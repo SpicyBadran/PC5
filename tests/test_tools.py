@@ -181,7 +181,8 @@ class KernelUnitTests(unittest.TestCase):
                os.path.join(ROOT, "kernel", "chain.c"),
                os.path.join(ROOT, "kernel", "block.c"),
                os.path.join(ROOT, "kernel", "sha256.c"),
-               os.path.join(ROOT, "kernel", "part.c")]
+               os.path.join(ROOT, "kernel", "part.c"),
+               os.path.join(ROOT, "kernel", "fat32.c")]
         build = subprocess.run(cmd, capture_output=True, text=True)
         self.assertEqual(build.returncode, 0, build.stderr[-2000:])
         run = subprocess.run([out], capture_output=True, text=True)

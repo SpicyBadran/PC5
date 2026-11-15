@@ -825,3 +825,132 @@ part device=0 scheme=none status=signature count=0 capacity=16384
   protective MBR is. The runner now sets the boot order it was verified with, and
   the four cases (no disk, zero disk, valid GPT, damaged GPT) all reach the CD.
   This is a test-harness property, not a PC5 claim.
+
+## 12. M1f — read-only FAT32, 2026-11-15
+
+FAT32 mount, root enumeration, 8.3 lookup and file read, verified by three
+independent computations of the same SHA-256 and by an unchanged disk image.
+
+Build inputs are pinned so the digest is reproducible:
+
+```
+$ make clean
+$ make BUILD_ID=m1f SOURCE_DATE_EPOCH=1763164800
+pc5: kernel image 51828 bytes (limit 585728)
+pc5: wrote build/pc5.iso (1587200 bytes, 775 sectors)
+pc5: sha256 c3f265853fb72a636965ac29eec1efcec9bf37ed52ec1bf8ebf84555d8770798
+```
+
+Two clean builds with those inputs are byte-identical (`cmp` clean).
+
+| Suite | Result |
+|---|---|
+| `make verify` | **53/53** |
+| `make check` | **155** tests, OK (25 tools + 41 UEFI + 10 release + 32 architecture + 14 storage + 13 partitions + 20 FAT32) |
+| `make unit` | **160** checks, 0 failures (was 99: +61 FAT32 parser checks) |
+| `make boot-test` | **68/68** (was 53: +15 FAT32 checks) |
+| `tests/uefi_stubtest.py` | **42/42** |
+| `make roadmap` | 15 milestones, tracks A/B separated, in sync |
+
+### 12.1 The fixture
+
+`tests/fat32_images.py` builds a complete disk, so every byte the kernel parses
+is written by the test:
+
+| Property | Value |
+|---|---|
+| image | 35,143,680 bytes (2048 + 66,592 sectors) |
+| partition | MBR type 0x0C at LBA 2048, 66,592 sectors |
+| geometry | 512-byte sectors, 1 sector per cluster, 32 reserved, 2 FATs × 513 sectors |
+| clusters | 65,534 — a spec-conforming FAT32 volume, not a small imitation |
+| root | cluster 2, one sector, short names only |
+| entries | label `PC5FS`, 6 files, 1 subdirectory, 1 deleted entry, 1 LFN record |
+
+Files and their independent digests (all produced by the fixture generator):
+
+| File | Size | SHA-256 |
+|---|---|---|
+| PC5TEST.TXT | 3,000 | `6c0d207f52de077d02b5aa25b77c50151351d6064f90d4fbdc54fab804c8cef8` |
+| SMALL.BIN | 100 | `c87efd8ee1c6706fea28a51e83eb504b3c950ffba15a853d33b7dbf2a0e54432` |
+| EXACT.BIN | 512 | `755929613d018a9cb308fd873b7b5b53078961f9be477d3650fa0710b350ad80` |
+| EMPTY.TXT | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| MULTI.BIN | 5,000 | `56d00af17691ed4e2148e6c57cfd8907163048682773ad515e423129298935e3` |
+| FRAG.BIN | 2,000 | `c551359b308fc808bbca9884fca00dd6c9a82cdd05d9e594431c0e4326ff9e81` |
+
+FRAG.BIN's chain is deliberately out of order (four non-consecutive clusters),
+MULTI.BIN spans ten clusters, EXACT.BIN is exactly one cluster and SMALL.BIN ends
+part-way through one.
+
+### 12.2 Three independent digests
+
+| Source | How it computes | Result |
+|---|---|---|
+| fixture generator | the bytes the files were built from | reference |
+| `tests/fat32_images.py: read_file()` | a second FAT32 implementation in Python | equal for all six files |
+| `kernel/fat32.c` via `tests/fat32_check.c` | the kernel module compiled as a host program | equal for all six files |
+| `kernel/fat32.c` inside the emulated PC | read through the real ATA path | equal (below) |
+
+The kernel's own output in the emulator (`build/test/serial-fat32.log`):
+
+```
+PC5-LOG fat32 device=0 partition=1 status=ok label="PC5FS" fs=FAT32 clusters=65534 spc=1 base=2048
+fat32 entry name=PC5TEST.TXT size=3000 attr=0x20
+...
+fat32 list count=7 status=ok
+fat32 read name=PC5TEST.TXT size=3000 status=ok sha256=6c0d207f52de077d02b5aa25b77c50151351d6064f90d4fbdc54fab804c8cef8
+fat32 read name=MULTI.BIN size=5000 status=ok sha256=56d00af17691ed4e2148e6c57cfd8907163048682773ad515e423129298935e3
+fat32 read name=FRAG.BIN size=2000 status=ok sha256=c551359b308fc808bbca9884fca00dd6c9a82cdd05d9e594431c0e4326ff9e81
+fat32 read name=SUBDIR size=0 status=directory sha256=
+fat32 read name=NOPE.TXT size=0 status=no-file sha256=
+```
+
+`fat32 list count=7` is the volume label, the deleted entry and the long-name
+record being ignored: seven real entries (six files plus one directory).
+
+### 12.3 Refusals
+
+Host-level checks (in `make check`, against the same 35 MB image and against
+synthetic volumes in `make unit`):
+
+| Case | Status |
+|---|---|
+| missing `55 AA` | `signature` |
+| 1,024-byte sectors | `bpb` |
+| sectors/cluster not a power of two | `bpb` |
+| zero reserved sectors, five FATs, bad media byte | `bpb` |
+| FSInfo or backup boot sector outside the reserved area | `bpb` |
+| FAT version 1.0 | `not-fat32` |
+| FAT16 root-entry count or 16-bit FAT size | `not-fat32` |
+| volume larger than its partition, root cluster outside the volume | `geometry` |
+| FAT too small to describe the clusters it claims | `geometry` |
+| free / bad / reserved / out-of-range cluster in a chain | `free-cluster`, `bad-cluster`, `reserved-cluster`, `cluster` |
+| cyclic chain (Floyd detection) | `loop` |
+| chain shorter than the declared file size | `chain` |
+| directory entry with a size but no cluster | `cluster` |
+| file larger than the caller's buffer | `space` |
+| unreadable sector | `io` |
+| long/invalid 8.3 name | `name` |
+
+A volume whose BPB declares FAT16 is refused in the emulator as
+`PC5-LOG fat32 status=not-fat32` and the boot continues to `PC5-BOOT-OK`
+(`build/test/serial-fat32-bad.log`).
+
+### 12.4 Write protection
+
+* `kernel/fat32.c` contains no write call, no `outb`, no `ata_write*`, no
+  `ata_writable_device`; `tests/test_fat32.py` asserts that mechanically.
+* The emulator's disk image is dumped after the run and compared byte-for-byte
+  with the input: identical, and the input file itself is unchanged.
+* The host driver re-reads the image file after reading every file and compares
+  its SHA-256 with the pre-run value: identical.
+
+### 12.5 What this does not establish
+
+* **No filesystem writing.** No file is created, deleted, resized or renamed.
+* **No long file names.** LFN records are skipped by design; a lookup by long
+  name returns `no-file`, not a guess.
+* **No subdirectory traversal.** Directories are listed and reading one returns
+  `directory`.
+* **Only 512-byte sectors**, only mirrored or explicitly selected FATs.
+* **No physical hardware.** The disk is v86's in-memory IDE device.
+* **No package or game parsing.** A readable file is not an installable title.

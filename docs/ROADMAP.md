@@ -94,13 +94,31 @@ Not done here: isohybrid USB, physical hardware (M2).
   partitions and their LBAs; a CRC-damaged table yields `count=0 status=crc` and
   the boot continues.
 
+## M1f — Read-only FAT32 · **COMPLETE (read-only, emulated disk + host driver)**
+
+* `kernel/fat32.c` validates the BPB and geometry structurally (root entries and
+  the 16-bit FAT size must be zero, version 0.0, FAT large enough to describe
+  every cluster), then walks the FAT, enumerates the root directory, matches
+  8.3 names case-insensitively and reads the file through an injected sector
+  reader. There is no write path in the module at all.
+* Corruption is refused, not guessed: free, bad, reserved, out-of-range and
+  cyclic chains each have their own status; a FAT16 BPB is `not-fat32`; a file
+  larger than the caller's buffer is `space`, never a silent truncation.
+* Three independent views must agree for every fixture file: the generated
+  bytes, an independent Python FAT32 reader, and the kernel module compiled as a
+  host program. In the emulator the kernel's SHA-256 is compared against both.
+* The disk image is byte-identical before and after a mount/list/read run.
+* Deliberate limits: long file names are skipped (not parsed on a guess), sector
+  size is 512 bytes only, subdirectories are listed but not descended, and
+  nothing is ever written.
+
 ## M2 — Physical boot and safe installation · **IN PROGRESS**
 
 * Physical boot: **not attempted** (no hardware access in this environment).
   Instructions and the troubleshooting matrix exist; the evidence does not.
-* Installer: **not started**. The block-write primitives (M1d) and read-only
-  partition discovery (M1e) exist; the remaining blocker is a writable
-  filesystem, then a bootloader installer and an isohybrid medium.
+* Installer: **not started**. Block write (M1d), partition discovery (M1e) and
+  read-only FAT32 (M1f) exist; the remaining blocker is FAT32 *writing*, then a
+  bootloader installer and an isohybrid medium.
 * USB writing: implemented and safe (`pc5ctl usb`), but the image is not yet
   isohybrid.
 
@@ -154,10 +172,9 @@ is reproducible; that is not a release-quality product.
 
 ## The next twelve engineering tasks, in dependency order
 
-1. **A writable filesystem on a discovered partition** — the read path, the
-   512-byte write path (M1d) and MBR/GPT discovery (M1e) are done; the missing
-   piece is a filesystem that can create and read back a file, followed by
-   AHCI/NVMe behind the same sector interface.
+1. **FAT32 writing** — reading a filesystem, creating a file, flushing and
+   independently reading it back is the next step (M1g); AHCI/NVMe follow behind
+   the same sector interface.
 2. **Package intake from the medium** — the kernel can already read a file from
    its own volume; the missing piece is a container parser behind that call.
 3. **UEFI loader** — PE32+ application filling the same `struct pc5_boot_info`,

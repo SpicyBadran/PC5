@@ -57,7 +57,7 @@ Why each non-OK stage has that state:
 
 | Feature | Status | Evidence |
 |---|---|---|
-| Bootable ISO (BIOS/El Torito + UEFI El Torito section) | COMPLETE AND VERIFIED | `make verify` 53/53, `make boot-test` 53/53 |
+| Bootable ISO (BIOS/El Torito + UEFI El Torito section) | COMPLETE AND VERIFIED | `make verify` 53/53, `make boot-test` 68/68 |
 | Loader (A20, E820, VBE, font, ISO probe, kernel load, PM handoff) | COMPLETE AND VERIFIED (emulated) | serial log |
 | Framebuffer console + text fallback + read-back self-test | COMPLETE AND VERIFIED (emulated) | Diagnostics page |
 | CPUID / E820 / PCI / ACPI / SMBIOS inventory | IMPLEMENTED — TESTING REQUIRED | hardware page; needs physical runs |
@@ -70,9 +70,10 @@ Why each non-OK stage has that state:
 | Firmware analysis tool (no decryption) | COMPLETE AND VERIFIED | unit tests on synthetic containers |
 | Kernel ATAPI PIO driver + ISO9660 reader | COMPLETE AND VERIFIED (emulated) | `storage_mounted volume=PC5 … signature=ok` |
 | Kernel MBR + GPT partition discovery (read-only) | COMPLETE AND VERIFIED (emulated disk + unit tests) | `partitions device=0 scheme=gpt count=2 status=ok`, and `status=crc` for a damaged table |
+| Kernel FAT32 read-only filesystem | COMPLETE AND VERIFIED (emulated disk + host driver) | `fat32 device=0 partition=1 status=ok label="PC5FS"`; file SHA-256 matches an independent reader |
 | Kernel ATA PIO write path (explicit test only) | COMPLETE AND VERIFIED (emulated IDE disk) | `storage_write=ok … verify=ok sha256=…`; host-side image comparison in `make boot-test` |
 | UEFI boot path | IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF) | `make stubtest` 42/42 running the real `BOOTX64.EFI`; no OVMF or hardware run yet |
-| Writable filesystem, installer | NOT STARTED | partition tables are read (M1e); nothing reads or writes a filesystem |
+| Writable filesystem, installer | NOT STARTED | FAT32 is read (M1f); nothing creates, modifies or installs a file |
 | AHCI / NVMe | NOT STARTED | legacy ATA channels only |
 | USB stack / DualSense | NOT STARTED | — |
 | Network stack | NOT STARTED | — |
@@ -82,9 +83,9 @@ Why each non-OK stage has that state:
 ## 4. Honest summary
 
 PC5 today is a real, reproducible, bootable PC environment with working
-diagnostics, a verified raw-sector write path and read-only partition discovery,
-and an honest compatibility model. It is **not** a PlayStation 5: no Sony code
+diagnostics, a verified raw-sector write path, read-only partition discovery and
+a read-only FAT32 filesystem, and an honest compatibility model. It is **not** a PlayStation 5: no Sony code
 runs, no PS5 game runs, and no stage of the genuine-PS5 chain has been reached.
-The next real engineering step is the one that unblocks the most downstream
-work: a filesystem on a discovered partition, then the installer; the UEFI run
-under real firmware stays blocked on OVMF or hardware.
+The next real engineering step is FAT32 *writing* (create, flush, independent
+read-back), then the installer; the UEFI run under real firmware stays blocked on
+OVMF or hardware.

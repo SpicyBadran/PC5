@@ -228,6 +228,11 @@ dependency order. Each is independently valuable and independently testable.
 
 ### Task A — FAT32 read: mount a real filesystem on a discovered partition
 
+**Status: executed 2026-11-15 as milestone M1f.** Every acceptance criterion in
+this task is met on an emulated disk, with three independent digest checks
+(`docs/TEST_RESULTS.md` §12). Not claimed: writing, long file names, descending
+into subdirectories, sector sizes other than 512 bytes, or any physical disk.
+
 **Paths:** new `kernel/fat32.c`; `kernel/include/pc5.h`; `kernel/main.c` (mount
 after `part_scan`); `kernel/ui.c` (`part` output, storage page); new
 `tests/mkfat.py` fixtures; `tests/kernel_unit.c`; `tests/boot_test.py`.
