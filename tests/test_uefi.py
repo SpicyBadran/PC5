@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
@@ -382,8 +383,12 @@ class UefiIsoTests(unittest.TestCase):
                       [c["name"] for c in rep.failures])
 
     def test_uefi_layout_is_deterministic(self):
-        _, info_a = self.build()
-        _, info_b = self.build()
+        # FAT directory timestamps have two-second resolution, so without a
+        # pinned epoch two builds that straddle a tick differ. That is a property
+        # of FAT, not of the layout: pin the epoch and the layout must be stable.
+        with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "1700000000"}):
+            _, info_a = self.build()
+            _, info_b = self.build()
         self.assertEqual(info_a["sha256"], info_b["sha256"])
 
 
