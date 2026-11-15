@@ -14,7 +14,10 @@ VERSION      ?= 0.2.0
 BUILD_ID     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo local)
 COMMIT       ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 TAG          ?=
-STAMP_EPOCH  ?= $(shell if [ -n "$$SOURCE_DATE_EPOCH" ]; then echo $$SOURCE_DATE_EPOCH; else date -u +%s; fi)
+# Use $(SOURCE_DATE_EPOCH) rather than $$SOURCE_DATE_EPOCH so that a value given
+# on the command line (make SOURCE_DATE_EPOCH=...) pins the timestamp too; a
+# make command-line variable is not exported to the shell.
+STAMP_EPOCH  ?= $(or $(SOURCE_DATE_EPOCH),$(shell date -u +%s))
 BUILD_DATE   ?= $(shell date -u -d @$(STAMP_EPOCH) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
 
 BUILD        := build
@@ -156,7 +159,8 @@ $(ISO): $(BUILD)/loader.bin $(BUILD)/kernel.bin $(BUILD)/efi.img $(BUILD)/iso/RE
 unit: | $(BUILD)
 	$(CC) -std=gnu11 -O1 -Wall -Wextra -Wno-unused-parameter -ffreestanding \
 	  -fno-builtin -fno-stack-protector -DPC5_HOST_TEST -Ikernel/include \
-	  -o $(BUILD)/kernel-unit tests/kernel_unit.c kernel/lib.c kernel/mem.c kernel/chain.c
+	  -o $(BUILD)/kernel-unit tests/kernel_unit.c kernel/lib.c kernel/mem.c kernel/chain.c \
+	  kernel/block.c kernel/sha256.c
 	$(BUILD)/kernel-unit
 
 roadmap:

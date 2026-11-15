@@ -87,6 +87,26 @@ const config = {
 };
 
 if (args.cdrom) config.cdrom = { url: path.resolve(args.cdrom) };
+
+// A writable hard disk exists only when the caller asks for one explicitly.
+// `--hda-buffer FILE` loads the image into memory and attaches it as hda, so
+// the emulator can write to it; `--hda-out FILE` dumps that same buffer after
+// the run.  Nothing is ever written back to the input path, and `--hda` (URL,
+// treat as read-only media) is left untouched: a boot test that does not ask
+// for a writable disk cannot accidentally get one.
+let hdaBuffer = null;
+if (args["hda-buffer"] && args["hda-buffer"] !== true) {
+  const src = fs.readFileSync(path.resolve(args["hda-buffer"]));
+  const bytes = new Uint8Array(src.length);
+  bytes.set(src);
+  hdaBuffer = bytes.buffer;
+  config.hda = { buffer: hdaBuffer };
+  console.error(`pc5-test: hda buffer ${hdaBuffer.byteLength} bytes (writable, in memory)`);
+}
+if (args["hda-out"] && args["hda-out"] !== true && !hdaBuffer) {
+  console.error("pc5-test: --hda-out requires --hda-buffer");
+  process.exit(2);
+}
 if (args.hda) config.hda = { url: path.resolve(args.hda) };
 if (args.fda) config.fda = { url: path.resolve(args.fda) };
 if (args["boot-order"]) config.boot_order = Number(args["boot-order"]);
@@ -113,6 +133,11 @@ function finish(reason, code = 0) {
     if (serialOut) {
       fs.mkdirSync(path.dirname(path.resolve(serialOut)), { recursive: true });
       fs.writeFileSync(serialOut, serial);
+    }
+    if (args["hda-out"] && args["hda-out"] !== true && hdaBuffer) {
+      fs.mkdirSync(path.dirname(path.resolve(args["hda-out"])), { recursive: true });
+      fs.writeFileSync(path.resolve(args["hda-out"]), Buffer.from(hdaBuffer));
+      console.error(`pc5-test: wrote ${hdaBuffer.byteLength} bytes to ${args["hda-out"]}`);
     }
   } catch (e) {
     console.error("pc5-test: writing evidence failed:", e.message);

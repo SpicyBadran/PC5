@@ -571,6 +571,7 @@ pc5: sha256 a665e27b5ef70ff2964e5103a02c09045c29306cd9273ade56602e3257e3e837
 | Suite | Result |
 |---|---|
 | `make verify` | **53/53** checks |
+| two clean builds, same inputs | byte-identical ISO (`cmp` clean) |
 | `make check` | **107** tests, OK — 24 tools + 41 UEFI + 10 release + 32 architecture |
 | `make unit` | **35** kernel assertions, 0 failures |
 | `make boot-test` | **25/25** checks on the v86/SeaBIOS emulated PC |
@@ -599,3 +600,138 @@ before the architecture change, and the milestone graph validates.
 Not established: anything new about hardware, firmware, drivers or PS5
 compatibility. The M0 change is paper and checks, and paper has never booted a
 machine.
+
+## 10. M1d — ATA storage write path, 2026-11-15
+
+The first storage write PC5 has ever performed. It is an emulated IDE disk, it
+is opt-in, and it is verified from both ends: the kernel verifies what it reads
+back, and the host verifies the bytes in the emulator's disk image.
+
+Build inputs are stated so the digest is reproducible. Recording this evidence
+found a build-system bug: `SOURCE_DATE_EPOCH` on the `make` command line was
+silently ignored (make does not export command-line variables to the shell), so
+the banner and `BUILDINFO.TXT` carried the wall clock. The Makefile now reads
+`$(SOURCE_DATE_EPOCH)`, `tests/test_tools.py` asserts that, and two clean builds
+with the same inputs are byte-identical.
+
+```
+$ make clean
+$ make BUILD_ID=m1d SOURCE_DATE_EPOCH=1763164800 iso
+pc5: loader image 4096 bytes
+pc5: kernel image 41724 bytes (limit 585728)
+pc5: wrote build/pc5.iso (1576960 bytes, 770 sectors)
+pc5: sha256 22121ad90c1a745c09f590596672f91df0027c11e12c39a0664aecd36bc5b1b0
+```
+
+| Property | Value |
+|---|---|
+| image size | 1,576,960 bytes (770 × 2048) |
+| image SHA-256 | `22121ad90c1a745c09f590596672f91df0027c11e12c39a0664aecd36bc5b1b0` |
+| kernel image | 41,724 bytes (M0 build: 36,508; the write path, SHA-256 and self-test add ~5 KB) |
+| UEFI application | 10,450 bytes (unchanged) |
+| inputs | `BUILD_ID=m1d`, `SOURCE_DATE_EPOCH=1763164800`, version 0.2.0 |
+
+| Suite | Result |
+|---|---|
+| `make verify` | **53/53** checks |
+| two clean builds, same inputs | byte-identical ISO (`cmp` clean) |
+| `make check` | **122** tests, OK — 25 tools + 41 UEFI + 10 release + 32 architecture + 14 storage |
+| `make unit` | **61** checks, 0 failures (was 35: +14 block rules, +12 SHA-256) |
+| `make boot-test` | **45/45** checks (was 25; +20 storage write, guard, and image checks) |
+| `tests/uefi_stubtest.py` | **42/42** checks against the stub firmware |
+| `make roadmap` | 13 milestones, tracks A/B separated, generated document in sync |
+
+### 10.1 The test disk
+
+| Property | Value |
+|---|---|
+| device | v86 IDE `hda`, primary disk; the CD-ROM stays the boot device and is `selected` |
+| image | `build/test/wtest-hda.img`, 8 MiB, zero-filled by the boot test |
+| attachment | `--hda-buffer` loads the file into an in-memory `ArrayBuffer`; `--hda-out` dumps it after the run |
+| reported geometry | `v86 ATA HD sectors=16384` (8 MiB / 512) |
+| scratch window | LBA 2048, 8 sectors, 4,096 bytes (1 MiB into the disk) |
+| host disk safety | the harness only ever attaches that file; the input path is never written back, and no path under `/dev/` is referenced by any test |
+
+### 10.2 What the kernel did
+
+Captured from `build/test/serial-ui.log` (COM1 mirror of the boot log and the
+serial console):
+
+```
+PC5-LOG storage drives=2 selected=1 atapi=1 model=v86 ATAPI CD-ROM
+PC5-LOG storage_write_device dev=0 model=v86 ATA HD sectors=16384 writable=1
+PC5-LOG storage_write_window lba=2048 sectors=8 bytes=4096
+PC5-LOG storage_write_guard name=zero_count status=count ok=1
+PC5-LOG storage_write_guard name=out_of_range_lba status=range ok=1
+PC5-LOG storage_write_guard name=past_end status=range ok=1
+PC5-LOG storage_write_guard name=lba_overflow status=range ok=1
+PC5-LOG storage_write_guard name=invalid_device status=no-device ok=1
+PC5-LOG storage_write_guard name=negative_device status=no-device ok=1
+PC5-LOG storage_write_guard name=null_buffer status=alignment ok=1
+PC5-LOG storage_write_guard name=scratch_window status=ok ok=1
+PC5-LOG storage_write_guard name=atapi_write status=read-only ok=1
+PC5-LOG storage_write_cdrom dev=1 selected=1 status=read-only refused=1
+PC5-LOG storage_write_faults injected=0 reason=no-fault-injection
+PC5-LOG storage_write=ok dev=0 lba=2048 sectors=8 bytes=4096 verify=ok sha256=80fdc12208ec4af1410125cbe146549182100a6b1e0cf67e382aa9aefdbafa3d
+```
+
+Reading it: the CD-ROM at index 1 is still the selected boot device (`atapi=1`)
+and ISO9660 mounts from it; the write went to index 0, a different device,
+chosen explicitly. The ATAPI write was refused with `read-only` — not by
+falling back to the boot device, but because the request validator refuses an
+ATAPI write before it looks at anything else (ADR-013 / `kernel/block.c`).
+
+### 10.3 What the host verified
+
+`make boot-test` reads `build/test/wtest-hda-after.img` — the emulator's 8 MiB
+disk after the run — and checks:
+
+| Check | Result |
+|---|---|
+| scratch bytes equal the expected 4 KiB pattern | pass |
+| host SHA-256 of those bytes | `80fdc12208ec4af1410125cbe146549182100a6b1e0cf67e382aa9aefdbafa3d` |
+| kernel SHA-256 of the read-back | identical to the host value |
+| every byte outside the scratch window | still zero — nothing else was written |
+| the input image file | unchanged (the runner writes only `--hda-out`) |
+| image size | still 8,388,608 bytes |
+
+The pattern is deterministic and public: `pattern[i] = (i * 7 + 0x5A) & 0xFF`.
+It is generated identically in `kernel/storage_test.c` and
+`tests/boot_test.py`, and its digest is also asserted against the kernel's
+SHA-256 implementation in `tests/kernel_unit.c`.
+
+### 10.4 Interface decision (ADR-013)
+
+Two units, never conflated:
+
+* `ata_read_blocks()` — 2048-byte optical/logical blocks on the **selected**
+  boot device. Unchanged; ISO9660 has used it since M1a and still passes.
+* `ata_read_sectors()` / `ata_write_sectors()` — 512-byte disk sectors on an
+  **explicitly indexed** device, bounded LBA28 chunks, cache flush after write.
+
+There is no write function without a device index, so no caller can reach the
+boot medium implicitly. `kernel/block.c` holds every rule that can be decided
+without port I/O, which is why the refusal table above is unit-tested as well as
+observed.
+
+### 10.4a A run that failed and did not reproduce
+
+One `make boot-test` invocation, issued in a sequence immediately after the
+host suite, recorded every check as failed, which is the signature of a run that
+produced no serial output at all. It did not reproduce in five subsequent runs,
+including one under the identical sequence of commands and load. Nothing in the
+harness or the kernel was changed to make it pass, and no skip was converted into
+a pass: the recorded result above is from a run in which all 45 checks executed.
+
+### 10.5 What this does not establish
+
+* **No physical disk has been written.** The only write target so far is v86's
+  in-memory IDE disk.
+* **No partition table, filesystem, installer or update path.** The write
+  primitives exist; everything above them does not.
+* **No fault injection.** The timeout and device-error branches are exercised by
+  unit-testing the request rules, not by making a real device fail; the log says
+  `injected=0` rather than implying otherwise.
+* **No AHCI, NVMe, USB storage, DMA or interrupts.** Legacy PIO only, as before.
+* **No claim that a writable disk changes the compatibility chain.** Stage 4
+  stays PARTIAL: there is still no game installation.

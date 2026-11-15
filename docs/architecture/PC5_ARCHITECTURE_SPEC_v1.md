@@ -6,7 +6,7 @@
 | Date | 2026-11-15 |
 | Branch / base | `arena/77118274-pc5`, base `f5e8c78` |
 | Supersedes | the implicit single-track architecture in `docs/ARCHITECTURE.md` (the boot-chain description there remains accurate) |
-| Decision records | ADR-001 … ADR-012 in `docs/TECHNICAL_DECISIONS.md` |
+| Decision records | ADR-001 … ADR-013 in `docs/TECHNICAL_DECISIONS.md` |
 | Machine-checked parts | `docs/architecture/roadmap.json`, `tools/roadmap.py`, `tests/test_architecture.py` |
 
 This document freezes the architecture before implementation continues. It does
@@ -159,7 +159,7 @@ tracks consume:
 |---|---|---|
 | display / session | mode setting, compositing, session switch, HDR capability reporting | framebuffer console only |
 | input | keyboard, mouse, DualSense, hot-plug, mapping, rumble/trigger output | PS/2 keyboard only |
-| storage | block devices, partitions, filesystems, install targets, health | read-only ATAPI + ISO9660 in the kernel |
+| storage | block devices, partitions, filesystems, install targets, health | ISO9660 read from the boot medium; 512-byte sector read/write on an explicitly indexed ATA disk (verified on an emulated disk only); no partitions, filesystem or installer |
 | audio | routing, volume, per-application streams, latency class | none |
 | network | link, DHCP, DNS, connectivity state, update transport | PCI enumeration only |
 | power | reset, power-off, suspend/resume, thermal state | reset and halt only |
@@ -248,6 +248,10 @@ neighbours. Each has an owner, a stability class and a test.
 | `PC5-PLAT` (platform service ABI: display, input, storage, audio, network, power) | system services → sessions and Track B | planned, v0 | does not exist | — |
 | `PC5-PKG` (release/package manifest) | build → updater, launcher, compatibility DB | planned, v0; seed is `build/build-info.json` | partial | `tools/verify_iso.py`, `tools/buildmeta.py` |
 | `PC5-COMPAT` (runtime host boundary: memory, threads, sync, GPU submit, audio out) | Track B runtime → platform services | planned, v0 | does not exist | — |
+
+`PC5-BOOT` freezes the loader contract; ADR-013 freezes the units on the other
+side of the kernel — 512-byte disk sectors for storage, 2048-byte blocks for
+optical media — because a driver that confuses them writes at the wrong offset.
 
 Two rules follow from I9:
 
@@ -375,6 +379,7 @@ all documents point at real paths.
 | ADR-010 | Dual-track governance with a machine-enforced Track A/B gate | accepted, in force |
 | ADR-011 | Hardware qualification matrix instead of universal support claims | accepted, in force |
 | ADR-012 | Architecture claims are machine-checked artefacts | accepted, in force |
+| ADR-013 | 512-byte disk sectors vs 2048-byte optical blocks | accepted, in force |
 
 ---
 

@@ -30,6 +30,11 @@ identification, both of which already exist.
 ## Task 1 — Storage write path behind the block interface
 
 **Milestone:** M1 (critical path). **Owner:** kernel-engineer. **Size:** large.
+**Status: executed 2026-11-15 as milestone M1d** — all acceptance criteria below
+are met on an emulated IDE disk, with the evidence in `docs/TEST_RESULTS.md`
+§10. What remains open is explicitly *not* claimed: no physical disk has been
+written, the timeout/IO error branches were not fault-injected, and partitions,
+filesystems and the installer are still absent.
 
 ### Objective
 
@@ -40,8 +45,10 @@ interface, without disturbing reads.
 
 ### Scope
 
-* `blk_write()` alongside `ata_read_blocks()` in `kernel/ata.c`, with the same
-  512-byte logical block contract and the same timeout behaviour.
+* Sector write functions alongside `ata_read_blocks()` in `kernel/ata.c`.
+  **As executed:** ADR-013 keeps the optical 2048-byte block interface intact
+  and adds `ata_read_sectors()` / `ata_write_sectors()` for 512-byte disk
+  sectors on an explicitly indexed device. No caller was reinterpreted.
 * A writable target: the emulator's attached hard disk first; AHCI and NVMe
   register-level write paths only after that works.
 * A kernel self-test that writes a known pattern to a reserved scratch area,
@@ -56,21 +63,29 @@ installation. Those are the *next* tasks and depend on this one.
 
 ### Acceptance criteria
 
-1. `blk_write()` exists with unit-testable logic and is exercised by
-   `tests/kernel_unit.c` (pattern construction, bounds rejection, error paths).
+1. A write function exists with unit-testable logic and is exercised by
+   `tests/kernel_unit.c` (bounds rejection, ATAPI refusal, overflow, alignment).
+   **Met:** `ata_write_sectors()` + `kernel/block.c`.
 2. In the emulated machine, the kernel writes a 4 KiB pattern to a scratch
-   region, reads it back through the existing read path, and the boot log
-   contains `PC5-LOG storage_write=ok bytes=4096 sha256_prefix=…` with a
-   matching value.
-3. A negative test exists: a write to an out-of-range LBA is refused and logged,
-   and the machine continues to boot.
+   region, reads it back, and the boot log reports the digest. **Met** — the
+   executed line is
+   `PC5-LOG storage_write=ok dev=0 lba=2048 sectors=8 bytes=4096 verify=ok sha256=80fdc122…`,
+   and the host checks the same digest against the emulator's disk image.
+3. Negative tests exist: out-of-range LBA, past-end, LBA overflow, zero count,
+   invalid and negative device index, NULL buffer, ATAPI write and scratch-window
+   violation are each refused with a distinct status and logged, and the machine
+   continues to boot. **Met** (nine guards, all `ok=1`). Timeout and device-error
+   handling exists in the driver but was **not** fault-injected; the log says
+   `storage_write_faults injected=0`.
 4. Writing is impossible when the boot medium is the CD-ROM: the driver refuses
-   and says why. The boot test asserts the refusal on the ISO path.
-5. The full suite passes: `make verify` (53), `make check`, `make boot-test`
-   (25 + the new assertions), `make stubtest` (42).
+   and says why. The boot test asserts the refusal on the ISO path. **Met** —
+   `storage_write_cdrom … status=read-only refused=1`.
+5. The full suite passes: `make verify` (53), `make check` (121), `make
+   boot-test` (45), `make stubtest` (42). **Met.**
 6. `docs/KNOWN_LIMITATIONS.md` no longer says the storage stack is read-only
    without qualification — it says read-write on qualified devices, with the
-   evidence linked.
+   evidence linked. **Met**, and it now also states that only an emulated disk
+   has been written.
 
 ### If it cannot be done here
 

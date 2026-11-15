@@ -69,8 +69,9 @@ Why each non-OK stage has that state:
 | CI pipeline that publishes releases | WRITTEN, ACTIVATION BLOCKED (token lacks the workflows permission) | `ci/README.md` |
 | Firmware analysis tool (no decryption) | COMPLETE AND VERIFIED | unit tests on synthetic containers |
 | Kernel ATAPI PIO driver + ISO9660 reader | COMPLETE AND VERIFIED (emulated) | `storage_mounted volume=PC5 … signature=ok` |
+| Kernel ATA PIO write path (explicit test only) | COMPLETE AND VERIFIED (emulated IDE disk) | `storage_write=ok … verify=ok sha256=…`; host-side image comparison in `make boot-test` |
 | UEFI boot path | IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF) | `make stubtest` 42/42 running the real `BOOTX64.EFI`; no OVMF or hardware run yet |
-| Writable storage (partitions, filesystem, installer) | NOT STARTED | stage 4 is PARTIAL for this reason |
+| Partitions, writable filesystem, installer | NOT STARTED | the sector write path exists (M1d); these three do not |
 | AHCI / NVMe | NOT STARTED | legacy ATA channels only |
 | USB stack / DualSense | NOT STARTED | — |
 | Network stack | NOT STARTED | — |
@@ -83,4 +84,5 @@ PC5 today is a real, reproducible, bootable PC environment with working
 diagnostics and an honest compatibility model. It is **not** a PlayStation 5:
 no Sony code runs, no PS5 game runs, and no stage of the genuine-PS5 chain has
 been reached. The next real engineering step is the one that unblocks the most
-downstream work: a kernel storage driver, followed by the UEFI boot path.
+downstream work: partitions and a writable filesystem on top of the new
+sector-write path, followed by the installer and a UEFI run under real firmware.
