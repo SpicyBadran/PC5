@@ -66,7 +66,7 @@ kernel and the loader cannot drift apart silently.
 | `kernel/ata.c` | legacy ATA/ATAPI PIO driver: LBA28 512-byte sector read/write for disks, packet reads on 2048-byte blocks for optical media |
 | `kernel/block.c` | block-request rules with no port I/O, so the host tests can prove them |
 | `kernel/part.c` | MBR/GPT parsers (pure) and a read-only, explicit-device scan |
-| `kernel/fat32.c` | FAT32: BPB validation, FAT chains, root directory, 8.3 lookup, file read; one create path (allocation, FAT copies, FSInfo, entry, read-back) |
+| `kernel/fat32.c` | FAT32: BPB validation, FAT chains, directory traversal, 8.3 lookup and case-insensitive path resolution, file read; three write operations (create, overwrite-in-place, mkdir) sharing one discipline — plan and validate the whole allocation in memory, build in unreferenced clusters, write every FAT copy and re-read it, flush, one directory-entry write, flush, read back through the name, then reclaim the replaced chain |
 | `kernel/sha256.c` | SHA-256 for write verification (and, later, update manifests) |
 | `kernel/storage_test.c` | explicit `wtest` write/read-back self-test on a reserved window |
 | `kernel/iso9660.c` | ECMA-119 volume mount, root directory walk, file read on top of `ata.c` |
@@ -76,7 +76,8 @@ kernel and the loader cannot drift apart silently.
 | `kernel/fw.c` | firmware probe (manifest presence), never a claim of execution |
 | `kernel/ui.c` | six pages, controller/keyboard navigation, serial recovery console, audit log |
 
-The kernel is deliberately small (about 41 KB in the 0.2.0 line) and freestanding: no libc, no
+The kernel is deliberately small (about 65 KB in the 0.3 line, of which the filesystem
+is the largest single module) and freestanding: no libc, no
 allocator, no paging, no interrupts beyond the IDT gates. Everything is
 polled, which keeps the boot deterministic and makes failures reproducible.
 
@@ -97,9 +98,10 @@ polled, which keeps the boot deterministic and makes failures reproducible.
 | `tests/disk_images.py` | deterministic MBR/GPT disk fixtures used by the boot test |
 | `tests/fat32_images.py` | deterministic FAT32 fixture, an independent FAT32 reader, and structural checks (FAT copies, chains, orphans, FSInfo, changed sectors) |
 | `tests/fat32_check.c` | host driver that runs `kernel/fat32.c` against a real image |
-| `tests/fat32_write_check.c` | host driver for the create path, with write/flush fault injection |
+| `tests/fat32_write_check.c` | host driver for the create, overwrite, mkdir and read paths, with write/flush/copy-targeted fault injection and an LBA log of every write |
 | `tests/test_fat32.py` | three-way digest comparison and refusal contracts |
 | `tests/test_fat32_write.py` | creation matrix, refusals, FSInfo and flush behaviour, fault-injection classification |
+| `tests/test_fat32_expand.py` | overwrite, directory creation, path handling, integrity invariants and a per-write failure sweep that classifies what each failure left behind |
 | `tests/test_hybrid.py` | the assembled MBR bootstrap byte by byte, the layout it produces, and one rejection test per way the table can lie about the image |
 | `tests/mbr_fixture.py` | synthetic and really-assembled bootstrap fixtures shared by the unit tests |
 | `tests/test_tools.py` | unit tests for the ISO writer, verifier and firmware tool |
@@ -120,6 +122,15 @@ polled, which keeps the boot deterministic and makes failures reproducible.
   and are what a filesystem, partition parser or installer will use. AHCI, NVMe
   and USB storage implement the same sector contract behind the same rules
   (`kernel/block.c` validates every request).
+* **Filesystem**: `kernel/fat32.c` talks to a disk only through `struct
+  fat32_io` — a `read` callback, an optional `write` callback and an optional
+  `flush` callback, each `(ctx, lba, count, buf)`. The mount made during boot
+  attaches a read callback and nothing else, so the boot path cannot write even
+  by mistake; `mounted_write_io()` is the one place a write callback is attached,
+  and only the explicit console commands reach it. Every write entry point
+  (`fat32_create_file`, `fat32_overwrite_file`, `fat32_create_dir`) is a function
+  of that interface alone, which is why the host driver can run the real module
+  against an in-memory image with fault injection and no emulator.
 * **Firmware**: `fw_probe()` consumes a manifest compiled into the kernel; the
   manifest is produced by `tools/firmware.py` from a user-supplied image.
 * **Compatibility chain**: `chain_evaluate()` takes one argument per subsystem,

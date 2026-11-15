@@ -111,7 +111,8 @@ def build_fat32_image(partition_lba: int = 2048,
                       sectors_per_cluster: int = 1,
                       label: str = "PC5FS",
                       holes: int = 0,
-                      fill_root: bool = False) -> bytes:
+                      fill_root: bool = False,
+                      valid_subdir: bool = False) -> bytes:
     """A complete disk image with one FAT32 partition and deterministic files.
 
     The file set is fixed so tests can assert exact sizes and digests:
@@ -128,6 +129,9 @@ def build_fat32_image(partition_lba: int = 2048,
     apart, so the next allocation by a writer lands on non-contiguous clusters.
     `fill_root` consumes every remaining root-directory slot with empty files,
     so a create has nowhere to put its entry.
+    `valid_subdir` fills SUBDIR with a correct "." and ".." pair and one file
+    (INNER.TXT, 700 bytes) so the M1i tests have a real directory to descend
+    into.  The root directory is identical either way.
     """
     fat_sectors, first_data, clusters = _fat_geometry(partition_sectors, sectors_per_cluster)
     total = partition_sectors
@@ -243,7 +247,17 @@ def build_fat32_image(partition_lba: int = 2048,
 
     # a subdirectory (root lists it; the reader must refuse to read it as a file)
     sub_cluster = allocate(1)[0]
-    payload[sub_cluster] = bytes(SECTOR)
+    payload[sub_cluster] = bytes(sectors_per_cluster * SECTOR)
+    inner_chain = []
+    if valid_subdir:
+        inner = bytes((i * 11 + 7) & 0xFF for i in range(700))
+        inner_chain = [allocate(1)[0], allocate(1)[0]]
+        for i, cl in enumerate(inner_chain):
+            payload[cl] = inner[i * SECTOR:(i + 1) * SECTOR]
+        sub_entries = _dirent(b".          ", ATTR_DIRECTORY, sub_cluster, 0)
+        sub_entries += _dirent(b"..         ", ATTR_DIRECTORY, 0, 0)
+        sub_entries += _dirent(_name83("INNER.TXT"), ATTR_ARCHIVE, inner_chain[0], len(inner))
+        payload[sub_cluster] = bytes(sub_entries).ljust(sectors_per_cluster * SECTOR, b"\x00")
     root_entries += _dirent(_name83("SUBDIR"), ATTR_DIRECTORY, sub_cluster, 0)
 
     # fragmentation holes: allocated clusters nothing points at, one apart, so
@@ -281,6 +295,8 @@ def build_fat32_image(partition_lba: int = 2048,
     for i, cl in enumerate(frag_chain):
         _p32(fat, cl * 4, frag_chain[i + 1] if i + 1 < len(frag_chain) else EOC)
     _p32(fat, sub_cluster * 4, EOC)
+    for i, cl in enumerate(inner_chain):
+        _p32(fat, cl * 4, inner_chain[i + 1] if i + 1 < len(inner_chain) else EOC)
     _p32(fat, 2 * 4, EOC)  # the root directory cluster is allocated
     for cl in hole_clusters:
         _p32(fat, cl * 4, EOC)
@@ -517,6 +533,198 @@ def cluster_chain(image: bytes, first: int, part_lba: int = 2048,
         cur = nxt
 
 
+def _dir_entries(image: bytes, cluster: int, part_lba: int = 2048) -> list[dict]:
+    """Every slot of one directory cluster chain, in slot order, raw bytes kept.
+
+    Stopping at the first 0x00 is what every FAT implementation does; the raw
+    bytes are kept so tests can inspect "." and ".." exactly as stored.
+    """
+    g = volume_geometry(image, part_lba)
+    fat = fat_entries(image, part_lba)
+    entries = []
+    cur = cluster
+    seen = 0
+    while True:
+        seen += 1
+        if seen > g["clusters"] + 2:
+            raise ValueError("directory loop")
+        for si in range(g["spc"]):
+            lba = part_lba + g["first_data"] + (cur - 2) * g["spc"] + si
+            block = image[lba * SECTOR:(lba + 1) * SECTOR]
+            for off in range(0, SECTOR, 32):
+                ent = block[off:off + 32]
+                if ent[0] == 0x00:
+                    return entries
+                base = ent[0:8].decode("ascii", "replace").rstrip()
+                ext = ent[8:11].decode("ascii", "replace").rstrip()
+                entries.append({
+                    "raw": ent,
+                    "name": f"{base}.{ext}" if ext else base,
+                    "deleted": ent[0] == 0xE5,
+                    "attr": ent[11],
+                    "size": _u32(ent, 28),
+                    "first_cluster": (_u16(ent, 20) << 16) | _u16(ent, 26),
+                    "slot_lba": lba,
+                    "slot_offset": off,
+                    "cluster": cur,
+                })
+        nxt = fat[cur]
+        if nxt >= 0x0FFFFFF8:
+            return entries
+        if nxt == 0:
+            raise ValueError("directory chain runs into a free cluster")
+        cur = nxt
+
+
+def _split_path(path: str) -> list[str]:
+    if path in ("", "/"):
+        return []
+    return path.strip("/").split("/")
+
+
+def resolve_dir(image: bytes, path: str = "", part_lba: int = 2048) -> int:
+    """Cluster of the directory named by `path` ("" or "/" is the root)."""
+    g = volume_geometry(image, part_lba)
+    cluster = g["root_cluster"]
+    for part in _split_path(path):
+        want = _name83(part)
+        for ent in _dir_entries(image, cluster, part_lba):
+            if ent["deleted"] or ent["attr"] == ATTR_LFN or ent["attr"] & ATTR_VOLUME_ID:
+                continue
+            if ent["raw"][0:11] == want:
+                if not ent["attr"] & ATTR_DIRECTORY:
+                    raise NotADirectoryError(f"{part} is not a directory")
+                cluster = ent["first_cluster"]
+                break
+        else:
+            raise KeyError(part)
+    return cluster
+
+
+def list_path(image: bytes, path: str = "", part_lba: int = 2048) -> list[dict]:
+    """Live entries of the directory at `path`, "." and ".." excluded."""
+    cluster = resolve_dir(image, path, part_lba)
+    return [e for e in _dir_entries(image, cluster, part_lba)
+            if not e["deleted"] and e["attr"] != ATTR_LFN
+            and not e["attr"] & ATTR_VOLUME_ID
+            and e["name"] not in (".", "..")]
+
+
+def read_path(image: bytes, path: str, part_lba: int = 2048) -> bytes:
+    """Read a file through a path, re-deriving every step from the bytes."""
+    parts = _split_path(path)
+    if not parts:
+        raise IsADirectoryError(path)
+    cl = resolve_dir(image, "/".join(parts[:-1]), part_lba)
+    want = _name83(parts[-1])
+    for ent in _dir_entries(image, cl, part_lba):
+        if ent["deleted"] or ent["attr"] == ATTR_LFN or ent["attr"] & ATTR_VOLUME_ID:
+            continue
+        if ent["raw"][0:11] != want:
+            continue
+        if ent["attr"] & ATTR_DIRECTORY:
+            raise IsADirectoryError(path)
+        if ent["size"] == 0:
+            return b""
+        g = volume_geometry(image, part_lba)
+        out = bytearray()
+        for c in cluster_chain(image, ent["first_cluster"], part_lba):
+            start = (part_lba + g["first_data"] + (c - 2) * g["spc"]) * SECTOR
+            out += image[start:start + g["spc"] * SECTOR]
+            if len(out) >= ent["size"]:
+                break
+        return bytes(out[:ent["size"]])
+    raise KeyError(path)
+
+
+def check_directory(image: bytes, path: str = "", part_lba: int = 2048) -> dict:
+    """Structural facts about one directory, as a second implementation sees them.
+
+    `.` must name the directory itself, `..` must name its parent (cluster 0
+    when the parent is the root), every entry must be 32-byte aligned (true by
+    construction of the slot loop), no two live short names may collide, and the
+    directory's own chain must not contain a free cluster.
+    """
+    g = volume_geometry(image, part_lba)
+    cluster = resolve_dir(image, path, part_lba)
+    parent = resolve_dir(image, "/".join(_split_path(path)[:-1]), part_lba) \
+        if _split_path(path) else g["root_cluster"]
+    entries = [e for e in _dir_entries(image, cluster, part_lba) if not e["deleted"]]
+    live = [e for e in entries if e["attr"] != ATTR_LFN
+            and not e["attr"] & ATTR_VOLUME_ID and e["name"] not in (".", "..")]
+    names = [e["name"] for e in live]
+    dot = next((e for e in entries if e["name"] == "."), None)
+    dotdot = next((e for e in entries if e["name"] == ".."), None)
+    want_up = 0 if parent == g["root_cluster"] else parent
+    return {
+        "cluster": cluster,
+        "chain": cluster_chain(image, cluster, part_lba),
+        "entries": entries,
+        "live": live,
+        "dot_ok": bool(dot and dot["attr"] & ATTR_DIRECTORY
+                       and dot["first_cluster"] == cluster),
+        "dotdot_ok": bool(dotdot and dotdot["attr"] & ATTR_DIRECTORY
+                          and dotdot["first_cluster"] == want_up),
+        "dotdot": dotdot["first_cluster"] if dotdot else None,
+        "parent": parent,
+        "want_dotdot": want_up,
+        "duplicates": sorted({n for n in names if names.count(n) > 1}),
+        "aligned": all(e["slot_offset"] % 32 == 0 for e in entries),
+    }
+
+
+def chains(image: bytes, part_lba: int = 2048) -> dict[str, list[int]]:
+    """Every object's cluster chain, keyed by path ("/" is the root directory).
+
+    Used to prove that no cluster is claimed by two objects: with the chains in
+    hand, a duplicate is a set intersection, not a guess.
+    """
+    g = volume_geometry(image, part_lba)
+    out = {}
+    queue = ["", ]
+    out["/"] = cluster_chain(image, g["root_cluster"], part_lba)
+    while queue:
+        path = queue.pop()
+        for ent in list_path(image, path, part_lba):
+            child = f"{path}/{ent['name']}" if path else ent["name"]
+            if ent["first_cluster"] < 2:
+                continue
+            out[child] = cluster_chain(image, ent["first_cluster"], part_lba)
+            if ent["attr"] & ATTR_DIRECTORY:
+                queue.append(child)
+    return out
+
+
+def all_files(image: bytes, part_lba: int = 2048) -> dict[str, bytes]:
+    """Every regular file reachable from the root, keyed by path, read by this
+    reader.  Used as the "did anything else change" oracle: a fault-injection
+    test compares this dict before and after, so it can never be fooled into
+    checking a file the image does not actually contain."""
+    out = {}
+    queue = [""]
+    while queue:
+        path = queue.pop()
+        for ent in list_path(image, path, part_lba):
+            child = f"{path}/{ent['name']}" if path else ent["name"]
+            if ent["attr"] & ATTR_DIRECTORY:
+                queue.append(child)
+            else:
+                out[child] = read_path(image, child, part_lba)
+    return out
+
+
+
+def double_allocated(image: bytes, part_lba: int = 2048) -> set[int]:
+    """Clusters claimed by more than one chain: the one thing never allowed."""
+    seen, twice = set(), set()
+    for chain in chains(image, part_lba).values():
+        for c in chain:
+            if c in seen:
+                twice.add(c)
+            seen.add(c)
+    return twice
+
+
 def allocated_clusters(image: bytes, part_lba: int = 2048) -> set[int]:
     """Clusters the FAT marks as in use (anything that is not free)."""
     fat = fat_entries(image, part_lba)
@@ -524,15 +732,28 @@ def allocated_clusters(image: bytes, part_lba: int = 2048) -> set[int]:
 
 
 def referenced_clusters(image: bytes, part_lba: int = 2048) -> set[int]:
-    """Clusters reachable from a live root-directory entry, plus the root
-    directory itself (which no directory entry points at)."""
-    used = {volume_geometry(image, part_lba)["root_cluster"]}
-    for ent in list_dir(image, part_lba):
-        if ent["size"] == 0 or ent["first_cluster"] < 2:
-            if ent["attr"] & ATTR_DIRECTORY and ent["first_cluster"] >= 2:
-                used.add(ent["first_cluster"])
+    """Clusters reachable from the root directory, descending into every
+    subdirectory (M1i made those reachable for real)."""
+    g = volume_geometry(image, part_lba)
+    used = {g["root_cluster"]}
+    seen_dirs = set()
+    queue = [g["root_cluster"]]
+    while queue:
+        cluster = queue.pop()
+        if cluster in seen_dirs:
             continue
-        used.update(cluster_chain(image, ent["first_cluster"], part_lba))
+        seen_dirs.add(cluster)
+        used.update(cluster_chain(image, cluster, part_lba))
+        for ent in _dir_entries(image, cluster, part_lba):
+            if ent["deleted"] or ent["attr"] == ATTR_LFN or ent["attr"] & ATTR_VOLUME_ID:
+                continue
+            if ent["first_cluster"] < 2:
+                continue
+            if ent["attr"] & ATTR_DIRECTORY:
+                used.add(ent["first_cluster"])
+                queue.append(ent["first_cluster"])
+            elif ent["size"] > 0:
+                used.update(cluster_chain(image, ent["first_cluster"], part_lba))
     return used
 
 

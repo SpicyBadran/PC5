@@ -373,13 +373,64 @@ class WriteDriver(unittest.TestCase):
         names = [e["name"] for e in fat32_images.list_dir(after)]
         self.assertIn("NEW.TXT", names)
 
-    def test_a_full_root_directory_is_refused(self):
+    def test_a_full_root_directory_is_grown_by_one_cluster(self):
+        """M1i replaces M1g's refusal here, with a stronger contract.
+
+        M1g refused to create a file when the root directory had no free slot
+        (`dir-full`, nothing written). M1i grows the directory by one cluster
+        instead — a FAT32 directory is an ordinary cluster chain, so appending
+        a zeroed cluster is legal and every existing entry is untouched. The
+        old assertion ("refused") would now be a lie about the implementation,
+        so it is replaced by the property that matters: the create succeeds,
+        the directory grows by exactly one cluster, every previous entry is
+        still readable, the new file reads back, both FAT copies agree, and the
+        changed sectors are confined to the data, the FATs, FSInfo, the existing
+        root cluster and the new directory cluster.
+        """
         image = close_directory(fat32_images.build_fat32_image(fill_root=True))
-        fields, after, rc = self.create(image, "NOPE.BIN", 512)
+        g = fat32_images.volume_geometry(image)
+        root_chain_before = fat32_images.cluster_chain(image, g["root_cluster"])
+        fields, after, _rc = self.create(image, "GROWN.BIN", 512)
+        self.assertEqual(fields.get("status"), "ok", fields.get("_stdout"))
+        self.assertEqual(fields.get("grew"), "1")
+        self.assertNotEqual(fields.get("writes"), "0")
+
+        g2 = fat32_images.volume_geometry(after)
+        root_chain_after = fat32_images.cluster_chain(after, g2["root_cluster"])
+        self.assertEqual(len(root_chain_after), len(root_chain_before) + 1)
+        self.assertEqual(root_chain_after[:len(root_chain_before)], root_chain_before,
+                         "growth must append, never re-link the existing chain")
+        self.assertEqual(int(fields["grown"]), root_chain_after[-1])
+        # the new cluster is allocated exactly once and holds the entry
+        fat = fat32_images.fat_entries(after)
+        self.assertGreaterEqual(fat[root_chain_after[-1]], 0x0FFFFFF8)
+        for copy in fat32_images.fat_copies(after):
+            self.assertEqual(copy, fat32_images.fat_copies(after)[0])
+
+        # every original file survives byte for byte, and the new one reads back
+        for name, data in fat32_images.expected_files().items():
+            self.assertEqual(fat32_images.read_file(after, name), data, name)
+        self.assertEqual(fat32_images.read_file(after, "GROWN.BIN"),
+                         bytes(((i * 17 + 5) & 0xFF) for i in range(512)))
+        self.assertIn("GROWN.BIN", [e["name"] for e in fat32_images.list_dir(after)])
+
+        allowed = allowed_change_sectors(g2)
+        allowed |= {g2["part_lba"] + g2["first_data"] + (c - 2) * g2["spc"] + s
+                    for c in root_chain_after for s in range(g2["spc"])}
+        allowed |= {g2["part_lba"] + g2["first_data"] + (c - 2) * g2["spc"] + s
+                    for c in fat32_images.cluster_chain(after, int(fields["first"]))
+                    for s in range(g2["spc"])}
+        self.assertEqual(fat32_images.changed_sectors(image, after) - allowed, set())
+
+    def test_a_directory_that_cannot_grow_is_refused_without_writing(self):
+        """The other half of the new contract: no free cluster, no create."""
+        image = close_directory(fat32_images.build_fat32_image(fill_root=True))
+        starved = leave_free_clusters(image, keep=0)
+        fields, after, rc = self.create(starved, "NOPE.BIN", 0)
         self.assertEqual(rc, 1)
-        self.assertEqual(fields["status"], "dir-full")
-        self.assertEqual(fields["writes"], "0")
-        self.assertEqual(after, image)
+        self.assertEqual(fields.get("status"), "full", fields.get("_stdout"))
+        self.assertEqual(fields.get("writes"), "0")
+        self.assertEqual(after, starved)
 
     def test_invalid_names_are_refused(self):
         image = fat32_images.build_fat32_image()

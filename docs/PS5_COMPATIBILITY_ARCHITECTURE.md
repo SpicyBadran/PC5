@@ -40,7 +40,7 @@ implementation.
 | 7 | Graphics command translation | framebuffer console only | NOT STARTED |
 | 8 | Shader processing and caching | none | NOT STARTED |
 | 9 | GPU memory and synchronisation | none | NOT STARTED |
-| 10 | Storage and filesystem | kernel ATAPI PIO + ISO9660 read; ATA PIO 512-byte read/write on an explicit device; MBR/GPT discovery; FAT32 read and create (mount/list/read/put) | PARTIAL — sectors, partition tables, a filesystem and one create operation exist (emulated only); no overwrite/delete/resize, so no install or package storage |
+| 10 | Storage and filesystem | kernel ATAPI PIO + ISO9660 read; ATA PIO 512-byte read/write on an explicit device; MBR/GPT discovery; FAT32 read, create, replace and mkdir over 8.3 paths (mount/list/read/put/write/mkdir) | PARTIAL — sectors, partition tables, a filesystem, replace-in-place and directories exist (emulated only); no delete/rename/resize and no installer, so no package storage |
 | 11 | Game package / executable handling | `FIH`/`CNT` signature identification only | RESEARCH |
 | 12 | Audio | PCI audio class counted only | NOT STARTED |
 | 13 | Controller / input translation | 8042 PS/2 keyboard driver behind `kbd_read()` | PARTIAL (keyboard only) |
