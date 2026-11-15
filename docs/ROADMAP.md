@@ -3,15 +3,23 @@
 Milestones from the project directive, with what is actually true today. A
 milestone is not "done" because its documentation exists.
 
+The 0.3 development line renumbers these milestones into a two-track graph. The
+canonical, machine-checked states now live in
+[`docs/architecture/roadmap.json`](architecture/roadmap.json) and are rendered in
+[`docs/architecture/M0_M8_DEPENDENCY_GRAPH.md`](architecture/M0_M8_DEPENDENCY_GRAPH.md);
+this file keeps the historical M0–M9 record and the evidence behind it.
+
 ## M0 — Repository and technical audit · **COMPLETE**
 
 Repository inspected (one file: the AnyPS5 archive), environment characterised,
 AnyPS5 audited with measured metrics, firmware availability established (none
-supplied), licences checked. Evidence: `docs/PROJECT_AUDIT.md`.
+supplied), licences checked. Evidence: `docs/PROJECT_AUDIT.md`. Extended on
+2026-11-15 by `docs/architecture/REPOSITORY_AUDIT_2026-11-15.md`, which measures
+the current tree and corrects nine documented contradictions.
 
 ## M1 — Working bootable PC5 ISO · **COMPLETE (emulated)**
 
-* `make iso` → `build/pc5.iso` (96,256 bytes, reproducible).
+* `make iso` → `build/pc5.iso` (1,570,816 bytes, reproducible; the image carries a 1.44 MB UEFI ESP, which is why it grew from the 96,256-byte BIOS-only baseline recorded in `docs/TEST_RESULTS.md` §1).
 * `make verify` → 53/53 structural checks.
 * `make boot-test` → 25/25 checks on the v86/SeaBIOS emulated PC, including the
   kernel mounting its own volume through its ATAPI/ISO9660 driver.

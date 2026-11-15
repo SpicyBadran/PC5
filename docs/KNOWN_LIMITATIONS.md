@@ -68,7 +68,9 @@ work that has secretly been done.
 20. **Physical hardware is untested.** Nothing in this repository has run on the
     reference Dell Inspiron 15 7577; the sandbox has no hardware access and no
     KVM. Emulated boot is the highest evidence level reached.
-21. **UEFI firmware was not available to test with.** The loader, the FAT ESP,
-    the PE32+ image and the ISO layout are checked structurally
-    (`tools/eficheck.py`, `tools/mkefiimg.py`, `tools/verify_iso.py`, 34 host
-    tests), but no boot of the UEFI path has been executed or recorded.
+21. **No UEFI boot has run under real firmware.** The loader's own machine code
+    has been executed against the stub in `tests/uefi_stub_firmware.py` (42
+    checks), and the PE32+ image, FAT ESP and ISO layout are checked structurally
+    (`tools/eficheck.py`, `tools/mkefiimg.py`, `tools/verify_iso.py`; 41 UEFI host
+    tests). What has never happened is an OVMF or hardware boot; §1 above states
+    the same thing in more detail.

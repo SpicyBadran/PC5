@@ -60,7 +60,7 @@ in the host tool and the reporting infrastructure around it.
 
 | Step | Work | Status |
 |---|---|---|
-| 1 | Storage driver + ISO9660 reader in the kernel | NOT STARTED |
+| 1 | Storage read path in the kernel (ATAPI PIO + ISO9660) | COMPLETE AND VERIFIED (emulated); writable target still missing |
 | 2 | `pc5ctl fw` intake for a user's own package images, hash + structure only | tool exists; kernel intake pending |
 | 3 | An execution-layer prototype: build AnyPS5 on a capable host and run one known-good homebrew PS5 ELF | RESEARCH REQUIRED |
 | 4 | Record the first per-title row in `docs/PS5_GAME_TEST_RESULTS.md` | NOT STARTED |

@@ -1,0 +1,334 @@
+{
+  "schema": "pc5.roadmap/1",
+  "version": "0.3.0-dev",
+  "updated": "2026-11-15",
+  "authority": "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
+  "tracks": {
+    "A": {
+      "name": "PC5 Native",
+      "objective": "An installable, PlayStation-inspired PC operating system on qualified mainstream x86-64 hardware.",
+      "may_depend_on": ["A"]
+    },
+    "B": {
+      "name": "Prospero",
+      "objective": "Evidence-backed research into PS5 executable compatibility and genuine PS5 system-software execution, isolated from Track A's release path.",
+      "may_depend_on": ["A", "B"]
+    }
+  },
+  "roles": [
+    "lead-architect",
+    "kernel-engineer",
+    "platform-engineer",
+    "graphics-engineer",
+    "compatibility-engineer",
+    "qa-engineer",
+    "release-engineer"
+  ],
+  "milestones": [
+    {
+      "id": "M0",
+      "track": "A",
+      "title": "Architecture freeze and repository audit",
+      "state": "complete",
+      "owner_role": "lead-architect",
+      "depends_on": [],
+      "legacy": ["repository M0"],
+      "deliverables": [
+        "docs/architecture/REPOSITORY_AUDIT_2026-11-15.md",
+        "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
+        "docs/architecture/LINUX_VS_FREESTANDING.md",
+        "docs/architecture/HARDWARE_STRATEGY.md",
+        "docs/architecture/MIGRATION_PLAN.md",
+        "docs/architecture/M0_M8_DEPENDENCY_GRAPH.md",
+        "docs/architecture/RISK_REGISTER.md",
+        "docs/architecture/FIRST_THREE_TASKS.md",
+        "docs/TECHNICAL_DECISIONS.md (ADR-009 to ADR-012)"
+      ],
+      "acceptance": [
+        "every tracked file is classified in the repository audit, with measured counts rather than estimates",
+        "the dual-track boundary is recorded as ADR-010 and enforced by tests/test_architecture.py",
+        "the Linux-foundation decision is recorded as ADR-009 with its exit condition and current blocker",
+        "documentation drift found by the audit is corrected or explicitly filed",
+        "the milestone graph in docs/architecture/roadmap.json validates with zero errors",
+        "make check passes with the architecture tests included"
+      ],
+      "evidence": [
+        "docs/architecture/REPOSITORY_AUDIT_2026-11-15.md",
+        "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
+        "docs/architecture/M0_M8_DEPENDENCY_GRAPH.md",
+        "docs/architecture/roadmap.json",
+        "docs/TECHNICAL_DECISIONS.md",
+        "tests/test_architecture.py"
+      ],
+      "next_action": "M1a is already proven; start M1c hardening (OVMF run) and M1 installer design in parallel."
+    },
+    {
+      "id": "M1a",
+      "track": "A",
+      "title": "Reproducible BIOS boot medium",
+      "state": "complete",
+      "owner_role": "release-engineer",
+      "depends_on": ["M0"],
+      "legacy": ["repository M1", "repository M1b (local half)"],
+      "deliverables": [
+        "tools/mkiso.py (ISO9660 + El Torito writer)",
+        "tools/verify_iso.py (independent verifier)",
+        "boot/loader.S (real-mode loader)",
+        "kernel/ (32-bit diagnostic kernel)"
+      ],
+      "acceptance": [
+        "make iso produces build/pc5.iso reproducibly under SOURCE_DATE_EPOCH",
+        "make verify passes every structural check",
+        "make boot-test boots the image on the v86/SeaBIOS emulated PC and asserts the rendered interface",
+        "the kernel mounts its own medium through its ATAPI/ISO9660 driver"
+      ],
+      "evidence": [
+        "docs/TEST_RESULTS.md",
+        "docs/ARCHITECTURE.md"
+      ]
+    },
+    {
+      "id": "M1b",
+      "track": "A",
+      "title": "Automated CI and release publication",
+      "state": "blocked",
+      "owner_role": "release-engineer",
+      "depends_on": ["M1a"],
+      "legacy": ["repository M1b, milestone B3"],
+      "blocker": "GitHub App installation lacks the Workflows permission, so ci/build.yml cannot be pushed to .github/workflows/; see ci/README.md.",
+      "deliverables": [
+        "ci/build.yml",
+        "tools/publish_release.sh",
+        "tests/test_release.py"
+      ],
+      "acceptance": [
+        "the workflow file is registered under .github/workflows/ and appears in gh api repos/.../actions/workflows",
+        "a tag push builds twice, requires identical hashes, runs every suite and publishes exactly three assets",
+        "a failed test run publishes nothing"
+      ],
+      "evidence": [
+        "ci/README.md",
+        "docs/TEST_RESULTS.md"
+      ]
+    },
+    {
+      "id": "M1c",
+      "track": "A",
+      "title": "UEFI boot path under real firmware",
+      "state": "in_progress",
+      "owner_role": "kernel-engineer",
+      "depends_on": ["M0"],
+      "legacy": ["repository M1c"],
+      "deliverables": [
+        "boot/uefi/ (PE32+ EFI application)",
+        "tools/mkefiimg.py (FAT ESP writer)",
+        "tools/eficheck.py (PE32+ validator)",
+        "tests/uefi_stub_firmware.py (Unicorn stub firmware harness)"
+      ],
+      "acceptance": [
+        "the loader's logic is executed end to end against the stub firmware (42 checks) — done",
+        "the same BOOTX64.EFI boots under OVMF and the serial log is recorded — NOT done",
+        "one physical UEFI machine reaches the PC5 kernel with Secure Boot off and the log is committed — NOT done",
+        "GOP-only machines get a working framebuffer console and the text fallback is no longer required"
+      ],
+      "evidence": [
+        "boot/uefi/README.md",
+        "docs/TEST_RESULTS.md"
+      ],
+      "next_action": "Obtain OVMF (or a UEFI-capable VM) in the build environment; a stub run may never be relabelled as firmware compatibility."
+    },
+    {
+      "id": "M1",
+      "track": "A",
+      "title": "Physical boot and installation",
+      "state": "not_started",
+      "owner_role": "kernel-engineer",
+      "depends_on": ["M0", "M1a", "M1c"],
+      "legacy": ["repository M2", "repository M3 (partial)"],
+      "deliverables": [
+        "bootable USB image (isohybrid MBR plus UEFI entry)",
+        "installer with explicit target confirmation",
+        "partition-table parser and writable filesystem",
+        "recovery entry point"
+      ],
+      "acceptance": [
+        "all three reference configurations boot from USB and each records a complete PC5-LOG and screen dump",
+        "the installer writes to NVMe on the AMD reference machine and to SATA on the Intel reference machine",
+        "the installed system boots with the installation medium removed",
+        "the recovery entry boots on the same machine and can reinstall",
+        "evidence for each machine is committed under docs/evidence/m1/<machine>/ with the firmware version and Secure Boot state"
+      ],
+      "evidence": [],
+      "next_action": "Storage write path first: AHCI/NVMe block drivers, GPT parser and a writable filesystem behind the existing block interface."
+    },
+    {
+      "id": "M2",
+      "track": "A",
+      "title": "Hardware abstraction and drivers",
+      "state": "not_started",
+      "owner_role": "kernel-engineer",
+      "depends_on": ["M1"],
+      "legacy": ["repository M3", "repository M6 (input/network part)"],
+      "deliverables": [
+        "Linux-kernel-based hardware support for the qualified device set",
+        "PC5 hardware abstraction layer over display, input, storage, audio and network",
+        "xHCI + HID + DualSense input path",
+        "audio routing and volume control",
+        "Ethernet and Wi-Fi enablement per qualified device"
+      ],
+      "acceptance": [
+        "every reference configuration has a compatibility-matrix row with boot, GPU acceleration, storage, USB, audio and network results measured separately",
+        "the DualSense is enumerated and its input reports are dumped and committed (buttons, sticks, touchpad, motion, adaptive triggers)",
+        "GPU acceleration is demonstrated by a recorded renderer string and a rendered frame on each GPU vendor",
+        "no device is described as supported without a row that names the measurement"
+      ],
+      "evidence": [],
+      "next_action": "Produce the qualification-matrix template as machine-readable rows before writing driver code, so results cannot be invented later."
+    },
+    {
+      "id": "M3",
+      "track": "A",
+      "title": "PC5 operating system",
+      "state": "not_started",
+      "owner_role": "platform-engineer",
+      "depends_on": ["M2"],
+      "legacy": ["repository M3", "repository M8 (partial)"],
+      "deliverables": [
+        "PC5 system image (immutable base plus update slots)",
+        "console session and desktop session",
+        "device, controller and application management",
+        "offline update verification and recovery",
+        "reproducible image build"
+      ],
+      "acceptance": [
+        "a clean install reaches the PC5 home screen on every reference configuration without a keyboard",
+        "an application can be installed, launched, suspended and removed from the PC5 interface",
+        "an interrupted update leaves a bootable system in the previous slot",
+        "the image build is reproducible from a recorded commit and SOURCE_DATE_EPOCH"
+      ],
+      "evidence": [],
+      "next_action": "Define the system-image composition and the session boundary before choosing shell technology."
+    },
+    {
+      "id": "M4",
+      "track": "A",
+      "title": "PlayStation experience",
+      "state": "not_started",
+      "owner_role": "platform-engineer",
+      "depends_on": ["M3"],
+      "legacy": ["repository M3/M6 interface work"],
+      "deliverables": [
+        "controller-first home screen",
+        "game library and launch manager",
+        "DualSense feature integration (light bar, haptics, adaptive triggers)",
+        "system settings and account-free profile handling"
+      ],
+      "acceptance": [
+        "every shell surface is reachable and operable with a DualSense alone; the keyboard is optional",
+        "DualSense features are individually exercised and the report/effect evidence is committed",
+        "the library launches a registered title and returns to the shell with state preserved",
+        "input-to-photon latency is measured on each reference configuration and recorded"
+      ],
+      "evidence": [],
+      "next_action": "Prototype the shell against the M3 session API on one machine before generalising."
+    },
+    {
+      "id": "M5",
+      "track": "B",
+      "title": "PS5 executable compatibility (research and runtime)",
+      "state": "not_started",
+      "owner_role": "compatibility-engineer",
+      "depends_on": ["M0"],
+      "legacy": ["repository M7 (execution path)"],
+      "deliverables": [
+        "PS5 ELF/SELF intake analysis with documented, lawful input requirements",
+        "loader and relocation support for user-space executables",
+        "PRX/NID import resolution with independently implemented shims",
+        "graphics and audio translation boundary for relinked titles",
+        "per-title records in docs/PS5_GAME_TEST_RESULTS.md"
+      ],
+      "acceptance": [
+        "at least one lawfully obtained PS5 user-space executable reaches a recorded, reproducible execution milestone (entry, syscall loop or presented frame) on PC5 Native",
+        "the record names the milestone reached and never describes it as PS5 system software or firmware execution",
+        "each attempted title has a row with the blocking subsystem, or the milestone is recorded as not reached",
+        "no Sony firmware, key or proprietary library is required, redistributed or derived"
+      ],
+      "evidence": [],
+      "next_action": "Host-side feasibility spike on a machine that can build the relinker, recorded as a negative or positive result."
+    },
+    {
+      "id": "M6",
+      "track": "B",
+      "title": "Genuine Prospero research",
+      "state": "not_started",
+      "owner_role": "compatibility-engineer",
+      "depends_on": ["M0"],
+      "legacy": ["repository M4", "repository M5"],
+      "deliverables": [
+        "firmware structure research on lawfully obtained images (never distributed)",
+        "public boot-chain and hardware-dependency documentation",
+        "security-architecture analysis",
+        "full-system emulation feasibility assessment",
+        "legal interoperability assessment"
+      ],
+      "acceptance": [
+        "a feasibility report cites public evidence for every claim and states what remains unproven",
+        "the hardware dependency map names each SoC block a PC would have to emulate",
+        "the legal assessment is written by or reviewed against counsel-grade sources before any experiment",
+        "the report ends in an explicit go / no-go recommendation; no stage of the PC5 compatibility chain is advanced by research alone"
+      ],
+      "evidence": [
+        "docs/FIRMWARE_ANALYSIS.md",
+        "docs/SECURITY.md"
+      ],
+      "next_action": "Legal assessment first; the technical feasibility question is not worth funding before it is answered."
+    },
+    {
+      "id": "M7",
+      "track": "A",
+      "title": "Performance and compatibility expansion",
+      "state": "not_started",
+      "owner_role": "qa-engineer",
+      "depends_on": ["M4"],
+      "legacy": ["repository M8"],
+      "deliverables": [
+        "reproducible benchmark suite",
+        "multi-vendor compatibility database",
+        "crash reporting and triage workflow",
+        "GPU, storage and controller latency measurements"
+      ],
+      "acceptance": [
+        "the benchmark suite runs unattended on every reference configuration and produces comparable records",
+        "a compatibility database row exists for every tested machine and title, generated from measurements",
+        "crash reports are attributable to a component and reproduce from the recorded configuration",
+        "no performance number is published without the machine, build and command that produced it"
+      ],
+      "evidence": [],
+      "next_action": "Define the benchmark manifest and evidence format in M2 so early runs already produce reusable data."
+    },
+    {
+      "id": "M8",
+      "track": "A",
+      "title": "Release-quality PC5",
+      "state": "not_started",
+      "owner_role": "release-engineer",
+      "depends_on": ["M7", "M1b"],
+      "legacy": ["repository M9"],
+      "deliverables": [
+        "installer and recovery media",
+        "signed update manifest with rollback",
+        "hardware qualification list",
+        "reproducible release pipeline and published assets",
+        "user and developer documentation"
+      ],
+      "acceptance": [
+        "a tagged commit builds twice to identical artifacts and publishes exactly the documented asset set",
+        "the update signature is verified before apply and a corrupted update is refused",
+        "a power cut during an update leaves a bootable, recoverable system",
+        "every machine on the qualification list has a committed evidence record from the release build"
+      ],
+      "evidence": [],
+      "next_action": "Blocked behind M7 and the Workflows permission that M1b needs; do not schedule a release before qualification exists."
+    }
+  ]
+}

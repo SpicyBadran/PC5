@@ -65,7 +65,7 @@ kernel and the loader cannot drift apart silently.
 | `kernel/fw.c` | firmware probe (manifest presence), never a claim of execution |
 | `kernel/ui.c` | six pages, controller/keyboard navigation, serial recovery console, audit log |
 
-The kernel is deliberately small (≈31 KB) and freestanding: no libc, no
+The kernel is deliberately small (36,508 bytes) and freestanding: no libc, no
 allocator, no paging, no interrupts beyond the IDT gates. Everything is
 polled, which keeps the boot deterministic and makes failures reproducible.
 
@@ -152,9 +152,13 @@ the verified one, and only a recorded OVMF or hardware boot can change that.
 
 ## 6. Why a Linux foundation is not in this build
 
-No Linux kernel source or binary was obtainable (apt and kernel.org are
-unreachable, no release assets can be downloaded), so a Linux-based PC5 runtime
-could not be built or tested. The bring-up kernel is therefore the whole
+No Linux kernel source or binary could be *built or booted* here (apt is
+unreachable, the Kconfig prerequisites and a QEMU/KVM vehicle are absent, and
+kernel.org is blocked — though `codeload.github.com` can serve the source), so a
+Linux-based PC5 runtime could not be built or tested. ADR-009 in
+`docs/TECHNICAL_DECISIONS.md` records Linux as the accepted foundation for PC5
+Native and the freestanding kernel as the recovery environment; the constraint is
+execution, not direction. The bring-up kernel is therefore the whole
 runtime, and it establishes the hardware-inventory and reporting layer that a
 future Linux image would reuse. See `docs/KNOWN_LIMITATIONS.md` and
 `docs/ROADMAP.md`.
