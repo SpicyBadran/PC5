@@ -453,12 +453,349 @@ static void test_partitions(void)
     check_str("part status overlap", part_status_name(PART_E_OVERLAP), "overlap");
 }
 
+
+/* ------------------------------------------------------------- fat32 */
+
+#define TDISK_SECTORS 32u
+
+struct tdisk {
+    u8 *data;
+    u32 sectors;
+    u32 read_limit;   /* refuse reads at or beyond this sector (0 = no limit) */
+};
+
+static int tdisk_read(void *ctx, u32 lba, u32 count, void *buf)
+{
+    struct tdisk *d = (struct tdisk *)ctx;
+    if (lba + count > d->sectors)
+        return -1;
+    if (d->read_limit && lba + count > d->read_limit)
+        return -1;
+    memcpy(buf, d->data + lba * 512u, count * 512u);
+    return 0;
+}
+
+static void w16(u8 *p, u32 v) { p[0] = (u8)v; p[1] = (u8)(v >> 8); }
+static void w32(u8 *p, u32 v) { w16(p, v); w16(p + 2, v >> 16); }
+
+/* A minimal but structurally valid FAT32 volume: 32 sectors, 4 reserved,
+ * two 1-sector FATs, 1 sector per cluster, root cluster 2, 26 data clusters.
+ * Deliberately below the 65,525-cluster advisory; the parser is structural,
+ * which is exactly what these tests pin down. */
+static void tdisk_init(struct tdisk *d, u32 sectors)
+{
+    memset(d, 0, sizeof(*d));
+    d->sectors = sectors;
+    d->data = (u8 *)calloc(sectors, 512u);
+    u8 *bs = d->data;
+    bs[510] = 0x55;
+    bs[511] = 0xaa;
+    w16(bs + 11, 512);
+    bs[13] = 1;
+    w16(bs + 14, 4);
+    bs[16] = 2;
+    w16(bs + 17, 0);
+    w16(bs + 19, 0);
+    bs[21] = 0xf8;
+    w16(bs + 22, 0);
+    w32(bs + 32, sectors);
+    w32(bs + 36, 1);
+    w16(bs + 40, 0);
+    w16(bs + 42, 0);
+    w32(bs + 44, 2);
+    w16(bs + 48, 1);
+    w16(bs + 50, 0);
+    bs[66] = 0x29;
+    memcpy(bs + 71, "PC5FS      ", 11);
+    memcpy(bs + 82, "FAT32   ", 8);
+}
+
+static void fat_set(struct tdisk *d, u32 cluster, u32 value)
+{
+    for (u32 copy = 0; copy < 2; copy++)
+        w32(d->data + (4u + copy) * 512u + cluster * 4u, value);
+}
+
+static void tfree(struct tdisk *d)
+{
+    free(d->data);
+    d->data = NULL;
+}
+
+/* Every test starts from the pristine volume; the struct holds a pointer, so a
+ * plain assignment would share (and let one test corrupt) the same buffer. */
+static void tclone(struct tdisk *dst, const struct tdisk *src)
+{
+    dst->sectors = src->sectors;
+    dst->read_limit = src->read_limit;
+    dst->data = (u8 *)malloc(src->sectors * 512u);
+    memcpy(dst->data, src->data, src->sectors * 512u);
+}
+
+static u8 *tdir(struct tdisk *d) { return d->data + 6u * 512u; }
+
+static void tdir_entry(struct tdisk *d, int index, const char name[11], u8 attr,
+                       u32 cluster, u32 size)
+{
+    u8 *e = tdir(d) + index * 32;
+    memcpy(e, name, 11);
+    e[11] = attr;
+    w16(e + 20, (u16)(cluster >> 16));
+    w16(e + 26, (u16)cluster);
+    w32(e + 28, size);
+}
+
+static u8 *tcluster(struct tdisk *d, u32 cluster)
+{
+    return d->data + (6u + (cluster - 2u)) * 512u;
+}
+
+static void test_fat32(void)
+{
+    struct tdisk d = {0};
+    struct fat32_io io;
+    struct fat32_volume v;
+    u8 buf[4096];
+    u32 len = 0;
+
+    io.read = tdisk_read;
+    io.ctx = &d;
+
+    /* ---- a valid mount ---- */
+    tdisk_init(&d, TDISK_SECTORS);
+    fat_set(&d, 0, 0x0ffffff8u);
+    fat_set(&d, 1, 0x0fffffffu);
+    check_int("fat32 mount", fat32_mount(&io, 0, d.sectors, &v), FAT32_OK);
+    check_int("fat32 cluster count", (long)v.cluster_count, 26);
+    check_int("fat32 first data sector", (long)v.first_data_sector, 6);
+    check_int("fat32 root cluster", (long)v.root_cluster, 2);
+    check_int("fat32 bytes per sector", (long)v.bytes_per_sector, 512);
+    check_str("fat32 label", v.label, "PC5FS");
+    check_str("fat32 fs type", v.fs_type, "FAT32");
+
+    struct tdisk base;
+    tdisk_init(&base, TDISK_SECTORS);
+    fat_set(&base, 0, 0x0ffffff8u);
+    fat_set(&base, 1, 0x0fffffffu);
+
+    /* ---- BPB and geometry refusals ---- */
+    tfree(&d);
+    tclone(&d, &base);
+    d.data[510] = 0;
+    check_int("fat32 missing signature", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_SIGNATURE);
+
+    tfree(&d);
+    tclone(&d, &base);
+    w16(d.data + 11, 1024);
+    check_int("fat32 1024-byte sectors refused", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_BPB);
+
+    tfree(&d);
+    tclone(&d, &base);
+    d.data[13] = 3;
+    check_int("fat32 non-power-of-two cluster", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_BPB);
+
+    tfree(&d);
+    tclone(&d, &base);
+    w16(d.data + 14, 0);
+    check_int("fat32 zero reserved sectors", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_BPB);
+
+    tfree(&d);
+    tclone(&d, &base);
+    d.data[16] = 5;
+    check_int("fat32 five FATs refused", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_BPB);
+
+    tfree(&d);
+    tclone(&d, &base);
+    d.data[21] = 0;
+    check_int("fat32 bad media byte", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_BPB);
+
+    tfree(&d);
+    tclone(&d, &base);
+    w16(d.data + 42, 0x0100);
+    check_int("fat32 version 1.0 refused", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_NOT_FAT32);
+
+    tfree(&d);
+    tclone(&d, &base);
+    w16(d.data + 17, 512);
+    check_int("fat16 root entries not fat32", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_NOT_FAT32);
+
+    tfree(&d);
+    tclone(&d, &base);
+    w16(d.data + 22, 1);
+    check_int("fat16 size field not fat32", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_NOT_FAT32);
+
+    tfree(&d);
+    tclone(&d, &base);
+    memcpy(d.data + 82, "FAT16   ", 8);
+    check_int("fat16 type string refused", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_NOT_FAT32);
+
+    tfree(&d);
+    tclone(&d, &base);
+    w32(d.data + 32, 33);
+    check_int("fat32 larger than partition", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_GEOMETRY);
+
+    tfree(&d);
+    tclone(&d, &base);
+    w32(d.data + 44, 0);
+    check_int("fat32 root cluster zero", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_GEOMETRY);
+
+    tfree(&d);
+    tclone(&d, &base);
+    w32(d.data + 44, 28);
+    check_int("fat32 root cluster past end", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_GEOMETRY);
+
+    tfree(&d);
+    tclone(&d, &base);
+    w16(d.data + 48, 4);
+    check_int("fat32 fsinfo outside reserved", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_BPB);
+
+    tfree(&d);
+    tclone(&d, &base);
+    w16(d.data + 50, 4);
+    check_int("fat32 backup outside reserved", fat32_mount(&io, 0, d.sectors, &v), FAT32_E_BPB);
+
+    /* FAT too small to describe the clusters it claims */
+    struct tdisk big;
+    tdisk_init(&big, 300);
+    struct fat32_io io_big = { tdisk_read, &big };
+    check_int("fat32 FAT capacity enforced", fat32_mount(&io_big, 0, big.sectors, &v), FAT32_E_GEOMETRY);
+    free(big.data);
+
+    /* ---- directory and file reads ---- */
+    tfree(&d);
+    tclone(&d, &base);
+    tdir_entry(&d, 0, "PC5FS      ", 0x08, 0, 0);           /* volume label  */
+    tdir_entry(&d, 1, "TEST    TXT", 0x20, 3, 100);         /* small file     */
+    tdir_entry(&d, 2, "SUBDIR     ", 0x10, 5, 0);           /* directory      */
+    tdir_entry(&d, 3, "DELETED TXT", 0x20, 6, 10);
+    tdir(&d)[3 * 32] = 0xe5;                                /* deleted        */
+    tdir(&d)[4 * 32 + 11] = 0x0f;                           /* LFN record     */
+    memcpy(tdir(&d) + 4 * 32, "LONGNA~1TXT", 11);
+    tdir_entry(&d, 5, "EXACT   BIN", 0x20, 7, 512);
+    tdir_entry(&d, 6, "MULTI   BIN", 0x20, 8, 1500);
+    tdir_entry(&d, 7, "EMPTY   TXT", 0x20, 0, 0);
+    tdir_entry(&d, 8, "BIG     BIN", 0x20, 9, 4000);
+
+    check_int("fat32 remount with entries", fat32_mount(&io, 0, d.sectors, &v), FAT32_OK);
+
+    for (u32 i = 0; i < 100; i++)
+        tcluster(&d, 3)[i] = (u8)(i + 1);
+    check_int("fat32 read small file", fat32_read_file(&io, &v, "TEST.TXT", buf, sizeof(buf), &len), FAT32_OK);
+    check_int("fat32 small length", (long)len, 100);
+    check_int("fat32 small first byte", buf[0], 1);
+    check_int("fat32 small last byte", buf[99], 100);
+
+    check_int("fat32 lookup is case-insensitive", fat32_find(&io, &v, "test.txt", NULL, NULL, NULL), FAT32_OK);
+    check_int("fat32 missing file", fat32_read_file(&io, &v, "NOPE.TXT", buf, sizeof(buf), &len), FAT32_E_NO_FILE);
+    check_int("fat32 long base name refused", fat32_find(&io, &v, "TOOLONGNAME.TXT", NULL, NULL, NULL), FAT32_E_NAME);
+    check_int("fat32 illegal character refused", fat32_find(&io, &v, "A?.TXT", NULL, NULL, NULL), FAT32_E_NAME);
+    check_int("fat32 directory is not a file", fat32_read_file(&io, &v, "SUBDIR", buf, sizeof(buf), &len), FAT32_E_IS_DIR);
+    check_int("fat32 deleted entry ignored", fat32_read_file(&io, &v, "DELETED.TXT", buf, sizeof(buf), &len), FAT32_E_NO_FILE);
+    check_int("fat32 long-name record is not a file",
+              fat32_read_file(&io, &v, "LONGNA~1.TXT", buf, sizeof(buf), &len), FAT32_E_NO_FILE);
+
+    for (u32 i = 0; i < 512; i++)
+        tcluster(&d, 7)[i] = (u8)i;
+    check_int("fat32 read exact cluster", fat32_read_file(&io, &v, "EXACT.BIN", buf, sizeof(buf), &len), FAT32_OK);
+    check_int("fat32 exact length", (long)len, 512);
+    check_int("fat32 exact last byte", buf[511], 255);
+
+    /* 1500 bytes over clusters 8, 10, 11 (a gap makes the chain non-contiguous) */
+    fat_set(&d, 8, 10);
+    fat_set(&d, 10, 11);
+    fat_set(&d, 11, 0x0fffffffu);
+    u32 multi_clusters[3] = {8, 10, 11};
+    for (u32 c = 0; c < 3; c++)
+        for (u32 i = 0; i < 512; i++)
+            tcluster(&d, multi_clusters[c])[i] = (u8)(c * 512 + i);
+    check_int("fat32 multi-cluster read", fat32_read_file(&io, &v, "MULTI.BIN", buf, sizeof(buf), &len), FAT32_OK);
+    check_int("fat32 multi length", (long)len, 1500);
+    check_int("fat32 multi boundary byte", buf[512], 0);  /* second cluster, first byte */
+    check_int("fat32 multi tail byte", buf[1499], (u8)(1499 - 1024));
+
+    check_int("fat32 zero-length file", fat32_read_file(&io, &v, "EMPTY.TXT", buf, sizeof(buf), &len), FAT32_OK);
+    check_int("fat32 zero-length size", (long)len, 0);
+
+    check_int("fat32 buffer too small is refused",
+              fat32_read_file(&io, &v, "BIG.BIN", buf, 1024, &len), FAT32_E_SPACE);
+
+    /* ---- chain corruption ---- */
+    tfree(&d);
+    tclone(&d, &base);
+    tdir_entry(&d, 0, "BROKEN  BIN", 0x20, 3, 3000);
+    fat32_mount(&io, 0, d.sectors, &v);
+
+    fat_set(&d, 3, 0);
+    check_int("fat32 free cluster in chain", fat32_read_file(&io, &v, "BROKEN.BIN", buf, sizeof(buf), &len), FAT32_E_FREE);
+
+    fat_set(&d, 3, 0x0ffffff7u);
+    check_int("fat32 bad cluster in chain", fat32_read_file(&io, &v, "BROKEN.BIN", buf, sizeof(buf), &len), FAT32_E_BAD);
+
+    fat_set(&d, 3, 0x0ffffff0u);
+    check_int("fat32 reserved cluster in chain", fat32_read_file(&io, &v, "BROKEN.BIN", buf, sizeof(buf), &len), FAT32_E_RESERVED);
+
+    fat_set(&d, 3, 30);
+    check_int("fat32 cluster past volume", fat32_read_file(&io, &v, "BROKEN.BIN", buf, sizeof(buf), &len), FAT32_E_CLUSTER);
+
+    /* 3 -> 4 -> 3: a two-cluster cycle */
+    fat_set(&d, 3, 4);
+    fat_set(&d, 4, 3);
+    check_int("fat32 cyclic chain", fat32_read_file(&io, &v, "BROKEN.BIN", buf, sizeof(buf), &len), FAT32_E_LOOP);
+
+    fat_set(&d, 3, 0x0fffffffu); /* chain ends, but the file claims 1500 bytes */
+    check_int("fat32 short chain", fat32_read_file(&io, &v, "BROKEN.BIN", buf, sizeof(buf), &len), FAT32_E_CHAIN);
+
+    /* entry with a size but no cluster */
+    tfree(&d);
+    tclone(&d, &base);
+    tdir_entry(&d, 0, "NOSPACE BIN", 0x20, 0, 100);
+    fat32_mount(&io, 0, d.sectors, &v);
+    check_int("fat32 file with no cluster", fat32_read_file(&io, &v, "NOSPACE.BIN", buf, sizeof(buf), &len), FAT32_E_CLUSTER);
+
+    /* truncated image: the directory sector itself is unreadable */
+    tfree(&d);
+    tclone(&d, &base);
+    tdir_entry(&d, 0, "TEST    TXT", 0x20, 3, 100);
+    fat32_mount(&io, 0, d.sectors, &v);
+    d.read_limit = 6; /* sectors 0..5 readable, cluster data (6+) is not */
+    check_int("fat32 truncated image", fat32_read_file(&io, &v, "TEST.TXT", buf, sizeof(buf), &len), FAT32_E_IO);
+    d.read_limit = 0;
+
+    /* ---- listing ---- */
+    tfree(&d);
+    tclone(&d, &base);
+    tdir_entry(&d, 0, "PC5FS      ", 0x08, 0, 0);
+    tdir_entry(&d, 1, "TEST    TXT", 0x20, 3, 100);
+    tdir_entry(&d, 2, "DELETED TXT", 0x20, 6, 10);
+    tdir(&d)[2 * 32] = 0xe5;
+    tdir(&d)[3 * 32] = 0x41; /* LFN ordinal */
+    tdir(&d)[3 * 32 + 11] = 0x0f;
+    memcpy(tdir(&d) + 3 * 32 + 1, "O T H E R", 10);
+    tdir_entry(&d, 4, "OTHER   BIN", 0x20, 4, 10);
+    fat32_mount(&io, 0, d.sectors, &v);
+    struct fat32_entry list[8];
+    int count = 0;
+    check_int("fat32 list root", fat32_list_root(&io, &v, list, 8, &count), FAT32_OK);
+    check_int("fat32 list count", count, 2);
+    check_str("fat32 list first name", list[0].name, "TEST.TXT");
+    check_int("fat32 list first size", (long)list[0].size, 100);
+    check_str("fat32 list second name", list[1].name, "OTHER.BIN");
+
+    tfree(&d);
+    free(base.data);
+
+    check_str("fat32 status ok", fat32_status_name(FAT32_OK), "ok");
+    check_str("fat32 status loop", fat32_status_name(FAT32_E_LOOP), "loop");
+    check_str("fat32 status space", fat32_status_name(FAT32_E_SPACE), "space");
+}
+
 int main(void)
 {
     test_format();
     test_block_rules();
     test_sha256();
     test_partitions();
+    test_fat32();
     test_numbers();
     test_strings();
     test_memory_map();

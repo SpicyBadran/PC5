@@ -66,8 +66,10 @@ static void storage_init(void)
     /* Read-only: find out what is already on the disk before anything may
      * write to it.  A failure here is reported, never fatal. */
     int disk = ata_writable_device();
-    if (disk >= 0)
+    if (disk >= 0) {
         part_scan(disk);
+        fat32_mount_partition(disk); /* read-only; failure is reported, not fatal */
+    }
 }
 
 static void log_boot_evidence(const struct cpu_info *cpu, const struct mem_info *mem,
@@ -134,6 +136,20 @@ static void log_boot_evidence(const struct cpu_info *cpu, const struct mem_info 
         }
     } else {
         pc5_log("PC5-LOG partitions=none");
+    }
+
+    const struct fat32_volume *fv = fat32_mounted();
+    if (fv->error == FAT32_OK && fat32_mounted_device() >= 0) {
+        pc5_log("PC5-LOG fat32 device=%d partition=%d status=ok label=\"%s\" fs=%s "
+                "clusters=%u spc=%u base=%u",
+                fat32_mounted_device(), fat32_mounted_partition(), fv->label,
+                fv->fs_type, fv->cluster_count, fv->sectors_per_cluster,
+                fv->base_lba);
+    } else if (pr->device >= 0) {
+        pc5_log("PC5-LOG fat32 status=%s reason=no-mounted-fat32-volume",
+                fat32_status_name(fv->error));
+    } else {
+        pc5_log("PC5-LOG fat32=none (no writable disk attached)");
     }
 }
 

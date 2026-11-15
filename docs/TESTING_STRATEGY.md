@@ -39,10 +39,16 @@ anywhere, in any document, on any screen.
     result, manifest → C embedding.
   * Kernel unit binary: built and executed.
   * Built image: verifies the real `build/pc5.iso` when present.
-* `tests/kernel_unit.c` — 99 assertions over the kernel's pure logic:
+* `tests/kernel_unit.c` — 160 assertions over the kernel's pure logic:
   formatter (`%s`, `%-4s`, `%08x`, `%llu`, `%%`), number conversion, E820
   accounting, chain state machine (including "a firmware manifest never turns
   execution into OK").
+
+`tests/test_fat32.py` mounts a real FAT32 image with the kernel module compiled
+as a host program and compares its SHA-256 for every fixture file against two
+independent sources: the bytes the fixture was generated from and a second FAT32
+reader written in Python. It also proves the image is unchanged after reading,
+that a FAT16 BPB is refused, and that the module contains no write path.
 
 `tests/test_partitions.py` protects the partition work's seams: that the
 fixture images really carry the CRCs and backup header the kernel checks, that
