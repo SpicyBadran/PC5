@@ -10,7 +10,7 @@ used across this repository.
 | 1 | Code compiles | `make` | PROVEN |
 | 2 | Build succeeds | `make iso` writes `build/pc5.iso` + `build-info.json` | PROVEN |
 | 3 | ISO is generated | file exists with recorded SHA-256 | PROVEN |
-| 4 | ISO integrity verified | `make verify` (independent parser, 32 checks) | PROVEN |
+| 4 | ISO integrity verified | `make verify` (independent parser, 53 checks) | PROVEN |
 | 5 | ISO boots in a virtual machine | `make boot-test` (v86 + SeaBIOS) | PROVEN |
 | 6 | Installer works | installer does not exist | NOT APPLICABLE YET |
 | 7 | Installation succeeds | depends on 6 | NOT APPLICABLE YET |
@@ -39,7 +39,7 @@ anywhere, in any document, on any screen.
     result, manifest → C embedding.
   * Kernel unit binary: built and executed.
   * Built image: verifies the real `build/pc5.iso` when present.
-* `tests/kernel_unit.c` — 32 assertions over the kernel's pure logic:
+* `tests/kernel_unit.c` — 35 assertions over the kernel's pure logic:
   formatter (`%s`, `%-4s`, `%08x`, `%llu`, `%%`), number conversion, E820
   accounting, chain state machine (including "a firmware manifest never turns
   execution into OK").
@@ -48,7 +48,18 @@ These run in milliseconds and catch the class of bug that otherwise only shows
 up on screen — the formatter bugs found this way are recorded in
 `docs/TEST_RESULTS.md`.
 
-### 2.2 Structural image test — `make verify`
+### 2.2 Architecture and milestone graph — `make roadmap`
+
+`tools/roadmap.py` validates `docs/architecture/roadmap.json`: unique ids, known
+tracks and roles, no cycles, acceptance criteria on every milestone, evidence
+paths that exist, and — the architectural gate — no Track A milestone depending
+directly or transitively on a Track B milestone. `tests/test_architecture.py`
+runs the same validation inside `make check`, including negative fixtures that
+prove the gate can fail, and checks that the generated graph in
+`M0_M8_DEPENDENCY_GRAPH.md` matches the data and that the architecture
+documents' relative links resolve.
+
+### 2.3 Structural image test — `make verify`
 
 A second, independent ISO9660/El Torito parser checks:
 volume descriptor, block size, volume size vs file size, root directory walk,
@@ -57,7 +68,7 @@ no-emulation entry, load segment `0x7C0`, virtual sector count in 512-byte
 units, boot descriptor CRC32, descriptor↔directory agreement for the kernel
 extent, `PC5K` kernel signature, and per-file SHA-256 against the build record.
 
-### 2.3 Emulated boot test — `make boot-test`
+### 2.4 Emulated boot test — `make boot-test`
 
 `tests/v86_runner.mjs` boots the image in v86 (SeaBIOS, emulated CD-ROM,
 El Torito no-emulation) and records serial output, the VGA text screen and
@@ -75,7 +86,7 @@ scripted input. `tests/boot_test.py` then asserts:
 Evidence is written to `build/test/boot-evidence.json`, `serial.log`,
 `serial-ui.log` and `screens.txt`.
 
-### 2.4 What the emulator cannot prove
+### 2.5 What the emulator cannot prove
 
 v86 is an x86 PC emulator, not a PC. It proves the boot chain and the interface
 logic. It does **not** prove: real firmware behaviour (VBE vs GOP quirks), real

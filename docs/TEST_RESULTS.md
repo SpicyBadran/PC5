@@ -539,3 +539,63 @@ controller/network/audio support, genuine PS5 firmware execution, PS5 game
 execution, a CI run, or a CI-published release. `docs/TESTING_STRATEGY.md`
 defines the levels; `docs/PS5_COMPATIBILITY_STATUS.md` records what the machine
 itself reports.
+
+## 9. M0 architecture change — re-verification, 2026-11-15
+
+The M0 change added the architecture documents, four ADRs, the milestone graph
+and its validator, and corrected nine documented contradictions. It touched
+documentation, one Makefile target and the test suite; it did not touch the
+loader, the kernel or the ISO writer. This section records that the artefact and
+every suite still behave, with the build inputs stated so the digest can be
+reproduced.
+
+```
+$ make clean
+$ make BUILD_ID=m0arch SOURCE_DATE_EPOCH=1763164800 iso
+pc5: loader image 4096 bytes
+pc5: kernel image 36500 bytes (limit 585728)
+pc5: wrote build/pc5.iso (1570816 bytes, 767 sectors)
+pc5: sha256 a665e27b5ef70ff2964e5103a02c09045c29306cd9273ade56602e3257e3e837
+```
+
+| Property | Value |
+|---|---|
+| path | `build/pc5.iso` |
+| size | 1,570,816 bytes (767 × 2048) |
+| SHA-256 | `a665e27b5ef70ff2964e5103a02c09045c29306cd9273ade56602e3257e3e837` |
+| inputs | `BUILD_ID=m0arch`, `SOURCE_DATE_EPOCH=1763164800`, version 0.2.0 |
+| loader image | 4,096 bytes |
+| kernel image | 36,500 bytes (the default build at this commit is 36,508; the string length of the injected build id changes it by a few bytes) |
+| UEFI application | 10,450 bytes |
+
+| Suite | Result |
+|---|---|
+| `make verify` | **53/53** checks |
+| `make check` | **107** tests, OK — 24 tools + 41 UEFI + 10 release + 32 architecture |
+| `make unit` | **35** kernel assertions, 0 failures |
+| `make boot-test` | **25/25** checks on the v86/SeaBIOS emulated PC |
+| `tests/uefi_stubtest.py` | **42/42** checks against the stub firmware |
+| `make roadmap` | 12 milestones, tracks A/B separated, generated document in sync |
+
+Two findings from this run are worth recording rather than hiding:
+
+1. **A pre-existing flaky test was found.** `test_uefi_layout_is_deterministic`
+   built the ESP twice without pinning `SOURCE_DATE_EPOCH`; FAT directory
+   timestamps have two-second resolution, so a suite that straddled a tick
+   produced two different hashes from identical content. The test now pins the
+   epoch, which is what it was always trying to assert. This is a test defect,
+   not a writer defect: the writer honours `SOURCE_DATE_EPOCH` correctly, which
+   §5 already proved.
+2. **The test count moved from 75 to 107** because the architecture tests were
+   added, and the graph validator found nothing to fix in the shipped graph on
+   its first run. A rising count is not progress by itself; the documentation
+   contradictions corrected in the same change (see
+   `docs/architecture/REPOSITORY_AUDIT_2026-11-15.md` §6) are the reason to
+   believe the new tests are load-bearing.
+
+Established by this section: the artefact and all five suites behave exactly as
+before the architecture change, and the milestone graph validates.
+
+Not established: anything new about hardware, firmware, drivers or PS5
+compatibility. The M0 change is paper and checks, and paper has never booted a
+machine.
