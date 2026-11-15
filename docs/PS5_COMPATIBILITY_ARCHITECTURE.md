@@ -38,7 +38,7 @@ implementation.
 | 7 | Graphics command translation | framebuffer console only | NOT STARTED |
 | 8 | Shader processing and caching | none | NOT STARTED |
 | 9 | GPU memory and synchronisation | none | NOT STARTED |
-| 10 | Storage and filesystem | loader reads the medium via INT 13h; no kernel driver | PARTIAL |
+| 10 | Storage and filesystem | kernel ATAPI PIO + ISO9660 (read-only); loader also probes the medium | PARTIAL — no write path, no partitions, no writable filesystem |
 | 11 | Game package / executable handling | `FIH`/`CNT` signature identification only | RESEARCH |
 | 12 | Audio | PCI audio class counted only | NOT STARTED |
 | 13 | Controller / input translation | 8042 PS/2 keyboard driver behind `kbd_read()` | PARTIAL (keyboard only) |
@@ -78,11 +78,13 @@ a parsed container is not an executed game. The project's vocabulary:
 
 ## 5. Next three implementations, in order
 
-1. **Storage**: ATA/AHCI PIO + ISO9660 reader in the kernel, so the environment
-   can read files from its own medium (unlocks package intake and a real
-   filesystem test).
-2. **UEFI loader**: a PE32+ application filling the same boot contract, plus a
-   FAT ESP inside the ISO (the writer already emits a UEFI El Torito section).
+1. **Writable storage**: block write, partition-table parsing and a writable
+   filesystem behind the existing block interface. The read path (ATAPI +
+   ISO9660) is complete and verified; without write support there is no installer,
+   no update and no persistent log.
+2. **UEFI under real firmware**: the loader exists and is executed against stub
+   firmware; it needs an OVMF or hardware run before UEFI machines can be called
+   supported (M1c in `docs/architecture/roadmap.json`).
 3. **USB HID**: xHCI enumeration and a HID parser, then a DualSense driver
    (input reports, touchpad, motion, adaptive triggers) behind a
    `controller_read()` interface that mirrors `kbd_read()`.
