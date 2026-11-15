@@ -159,9 +159,9 @@ here.
 
 A large fraction of real firmware treats a USB stick as a hard disk and ignores
 the El Torito CD entry unless a valid MBR and partition table are present. The
-image has none (KNOWN_LIMITATIONS §2). This is a structural change with a
-structural test, so it can be completed without hardware — and it directly
-attacks blocker B3.
+image had none (KNOWN_LIMITATIONS §2); it has one since M1h. This is a structural
+change with a structural test, so it can be completed without hardware — and it
+directly attacks blocker B3.
 
 ### Scope
 
@@ -220,8 +220,8 @@ everything else.
 ## Next three tasks, after M1d and M1e
 
 The first three tasks (storage write, UEFI under real firmware, hybrid MBR) are
-now: **task 1 executed** (M1d), **task 2 blocked on UEFI firmware**, **task 3 not
-started**. Partition discovery was pulled forward as M1e because it is the hard
+now: **task 1 executed** (M1d), **task 2 blocked on UEFI firmware**, **task 3
+executed** (M1h). Partition discovery was pulled forward as M1e because it is the hard
 prerequisite for both the installer and any filesystem work, and because it is
 verifiable here without hardware. What follows is the next executable set, in
 dependency order. Each is independently valuable and independently testable.
@@ -311,6 +311,20 @@ directory; the input image is only mutated when the explicit command runs.
 report success unless both FATs and the directory agree after a re-read.
 
 ### Task C — isohybrid medium: an ISO that also boots as a USB disk
+
+**Status: executed 2026-11-15 as milestone M1h.** Done: a 440-byte MBR bootstrap
+(`boot/mbr.S`) that loads the *same* El Torito boot image through INT 13h, a
+partition table computed from the real layout, an `--no-cdrom` boot test with a
+blank-sector-0 control, and verifier checks with a rejection test per corruption
+(`docs/TEST_RESULTS.md` §14, ADR-014). Not done: a boot on physical hardware.
+Four details differ from the plan below, and the plan is kept as history:
+the entry is a single whole-image entry of type `0x17` (hidden), not a "FAT
+partition entry" — the image contains no FAT filesystem outside the ESP, and
+claiming otherwise would invite automounters to offer to format the stick; the
+boot image's LBA comes from the **boot catalog** (LBA 24), not from the PVD; the
+bootstrap is 440 bytes plus the table the builder owns, not a full 512-byte stub;
+and the boot test detaches the CD rather than trusting `--hda` alongside
+`--cdrom`, because firmware falls back to El Torito when the disk fails.
 
 **Paths:** `tools/mkiso.py`, `tools/verify_iso.py`, `tests/test_tools.py`,
 `tests/boot_test.py`, `docs/BUILDING.md`.

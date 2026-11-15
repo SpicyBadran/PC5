@@ -13,6 +13,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 
 import firmware  # noqa: E402
+import mbr_fixture  # noqa: E402
 import mkiso  # noqa: E402
 import verify_iso  # noqa: E402
 
@@ -27,6 +28,7 @@ class MkIsoTests(unittest.TestCase):
     def build(self, files=None):
         builder = mkiso.IsoBuilder(volume_id="PC5TEST")
         builder.set_bios_boot_image(self.make_boot_image(), desc_offset=0xE00)
+        builder.set_mbr_code(mbr_fixture.synthetic())
         for name, data in (files or {"KERNEL.BIN": b"\xeb\x05PC5K\x01" + bytes(2048)}).items():
             builder.add_file(name, data)
         return builder.build()

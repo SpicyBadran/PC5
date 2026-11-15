@@ -51,9 +51,9 @@ make clean iso && sha256sum build/pc5.iso   # same digest both times
 ```
 
 Everything else is deterministic: `tools/mkiso.py` allocates every extent by a
-fixed rule and stamps the volume and directory records from `SOURCE_DATE_EPOCH`
-(not from the wall clock), so nothing depends on file-system order or on when
-you build. This is covered by
+fixed rule, stamps the volume and directory records from `SOURCE_DATE_EPOCH`
+(not from the wall clock) and writes a constant disk signature into the hybrid
+MBR, so nothing depends on file-system order or on when you build. This is covered by
 `tests/test_tools.py::test_source_date_epoch_makes_builds_byte_identical`. `build/build-info.json` records the volume
 layout, the per-file SHA-256 values and the image SHA-256 that `make verify`
 re-checks.
@@ -142,6 +142,22 @@ docs/                engineering documentation
 build/               generated; not committed
 ```
 
+Generated boot artifacts, all pinned by the Makefile:
+
+| File | Size | What it is |
+|---|---|---|
+| `build/loader.bin` | exactly 4096 | stage-1 loader (`boot/loader.S`), loaded at `07C0:0000` |
+| `build/mbr.bin` | exactly 440 | hybrid MBR bootstrap (`boot/mbr.S`), first bytes of sector 0 |
+| `build/efi.img` | 1,474,560 | FAT12 ESP holding `\EFI\BOOT\BOOTX64.EFI` |
+| `build/kernel.bin` | ≤ 585,728 | the 32-bit kernel |
+
+`tools/mkiso.py --mbr-code build/mbr.bin` receives only the 440 bytes of code: it
+writes the disk signature, the partition table (start LBA 0, length = the whole
+image in 512-byte sectors, type `0x17`, boot flag set, CHS derived from the same
+LBAs), the `55 AA` word, and patches the boot-image LBA and length into the
+bootstrap from the El Torito entry. A build without a bootstrap is refused — an
+image that only boots as a CD is a support case nobody can debug in the field.
+
 ## Adding a file to the ISO
 
 `make iso` passes `--file NAME=PATH` to `tools/mkiso.py`. File names are
@@ -152,6 +168,9 @@ volume.
 ## Build guard rails
 
 * loader must be exactly 4096 bytes (the boot descriptor offset is compiled in),
+* MBR bootstrap must be exactly 440 bytes (the partition table starts at 0x1B8),
+* the MBR partition must cover the whole image and name the El Torito boot image
+  (`make verify` re-reads sector 0 and fails on any disagreement),
 * kernel must be ≤ 585,728 bytes (real-mode load window),
 * `tools/mkiso.py` refuses to write past the end of the image and asserts the
   final size,
