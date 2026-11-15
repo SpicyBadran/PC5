@@ -32,7 +32,27 @@ What *does* work today, verified in this repository:
 | UEFI boot path (PE32+ `\EFI\BOOT\BOOTX64.EFI`, GOP, FAT ESP) | IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF) | `make stubtest` → 42/42 checks running the real image; no UEFI firmware exists in the build environment, so this is not a compatibility result — see [`docs/TEST_RESULTS.md`](docs/TEST_RESULTS.md) §7 |
 | DualSense controller support | NOT STARTED (needs a USB stack) | chain stage 3 |
 | Genuine PS5 firmware execution | BLOCKED — no verified path exists | [`docs/FIRMWARE_ANALYSIS.md`](docs/FIRMWARE_ANALYSIS.md) |
-| Actual PS5 game execution | NOT STARTED | [`docs/GAME_TEST_RESULTS.md`](docs/PS5_GAME_TEST_RESULTS.md) |
+| Actual PS5 game execution | NOT STARTED | [`docs/PS5_GAME_TEST_RESULTS.md`](docs/PS5_GAME_TEST_RESULTS.md) |
+
+## Architecture: two independent tracks
+
+The architecture is frozen in [`docs/architecture/`](docs/architecture/README.md)
+and splits the project into two tracks that share infrastructure without
+depending on each other:
+
+* **Track A — PC5 Native**: an installable, PlayStation-inspired PC operating
+  system on qualified mainstream hardware. Linux is the planned hardware
+  foundation; the existing freestanding kernel is kept as the recovery and
+  diagnostic environment. **This is not built yet** — what exists is the boot
+  medium described above.
+* **Track B — Prospero**: PS5 executable compatibility and research into genuine
+  PS5 system software. **Nothing on this track has executed**, and it must never
+  gate Track A: `make check` fails if a Track A milestone depends on Track B.
+
+Read [`docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md`](docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md)
+for the invariants and interfaces, or the
+[audit](docs/architecture/REPOSITORY_AUDIT_2026-11-15.md) for what is measurably
+true today.
 
 ## Quick start
 
@@ -42,6 +62,7 @@ Build it (needs `gcc`, `binutils`, `make`, `python3`; nothing else):
 make            # writes build/pc5.iso + build/pc5.iso.sha256 + build/build-info.json
 make verify     # independent structural verification of the image
 make check      # host unit tests + kernel unit tests
+make roadmap    # validate the milestone graph and the dual-track gate
 make boot-test  # boots the ISO in the emulator and asserts the interface
 make release-assets TAG=v0.2.0   # verify + metadata + the three release files
 ```
@@ -84,6 +105,7 @@ Write it to a USB stick and boot a real machine: [`docs/INSTALLATION.md`](docs/I
 
 | Document | Contents |
 |---|---|
+| [`docs/architecture/`](docs/architecture/README.md) | dual-track architecture, current audit, hardware strategy, migration plan, milestone graph, risks, next tasks |
 | [`docs/PROJECT_AUDIT.md`](docs/PROJECT_AUDIT.md) | what the repository contained, what was inspected, environment limits |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | boot chain, kernel modules, host tools |
 | [`docs/TECHNICAL_DECISIONS.md`](docs/TECHNICAL_DECISIONS.md) | decision records with rejected alternatives |

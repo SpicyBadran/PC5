@@ -4,6 +4,7 @@
 #   make check      unit tests for the host tools
 #   make boot-test  boot the ISO in the emulator harness and assert the log
 #   make verify     validate the ISO structure and every checksum
+#   make roadmap    validate the milestone graph and its generated document
 #   make clean
 #
 # Reproducibility: set SOURCE_DATE_EPOCH to pin the build timestamp; the
@@ -44,7 +45,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: all iso uefi check test boot-test stubtest verify clean distclean info unit metadata release-assets
+.PHONY: all iso uefi check test boot-test stubtest verify roadmap clean distclean info unit metadata release-assets
 
 all: iso
 
@@ -157,6 +158,9 @@ unit: | $(BUILD)
 	  -fno-builtin -fno-stack-protector -DPC5_HOST_TEST -Ikernel/include \
 	  -o $(BUILD)/kernel-unit tests/kernel_unit.c kernel/lib.c kernel/mem.c kernel/chain.c
 	$(BUILD)/kernel-unit
+
+roadmap:
+	python3 tools/roadmap.py check
 
 check: unit
 	python3 -m unittest discover -s tests -p 'test_*.py' -v

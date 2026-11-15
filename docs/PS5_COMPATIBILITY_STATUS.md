@@ -57,7 +57,7 @@ Why each non-OK stage has that state:
 
 | Feature | Status | Evidence |
 |---|---|---|
-| Bootable ISO (BIOS/El Torito) | COMPLETE AND VERIFIED | `make verify` 32/32, `make boot-test` 25/25 |
+| Bootable ISO (BIOS/El Torito + UEFI El Torito section) | COMPLETE AND VERIFIED | `make verify` 53/53, `make boot-test` 25/25 |
 | Loader (A20, E820, VBE, font, ISO probe, kernel load, PM handoff) | COMPLETE AND VERIFIED (emulated) | serial log |
 | Framebuffer console + text fallback + read-back self-test | COMPLETE AND VERIFIED (emulated) | Diagnostics page |
 | CPUID / E820 / PCI / ACPI / SMBIOS inventory | IMPLEMENTED — TESTING REQUIRED | hardware page; needs physical runs |
@@ -69,7 +69,7 @@ Why each non-OK stage has that state:
 | CI pipeline that publishes releases | WRITTEN, ACTIVATION BLOCKED (token lacks the workflows permission) | `ci/README.md` |
 | Firmware analysis tool (no decryption) | COMPLETE AND VERIFIED | unit tests on synthetic containers |
 | Kernel ATAPI PIO driver + ISO9660 reader | COMPLETE AND VERIFIED (emulated) | `storage_mounted volume=PC5 … signature=ok` |
-| UEFI boot path | NOT STARTED | — |
+| UEFI boot path | IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF) | `make stubtest` 42/42 running the real `BOOTX64.EFI`; no OVMF or hardware run yet |
 | Writable storage (partitions, filesystem, installer) | NOT STARTED | stage 4 is PARTIAL for this reason |
 | AHCI / NVMe | NOT STARTED | legacy ATA channels only |
 | USB stack / DualSense | NOT STARTED | — |
