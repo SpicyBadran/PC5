@@ -19,11 +19,14 @@ the current tree and corrects nine documented contradictions.
 
 ## M1 — Working bootable PC5 ISO · **COMPLETE (emulated)**
 
-* `make iso` → `build/pc5.iso` (1,570,816 bytes, reproducible; the image carries a 1.44 MB UEFI ESP, which is why it grew from the 96,256-byte BIOS-only baseline recorded in `docs/TEST_RESULTS.md` §1).
-* `make verify` → 53/53 structural checks.
-* `make boot-test` → 53/53 checks on the v86/SeaBIOS emulated PC, including the
+* `make iso` → `build/pc5.iso` (1,593,344 bytes, reproducible; the image carries a
+  1.44 MB UEFI ESP, which is why it grew from the 96,256-byte BIOS-only baseline
+  recorded in `docs/TEST_RESULTS.md` §1).
+* `make verify` → 75/75 structural checks (M1h added the system-area MBR).
+* `make boot-test` → 87/87 checks on the v86/SeaBIOS emulated PC, including the
   kernel mounting its own volume through its ATAPI/ISO9660 driver, the ATA write
-  test (M1d) and partition discovery (M1e).
+  test (M1d), partition discovery (M1e), FAT32 read/create (M1f, M1g) and the
+  hybrid-MBR boot with the CD detached (M1h).
 
 ## M1c — UEFI boot path · **IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF)**
 
@@ -49,7 +52,8 @@ the current tree and corrects nine documented contradictions.
   It is not a compatibility result: nothing about the UEFI path may be called
   verified until a recorded OVMF or hardware boot exists.
 
-Not done here: isohybrid USB, physical hardware (M2).
+Not done here: physical hardware (M2). The hybrid USB path landed afterwards as
+M1h (see the milestone list below and ADR-014).
 
 ## M1b — Automated, reproducible releases · **IMPLEMENTED, ACTIVATION BLOCKED**
 
@@ -147,15 +151,51 @@ Not done here: isohybrid USB, physical hardware (M2).
 * Not claimed: crash consistency against real power loss, or any physical disk.
   See `docs/KNOWN_LIMITATIONS.md` §5 and `docs/TEST_RESULTS.md` §13.
 
+## M1h — Hybrid MBR · **COMPLETE (emulated disk; no physical boot)**
+
+* The ISO9660 **system area** — the 32 KiB ECMA-119 reserves and the filesystem
+  never reads — now carries a hard-disk MBR in its first sector: `55 AA`, a fixed
+  disk signature, and **one** partition entry with the boot flag set, type
+  `0x17`, start LBA 0 and length equal to the whole image in 512-byte sectors.
+  The table is computed from the layout that was just built, never copied from a
+  template, and the CHS fields are derived from the same LBAs.
+* `boot/mbr.S` is exactly 440 bytes (the builder owns the rest of the sector). It
+  copies a relay to `0000:0500` out of the loader's way, reads the boot image
+  with INT 13h extended read into `0000:7C00`, retries three times with a drive
+  reset, prints one line and halts on failure, and hands off with `DL` preserved.
+  It loads the **same** 4096-byte stage-1 loader that El Torito names; the LBA
+  and length are patched in from the El Torito entry, so the two paths cannot
+  disagree.
+* Nothing else moved: the El Torito entries, every file extent (the kernel still
+  starts at LBA 747), the loader, the FAT ESP and the kernel are what they were,
+  and the image is still 778 blocks / 1,593,344 bytes — the MBR lives in space
+  the filesystem already reserved.
+* The loader needed no change — `read_pvd` already probes 2048- then 512-byte
+  units and `load_kernel` already converts LBAs — so the hard-disk path reports
+  `disk unit bytes 0200` where the CD path reports `0800`, and both reach the
+  same kernel build.
+* Evidence: the ISO booted in the emulator with **no CD attached** and the image
+  attached as a disk (`boot_order=2`), reaching `PC5-BOOT-OK`; the same image
+  with sector 0 blanked produced zero output, so the result is the MBR and not a
+  firmware fallback.
+* `tools/verify_iso.py` verifies sector 0 the way firmware reads it and rejects a
+  table that disagrees with the image; `tests/test_hybrid.py` corrupts each field
+  and requires the rejection.
+* Not claimed: a boot on physical hardware. SeaBIOS accepting the medium says
+  nothing about a particular machine's USB-HDD mode. See
+  `docs/KNOWN_LIMITATIONS.md` item 2 and ADR-014.
+
 ## M2 — Physical boot and safe installation · **IN PROGRESS**
 
 * Physical boot: **not attempted** (no hardware access in this environment).
   Instructions and the troubleshooting matrix exist; the evidence does not.
 * Installer: **not started**. Block write (M1d), partition discovery (M1e),
-  read-only FAT32 (M1f) and FAT32 create (M1g) exist; the remaining blockers are
-  a bootloader installer, an isohybrid medium and overwrite/rename support.
-* USB writing: implemented and safe (`pc5ctl usb`), but the image is not yet
-  isohybrid.
+  read-only FAT32 (M1f), FAT32 create (M1g) and the hybrid medium (M1h) exist; the
+  remaining blockers are a bootloader installer and overwrite/rename support.
+* USB writing: implemented and safe (`pc5ctl usb`), and since M1h the image is
+  hybrid — it boots through El Torito *and* through its MBR when firmware
+  presents the stick as a hard disk. The emulated proof is §14 of
+  `docs/TEST_RESULTS.md`; the physical stick is still M2's business.
 
 ## M3 — Hardware and core services · **PARTIAL**
 
@@ -214,7 +254,8 @@ is reproducible; that is not a release-quality product.
    its own volume; the missing piece is a container parser behind that call.
 3. **UEFI loader** — PE32+ application filling the same `struct pc5_boot_info`,
    plus the FAT ESP the ISO writer already supports.
-4. **isohybrid MBR** — so a stick boots on firmware that insists on HDD mode.
+4. ~~**isohybrid MBR** — so a stick boots on firmware that insists on HDD mode.~~
+   Delivered as M1h (ADR-014).
 5. **GOP graphics path** — framebuffer from `EFI_GRAPHICS_OUTPUT_PROTOCOL` for
    machines with no VBE.
 6. **USB stack (xHCI + HID)** — then a DualSense driver behind

@@ -146,9 +146,9 @@
         "tests/uefi_stub_firmware.py (Unicorn stub firmware harness)"
       ],
       "acceptance": [
-        "the loader's logic is executed end to end against the stub firmware (42 checks) \u2014 done",
-        "the same BOOTX64.EFI boots under OVMF and the serial log is recorded \u2014 NOT done",
-        "one physical UEFI machine reaches the PC5 kernel with Secure Boot off and the log is committed \u2014 NOT done",
+        "the loader's logic is executed end to end against the stub firmware (42 checks) — done",
+        "the same BOOTX64.EFI boots under OVMF and the serial log is recorded — NOT done",
+        "one physical UEFI machine reaches the PC5 kernel with Secure Boot off and the log is committed — NOT done",
         "GOP-only machines get a working framebuffer console and the text fallback is no longer required"
       ],
       "evidence": [
@@ -348,7 +348,46 @@
         "tests/fat32_write_check.c",
         "kernel/fat32.c"
       ],
-      "next_action": "Hybrid MBR / isohybrid so the same ISO boots as USB media (M1h); later the installer (M4)."
+      "next_action": "Physical boot and the installer (M2), starting with overwrite/rename and directory creation."
+    },
+    {
+      "id": "M1h",
+      "track": "A",
+      "title": "Hybrid MBR: the same ISO boots as a hard disk",
+      "state": "complete",
+      "owner_role": "platform-engineer",
+      "depends_on": [
+        "M1g"
+      ],
+      "legacy": [
+        "docs/architecture/FIRST_THREE_TASKS.md (next three, task C)"
+      ],
+      "deliverables": [
+        "boot/mbr.S (440-byte MBR bootstrap: relay at 0x0500, INT 13h extended read, hand-off at 0000:7C00 with DL preserved)",
+        "tools/mkiso.py (hybrid MBR composition from the real layout: patch words, disk signature, one whole-image partition, CHS, 55AA)",
+        "tools/verify_iso.py (independent MBR verification: signature, one entry, type/flag/extent, CHS, patch words, no overlap, nothing past EOF)",
+        "tests/test_hybrid.py (37 tests: assembled bootstrap bytes, layout, determinism, and a rejection test per corruption)",
+        "tests/mbr_fixture.py (synthetic and really-assembled bootstrap fixtures)",
+        "tests/boot_test.py (boots the ISO with no CD attached, plus a blanked-sector-0 control)",
+        "Makefile (build/mbr.bin pinned to 440 bytes, passed as --mbr-code)"
+      ],
+      "acceptance": [
+        "the image carries a valid MBR in the ISO9660 system area: 55AA at 510, a disk signature, one partition entry with the boot flag set and type 0x17",
+        "the partition describes the actual image: start LBA 0, length = every 512-byte sector of the file, nothing past the end, no overlap, CHS consistent with the LBA fields",
+        "the MBR bootstrap loads the same boot image El Torito names, using values patched in from the layout rather than a template",
+        "the El Torito entries, the ISO9660 layout, the 4096-byte stage-1 loader and the FAT ESP are unchanged",
+        "the verifier rejects every inconsistency it can express, and a test per corruption proves it",
+        "the image boots with the CD detached and the disk attached, reaching the same kernel build as the CD path",
+        "a copy with sector 0 blanked does not boot at all, so the evidence is not an artefact of the firmware falling back",
+        "two clean builds remain byte-identical, and the MBR path adds no firmware binary and no kernel change"
+      ],
+      "evidence": [
+        "docs/TEST_RESULTS.md",
+        "boot/mbr.S",
+        "tests/test_hybrid.py",
+        "tools/verify_iso.py"
+      ],
+      "next_action": "Physical boot on a real machine with a USB stick (M2); then overwrite/rename and directory creation for the installer."
     },
     {
       "id": "M2",

@@ -81,6 +81,9 @@ $(OBJ)/start.o: kernel/start.S | $(OBJ)
 $(OBJ)/loader.o: boot/loader.S | $(OBJ)
 	$(AS) --32 $< -o $@
 
+$(OBJ)/mbr.o: boot/mbr.S | $(OBJ)
+	$(AS) --32 $< -o $@
+
 $(BUILD)/kernel.bin: $(KERNEL_OBJ) $(FW_MANIFEST_OBJ) kernel/kernel.ld
 	$(LD) -m elf_i386 -T kernel/kernel.ld --oformat binary -nostdlib -o $@ $(KERNEL_OBJ) $(FW_MANIFEST_OBJ)
 	@size=$$(stat -c %s $@); echo "pc5: kernel image $$size bytes (limit 585728)"; \
@@ -90,6 +93,15 @@ $(BUILD)/loader.bin: $(OBJ)/loader.o
 	$(LD) -m elf_i386 -Ttext 0x7c00 --oformat binary -e _start -o $@ $<
 	@size=$$(stat -c %s $@); echo "pc5: loader image $$size bytes"; \
 	 if [ $$size -ne 4096 ]; then echo "pc5: loader must be exactly 4096 bytes (descriptor at 0xE00)"; exit 1; fi
+
+# The hybrid MBR is the first 512 bytes of the image.  Only its first 440 bytes
+# are code: bytes 440..511 are the disk signature, the partition table and 55AA,
+# which tools/mkiso.py writes from the real layout so the table can never
+# disagree with the image it describes.
+$(BUILD)/mbr.bin: $(OBJ)/mbr.o
+	$(LD) -m elf_i386 -Ttext 0x7c00 --oformat binary -e _start -o $@ $<
+	@size=$$(stat -c %s $@); echo "pc5: MBR bootstrap $$size bytes"; \
+	 if [ $$size -ne 440 ]; then echo "pc5: MBR bootstrap must be exactly 440 bytes (partition table starts at 0x1B8)"; exit 1; fi
 
 # ---------------------------------------------------------------- UEFI ----
 # The UEFI boot application is an ordinary PE32+ EFI image built with the
@@ -144,10 +156,11 @@ $(BUILD)/iso/BUILDINFO.TXT: | $(BUILD)
 $(BUILD):
 	@mkdir -p $(BUILD)
 
-$(ISO): $(BUILD)/loader.bin $(BUILD)/kernel.bin $(BUILD)/efi.img $(BUILD)/iso/README.TXT $(BUILD)/iso/BUILDINFO.TXT tools/mkiso.py
+$(ISO): $(BUILD)/loader.bin $(BUILD)/mbr.bin $(BUILD)/kernel.bin $(BUILD)/efi.img $(BUILD)/iso/README.TXT $(BUILD)/iso/BUILDINFO.TXT tools/mkiso.py
 	python3 tools/mkiso.py \
 	  --volume-id PC5 \
 	  --boot-image $(BUILD)/loader.bin \
+	  --mbr-code $(BUILD)/mbr.bin \
 	  --desc-offset 0xE00 \
 	  --uefi-image $(BUILD)/efi.img \
 	  --file KERNEL.BIN=$(BUILD)/kernel.bin \

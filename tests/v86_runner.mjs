@@ -86,7 +86,10 @@ const config = {
   disable_speaker: true,
 };
 
-if (args.cdrom) config.cdrom = { url: path.resolve(args.cdrom) };
+// --no-cdrom detaches the CD entirely, which is what a "USB stick on a machine
+// with no optical drive" boot looks like.  The boot test uses it to prove the
+// hybrid MBR works on its own, with nothing else to fall back to.
+if (args.cdrom && !args["no-cdrom"]) config.cdrom = { url: path.resolve(args.cdrom) };
 
 // A writable hard disk exists only when the caller asks for one explicitly.
 // `--hda-buffer FILE` loads the image into memory and attaches it as hda, so

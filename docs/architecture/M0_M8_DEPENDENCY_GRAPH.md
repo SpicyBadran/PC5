@@ -35,6 +35,8 @@ Track A — PC5 Native
         depends on  M1e
   M1g   complete     Safe FAT32 write: create, flush, independent read-back
         depends on  M1f
+  M1h   complete     Hybrid MBR: the same ISO boots as a hard disk
+        depends on  M1g
   M2    not_started  Hardware abstraction and drivers
         depends on  M1, M1g
   M3    not_started  PC5 operating system

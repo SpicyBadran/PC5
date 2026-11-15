@@ -19,8 +19,17 @@ work that has secretly been done.
    ISO volume id, the kernel LBA or the ISO9660 descriptor (the file protocol
    does not expose them), and it hands over no VGA font, so the kernel's
    framebuffer console falls back to text mode.
-2. **Not isohybrid.** There is no MBR, so firmware that treats a USB stick
-   strictly as a hard disk will not boot it.
+2. **USB-HDD boot is implemented, not proven on hardware.** Since M1h the image
+   carries a hybrid MBR (type `0x17`, covering the whole image) and the stage-1
+   loader loads the same boot image through INT 13h, verified in the emulator
+   with the CD detached. It has never been booted from a physical USB stick: the
+   emulated firmware (SeaBIOS) is not evidence about a particular machine's
+   firmware, about USB mass-storage enumeration, or about a BIOS that insists on
+   a different partition type. The MBR bootstrap reads the boot image with INT 13h
+   **extended read** (`AH=0x42`), so a BIOS from before extensions existed cannot
+   use that path at all (El Torito still works on such a machine). Treat "boots
+   from USB on machine X" as untested until it has been recorded per §7 of
+   `docs/TEST_RESULTS.md`.
 3. **No Secure Boot support.** No signed shim, no enrolled keys.
 4. **No installer.** PC5 runs from the medium; nothing is written to disk.
    Partitioning, data-loss confirmation and installed-system boot do not exist.

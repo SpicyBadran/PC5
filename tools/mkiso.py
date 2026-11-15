@@ -9,7 +9,8 @@ descriptor that the stage-1 loader reads.
 
 Layout produced (2048-byte logical blocks):
 
-    LBA 0..15    system area (all zero)
+    LBA 0        system area, first sector: hybrid MBR (see below)
+    LBA 0..15    system area (otherwise zero)
     LBA 16       primary volume descriptor
     LBA 17       boot record volume descriptor (El Torito)
     LBA 18       volume descriptor set terminator
@@ -22,6 +23,30 @@ Layout produced (2048-byte logical blocks):
 The BIOS boot image is *not* required to be 512 bytes: the whole image is
 loaded contiguously by the firmware at 07C0:0000, so the stage-1 loader can
 carry its own code past the first virtual sector.
+
+Hybrid MBR (M1h): ISO9660 reserves the first 32 KiB as "system area" precisely
+so a medium can carry structures that are not part of the filesystem, and the
+first 512 bytes of it are a hard-disk MBR as far as any BIOS is concerned.  The
+builder therefore writes:
+
+    offset 0x000..0x1B7  MBR bootstrap (boot/mbr.S, exactly 440 bytes), with
+                         two 32-bit words patched in:
+                           +0x1B0  boot image LBA in 512-byte units
+                           +0x1B4  boot image length in 512-byte sectors
+    offset 0x1B8..0x1BB  disk signature (fixed constant, for reproducibility)
+    offset 0x1BC..0x1BD  reserved, zero
+    offset 0x1BE..0x1FD  partition table: one bootable entry, type 0x17,
+                         start LBA 0, length = the whole image in 512-byte
+                         sectors; the other three entries are zero
+    offset 0x1FE..0x1FF  55AA
+
+One entry covers the whole image because that is what the image *is*: an
+ISO9660 volume with an El Torito boot image inside it.  The entry is a BIOS
+compatibility shim, not a claim that the image contains a FAT or ext filesystem;
+type 0x17 ("hidden") keeps automounters away, which is the same trade-off the
+syslinux isohybrid makes.  The MBR bootstrap loads the same stage-1 loader that
+El Torito names, so both firmware paths converge before the first PC5
+instruction runs.  See docs/TECHNICAL_DECISIONS.md ADR-014.
 
 Every build writes `build/build-info.json` with the layout and SHA-256 of
 each input, so a rebuild can be compared byte for byte.
@@ -43,6 +68,17 @@ SYSTEM_AREA_SECTORS = 16
 BOOT_DESC_MAGIC = b"PC5BOOT1"
 BOOT_DESC_SIZE = 64
 
+# Hybrid MBR (M1h)
+MBR_BYTES = 512
+MBR_CODE_BYTES = 440           # 0x1B8: disk signature starts here
+MBR_PATCH_LBA = 0x1B0
+MBR_PATCH_COUNT = 0x1B4
+MBR_DISK_SIGNATURE = 0x50433530  # "PC50": fixed so builds stay byte-identical
+MBR_PARTITION_TYPE = 0x17        # hidden, as isohybrid uses: never automounted
+MBR_BOOT_FLAG = 0x80
+CHS_HEADS = 255
+CHS_SECTORS = 63
+
 
 # --------------------------------------------------------------------------
 # helpers
@@ -55,6 +91,57 @@ def both16(value: int) -> bytes:
 def both32(value: int) -> bytes:
     """32-bit both-endian (little then big) field."""
     return struct.pack("<I", value) + struct.pack(">I", value)
+
+
+def mbr_chs(lba: int) -> bytes:
+    """CHS address for a 512-byte LBA, in the byte order the MBR uses.
+
+    CHS cannot express disks past 1023 cylinders, so anything larger gets the
+    0xFE 0xFF 0xFF marker that every tool understands as "use the LBA field".
+    """
+    cylinders = lba // (CHS_HEADS * CHS_SECTORS)
+    if cylinders > 1023 or lba < 0:
+        return bytes([0xFE, 0xFF, 0xFF])
+    head = (lba % (CHS_HEADS * CHS_SECTORS)) // CHS_SECTORS
+    sector = (lba % CHS_SECTORS) + 1
+    return bytes([head, (sector & 0x3F) | ((cylinders >> 8) << 6), cylinders & 0xFF])
+
+
+def mbr_partition_entry(status: int, ptype: int, start_lba: int, sectors: int) -> bytes:
+    """One 16-byte partition table entry covering [start_lba, start_lba+sectors)."""
+    if sectors <= 0:
+        raise SystemExit("a partition entry needs a positive sector count")
+    last = start_lba + sectors - 1
+    return (bytes([status]) + mbr_chs(start_lba) + bytes([ptype])
+            + mbr_chs(last) + struct.pack("<II", start_lba, sectors))
+
+
+def build_hybrid_mbr(code: bytes, image_bytes: int, boot_image_lba: int,
+                     boot_image_sectors: int) -> bytes:
+    """Compose the 512-byte hybrid MBR.
+
+    `code` is boot/mbr.S (440 bytes); this function owns the disk signature, the
+    partition table and the signature word, and patches the two words the
+    bootstrap uses to find the same boot image El Torito names.
+    """
+    if len(code) != MBR_CODE_BYTES:
+        raise SystemExit(
+            f"MBR bootstrap must be exactly {MBR_CODE_BYTES} bytes, got {len(code)}"
+        )
+    total_sectors = image_bytes // 512
+    if image_bytes % 512:
+        raise SystemExit("image size must be a multiple of 512 bytes")
+
+    mbr = bytearray(MBR_BYTES)
+    mbr[0:MBR_CODE_BYTES] = code
+    struct.pack_into("<I", mbr, MBR_PATCH_LBA, boot_image_lba * 4)   # ISO blocks -> 512B
+    struct.pack_into("<I", mbr, MBR_PATCH_COUNT, boot_image_sectors)
+    struct.pack_into("<I", mbr, 440, MBR_DISK_SIGNATURE)
+    # bytes 444..445 stay zero (reserved)
+    mbr[446:462] = mbr_partition_entry(MBR_BOOT_FLAG, MBR_PARTITION_TYPE, 0, total_sectors)
+    # entries 2..4 stay zero
+    mbr[510:512] = b"\x55\xaa"
+    return bytes(mbr)
 
 
 def build_time() -> datetime.datetime:
@@ -155,6 +242,7 @@ class IsoBuilder:
         self.boot_desc_offset = 0x100
         self.descriptor_builder = make_boot_descriptor
         self.uefi_sectors = 0
+        self.mbr_code: bytes | None = None
 
     # -- inputs ---------------------------------------------------------
     def add_file(self, name: str, data: bytes):
@@ -172,6 +260,14 @@ class IsoBuilder:
     def set_uefi_image(self, data: bytes):
         self.uefi_image = data
 
+    def set_mbr_code(self, data: bytes):
+        """The 440 bytes of boot/mbr.S; the builder supplies the rest."""
+        if len(data) != MBR_CODE_BYTES:
+            raise SystemExit(
+                f"MBR bootstrap must be exactly {MBR_CODE_BYTES} bytes, got {len(data)}"
+            )
+        self.mbr_code = data
+
     # -- layout ---------------------------------------------------------
     @staticmethod
     def _sectors(n: int) -> int:
@@ -180,6 +276,10 @@ class IsoBuilder:
     def build(self) -> tuple[bytes, dict]:
         if not self.bios_image:
             raise SystemExit("a BIOS boot image is required")
+        if not self.mbr_code:
+            # Every PC5 image is hybrid: a medium that only boots as a CD is a
+            # support case nobody can debug in the field.
+            raise SystemExit("a hybrid MBR bootstrap is required (see boot/mbr.S)")
 
         sectors = SYSTEM_AREA_SECTORS + 3  # pvd, brvd, terminator
         l_path_lba = sectors
@@ -343,6 +443,12 @@ class IsoBuilder:
         term[1:6] = b"CD001"
         term[6] = 1
 
+        # -- hybrid MBR ------------------------------------------------
+        # Written into the ISO9660 system area, which exists exactly for this.
+        mbr = build_hybrid_mbr(self.mbr_code, iso_sectors * SECTOR,
+                               boot_image_lba=bios_lba,
+                               boot_image_sectors=bios_vsectors)
+
         # -- assemble ---------------------------------------------------
         image = bytearray(iso_sectors * SECTOR)
 
@@ -356,6 +462,7 @@ class IsoBuilder:
                 )
             image[offset:end] = payload
 
+        put(0, mbr)
         put(bios_lba * SECTOR, boot_image)
         if self.uefi_image:
             put(uefi_lba * SECTOR, self.uefi_image)
@@ -397,6 +504,17 @@ class IsoBuilder:
                 "uefi_entry_offset": 96 if self.uefi_image else None,
                 "root_dir_lba": root_lba,
             },
+            "hybrid_mbr": {
+                "present": True,
+                "code_bytes": MBR_CODE_BYTES,
+                "disk_signature": f"0x{MBR_DISK_SIGNATURE:08x}",
+                "partition_type": f"0x{MBR_PARTITION_TYPE:02x}",
+                "boot_flag": f"0x{MBR_BOOT_FLAG:02x}",
+                "start_lba_512": 0,
+                "sectors_512": iso_sectors * SECTOR // 512,
+                "boot_image_lba_512": bios_lba * 4,
+                "boot_image_sectors_512": bios_vsectors,
+            },
             "kernel": {"lba": kernel_lba, "bytes": kernel_size},
             "files": [
                 {"identifier": ident.decode("ascii"), "lba": lba, "bytes": len(data),
@@ -415,6 +533,8 @@ def main(argv=None):
     ap.add_argument("--volume-id", default="PC5")
     ap.add_argument("--boot-image", required=True, help="BIOS no-emulation boot image")
     ap.add_argument("--uefi-image", help="FAT image for the UEFI El Torito entry")
+    ap.add_argument("--mbr-code", required=True,
+                    help="440-byte hybrid MBR bootstrap (build/mbr.bin from boot/mbr.S)")
     ap.add_argument("--file", action="append", default=[], metavar="NAME=PATH",
                     help="add a file to the ISO root")
     ap.add_argument("--output", required=True)
@@ -425,6 +545,8 @@ def main(argv=None):
     builder = IsoBuilder(volume_id=args.volume_id)
     with open(args.boot_image, "rb") as fh:
         builder.set_bios_boot_image(fh.read(), desc_offset=args.desc_offset)
+    with open(args.mbr_code, "rb") as fh:
+        builder.set_mbr_code(fh.read())
     if args.uefi_image:
         with open(args.uefi_image, "rb") as fh:
             builder.set_uefi_image(fh.read())

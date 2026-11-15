@@ -83,10 +83,12 @@ a parsed container is not an executed game. The project's vocabulary:
 1. **Bootloader installation on a real filesystem**: creating one file is done
    (M1g: allocate, FAT copies, FSInfo, flush, independent read-back). What is
    still missing for an installer is overwrite/rename, directory creation and a
-   boot entry, plus an isohybrid medium. See task B in
+   boot entry. See task B in
    `docs/architecture/FIRST_THREE_TASKS.md`.
-2. **isohybrid medium**: the same ISO booting as a USB hard disk, which removes a
-   distribution blocker without new kernel code (task C there).
+2. **isohybrid medium** — *delivered as M1h (ADR-014)*: the same ISO now boots as
+   a USB hard disk through its hybrid MBR, which removes a distribution blocker
+   without touching kernel code (task C there). The remaining gap is a recorded
+   boot on physical hardware, not code.
 3. **UEFI under real firmware**: the loader exists and is executed against stub
    firmware; it needs an OVMF or hardware run before UEFI machines can be called
    supported (M1c in `docs/architecture/roadmap.json`). This is an environment
