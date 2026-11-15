@@ -75,8 +75,8 @@ proves the preservation process before anything large depends on it. `PC5-BOOT`
 is frozen by invariant I3, which makes this a pure relocation.
 
 **Gate:** `make verify` (53 checks), `make check` (all host tests), `make
-boot-test` (25 checks), `make stubtest` (42 checks), and the `_Static_assert`
-offsets still compile. Byte-identical ISO for the same `SOURCE_DATE_EPOCH` is
+boot-test` (45 checks, including the storage write test), `make stubtest`
+(42 checks), and the `_Static_assert` offsets still compile. Byte-identical ISO for the same `SOURCE_DATE_EPOCH` is
 not required (include paths change debug info), so the gate is behavioural, not
 bitwise.
 

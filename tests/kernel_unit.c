@@ -169,9 +169,96 @@ static void test_chain(void)
     check_int("stage 7 still blocked", st[6].state == CHAIN_BLOCKED, 1);
 }
 
+/* ---- block request rules (kernel/block.c) ---- */
+static void test_block_rules(void)
+{
+    /* dev capacity 16384 sectors, disk (not ATAPI) */
+    check_int("valid read", blk_check_disk_request(2048, 8, 16384, 0, 0), BLK_OK);
+    check_int("valid write", blk_check_disk_request(2048, 8, 16384, 1, 0), BLK_OK);
+    check_int("whole disk", blk_check_disk_request(0, 16384, 16384, 1, 0), BLK_OK);
+    check_int("zero count", blk_check_disk_request(2048, 0, 16384, 1, 0), BLK_E_COUNT);
+    check_int("lba at capacity", blk_check_disk_request(16384, 1, 16384, 1, 0), BLK_E_RANGE);
+    check_int("one past end", blk_check_disk_request(16383, 2, 16384, 1, 0), BLK_E_RANGE);
+    check_int("unknown capacity", blk_check_disk_request(0, 1, 0, 1, 0), BLK_E_RANGE);
+    check_int("lba overflow", blk_check_disk_request(0xffffffffu, 1, 16384, 1, 0), BLK_E_RANGE);
+    check_int("count wrap", blk_check_disk_request(16380, 0xfffffff0u, 16384, 1, 0), BLK_E_RANGE);
+    check_int("atapi write refused", blk_check_disk_request(0, 1, 0, 1, 1), BLK_E_READ_ONLY);
+    /* the device type is decided before the range: an ATAPI write is refused
+     * whatever the LBA and count say */
+    check_int("atapi write refused even at zero", blk_check_disk_request(0, 0, 0, 1, 1), BLK_E_READ_ONLY);
+    /* optical reads do not use this validator (they go through ata_read_blocks,
+     * which knows 2048-byte blocks); here an ATAPI read with no capacity must
+     * still fail closed rather than be mistaken for a write refusal */
+    check_int("atapi read, unknown capacity", blk_check_disk_request(16, 1, 0, 0, 1), BLK_E_RANGE);
+
+    check_int("chunk exact", blk_chunk_sectors(8, 32), 8);
+    check_int("chunk capped", blk_chunk_sectors(100, 32), 32);
+    check_int("chunk zero remaining", blk_chunk_sectors(0, 32), 0);
+    check_int("chunk zero max", blk_chunk_sectors(8, 0), 0);
+
+    check_str("status ok", blk_status_name(BLK_OK), "ok");
+    check_str("status read-only", blk_status_name(BLK_E_READ_ONLY), "read-only");
+    check_str("status range", blk_status_name(BLK_E_RANGE), "range");
+    check_str("status timeout", blk_status_name(BLK_E_TIMEOUT), "timeout");
+}
+
+/* ---- SHA-256 known-answer tests (kernel/sha256.c) ---- */
+static void sha_of(const u8 *data, u32 len, char out[65])
+{
+    struct sha256_ctx ctx;
+    u8 digest[32];
+    sha256_init(&ctx);
+    if (len && data)
+        sha256_update(&ctx, data, len);
+    sha256_final(&ctx, digest);
+    sha256_hex(digest, out);
+}
+
+static void test_sha256(void)
+{
+    char hex[65];
+    u8 pattern[4096];
+
+    sha_of(NULL, 0, hex);
+    check_str("sha256 empty", hex,
+              "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    sha_of((const u8 *)"abc", 3, hex);
+    check_str("sha256 abc", hex,
+              "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    sha_of((const u8 *)"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq", 56, hex);
+    check_str("sha256 56-byte vector", hex,
+              "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
+
+    memset(pattern, 'a', sizeof(pattern));
+    sha_of(pattern, 112, hex);
+    check_str("sha256 112-byte vector", hex,
+              "f54353008a2553262ecdc4a34749563ba0950e8b0fc8652780b0a614b99683c1");
+
+    /* the write self-test pattern, identical to tests/boot_test.py */
+    for (u32 i = 0; i < sizeof(pattern); i++)
+        pattern[i] = (u8)((i * 7u + 0x5au) & 0xffu);
+    sha_of(pattern, sizeof(pattern), hex);
+    check_str("sha256 write-test pattern", hex,
+              "80fdc12208ec4af1410125cbe146549182100a6b1e0cf67e382aa9aefdbafa3d");
+
+    /* split updates must equal a single update */
+    struct sha256_ctx a, b;
+    u8 da[32], db[32];
+    sha256_init(&a);
+    sha256_update(&a, pattern, 100);
+    sha256_update(&a, pattern + 100, sizeof(pattern) - 100);
+    sha256_final(&a, da);
+    sha256_init(&b);
+    sha256_update(&b, pattern, sizeof(pattern));
+    sha256_final(&b, db);
+    check_int("sha256 streaming equals one-shot", memcmp(da, db, sizeof(da)), 0);
+}
+
 int main(void)
 {
     test_format();
+    test_block_rules();
+    test_sha256();
     test_numbers();
     test_strings();
     test_memory_map();

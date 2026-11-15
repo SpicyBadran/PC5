@@ -161,6 +161,10 @@ The UEFI stub run and the emulated boot were both reproduced here, which matters
 because the previous record was produced in a different session. Neither is a
 hardware result.
 
+These are the M0 numbers. The M1d storage-write change later the same day raised
+them to 122 host tests, 61 unit assertions and 45 boot checks; see
+`docs/TEST_RESULTS.md` §10 for that record.
+
 ---
 
 ## 4. Environment constraints (measured, not assumed)

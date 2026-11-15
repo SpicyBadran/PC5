@@ -269,6 +269,41 @@ struct acpi_info {
 void acpi_scan(struct acpi_info *out);
 
 /* ------------------------------------------------------------- storage */
+/* Two transfer granularities, deliberately distinct (ADR-013):
+ *
+ *   PC5_SECTOR_SIZE  512-byte disk sectors  -> ATA READ/WRITE SECTORS
+ *   PC5_BLOCK_SIZE   2048-byte optical blocks -> ATAPI READ(10) and ISO9660
+ *
+ * Mixing them silently is how a driver corrupts a disk.  Every function below
+ * names which one it uses: `*_sectors` is always 512 bytes, `*_blocks` is
+ * always 2048 bytes and only ever talks to the boot medium.
+ */
+#define PC5_SECTOR_SIZE 512
+#define PC5_BLOCK_SIZE 2048
+#define ATA_MAX_DRIVES 4
+/* Bound the work between two polls: the ATA sector-count register is 8-bit
+ * (0 would mean 256), and a small chunk keeps timeouts meaningful. */
+#define ATA_MAX_SECTORS_PER_CMD 32
+
+enum blk_status {
+    BLK_OK = 0,
+    BLK_E_NO_DEVICE = -1,  /* index out of range, or nothing on that port      */
+    BLK_E_READ_ONLY = -2,  /* ATAPI packet device: never a write target        */
+    BLK_E_RANGE = -3,      /* capacity unknown, LBA outside the device, overflow */
+    BLK_E_COUNT = -4,      /* zero or nonsensical sector count                 */
+    BLK_E_ALIGN = -5,      /* NULL or odd-address buffer                       */
+    BLK_E_IO = -6,         /* device reported ERR/DF                           */
+    BLK_E_TIMEOUT = -7,    /* bounded polling expired                          */
+    BLK_E_VERIFY = -8      /* read-back did not match what was written         */
+};
+const char *blk_status_name(int status);
+
+/* Pure request validation (host unit-tested).  A write to an ATAPI device is
+ * refused before anything else is considered, and an unknown capacity fails
+ * closed rather than being guessed. */
+int blk_check_disk_request(u32 lba, u32 count, u32 capacity, int writable, int atapi);
+u32 blk_chunk_sectors(u32 remaining, u32 max_per_command);
+
 struct storage_report {
     int drives;          /* drives found on the legacy ATA channels */
     int selected;        /* index of the drive used, -1 if none */
@@ -297,6 +332,38 @@ int ata_selected(void);
 const struct ata_drive *ata_drive(int index);
 const struct storage_report *storage_report(void);
 int ata_read_blocks(u32 lba, u32 count, void *buf);
+
+/* Disk-sector interface (512-byte).  `device` is an explicit index from
+ * ata_drive(); nothing here falls back to the selected boot device. */
+int ata_read_sectors(int device, u32 lba, u32 count, void *buf);
+int ata_write_sectors(int device, u32 lba, u32 count, const void *buf);
+int ata_writable_device(void);
+
+/* Kernel write self-test, invoked explicitly (serial command `wtest`): it
+ * writes a deterministic pattern to a reserved scratch window on the first
+ * writable ATA disk, reads it back and verifies it.  It is never run on an
+ * ordinary boot path. */
+#define WTEST_SCRATCH_LBA 2048u
+#define WTEST_SCRATCH_SECTORS 8u
+#define WTEST_BYTES (WTEST_SCRATCH_SECTORS * PC5_SECTOR_SIZE)
+int storage_write_selftest(void);
+int storage_write_test_region_ok(u32 lba, u32 count);
+int storage_selftest_state(void);          /* 0 not run, 1 ok, -1 failed */
+const char *storage_selftest_sha256(void); /* 64 hex chars, or "" */
+int storage_selftest_device(void);         /* index or -1 */
+
+/* SHA-256 (FIPS 180-4), used for write-verification evidence and, later, for
+ * update manifests. */
+struct sha256_ctx {
+    u32 state[8];
+    u64 bytes;
+    u8 block[64];
+    u32 used;
+};
+void sha256_init(struct sha256_ctx *ctx);
+void sha256_update(struct sha256_ctx *ctx, const void *data, u32 len);
+void sha256_final(struct sha256_ctx *ctx, u8 out[32]);
+void sha256_hex(const u8 digest[32], char out[65]);
 
 int iso_mount(void);
 int iso_mounted(void);

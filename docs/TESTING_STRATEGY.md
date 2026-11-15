@@ -39,10 +39,15 @@ anywhere, in any document, on any screen.
     result, manifest → C embedding.
   * Kernel unit binary: built and executed.
   * Built image: verifies the real `build/pc5.iso` when present.
-* `tests/kernel_unit.c` — 35 assertions over the kernel's pure logic:
+* `tests/kernel_unit.c` — 61 assertions over the kernel's pure logic:
   formatter (`%s`, `%-4s`, `%08x`, `%llu`, `%%`), number conversion, E820
   accounting, chain state machine (including "a firmware manifest never turns
   execution into OK").
+
+`tests/test_storage.py` separately protects the write test's seams: that the
+scratch window in the boot test matches `kernel/include/pc5.h`, that the host
+pattern produces the kernel's expected digest, that no boot path starts a write
+test, and that the harness only ever attaches a file it created.
 
 These run in milliseconds and catch the class of bug that otherwise only shows
 up on screen — the formatter bugs found this way are recorded in
@@ -72,13 +77,21 @@ extent, `PC5K` kernel signature, and per-file SHA-256 against the build record.
 
 `tests/v86_runner.mjs` boots the image in v86 (SeaBIOS, emulated CD-ROM,
 El Torito no-emulation) and records serial output, the VGA text screen and
-scripted input. `tests/boot_test.py` then asserts:
+scripted input. It can also attach a writable disk from an in-memory copy of a
+file (`--hda-buffer`), which is how the storage write test gets a disposable
+8 MiB IDE disk; the image is dumped afterwards (`--hda-out`) and verified on the
+host, and the input file is never written back to. `tests/boot_test.py` then asserts:
 
 * loader banner, ISO9660 descriptor read, kernel verification, protected-mode
   handoff, kernel start, `PC5-BOOT-OK`;
 * `genuine_ps5_execution=no` and a blocked chain stage with evidence in the log;
 * the kernel mounted its own medium through its ATAPI/ISO9660 code and read a
-  file back with a valid signature (`storage_mounted volume=PC5 … signature=ok`);
+  file back with a valid signature (`storage_mounted volume=PC5 … signature=ok`),
+  and still does so with a writable disk attached;
+* `wtest` wrote a 4 KiB pattern to the reserved window on that disk, read it
+  back and verified it; every unsafe request (zero count, out-of-range,
+  overflow, invalid index, NULL buffer, ATAPI write) was refused with
+  `ok=1`, and the host's SHA-256 of the written sectors equals the kernel's;
 * all six interface pages by dumping the console's shadow character grid over
   the serial console (`page N` + `screen`), so the assertions cover the
   *rendered* interface rather than a separate reporting path.
