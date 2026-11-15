@@ -108,7 +108,8 @@ evidence, the choice, and what would reverse it.
   without unreal-mode tricks.
 * **Decision**: kernel + assets must stay under `0x8F000 - 0x10000` (572 KiB);
   the Makefile fails the build if it grows past that, and the loader fails with
-  a diagnostic code if the image would cross the limit. Measured 2026-11-15: 36,508 bytes.
+  a diagnostic code if the image would cross the limit. Measured 2026-11-15 after the
+  storage-write work: 41,724 bytes (BUILD_ID=m1d) — well inside the window.
 * **Reversal**: implement unreal-mode high loading (already scoped in
   `docs/ROADMAP.md`) when a Linux payload needs it.
 
@@ -225,3 +226,33 @@ evidence, the choice, and what would reverse it.
 * **Reversal**: if the graph outgrows JSON (for example, per-task tracking), move
   to a richer format but keep the validator, the generated document and the
   failing tests. The check is the decision; the format is not.
+
+## ADR-013 — Two transfer granularities: 512-byte disk sectors and 2048-byte optical blocks
+
+* **Problem**: the storage task calls for a 512-byte logical-block write
+  interface, while `ata_read_blocks()` has always read 2048-byte blocks because
+  that is ISO9660's logical block size and ATAPI `READ(10)` returns 2048 bytes
+  per block. Reinterpreting one as the other silently is how a driver writes a
+  disk at the wrong offset.
+* **Alternatives**: (a) change the ISO9660 path to 512-byte units and rewrite
+  every caller; (b) keep only the 2048-byte interface and express disk writes in
+  four-sector units; (c) keep both and make each name state its unit.
+* **Evidence**: ATA `IDENTIFY DEVICE` reports capacity in 512-byte sectors
+  (words 60–61); ATA `READ/WRITE SECTORS` transfers 512 bytes per sector; ATAPI
+  packet devices use 2048-byte logical blocks and are configured for them in
+  `ata_init()`; ECMA-119 (ISO9660) defines a 2048-byte logical block. The two
+  numbers describe different hardware, not different conventions that could be
+  unified without lying to one of them. The existing ISO path passes 25 boot
+  checks and must not be disturbed by a units rewrite.
+* **Decision**: (c). `ata_read_sectors()` and `ata_write_sectors()` take an
+  explicit device index, count 512-byte sectors and are the only write path.
+  `ata_read_blocks()` keeps 2048-byte blocks, operates on the *selected* boot
+  device and is the only interface ISO9660 uses. No function name hides its
+  unit; no write call exists without a device index.
+* **Consequence**: a future filesystem, partition parser or installer uses the
+  sector interface and can be validated on the host (`kernel/block.c` has no
+  port I/O); optical reads stay untouched. AHCI/NVMe backends implement the
+  same sector contract and nothing above them changes.
+* **Reversal**: if a filesystem ever needs 4096-byte units, it composes them
+  from sectors at the filesystem layer. The ATA contract itself is fixed by the
+  hardware and will not change.

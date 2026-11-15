@@ -22,7 +22,7 @@ distribution tool, or network access.
 ```sh
 make info        # version, build id, timestamp, source list
 make             # build/pc5.iso, build/pc5.iso.sha256, build/build-info.json
-make unit        # host-side kernel unit tests (35 checks)
+make unit        # host-side kernel unit tests (61 checks)
 make check       # unit tests + python test suite
 make verify      # independent ISO verification (+ build/verify-report.json)
 make roadmap     # validate the milestone graph and the Track A/B gate

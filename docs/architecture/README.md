@@ -26,9 +26,10 @@ Supporting artefacts:
 * `tests/test_architecture.py` — runs that validation in `make check`, checks
   that every evidence path exists, that these documents' relative links resolve,
   and that this index and the directory agree.
-* `docs/TECHNICAL_DECISIONS.md` — ADR-001 … ADR-012, including the four decisions
+* `docs/TECHNICAL_DECISIONS.md` — ADR-001 … ADR-013, including the four decisions
   made here (Linux foundation, dual-track gate, hardware qualification, and
-  machine-checked architecture claims).
+  machine-checked architecture claims) and ADR-013 from the first executed task
+  (512-byte disk sectors vs 2048-byte optical blocks).
 
 ## Status, stated plainly
 

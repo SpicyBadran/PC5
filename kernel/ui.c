@@ -16,7 +16,7 @@
 
 #define SHADOW_DUMP_MAX 20000
 #define LOG_LINES 64
-#define LOG_WIDTH 120
+#define LOG_WIDTH 200
 
 static char log_lines[LOG_LINES][LOG_WIDTH];
 static int log_count, log_next;
@@ -473,7 +473,7 @@ static void serial_command(char *cmd)
 {
     const struct chain_stage *st = chain_stages();
     if (!strcmp(cmd, "help")) {
-        serial_puts("commands: help status chain hw fw storage diag log screen reboot halt\r\n");
+        serial_puts("commands: help status chain hw fw storage wtest diag log screen reboot halt\r\n");
     } else if (!strcmp(cmd, "status")) {
         char line[160];
         pc5_snprintf(line, sizeof(line), "pc5 version=%s build=%s date=%s\r\n", PC5_VERSION,
@@ -535,6 +535,23 @@ static void serial_command(char *cmd)
         pc5_snprintf(line, sizeof(line), "storage mounted=%d volume=%s blocks=%u read=%s bytes=%u sig=%d\r\n",
                      sr->mounted, sr->mounted ? sr->volume : "-", sr->blocks, sr->file_name,
                      sr->file_bytes, sr->file_signature);
+        serial_puts(line);
+        pc5_snprintf(line, sizeof(line), "storage write_dev=%d write_test=%s (run 'wtest'; writes are never automatic)\r\n",
+                     ata_writable_device(),
+                     storage_selftest_state() == 1 ? "ok"
+                     : storage_selftest_state() == 0 ? "not-run" : "failed");
+        serial_puts(line);
+    } else if (!strcmp(cmd, "wtest")) {
+        /* Explicit, operator-requested write test.  Never part of boot. */
+        char line[220];
+        int rc = storage_write_selftest();
+        const char *result = storage_selftest_state() == 1 ? "ok"
+                           : storage_selftest_state() == 0 ? "skipped"
+                                                          : blk_status_name(rc);
+        pc5_snprintf(line, sizeof(line), "wtest result=%s dev=%d bytes=%u%s%s\r\n",
+                     result, storage_selftest_device(), (u32)WTEST_BYTES,
+                     storage_selftest_sha256()[0] ? " sha256=" : "",
+                     storage_selftest_sha256());
         serial_puts(line);
     } else if (!strcmp(cmd, "diag")) {
         char line[160];

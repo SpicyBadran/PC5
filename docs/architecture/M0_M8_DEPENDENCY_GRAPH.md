@@ -20,12 +20,14 @@ Track A — PC5 Native
   M0    complete     Architecture freeze and repository audit
         depends on  —
   M1    not_started  Physical boot and installation
-        depends on  M0, M1a, M1c
+        depends on  M0, M1a, M1c, M1d
   M1a   complete     Reproducible BIOS boot medium
         depends on  M0
   M1b   blocked      Automated CI and release publication
         depends on  M1a
   M1c   in_progress  UEFI boot path under real firmware
+        depends on  M0
+  M1d   complete     ATA PIO storage write path (emulated HDD)
         depends on  M0
   M2    not_started  Hardware abstraction and drivers
         depends on  M1
@@ -144,7 +146,7 @@ list an agent must respect:
 
 | Gate | Between | Rule |
 |---|---|---|
-| G1 | M1a/M1c → M1 | no installation claim until a physical machine boots and the log is committed |
+| G1 | M1a/M1c/M1d → M1 | a reproducible medium, both boot paths, and a verified write path — but no installation claim until a physical machine boots and the log is committed |
 | G2 | M1 → M2 | no "driver supported" claim until a measured compatibility row exists for that device |
 | G3 | M2 → M3 | no shell work on hardware that cannot yet display, store and take input reliably |
 | G4 | M3 → M4 | no PlayStation-experience claim before the base OS installs and boots unattended |

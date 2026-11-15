@@ -138,12 +138,46 @@
       "next_action": "Obtain OVMF (or a UEFI-capable VM) in the build environment; a stub run may never be relabelled as firmware compatibility."
     },
     {
+      "id": "M1d",
+      "track": "A",
+      "title": "ATA PIO storage write path (emulated HDD)",
+      "state": "complete",
+      "owner_role": "kernel-engineer",
+      "depends_on": ["M0"],
+      "legacy": ["docs/architecture/FIRST_THREE_TASKS.md Task 1"],
+      "deliverables": [
+        "kernel/ata.c (device-indexed 512-byte sector read/write, LBA28, cache flush)",
+        "kernel/block.c (block-request rules, no port I/O)",
+        "kernel/storage_test.c (explicit write self-test on a reserved window)",
+        "kernel/sha256.c (write-verification digest)",
+        "tests/v86_runner.mjs (--hda-buffer / --hda-out for a disposable disk)",
+        "tests/boot_test.py (write, read-back, guard and host-side image checks)",
+        "tests/test_storage.py (scratch-window and explicitness contracts)"
+      ],
+      "acceptance": [
+        "writes take an explicit device index; no call falls back to the selected boot device",
+        "ATAPI devices, zero counts, out-of-range or overflowing LBAs, invalid indices and NULL buffers are refused with distinct statuses",
+        "a 4 KiB deterministic pattern is written to a reserved 8-sector window, cache-flushed, read back and compared",
+        "the kernel's SHA-256 of the read-back equals the host's SHA-256 of the same bytes in the emulator's disk image",
+        "nothing outside the scratch window is written, and the CD-ROM path still boots and mounts ISO9660 with the disk attached",
+        "the write test never runs on an ordinary boot; it requires the explicit serial command",
+        "physical disk writing is NOT included and is not claimed"
+      ],
+      "evidence": [
+        "docs/TEST_RESULTS.md",
+        "tests/boot_test.py",
+        "tests/test_storage.py",
+        "kernel/storage_test.c"
+      ],
+      "next_action": "Repeat the write on the REF-AMD physical machine; then a partition-table parser and a writable filesystem behind the same sector interface."
+    },
+    {
       "id": "M1",
       "track": "A",
       "title": "Physical boot and installation",
       "state": "not_started",
       "owner_role": "kernel-engineer",
-      "depends_on": ["M0", "M1a", "M1c"],
+      "depends_on": ["M0", "M1a", "M1c", "M1d"],
       "legacy": ["repository M2", "repository M3 (partial)"],
       "deliverables": [
         "bootable USB image (isohybrid MBR plus UEFI entry)",
@@ -159,7 +193,7 @@
         "evidence for each machine is committed under docs/evidence/m1/<machine>/ with the firmware version and Secure Boot state"
       ],
       "evidence": [],
-      "next_action": "Storage write path first: AHCI/NVMe block drivers, GPT parser and a writable filesystem behind the existing block interface."
+      "next_action": "Storage write exists (M1d, emulated). Next: partitions and a writable filesystem, then the installer; AHCI/NVMe follow behind the same sector interface."
     },
     {
       "id": "M2",
