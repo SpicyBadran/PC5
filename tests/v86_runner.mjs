@@ -109,7 +109,13 @@ if (args["hda-out"] && args["hda-out"] !== true && !hdaBuffer) {
 }
 if (args.hda) config.hda = { url: path.resolve(args.hda) };
 if (args.fda) config.fda = { url: path.resolve(args.fda) };
-if (args["boot-order"]) config.boot_order = Number(args["boot-order"]);
+// Boot order: the CD must win even when the attached disk carries a valid
+// boot signature (a GPT protective MBR does).  v86's default order does not
+// guarantee that -- with a partition table on hda this run produced no serial
+// output at all.  0x213 is the order verified here for four cases: no disk,
+// zero-filled disk, valid GPT disk and CRC-damaged GPT disk.  --boot-order
+// still overrides it.
+config.boot_order = args["boot-order"] ? Number(args["boot-order"]) : 0x213;
 
 const emulator = new V86(config);
 

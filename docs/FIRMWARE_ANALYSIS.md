@@ -110,3 +110,76 @@ tool       pc5-firmware 0.1.0
 ```
 
 `docs/playstation/FIRMWARE_VERSIONS.md` is where these rows go.
+
+## 7. Planned intake of an owner-supplied `.PUP` (design now, nothing assumed)
+
+The owner expects to obtain an **officially obtained** Sony installation/update
+package later. This section fixes the workflow now so the arrival of the file is
+a test, not a redesign. It is a specification of handling, not a claim that the
+package is bootable on a PC — it is not (`§2`).
+
+### 7.1 Two different packages, never treated as interchangeable
+
+Sony distributes more than one kind of package, and the naming from public
+documentation is *update* versus *reinstallation*. PC5 records which one it was
+given and refuses to infer the other:
+
+| Property | Update package | Reinstallation package |
+|---|---|---|
+| Intended console action | update an existing system | restore a system from scratch |
+| Expected size (public documentation, approximate) | ~1.1 GB | ~1.2 GB and up |
+| Contents | version-to-version payload | complete system image set, per public reports |
+| PC5's assumption | none about layout | none about layout |
+
+Any statement about which one the owner supplied is recorded as *reported by the
+owner*, with the file's own hash — never as a verified Sony claim.
+
+### 7.2 Handling rules (the tooling already follows them)
+
+1. **The original is opened read-only and never modified.** No in-place patching,
+   no re-writing, no "cleaned" copy in place of the original. Analysis writes
+   only separate report files.
+2. **Identity is recorded before interpretation:** SHA-256, byte size, container
+   signature, and the date of analysis.
+3. **Version strings are reported only when found by evidence.** If the file
+   carries none in plaintext, the report says `version: not identified`. No
+   version is inferred from a filename, a marketing page or a size.
+4. **Structure is reported at the level actually verified.** `tools/firmware.py`
+   identifies `SLB2` and prints the header bytes and printable entry names; it
+   does not decode an entry table whose layout has not been confirmed.
+5. **No key material, no decryption, no circumvention.** If a component is
+   encrypted, the report says so (entropy, signature) and stops there.
+6. **Distribution is a separate, deliberate act.** The package and every derived
+   component stay outside Git (`.gitignore` covers `firmware/`), outside CI
+   artefacts and outside releases. Nothing is pushed, published or uploaded
+   automatically; before any upload the owner verifies that the use is
+   authorised and that repository access controls fit.
+7. **The PC5 installation medium never contains it.** `docs/INSTALLATION.md`
+   defines the four image targets and only the first three may be distributed.
+
+### 7.3 The sequence when the file arrives
+
+```sh
+# 1. hash and identify, writing reports beside — never over — the input
+sha256sum /secure/PS5UPDATE.PUP
+python3 tools/firmware.py analyze --input /secure/PS5UPDATE.PUP \
+    --json-out /secure/analysis/report.json \
+    --manifest-out /secure/analysis/manifest.json
+# 2. record the row in docs/playstation/FIRMWARE_VERSIONS.md (hash, size, kind,
+#    version if identified, source, date, tool version)
+# 3. stop and report: format, integrity, version, and what can be researched
+#    next. No loading attempt is made from an unanalysed package.
+```
+
+Only after step 3, and only if the evidence supports it, is a research question
+framed — for example "does entry X have a documented consumer on PC hardware".
+The answer may be "no", and that is a valid result.
+
+### 7.4 What is deliberately *not* designed
+
+* no assumption that the package can be turned into an ISO,
+* no assumption that a reinstallation package contains a bootable PC image,
+* no firmware "installer" in PC5,
+* no path in the kernel that consumes a `.PUP` (the kernel's firmware stage is
+  BLOCKED by design; `kernel/chain.c` enforces it and `tests/kernel_unit.c`
+  proves it).

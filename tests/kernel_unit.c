@@ -254,11 +254,211 @@ static void test_sha256(void)
     check_int("sha256 streaming equals one-shot", memcmp(da, db, sizeof(da)), 0);
 }
 
+
+/* ---------------------------------------------------------- partitions */
+
+static void put32(u8 *p, u32 v)
+{
+    p[0] = (u8)v; p[1] = (u8)(v >> 8); p[2] = (u8)(v >> 16); p[3] = (u8)(v >> 24);
+}
+
+static void put64(u8 *p, u64 v)
+{
+    put32(p, (u32)v);
+    put32(p + 4, (u32)(v >> 32));
+}
+
+/* Build a plain MBR with up to four entries: type, first LBA, sector count. */
+static void build_mbr(u8 *s, const u8 types[4], const u32 first[4], const u32 count[4])
+{
+    memset(s, 0, 512);
+    for (int i = 0; i < 4; i++) {
+        u8 *e = s + 446 + i * 16;
+        e[4] = types[i];
+        put32(e + 8, first[i]);
+        put32(e + 12, count[i]);
+    }
+    s[510] = 0x55;
+    s[511] = 0xaa;
+}
+
+static void gpt_name_into(u8 *entry, const char *name)
+{
+    for (int i = 0; name[i] && i < 35; i++) {
+        entry[56 + i * 2] = (u8)name[i];
+        entry[56 + i * 2 + 1] = 0;
+    }
+}
+
+/* Build a GPT header plus its entry array.  `corrupt_header_crc` and
+ * `corrupt_entries_crc` flip the stored checksum so the refusal path can be
+ * tested; the caller passes the capacity to keep the header coherent. */
+static void build_gpt(u8 *header, u8 *entries, u32 capacity, u32 num_entries,
+                      u32 entry_size, int corrupt_header_crc, int corrupt_entries_crc)
+{
+    memset(header, 0, 512);
+    memcpy(header, "EFI PART", 8);
+    put32(header + 8, 0x00010000u);
+    put32(header + 12, 92);
+    put64(header + 24, 1);
+    put64(header + 32, capacity - 1);
+    put64(header + 40, 34);
+    put64(header + 48, capacity - 34);
+    put64(header + 72, 2);
+    put32(header + 80, num_entries);
+    put32(header + 84, entry_size);
+
+    memset(entries, 0, num_entries * entry_size);
+    put32(header + 88, part_crc32(entries, num_entries * entry_size) ^
+                           (corrupt_entries_crc ? 1u : 0u));
+
+    put32(header + 16, 0);
+    u32 crc = part_crc32(header, 92);
+    put32(header + 16, corrupt_header_crc ? crc ^ 1u : crc);
+}
+
+static void gpt_entry(u8 *entries, u32 entry_size, u32 i, u8 type_byte,
+                      u64 first, u64 last, const char *name)
+{
+    u8 *e = entries + i * entry_size;
+    memset(e, 0, entry_size);
+    e[0] = type_byte;      /* first byte of the type GUID is enough to be "used" */
+    e[15] = 0x11;
+    put64(e + 32, first);
+    put64(e + 40, last);
+    if (name)
+        gpt_name_into(e, name);
+}
+
+static void test_partitions(void)
+{
+    u8 mbr[512];
+    u8 header[512];
+    u8 entries[128 * 128];
+    struct part_report r;
+    const u8 no_types[4] = {0, 0, 0, 0};
+    const u32 zeros[4] = {0, 0, 0, 0};
+
+    check_int("crc32 check vector", (long)part_crc32("123456789", 9), 0xcbf43926L);
+
+    /* ---- MBR ---- */
+    memset(mbr, 0, sizeof(mbr));
+    check_int("mbr without signature", part_parse_mbr(mbr, 16384, &r), PART_E_SIGNATURE);
+
+    u8 types[4] = {0x83, 0x07, 0, 0};
+    u32 first[4] = {2048, 8192, 0, 0};
+    u32 count[4] = {2048, 2048, 0, 0};
+    build_mbr(mbr, types, first, count);
+    check_int("mbr parses", part_parse_mbr(mbr, 16384, &r), PART_OK);
+    check_int("mbr scheme", r.scheme, PART_SCHEME_MBR);
+    check_int("mbr count", r.count, 2);
+    check_int("mbr valid", r.valid, 1);
+    check_int("mbr first lba", (long)r.parts[0].first_lba, 2048);
+    check_int("mbr first type", r.parts[0].type, 0x83);
+    check_int("mbr second type", r.parts[1].type, 0x07);
+
+    types[0] = 0x83; first[0] = 2048; count[0] = 4096;
+    types[1] = 0x83; first[1] = 4096; count[1] = 2048;
+    build_mbr(mbr, types, first, count);
+    check_int("mbr overlap refused", part_parse_mbr(mbr, 16384, &r), PART_E_OVERLAP);
+    check_int("mbr overlap not valid", r.valid, 0);
+
+    types[0] = 0x83; first[0] = 16380; count[0] = 16;
+    types[1] = 0; count[1] = 0;
+    build_mbr(mbr, types, first, count);
+    check_int("mbr past end refused", part_parse_mbr(mbr, 16384, &r), PART_E_RANGE);
+
+    types[0] = 0x0f; first[0] = 4096; count[0] = 4096;
+    types[1] = 0; first[1] = 0; count[1] = 0;
+    build_mbr(mbr, types, first, count);
+    check_int("mbr extended parses", part_parse_mbr(mbr, 16384, &r), PART_OK);
+    check_str("mbr extended labelled", r.parts[0].name, "extended (not walked)");
+
+    /* protective MBR: the GPT layer must decide */
+    build_mbr(mbr, no_types, zeros, zeros);
+    mbr[446 + 4] = 0xee;
+    put32(mbr + 446 + 8, 1);
+    put32(mbr + 446 + 12, 0xffffffffu);
+    check_int("protective mbr recognised", part_parse_mbr(mbr, 16384, &r), PART_OK);
+    check_int("protective mbr means gpt", r.scheme, PART_SCHEME_GPT);
+    check_int("protective mbr carries no partition", r.count, 0);
+
+    /* ---- GPT ---- */
+    build_gpt(header, entries, 16384, 128, 128, 0, 0);
+    gpt_entry(entries, 128, 0, 0xa2, 2048, 4095, "PC5 ROOT");
+    gpt_entry(entries, 128, 1, 0xa2, 4096, 6143, "PC5 DATA");
+    /* the entry CRC was computed before the entries existed: rebuild it */
+    put32(header + 88, part_crc32(entries, 128 * 128));
+    put32(header + 16, 0);
+    put32(header + 16, part_crc32(header, 92));
+
+    check_int("gpt parses", part_parse_gpt(header, 512, entries, 128 * 128, 16384, &r), PART_OK);
+    check_int("gpt scheme", r.scheme, PART_SCHEME_GPT);
+    check_int("gpt count", r.count, 2);
+    check_int("gpt valid", r.valid, 1);
+    check_str("gpt name 1", r.parts[0].name, "PC5 ROOT");
+    check_str("gpt name 2", r.parts[1].name, "PC5 DATA");
+    check_int("gpt first lba", (long)r.parts[0].first_lba, 2048);
+    check_int("gpt sectors", (long)r.parts[0].sectors, 2048);
+
+    u8 type_guid[16];
+    memset(type_guid, 0, sizeof(type_guid));
+    type_guid[0] = 0xa2;
+    type_guid[15] = 0x11;
+    char hex[PART_GUID_HEX_LEN];
+    part_guid_hex(type_guid, hex);
+    check_str("guid hex", hex, "a2000000000000000000000000000011");
+
+    /* corrupt header CRC */
+    u8 bad[512];
+    memcpy(bad, header, 512);
+    bad[16] ^= 1;
+    check_int("gpt header crc refused", part_parse_gpt(bad, 512, entries, 128 * 128, 16384, &r), PART_E_CRC);
+
+    /* corrupt entry CRC */
+    u8 bad_entries[128 * 128];
+    memcpy(bad_entries, entries, sizeof(bad_entries));
+    bad_entries[128 + 56] ^= 1;
+    check_int("gpt entry crc refused", part_parse_gpt(header, 512, bad_entries, 128 * 128, 16384, &r), PART_E_CRC);
+
+    /* entry past the device */
+    build_gpt(header, entries, 16384, 128, 128, 0, 0);
+    gpt_entry(entries, 128, 0, 0xa2, 16000, 17000, "TOO BIG");
+    put32(header + 88, part_crc32(entries, 128 * 128));
+    put32(header + 16, 0);
+    put32(header + 16, part_crc32(header, 92));
+    check_int("gpt past end refused", part_parse_gpt(header, 512, entries, 128 * 128, 16384, &r), PART_E_RANGE);
+
+    /* overlapping entries */
+    build_gpt(header, entries, 16384, 128, 128, 0, 0);
+    gpt_entry(entries, 128, 0, 0xa2, 2048, 4095, "A");
+    gpt_entry(entries, 128, 1, 0xa2, 3000, 5000, "B");
+    put32(header + 88, part_crc32(entries, 128 * 128));
+    put32(header + 16, 0);
+    put32(header + 16, part_crc32(header, 92));
+    check_int("gpt overlap refused", part_parse_gpt(header, 512, entries, 128 * 128, 16384, &r), PART_E_OVERLAP);
+    check_int("gpt overlap not valid", r.valid, 0);
+
+    /* empty table is valid and empty */
+    build_gpt(header, entries, 16384, 128, 128, 0, 0);
+    put32(header + 16, 0);
+    put32(header + 16, part_crc32(header, 92));
+    check_int("empty gpt parses", part_parse_gpt(header, 512, entries, 128 * 128, 16384, &r), PART_OK);
+    check_int("empty gpt count", r.count, 0);
+    check_int("empty gpt valid", r.valid, 1);
+
+    check_str("scheme mbr", part_scheme_name(PART_SCHEME_MBR), "mbr");
+    check_str("scheme gpt", part_scheme_name(PART_SCHEME_GPT), "gpt");
+    check_str("part status signature", part_status_name(PART_E_SIGNATURE), "signature");
+    check_str("part status overlap", part_status_name(PART_E_OVERLAP), "overlap");
+}
+
 int main(void)
 {
     test_format();
     test_block_rules();
     test_sha256();
+    test_partitions();
     test_numbers();
     test_strings();
     test_memory_map();

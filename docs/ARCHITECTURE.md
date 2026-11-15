@@ -21,7 +21,8 @@
  kernel/start.S        identity flat 32-bit entry, .bss cleared, IDT installed
    ▼
  kernel/main.c         console → timer → CPUID → E820 → PCI → SMBIOS → ACPI
-                       → firmware probe → storage (ATAPI + ISO9660 self-test)
+                       → firmware probe → storage (ATAPI + ISO9660 self-test
+                       → partition scan, read-only)
                        → keyboard → chain → interface
 ```
 
@@ -59,6 +60,7 @@ kernel and the loader cannot drift apart silently.
 | `kernel/smbios.c` | `_SM_`/`_SM3_` anchor, structure walk (BIOS, system, board, CPU, DIMMs) |
 | `kernel/ata.c` | legacy ATA/ATAPI PIO driver: LBA28 512-byte sector read/write for disks, packet reads on 2048-byte blocks for optical media |
 | `kernel/block.c` | block-request rules with no port I/O, so the host tests can prove them |
+| `kernel/part.c` | MBR/GPT parsers (pure) and a read-only, explicit-device scan |
 | `kernel/sha256.c` | SHA-256 for write verification (and, later, update manifests) |
 | `kernel/storage_test.c` | explicit `wtest` write/read-back self-test on a reserved window |
 | `kernel/iso9660.c` | ECMA-119 volume mount, root directory walk, file read on top of `ata.c` |
@@ -84,6 +86,8 @@ polled, which keeps the boot deterministic and makes failures reproducible.
 | `tests/boot_test.py` | asserts boot markers and the rendered interface, writes `build/test/boot-evidence.json` |
 | `tests/kernel_unit.c` | host-side unit tests for the kernel's pure logic, including the block rules and SHA-256 vectors |
 | `tests/test_storage.py` | contracts for the write test, its scratch window and harness safety |
+| `tests/test_partitions.py` | fixtures and contracts for partition discovery |
+| `tests/disk_images.py` | deterministic MBR/GPT disk fixtures used by the boot test |
 | `tests/test_tools.py` | unit tests for the ISO writer, verifier and firmware tool |
 | `tests/uefi_stub_firmware.py` | executes the real `BOOTX64.EFI` on the Unicorn CPU emulator against a stub firmware (protocols at their specified slots, two file-system volumes); emulates `lgdt`/segment loads/`lretq` |
 | `tests/uefi_stubtest.py` | asserts 42 properties of that run, plus two negative runs; `make stubtest` |

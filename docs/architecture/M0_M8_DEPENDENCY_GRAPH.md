@@ -20,7 +20,7 @@ Track A — PC5 Native
   M0    complete     Architecture freeze and repository audit
         depends on  —
   M1    not_started  Physical boot and installation
-        depends on  M0, M1a, M1c, M1d
+        depends on  M0, M1a, M1c, M1d, M1e
   M1a   complete     Reproducible BIOS boot medium
         depends on  M0
   M1b   blocked      Automated CI and release publication
@@ -29,6 +29,8 @@ Track A — PC5 Native
         depends on  M0
   M1d   complete     ATA PIO storage write path (emulated HDD)
         depends on  M0
+  M1e   complete     Read-only MBR and GPT partition discovery
+        depends on  M1d
   M2    not_started  Hardware abstraction and drivers
         depends on  M1
   M3    not_started  PC5 operating system
@@ -46,7 +48,7 @@ Track B — Prospero  (never gates Track A)
   M6    not_started  Genuine Prospero research
         depends on  M0
 
-Track A critical path: M0 -> M1a -> M1 -> M2 -> M3 -> M4 -> M7 -> M8
+Track A critical path: M0 -> M1d -> M1e -> M1 -> M2 -> M3 -> M4 -> M7 -> M8
 Track B milestones: M5, M6  — every one of them may stop without changing a Track A release.
 ```
 <!-- roadmap:end -->

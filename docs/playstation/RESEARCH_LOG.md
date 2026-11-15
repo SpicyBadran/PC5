@@ -2,6 +2,43 @@
 
 Dated entries, newest first. Facts are marked as reported or verified.
 
+## 2026-11-15 — Re-audit, partition discovery, and the genuine-boot assessment
+
+**Repository (verified here).** 90 tracked files; kernel+boot 5,986 lines, tests
+4,157, host tools 3,061, docs 4,616. Gate results at this commit: `make verify`
+53/53, `make check` 135 tests, `make unit` 99 checks, `make boot-test` 53/53,
+`make stubtest` 42/42, `make roadmap` 14 milestones. The full inventory, with
+the seven categories (verified / under-tested / experimental / simulated /
+planned / hardware-blocked / infeasible), is §7 of
+`docs/architecture/REPOSITORY_AUDIT_2026-11-15.md`.
+
+**Partition discovery (implemented and verified here).** MBR and GPT tables are
+now parsed read-only in the kernel, with header and entry CRC-32 checks, refusal
+of overlapping or out-of-range partitions, and a damaged table reported as
+`status=crc`. Verified on an emulated IDE disk whose bytes the test builds
+(`tests/disk_images.py`) and in 99 host unit checks. It is read-only: no
+filesystem, no installer.
+
+**Genuine PS5 boot (assessment, not attempted).** The dependency chain is
+recorded in `docs/playstation/BOOT_FEASIBILITY.md`: container understanding is
+research; obtaining authorised inner components, a security-processor trust
+anchor, console platform initialisation, GPU/audio/storage contracts and system
+services are blocked. Three routes could change that — Sony authorisation, a
+full-SoC emulator including the security processor, or reconstruction from
+leaked material — and the third is excluded by project policy. No public
+evidence of the first two exists. This is a finding, not a schedule slip.
+
+**Harness quirk (verified here).** v86's default boot order produced no serial
+output when `hda` carried a valid boot signature (a GPT protective MBR is one).
+The test runner now sets the order it was verified with (0x213); four cases —
+no disk, zero-filled disk, valid GPT, CRC-damaged GPT — all reach the CD. This
+is a property of the test harness, not of PC5.
+
+**Hygiene finding (verified here).** A 19 MB third-party archive,
+`AnyPS5-main (1).zip`, is committed at the repository root and is never built by
+any target. Removal is recommended but is an owner decision; it is recorded, not
+silently deleted.
+
 ## 2026-11-12 — Project start
 
 **Environment verification (verified here).**

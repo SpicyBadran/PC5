@@ -27,6 +27,9 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNNER = os.path.join(ROOT, "tests", "v86_runner.mjs")
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import disk_images  # noqa: E402  (test fixture builder, see tests/disk_images.py)
+
 # The write test gets its own disposable disk: a zero-filled file created here,
 # loaded into the emulator's memory through --hda-buffer and dumped back with
 # --hda-out.  It is never a host device, and the input file is never written to.
@@ -95,6 +98,17 @@ def run_vm(iso, seconds, serial_out, screen_out=None, keys=None,
         env["V86_ASSETS"] = assets
     proc = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=seconds + 60)
     return proc
+
+
+def _has_line(text, needle):
+    return any(needle in line for line in text.splitlines())
+
+
+def _first_line(text, needle):
+    for line in text.splitlines():
+        if needle in line:
+            return line.strip()
+    return f"no line containing {needle!r}"
 
 
 def screen_dump(serial_text):
@@ -171,6 +185,7 @@ def main(argv=None):
     keys = ",".join([
         "serial:wtest\\r", "wait:2",
         "serial:storage\\r", "wait:1",
+        "serial:part\\r", "wait:1",
         "serial:screen\\r", "wait:1",
         "serial:page 2\\r", "wait:1", "serial:screen\\r", "wait:1",
         "serial:page 3\\r", "wait:1", "serial:screen\\r", "wait:1",
@@ -202,6 +217,13 @@ def main(argv=None):
         res.check(f"write guard refuses {name}", line_present, name)
     res.check("writes to the CD-ROM boot device are refused explicitly",
               "storage_write_cdrom" in ui_log and "refused=1" in ui_log)
+
+    # ---- a disk with no partition table must not be reported as partitioned ----
+    res.check("a blank disk is not reported as having a partition table",
+              any(ln.strip().startswith("part device=0 scheme=none")
+                  and "status=signature" in ln
+                  for ln in ui_log.splitlines()),
+              "blank 8 MiB disk, no 55 AA signature")
 
     # ---- the write itself, and host-side verification of the disk image ----
     write_lines = [ln for ln in ui_log.splitlines() if "PC5-LOG storage_write=ok" in ln]
@@ -239,6 +261,50 @@ def main(argv=None):
               bool(host_sha) and host_sha == kernel_sha,
               (host_sha[:16] + "...") if host_sha else "missing")
     res.check("nothing outside the scratch window was written", outside_ok)
+
+    # ---- partition discovery: tables whose bytes this test controls ----
+    # 8 MiB = 16384 sectors, same geometry as the write-test disk.  The two
+    # partitions sit above the GPT metadata and inside the usable area.
+    part_disk = os.path.join(args.out_dir, "part-hda-gpt.img")
+    with open(part_disk, "wb") as fh:
+        fh.write(disk_images.gpt_image(WTEST_HDD_BYTES, [
+            ("PC5 ROOT", 2048, 2048, disk_images.TYPE_LINUX_FS),
+            ("PC5 DATA", 4096, 2048, disk_images.TYPE_LINUX_FS),
+        ]))
+    part_serial = os.path.join(args.out_dir, "serial-part.log")
+    run_vm(args.iso, args.seconds, part_serial, hda_buffer=part_disk)
+    with open(part_serial, "r", errors="replace") as fh:
+        part_log = fh.read()
+
+    res.check("kernel scans the attached disk for a partition table",
+              "PC5-LOG partitions device=0 scheme=gpt" in part_log)
+    res.check("GPT table validates (header and entry CRC)",
+              "PC5-LOG partitions device=0 scheme=gpt count=2 status=ok" in part_log,
+              _first_line(part_log, "PC5-LOG partitions device=0"))
+    res.check("both GPT partitions are reported",
+              _has_line(part_log, 'name="PC5 ROOT"') and _has_line(part_log, 'name="PC5 DATA"'),
+              _first_line(part_log, "PC5-LOG partition index=1"))
+    res.check("partition starts and lengths are the ones written",
+              _has_line(part_log, "first=2048 sectors=2048") and _has_line(part_log, "first=4096 sectors=2048"))
+    res.check("partition scan does not disturb the CD boot device",
+              "storage drives=2 selected=1 atapi=1" in part_log
+              and "storage_mounted volume=PC5" in part_log)
+
+    # A damaged entry table must be refused, and must not stop the boot.
+    bad_disk = os.path.join(args.out_dir, "part-hda-gpt-corrupt.img")
+    with open(part_disk, "rb") as fh:
+        damaged = disk_images.corrupt_entries_crc(fh.read())
+    with open(bad_disk, "wb") as fh:
+        fh.write(damaged)
+    bad_serial = os.path.join(args.out_dir, "serial-part-corrupt.log")
+    run_vm(args.iso, args.seconds, bad_serial, hda_buffer=bad_disk)
+    with open(bad_serial, "r", errors="replace") as fh:
+        bad_log = fh.read()
+    res.check("a GPT entry array with a bad CRC is refused, not guessed",
+              "PC5-LOG partitions device=0 scheme=gpt count=0 status=crc" in bad_log,
+              _first_line(bad_log, "PC5-LOG partitions device=0"))
+    res.check("a refused partition table does not stop the boot",
+              "PC5-BOOT-OK" in bad_log)
 
     dumps = screen_dump(ui_log)
     res.check("console shadow buffer dumped over serial", len(dumps) >= 4,
@@ -285,6 +351,17 @@ def main(argv=None):
             "input_image_unchanged": input_ok,
             "disk_image_after": os.path.abspath(disk_out) if attached else None,
         },
+        "partition_test": {
+            "fixture": "tests/disk_images.py (this file builds the bytes)",
+            "disk_bytes": WTEST_HDD_BYTES,
+            "gpt_image": os.path.abspath(part_disk),
+            "gpt_partitions": [
+                {"name": "PC5 ROOT", "first_lba": 2048, "sectors": 2048},
+                {"name": "PC5 DATA", "first_lba": 4096, "sectors": 2048},
+            ],
+            "corrupt_image": os.path.abspath(bad_disk),
+            "corrupt_result": "status=crc, count=0, boot continues",
+        },
         "levels_proven": [
             "ISO generated",
             "ISO integrity verified by tools/verify_iso.py (run 'make verify')",
@@ -292,10 +369,13 @@ def main(argv=None):
             "PC5 boot environment runs and reports the compatibility chain",
             "ATA PIO 512-byte sector write, flush and verified read-back on an emulated IDE disk",
             "writes to the ATAPI boot device are refused by the kernel API",
+            "MBR and GPT partition tables parsed read-only from an emulated disk",
         ],
         "levels_not_proven": [
             "physical hardware boot",
             "physical disk write (no real ATA disk has been written)",
+            "extended/logical MBR partitions (not walked)",
+            "any filesystem on a discovered partition (not implemented)",
             "controller, network and audio on physical hardware",
             "genuine PS5 system software execution",
             "actual PS5 game execution",

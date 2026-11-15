@@ -237,6 +237,17 @@ static void page_hardware(void)
                      sr->drives, sr->error);
     row_text(y++, line, sr->mounted ? COL_LGREEN : COL_YELLOW, COL_BLACK);
 
+    const struct part_report *pr = part_report();
+    if (pr->device >= 0 && pr->error == PART_OK)
+        pc5_snprintf(line, sizeof(line), "partitions: %s, %d partition(s) on disk %d (read-only scan)",
+                     part_scheme_name(pr->scheme), pr->count, pr->device);
+    else if (pr->device >= 0)
+        pc5_snprintf(line, sizeof(line), "partitions: disk %d unreadable or invalid (%s), no target offered",
+                     pr->device, part_status_name(pr->error));
+    else
+        pc5_snprintf(line, sizeof(line), "partitions: no writable disk attached");
+    row_text(y++, line, (pr->device >= 0 && pr->error == PART_OK) ? COL_LGREEN : COL_YELLOW, COL_BLACK);
+
     row_text(y++, "", COL_LGREY, COL_BLACK);
     row_text(y++, "PCI device list (bus:slot.func vendor:device class)", COL_LCYAN, COL_BLACK);
     for (u32 i = 0; i < g->pci.count; i++) {
@@ -473,7 +484,7 @@ static void serial_command(char *cmd)
 {
     const struct chain_stage *st = chain_stages();
     if (!strcmp(cmd, "help")) {
-        serial_puts("commands: help status chain hw fw storage wtest diag log screen reboot halt\r\n");
+        serial_puts("commands: help status chain hw fw storage part wtest diag log screen reboot halt\r\n");
     } else if (!strcmp(cmd, "status")) {
         char line[160];
         pc5_snprintf(line, sizeof(line), "pc5 version=%s build=%s date=%s\r\n", PC5_VERSION,
@@ -541,6 +552,28 @@ static void serial_command(char *cmd)
                      storage_selftest_state() == 1 ? "ok"
                      : storage_selftest_state() == 0 ? "not-run" : "failed");
         serial_puts(line);
+    } else if (!strcmp(cmd, "part")) {
+        const struct part_report *pr = part_report();
+        char line[220];
+        if (pr->device < 0) {
+            serial_puts("part none (no writable disk attached)\r\n");
+        } else {
+            pc5_snprintf(line, sizeof(line),
+                         "part device=%d scheme=%s status=%s count=%d capacity=%u\r\n",
+                         pr->device, part_scheme_name(pr->scheme),
+                         part_status_name(pr->error), pr->count, pr->capacity);
+            serial_puts(line);
+            for (int i = 0; i < pr->count; i++) {
+                const struct pc5_partition *pp = &pr->parts[i];
+                char guid[PART_GUID_HEX_LEN];
+                part_guid_hex(pp->type_guid, guid);
+                pc5_snprintf(line, sizeof(line),
+                             "part %u scheme=%s type=0x%02x guid=%s first=%u sectors=%u name=%s\r\n",
+                             pp->index, part_scheme_name(pp->scheme), pp->type, guid,
+                             pp->first_lba, pp->sectors, pp->name);
+                serial_puts(line);
+            }
+        }
     } else if (!strcmp(cmd, "wtest")) {
         /* Explicit, operator-requested write test.  Never part of boot. */
         char line[220];

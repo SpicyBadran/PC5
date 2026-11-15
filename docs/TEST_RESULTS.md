@@ -735,3 +735,93 @@ a pass: the recorded result above is from a run in which all 45 checks executed.
 * **No AHCI, NVMe, USB storage, DMA or interrupts.** Legacy PIO only, as before.
 * **No claim that a writable disk changes the compatibility chain.** Stage 4
   stays PARTIAL: there is still no game installation.
+
+## 11. M1e — MBR and GPT partition discovery, 2026-11-15
+
+Read-only partition discovery, verified twice over: the kernel parses tables
+whose exact bytes the test wrote, and the boot test asserts what the kernel
+reported. Nothing is mounted, written or formatted.
+
+Build inputs are pinned so the digest is reproducible:
+
+```
+$ make clean
+$ make BUILD_ID=m1e SOURCE_DATE_EPOCH=1763164800
+pc5: loader image 4096 bytes
+pc5: kernel image 45660 bytes (limit 585728)
+pc5: wrote build/pc5.iso (1581056 bytes, 772 sectors)
+pc5: sha256 69e2cb1cda6d1fc9d065b25351ed117edfaeb94e41696d477c181379692af54e
+```
+
+Two clean builds with those inputs are byte-identical (`cmp` clean).
+
+| Suite | Result |
+|---|---|
+| `make verify` | **53/53** |
+| `make check` | **135** tests, OK (25 tools + 41 UEFI + 10 release + 32 architecture + 14 storage + 13 partitions) |
+| `make unit` | **99** checks, 0 failures (was 61: +38 partition parser checks) |
+| `make boot-test` | **53/53** (was 45: +8 partition checks) |
+| `tests/uefi_stubtest.py` | **42/42** |
+| `make roadmap` | 14 milestones, tracks A/B separated, in sync |
+
+### 11.1 Fixtures the test builds
+
+`tests/disk_images.py` writes the disk bytes itself, so the expected answer is
+known exactly rather than inferred:
+
+| Fixture | Contents |
+|---|---|
+| `part-hda-gpt.img` | 8 MiB (16,384 sectors); protective MBR, primary header at LBA 1, 128-entry array at LBA 2, backup array at LBA 16,351, backup header at LBA 16,383; partitions `PC5 ROOT` (LBA 2048, 2048 sectors) and `PC5 DATA` (LBA 4096, 2048 sectors) |
+| `part-hda-gpt-corrupt.img` | the same image with one byte of the primary entry array flipped, so the header CRC still matches and the entry CRC does not |
+| `wtest-hda.img` (unchanged) | zero-filled 8 MiB disk — the negative case: no table at all |
+
+### 11.2 What the kernel reported
+
+Valid GPT (`build/test/serial-part.log`):
+
+```
+PC5-LOG partitions device=0 scheme=gpt count=2 status=ok capacity=16384
+PC5-LOG partition index=1 scheme=gpt type=0x00 guid=af3dc60f838472478e793d69d8477de4 first=2048 sectors=2048 name="PC5 ROOT"
+PC5-LOG partition index=2 scheme=gpt type=0x00 guid=af3dc60f838472478e793d69d8477de4 first=4096 sectors=2048 name="PC5 DATA"
+```
+
+Damaged entry array (`build/test/serial-part-corrupt.log`):
+
+```
+PC5-LOG partitions device=0 scheme=gpt count=0 status=crc capacity=16384
+```
+
+The run continued to `PC5-BOOT-OK`; a damaged table is reported, not acted on.
+
+Blank disk, via the serial `part` command (`build/test/serial-ui.log`):
+
+```
+part device=0 scheme=none status=signature count=0 capacity=16384
+```
+
+### 11.3 Unit-level coverage
+
+`tests/kernel_unit.c` exercises the parsers with no device involved:
+
+* CRC-32 check vector (`123456789` → `0xCBF43926`),
+* MBR: missing `55 AA`, two primaries, overlap, past-end, extended container
+  labelled `extended (not walked)`, protective MBR recognised as GPT,
+* GPT: valid table with names, header CRC mismatch, entry CRC mismatch,
+  partition past the device, overlapping entries, empty-but-valid table,
+* GUID hex formatting and the status/scheme name tables.
+
+### 11.4 What this does not establish
+
+* **No filesystem is read or mounted.** A valid table says nothing about what is
+  inside a partition.
+* **Extended/logical MBR partitions are not walked** — they are labelled, not
+  guessed.
+* **No writes, no formatting, no installer.** The module contains no write call;
+  `tests/test_partitions.py` asserts that mechanically.
+* **No physical disk has been read for a partition table**, and no AHCI/NVMe
+  device exists to read one from.
+* **A harness quirk, fixed and recorded:** v86's default boot order booted
+  nothing when `hda` carried a valid boot signature, which is exactly what a GPT
+  protective MBR is. The runner now sets the boot order it was verified with, and
+  the four cases (no disk, zero disk, valid GPT, damaged GPT) all reach the CD.
+  This is a test-harness property, not a PC5 claim.
