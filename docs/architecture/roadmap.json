@@ -177,7 +177,7 @@
       "title": "Physical boot and installation",
       "state": "not_started",
       "owner_role": "kernel-engineer",
-      "depends_on": ["M0", "M1a", "M1c", "M1d"],
+      "depends_on": ["M0", "M1a", "M1c", "M1d", "M1e"],
       "legacy": ["repository M2", "repository M3 (partial)"],
       "deliverables": [
         "bootable USB image (isohybrid MBR plus UEFI entry)",
@@ -193,7 +193,41 @@
         "evidence for each machine is committed under docs/evidence/m1/<machine>/ with the firmware version and Secure Boot state"
       ],
       "evidence": [],
-      "next_action": "Storage write exists (M1d, emulated). Next: partitions and a writable filesystem, then the installer; AHCI/NVMe follow behind the same sector interface."
+      "next_action": "Sector write (M1d) and partition discovery (M1e) exist. Next: a writable filesystem on a discovered partition, installer, isohybrid USB medium; AHCI/NVMe follow behind the same sector interface."
+    },
+    {
+      "id": "M1e",
+      "track": "A",
+      "title": "Read-only MBR and GPT partition discovery",
+      "state": "complete",
+      "owner_role": "kernel-engineer",
+      "depends_on": ["M1d"],
+      "legacy": ["docs/architecture/FIRST_THREE_TASKS.md (next three, task 2)"],
+      "deliverables": [
+        "kernel/part.c (pure MBR/GPT parsers, CRC-32, explicit-device scan)",
+        "kernel/include/pc5.h (partition types, statuses, bounds)",
+        "kernel/main.c (boot-time scan, PC5-LOG evidence, never fatal)",
+        "kernel/ui.c (storage-page line and `part` serial command)",
+        "tests/disk_images.py (reproducible MBR/GPT fixtures, including a damaged table)",
+        "tests/boot_test.py (GPT disk, damaged-table refusal, blank-disk negative)",
+        "tests/test_partitions.py (read-only and explicitness contracts)"
+      ],
+      "acceptance": [
+        "a GPT disk is parsed read-only from its protective MBR, header and entry array; header and entry CRCs are verified",
+        "a table with a mismatched CRC is refused with status=crc and the boot continues",
+        "a blank disk is reported as scheme=none status=signature, not as an empty table",
+        "partitions that overlap or extend past the device are refused with a distinct status",
+        "the scan takes an explicit device index and refuses ATAPI before reading a sector",
+        "no write, format or mount call exists in the partition module",
+        "extended/logical MBR partitions are labelled as not walked rather than guessed"
+      ],
+      "evidence": [
+        "docs/TEST_RESULTS.md",
+        "tests/disk_images.py",
+        "tests/test_partitions.py",
+        "kernel/part.c"
+      ],
+      "next_action": "Writable filesystem on a discovered partition (task A in the next three), then the installer."
     },
     {
       "id": "M2",

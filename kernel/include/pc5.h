@@ -365,6 +365,67 @@ void sha256_update(struct sha256_ctx *ctx, const void *data, u32 len);
 void sha256_final(struct sha256_ctx *ctx, u8 out[32]);
 void sha256_hex(const u8 digest[32], char out[65]);
 
+/* ------------------------------------------------------- partitions */
+/* Read-only discovery of MBR and GPT partition tables on a disk.  The
+ * parsers are pure functions over buffers, so the host tests can prove them
+ * against synthetic tables; only part_scan() touches a device, and it only
+ * ever *reads* 512-byte sectors through ata_read_sectors().  Nothing here
+ * mounts, writes or formats anything (see docs/ROADMAP.md M1e). */
+#define PART_MAX 16
+#define PART_NAME_LEN 37
+#define PART_GUID_HEX_LEN 33
+
+enum part_scheme {
+    PART_SCHEME_NONE = 0,
+    PART_SCHEME_MBR = 1,
+    PART_SCHEME_GPT = 2
+};
+
+enum part_status {
+    PART_OK = 0,
+    PART_E_NO_DEVICE = -1, /* no such drive index                             */
+    PART_E_ATAPI = -2,     /* optical device: no partition table to read      */
+    PART_E_IO = -3,        /* the device refused the read                     */
+    PART_E_SIGNATURE = -4, /* neither 55 AA nor "EFI PART" where required     */
+    PART_E_CRC = -5,       /* GPT header or entry-array CRC mismatch          */
+    PART_E_TABLE = -6,     /* geometry outside the spec bounds                */
+    PART_E_RANGE = -7,     /* partition extends past the device or overlaps   */
+    PART_E_OVERLAP = -8
+};
+
+struct pc5_partition {
+    u8 scheme;                /* enum part_scheme                            */
+    u8 index;                 /* 1-based, as the table numbers it            */
+    u8 type;                  /* MBR type code (0 for GPT)                   */
+    u8 type_guid[16];         /* raw GPT type GUID bytes                     */
+    u32 first_lba;            /* 512-byte sectors                            */
+    u32 sectors;
+    char name[PART_NAME_LEN]; /* GPT UTF-16LE name reduced to ASCII, or ""    */
+};
+
+struct part_report {
+    int device;               /* disk index scanned, -1 if none              */
+    int scheme;               /* enum part_scheme                            */
+    int count;                /* partitions recorded                         */
+    int valid;                /* 1 only if the whole table parsed cleanly     */
+    int error;                /* enum part_status of the first failure       */
+    u32 capacity;             /* device capacity in 512-byte sectors         */
+    struct pc5_partition parts[PART_MAX];
+};
+
+/* Pure parsers (host unit-tested).  `capacity` is in 512-byte sectors. */
+int part_parse_mbr(const u8 sector[512], u32 capacity, struct part_report *out);
+int part_parse_gpt(const u8 *header, u32 header_bytes, const u8 *entries,
+                   u32 entries_bytes, u32 capacity, struct part_report *out);
+u32 part_crc32(const void *data, u32 len);
+void part_guid_hex(const u8 guid[16], char out[PART_GUID_HEX_LEN]);
+
+/* Device layer: reads the table from `device` and caches the result. */
+const struct part_report *part_scan(int device);
+const struct part_report *part_report(void);
+const char *part_scheme_name(int scheme);
+const char *part_status_name(int status);
+
 int iso_mount(void);
 int iso_mounted(void);
 const char *iso_volume_id(void);

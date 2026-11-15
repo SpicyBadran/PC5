@@ -185,7 +185,8 @@ physical boot. The image remains the same operating system.
 2. An independent read of the MBR and partition table in `tests/test_tools.py`
    agrees with the writer's output — the verifier may not share the writer's
    arithmetic.
-3. The BIOS El Torito path is unchanged: `make boot-test` still reports 25/25.
+3. The BIOS El Torito path is unchanged: `make boot-test` still boots and passes
+   every check (53 today, 25 when this task was written).
 4. `make verify` gains at least three checks (MBR signature, partition extent,
    ISO and partition length agreement) and passes with the higher count; every
    document quoting the old count is updated in the same commit.
@@ -213,3 +214,124 @@ The dependency they form is small and useful: Task 3 makes the medium reachable
 by real firmware, Task 2 makes the UEFI path credible, Task 1 makes installation
 possible. Together they satisfy M1's prerequisites, which is the gate in front of
 everything else.
+
+---
+
+## Next three tasks, after M1d and M1e
+
+The first three tasks (storage write, UEFI under real firmware, hybrid MBR) are
+now: **task 1 executed** (M1d), **task 2 blocked on UEFI firmware**, **task 3 not
+started**. Partition discovery was pulled forward as M1e because it is the hard
+prerequisite for both the installer and any filesystem work, and because it is
+verifiable here without hardware. What follows is the next executable set, in
+dependency order. Each is independently valuable and independently testable.
+
+### Task A — FAT32 read: mount a real filesystem on a discovered partition
+
+**Paths:** new `kernel/fat32.c`; `kernel/include/pc5.h`; `kernel/main.c` (mount
+after `part_scan`); `kernel/ui.c` (`part` output, storage page); new
+`tests/mkfat.py` fixtures; `tests/kernel_unit.c`; `tests/boot_test.py`.
+
+**Why:** partition discovery stops at the table. An installer needs to read a
+filesystem — to see whether a partition already holds an installation, and to
+read the kernel it will copy. FAT32 is the only filesystem that is both simple
+enough to implement honestly in this kernel and universally understood by
+firmware, which matters for the UEFI ESP later.
+
+**Implementation:** BPB validation (bytes/sector ∈ {512,1024,2048,4096},
+sectors/cluster power of two, FAT count, reserved sectors, total sectors fitting
+the partition), FAT chain walk with a loop/cycle bound, directory entry parsing
+(8.3 and long names), read-only file read into a caller buffer. No allocator, no
+write path, no cluster cache beyond one sector.
+
+**Depends on:** M1d (sector reads), M1e (partition table).
+
+**Output:** `PC5-LOG fat32 partition=1 status=ok label="PC5" files=…` and
+`fat32_read` returning the bytes of a named file; a serial `ls <part>` command.
+
+**Tests:** host unit tests against a fixture FAT32 image built by
+`tests/mkfat.py` (valid, bad BPB, cyclic FAT chain, cluster past end); boot test
+attaches a disk whose partition 1 contains a FAT32 volume with a known file and
+asserts the kernel reads it back with the expected SHA-256.
+
+**Acceptance:** the file's SHA-256 from the kernel equals the host's; a corrupt
+BPB or cyclic chain is refused with a distinct status and the boot continues;
+nothing writes to the volume (asserted by comparing the disk image before/after
+and by the absence of any write call in the module).
+
+**Risks:** FAT32 edge cases (LFN checksums, cluster-count boundary between FAT16
+and FAT32); mitigated by refusing anything ambiguous and saying so. Time-boxed:
+a read path that handles the fixture set, not every historical variant.
+
+### Task B — FAT32 write: create a file, flush, and prove it from the host
+
+**Paths:** `kernel/fat32.c` (write path), `kernel/storage_test.c` (extend the
+self-test to a filesystem round-trip), `tests/boot_test.py`, `tests/mkfat.py`.
+
+**Why:** an installer that cannot create a file is not an installer. This is the
+first operation that mutates a *filesystem* rather than raw sectors.
+
+**Implementation:** allocate a cluster from the FAT, extend a directory entry
+(or create one), write the data, update both FAT copies, flush the device, then
+re-read through the read path and compare. Every metadata update is ordered so a
+crash leaves a detectable inconsistency rather than a silent one.
+
+**Depends on:** Task A.
+
+**Output:** `PC5-LOG fat32_write=ok partition=1 bytes=… sha256=…` on an explicit
+serial command, mirroring `wtest`; never automatic.
+
+**Tests:** host unit tests for allocation and directory insertion; boot test with
+an 8 MiB disk: create a file, flush, read it back in the kernel, dump the disk
+image and verify it with an independent FAT32 reader written in the test
+(`tests/mkfat.py` gains a parser) — two implementations must agree.
+
+**Acceptance:** the host reader finds the file with the same bytes and the FAT
+copies agree; a full disk fails with `no-space` rather than corrupting the
+directory; the input image is only mutated when the explicit command runs.
+
+**Risks:** write ordering and FAT-copy divergence; mitigated by refusing to
+report success unless both FATs and the directory agree after a re-read.
+
+### Task C — isohybrid medium: an ISO that also boots as a USB disk
+
+**Paths:** `tools/mkiso.py`, `tools/verify_iso.py`, `tests/test_tools.py`,
+`tests/boot_test.py`, `docs/BUILDING.md`.
+
+**Why:** the current image boots from CD/DVD and from a UEFI ESP, but a USB
+stick written from it is not bootable by BIOS — the El Torito catalogue is the
+only BIOS entry point. A hybrid MBR removes a real distribution blocker without
+needing new kernel code.
+
+**Implementation:** prepend/overlay a 512-byte MBR with one partition entry
+covering the ISO, install a small boot stub that loads the El Torito boot image
+by LBA (the 2048-byte sector count is already in the PVD), and set the ISO's
+system area bytes so both interpretations stay valid. `verify_iso.py` learns to
+check the MBR signature, the entry geometry and the stub's LBA arithmetic.
+
+**Depends on:** nothing in the kernel; M1a's ISO writer.
+
+**Output:** `build/pc5.iso` boots in v86 both as `--cdrom` and as `--hda`
+(disk image), with identical serial evidence.
+
+**Tests:** boot test runs the same image a second time as a hard disk; the ISO
+verifier asserts the MBR fields; a negative test flips the signature and expects
+refusal.
+
+**Acceptance:** both boot paths produce `PC5-BOOT-OK`; the ISO still passes the
+53 structural checks; the image remains byte-identical between two builds.
+
+**Risks:** BIOSes differ in how they treat hybrid images; documented as
+"verified in v86 only" until a physical USB test exists.
+
+### Not in this set, and why
+
+* **UEFI under OVMF** stays the top blocker, but it is an environment problem
+  (no OVMF, no UEFI VM), not an engineering one. Until firmware exists, any
+  "UEFI works" statement would be the stub run relabelled — which this project
+  does not do.
+* **Installer** depends on A, B and C; scheduling it now would mean building UI
+  over three missing primitives.
+* **AHCI/NVMe** widen the device set without unblocking anything above them;
+  they follow the filesystem so the same filesystem code is tested on emulated
+  AHCI rather than written blind.
