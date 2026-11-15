@@ -40,7 +40,7 @@ implementation.
 | 7 | Graphics command translation | framebuffer console only | NOT STARTED |
 | 8 | Shader processing and caching | none | NOT STARTED |
 | 9 | GPU memory and synchronisation | none | NOT STARTED |
-| 10 | Storage and filesystem | kernel ATAPI PIO + ISO9660 read; ATA PIO 512-byte read/write on an explicit device; MBR/GPT discovery; FAT32 read-only (mount/list/read) | PARTIAL — sectors, partition tables and a read-only filesystem exist (emulated only); no filesystem writing, so no install or package storage |
+| 10 | Storage and filesystem | kernel ATAPI PIO + ISO9660 read; ATA PIO 512-byte read/write on an explicit device; MBR/GPT discovery; FAT32 read and create (mount/list/read/put) | PARTIAL — sectors, partition tables, a filesystem and one create operation exist (emulated only); no overwrite/delete/resize, so no install or package storage |
 | 11 | Game package / executable handling | `FIH`/`CNT` signature identification only | RESEARCH |
 | 12 | Audio | PCI audio class counted only | NOT STARTED |
 | 13 | Controller / input translation | 8042 PS/2 keyboard driver behind `kbd_read()` | PARTIAL (keyboard only) |
@@ -80,9 +80,10 @@ a parsed container is not an executed game. The project's vocabulary:
 
 ## 5. Next three implementations, in order
 
-1. **FAT32 writing**: create a file, update the FAT and directory entries, flush,
-   and prove it with an independent reader. Reading is complete (M1f); without
-   writing there is no installer, no update and no package storage. See task B in
+1. **Bootloader installation on a real filesystem**: creating one file is done
+   (M1g: allocate, FAT copies, FSInfo, flush, independent read-back). What is
+   still missing for an installer is overwrite/rename, directory creation and a
+   boot entry, plus an isohybrid medium. See task B in
    `docs/architecture/FIRST_THREE_TASKS.md`.
 2. **isohybrid medium**: the same ISO booting as a USB hard disk, which removes a
    distribution blocker without new kernel code (task C there).

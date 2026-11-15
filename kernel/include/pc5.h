@@ -337,6 +337,7 @@ int ata_read_blocks(u32 lba, u32 count, void *buf);
  * ata_drive(); nothing here falls back to the selected boot device. */
 int ata_read_sectors(int device, u32 lba, u32 count, void *buf);
 int ata_write_sectors(int device, u32 lba, u32 count, const void *buf);
+int ata_flush(int device);
 int ata_writable_device(void);
 
 /* Kernel write self-test, invoked explicitly (serial command `wtest`): it
@@ -427,10 +428,16 @@ const char *part_scheme_name(int scheme);
 const char *part_status_name(int status);
 
 /* ------------------------------------------------------------ fat32 */
-/* Read-only FAT32.  The filesystem code never receives a device index: it is
- * handed a sector-read callback, so the host tests can mount a complete image
- * held in memory and the kernel can mount a partition on an explicit disk.
- * There is no write path in this module at all (docs/ROADMAP.md M1f). */
+/* FAT32.  The filesystem code never receives a device index: it is handed
+ * sector callbacks, so the host tests can mount a complete image held in
+ * memory and the kernel can mount a partition on an explicit disk.
+ *
+ * Reads have always been here (M1f).  M1g adds one narrowly scoped write
+ * operation, `fat32_create_file()`: create a *new* 8.3 file in the root
+ * directory.  Everything else stays impossible by construction: there is no
+ * overwrite, no delete, no resize, no subdirectory write, and no call at all
+ * when `fat32_io.write` is NULL (which is how a read-only mount stays
+ * read-only).  See docs/ROADMAP.md M1g and docs/KNOWN_LIMITATIONS.md §5. */
 #define FAT32_OK 0
 #define FAT32_E_IO -1          /* the sector source failed                       */
 #define FAT32_E_SIGNATURE -2   /* no 55 AA boot signature                        */
@@ -448,9 +455,22 @@ const char *part_status_name(int status);
 #define FAT32_E_CLUSTER -14    /* cluster number outside the volume              */
 #define FAT32_E_LOOP -15       /* the chain revisits clusters                    */
 #define FAT32_E_CORRUPT -16    /* directory entry or metadata inconsistent       */
+#define FAT32_E_READ_ONLY -17  /* the sector source offers no write callback      */
+#define FAT32_E_EXISTS -18     /* the name already exists: never overwritten      */
+#define FAT32_E_FULL -19       /* no free cluster could be allocated              */
+#define FAT32_E_DIR_FULL -20   /* no free root-directory slot                     */
+#define FAT32_E_VERIFY -21     /* the read-back does not match what was written   */
+#define FAT32_E_FLUSH -22      /* flush failed, or the source cannot flush        */
+#define FAT32_E_TOO_BIG -23    /* the file needs more clusters than M1g allows    */
 
+/* One sector source.  `write` and `flush` are optional: a source that leaves
+ * them NULL is read-only, and every write call returns FAT32_E_READ_ONLY
+ * without touching a byte.  The kernel's device layer supplies both; a mount
+ * that is meant to stay read-only simply does not. */
 struct fat32_io {
     int (*read)(void *ctx, u32 lba, u32 count, void *buf);
+    int (*write)(void *ctx, u32 lba, u32 count, const void *buf);
+    int (*flush)(void *ctx);
     void *ctx;
 };
 
@@ -490,6 +510,55 @@ int fat32_list_root(const struct fat32_io *io, const struct fat32_volume *vol,
                     struct fat32_entry *out, int max, int *count);
 const char *fat32_status_name(int status);
 
+/* --------------------------------------------------- FAT32 create (M1g) */
+
+/* A file this milestone can create needs at most this many clusters; the chain
+ * is held in a fixed array, because the kernel cannot allocate.  128 clusters
+ * is 64 KiB at the fixture's 512-byte clusters. */
+#define FAT32_MAX_CHAIN 128
+
+/* How far a create got.  A failure reports the stage it reached so a caller can
+ * say what state the volume may be in instead of claiming nothing happened. */
+enum fat32_stage {
+    FAT32_STAGE_NONE = 0,   /* nothing was written                            */
+    FAT32_STAGE_CHECK,      /* name/space/duplicate checks only               */
+    FAT32_STAGE_ALLOCATED,  /* clusters chosen in memory, nothing written     */
+    FAT32_STAGE_DATA,       /* writing file content into the new clusters     */
+    FAT32_STAGE_FAT,        /* linking the chain in every FAT copy            */
+    FAT32_STAGE_FSINFO,     /* writing the free-cluster counters              */
+    FAT32_STAGE_FLUSH,      /* flushing before the name exists                */
+    FAT32_STAGE_DIR,        /* writing the directory entry                    */
+    FAT32_STAGE_DONE        /* entry written, flushed and read back verified  */
+};
+
+struct fat32_write_report {
+    u32 clusters;           /* data clusters allocated (0 for an empty file)   */
+    u32 first_cluster;
+    u32 bytes;
+    u32 dir_sector;         /* partition-relative sector holding the new entry */
+    u32 dir_offset;         /* byte offset of the entry inside that sector     */
+    u32 free_before;        /* free clusters counted by scanning the FAT       */
+    u32 free_after;         /* free count written to FSInfo                    */
+    u32 fsinfo_claimed;     /* free count FSInfo claimed before the write      */
+    int fsinfo_valid;       /* the FSInfo block passed its signatures          */
+    int fsinfo_updated;     /* 1 updated, 0 not attempted, <0 failed           */
+    int mirrors_equal;      /* every FAT copy holds the same entries afterwards */
+    int flush_state;        /* 0 not offered, 1 flushed, <0 failed             */
+    int verified;           /* byte-for-byte read-back matched                 */
+    u32 writes;             /* sector write calls issued                       */
+    int stage;              /* enum fat32_stage reached                        */
+};
+
+/* Create `name` in the root directory with exactly `size` bytes of `data`.
+ * Existing names are refused (§ never overwrite).  Write ordering is
+ * content -> FAT -> directory entry -> FSInfo -> flush -> read-back, so no
+ * directory entry ever points at content that was not written first.  A
+ * failure can therefore leave at worst an allocated-but-unreferenced chain
+ * (a leak), never a file that reads back as garbage.  See docs/ROADMAP.md. */
+int fat32_create_file(const struct fat32_io *io, struct fat32_volume *vol,
+                      const char *name, const void *data, u32 size,
+                      struct fat32_write_report *rep);
+
 /* Device layer: mount the first FAT32 partition on `device` (an explicit disk
  * index), never ATAPI, never the boot medium implicitly. */
 int fat32_mount_partition(int device);
@@ -498,6 +567,9 @@ int fat32_mounted_device(void);
 int fat32_mounted_partition(void);
 int fat32_read_named(const char *name, void *buf, u32 max, u32 *out_len);
 int fat32_list_mounted(struct fat32_entry *out, int max, int *count);
+int fat32_mounted_writable(void);
+int fat32_create_mounted(const char *name, const void *data, u32 size,
+                         struct fat32_write_report *rep);
 
 int iso_mount(void);
 int iso_mounted(void);

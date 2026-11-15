@@ -48,7 +48,21 @@ anywhere, in any document, on any screen.
 as a host program and compares its SHA-256 for every fixture file against two
 independent sources: the bytes the fixture was generated from and a second FAT32
 reader written in Python. It also proves the image is unchanged after reading,
-that a FAT16 BPB is refused, and that the module contains no write path.
+that a FAT16 BPB is refused, and that the filesystem code reaches the disk only
+through its injected sector callbacks.
+
+`tests/test_fat32_write.py` is the M1g layer, and it is written as an
+adversarial test rather than a happy path. Each case builds a fresh image, runs
+the kernel's create path against a copy, then hands the *resulting image* to the
+independent Python reader and checks the file's bytes and SHA-256, its cluster
+chain, every FAT copy, the FSInfo counters, every pre-existing file, and the
+exact set of changed sectors. Refusals (existing name, full volume, full root
+directory, invalid name, read-only source, oversize file) must leave the image
+byte-identical. `tests/fat32_write_check.c` then forces write and flush failures
+at each stage — first data write, between FAT copies, before the directory
+entry, during the flush, and a corrupted data write — and the Python verifier
+classifies the result as intact, leaked-chain, partial-file or inconsistent
+mirror. No case is allowed to report a failed operation as a success.
 
 `tests/test_partitions.py` protects the partition work's seams: that the
 fixture images really carry the CRCs and backup header the kernel checks, that
@@ -107,6 +121,15 @@ host, and the input file is never written back to. `tests/boot_test.py` then ass
   header and entry CRC-32 and reported both partitions and their LBAs; with one
   entry byte flipped it reported `status=crc`, offered no target and still
   booted; with a zero-filled disk it reported `scheme=none`;
+* with a FAT32 disk attached, the kernel mounted it, listed the root directory,
+  read all six fixture files and matched their SHA-256 against both the fixture
+  bytes and the independent reader, and the dumped image was byte-identical;
+* a `put NEW.TXT hello-m1g` typed at the console created a real file on a
+  *disposable* FAT32 disk; the dumped image was read back by the independent
+  reader, which matched the payload byte for byte, found both FAT copies
+  identical, no orphan clusters, every pre-existing file intact and the changed
+  sectors confined to the data, FAT, FSInfo and root-directory regions; repeated
+  and malformed names were refused with no writes;
 * all six interface pages by dumping the console's shadow character grid over
   the serial console (`page N` + `screen`), so the assertions cover the
   *rendered* interface rather than a separate reporting path.
