@@ -57,12 +57,12 @@ Why each non-OK stage has that state:
 
 | Feature | Status | Evidence |
 |---|---|---|
-| Bootable ISO (BIOS/El Torito + UEFI El Torito section + hybrid MBR) | COMPLETE AND VERIFIED (emulated) | `make verify` 75/75, `make boot-test` 87/87; MBR path booted with the CD detached, control with sector 0 blanked did not boot |
+| Bootable ISO (BIOS/El Torito + UEFI El Torito section + hybrid MBR) | COMPLETE AND VERIFIED (emulated) | `make verify` 75/75, `make check` 280, `make boot-test` 116/116; MBR path booted with the CD detached, control with sector 0 blanked did not boot |
 | Loader (A20, E820, VBE, font, ISO probe, kernel load, PM handoff) | COMPLETE AND VERIFIED (emulated) | serial log |
 | Framebuffer console + text fallback + read-back self-test | COMPLETE AND VERIFIED (emulated) | Diagnostics page |
 | CPUID / E820 / PCI / ACPI / SMBIOS inventory | IMPLEMENTED — TESTING REQUIRED | hardware page; needs physical runs |
 | PS/2 keyboard navigation | IMPLEMENTED — TESTING REQUIRED | 8042 driver; emulator input only |
-| Serial console with 11 commands | COMPLETE AND VERIFIED | boot test drives it |
+| Serial console with 16 commands (including `put`, `write`, `mkdir`, `ls`, `read`) | COMPLETE AND VERIFIED | boot test drives it |
 | Compatibility chain + evidence reporting | COMPLETE AND VERIFIED | unit tests + boot test |
 | ISO writer + independent verifier + hybrid MBR (reproducible under SOURCE_DATE_EPOCH) | COMPLETE AND VERIFIED | 62 host tests (25 tools + 37 hybrid MBR), `docs/TEST_RESULTS.md` §14 |
 | Release packaging (`make release-assets`) + provenance in `build-info.json` | COMPLETE AND VERIFIED (local) | `docs/TEST_RESULTS.md` §6 |
@@ -72,9 +72,10 @@ Why each non-OK stage has that state:
 | Kernel MBR + GPT partition discovery (read-only) | COMPLETE AND VERIFIED (emulated disk + unit tests) | `partitions device=0 scheme=gpt count=2 status=ok`, and `status=crc` for a damaged table |
 | Kernel FAT32 read-only filesystem | COMPLETE AND VERIFIED (emulated disk + host driver) | `fat32 device=0 partition=1 status=ok label="PC5FS"`; file SHA-256 matches an independent reader |
 | Kernel FAT32 create (one root file) | COMPLETE AND VERIFIED (emulated disk + host driver) | `put NEW.TXT hello-m1g` → independent reader matches, originals intact, both FAT copies equal |
+| Kernel FAT32 overwrite, directories and paths | COMPLETE AND VERIFIED (emulated disk + host driver + a second boot) | `write PC5TEST.TXT …` frees the old chain only after the switch; `mkdir NEWDIR` then `put NEWDIR/A.TXT` reads back after a reboot; 50 host tests, one per-write failure sweep |
 | Kernel ATA PIO write path (explicit test only) | COMPLETE AND VERIFIED (emulated IDE disk) | `storage_write=ok … verify=ok sha256=…`; host-side image comparison in `make boot-test` |
 | UEFI boot path | IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF) | `make stubtest` 42/42 running the real `BOOTX64.EFI`; no OVMF or hardware run yet |
-| Writable filesystem, installer | PARTIAL (create only) | a new 8.3 root file can be created (M1g); no overwrite, delete, resize or install |
+| Writable filesystem, installer | PARTIAL (create, replace, mkdir) | 8.3 files can be created and replaced in place and directories created (M1g, M1i); no delete, rename, resize or install |
 | AHCI / NVMe | NOT STARTED | legacy ATA channels only |
 | USB stack / DualSense | NOT STARTED | — |
 | Network stack | NOT STARTED | — |

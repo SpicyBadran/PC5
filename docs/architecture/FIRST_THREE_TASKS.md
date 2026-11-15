@@ -270,13 +270,18 @@ a read path that handles the fixture set, not every historical variant.
 
 ### Task B — FAT32 write: create a file, flush, and prove it from the host
 
-**Status: create executed 2026-11-15 as milestone M1g; the rest is open.**
-Done: allocation from the FAT, both FAT copies maintained and re-read, FSInfo
-validated and recomputed, one root-directory entry written, two ATA flushes, and
-a read-back through the sector source — with a fault injector for each stage and
-an independent FAT32 reader confirming the dumped image
-(`docs/TEST_RESULTS.md` §13). Not done: overwrite, delete, resize, rename,
-subdirectory creation, directory expansion, and a boot-entry installer. The
+**Status: create executed as M1g (2026-11-15), expand executed as M1i
+(2026-11-15); delete, rename and the boot-entry installer remain open.**
+Done in M1g: allocation from the FAT, both FAT copies maintained and re-read,
+FSInfo validated and recomputed, one root-directory entry written, two ATA
+flushes, and a read-back through the sector source — with a fault injector for
+each stage and an independent FAT32 reader confirming the dumped image
+(`docs/TEST_RESULTS.md` §13). Done in M1i (`docs/TEST_RESULTS.md` §15, ADR-015):
+replace-in-place of an existing file (new chain built first, one entry write to
+switch, old chain freed afterwards), directory creation with `.` and `..`,
+one-cluster growth of a full directory, and the 8.3 path grammar that all three
+operations share. Still not done: delete, rename, truncate-in-place, and the
+installer's boot-entry work — those are M2's. The
 original plan below is kept because the remaining work is still that plan; two
 details changed in execution: the driver lives in `tests/fat32_write_check.c`
 rather than `kernel/storage_test.c`, and the reader already existed in

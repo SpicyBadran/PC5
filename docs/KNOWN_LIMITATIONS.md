@@ -36,26 +36,40 @@ work that has secretly been done.
 
 ## Environment
 
-5. **Storage is legacy-only, filesystem access is read-only, and there is no
-   installer.** The kernel drives ATA PIO and ATAPI on the two legacy channels.
-   It reads ISO9660 from the boot medium, reads and writes 512-byte sectors on
-   an explicitly indexed ATA disk, reads MBR and GPT partition tables, and
-   mounts a FAT32 partition to list and read files, and can create one new 8.3
-   file in the root directory (`put NAME.EXT text`), which allocates clusters,
-   updates every FAT copy, updates FSInfo, flushes and then reads the file back.
-   There is no AHCI, no NVMe, no USB storage, no overwrite, delete, resize or
-   rename, no subdirectory write, no directory expansion, no journal and no
-   repair, no installer and no bootloader installation. FAT32 long file names
-   are skipped, only 512-byte sectors are supported, and subdirectories are
-   listed but not descended. Writes never happen on an ordinary boot: the only
-   two write paths are the explicit `wtest` console command (a reserved 8-sector
-   scratch window) and the explicit `put` command. All of this has been verified
-   only on the emulated test disk — **no real disk has ever been written or
-   read.** Creating a file is one operation, not a filesystem: there is no
-   overwrite, no delete, no resize and no directory growth, a nearly-full volume
-   costs O(clusters) sector reads to scan, and nothing here is crash-consistent
-   against a real power cut — the write ordering only guarantees that an
-   interruption leaves a leaked chain rather than a file with rubbish in it.
+5. **Storage is legacy-only, the filesystem is a small writable subset, and
+   there is no installer.** The kernel drives ATA PIO and ATAPI on the two legacy
+   channels. It reads ISO9660 from the boot medium, reads and writes 512-byte
+   sectors on an explicitly indexed ATA disk, reads MBR and GPT partition tables,
+   and mounts a FAT32 partition to list, read, create, replace and create
+   directories in. Since M1i the write path covers:
+
+   * `put PATH text` — create a new 8.3 file, allocating clusters, updating every
+     FAT copy, updating FSInfo, flushing, then reading the file back;
+   * `write PATH text` — replace an existing file's content in place, built in
+     new clusters and switched with one directory-entry write, the old chain freed
+     afterwards;
+   * `mkdir PATH` — create one directory with valid `.` and `..`, growing a full
+     parent by one cluster.
+
+   Paths are 8.3 components separated by `/`, at most 8 components and 63
+   characters, matched case-insensitively. There is **no** delete, rename,
+   truncate-in-place, attribute change, move, long file name, link, journal or
+   repair, no installer and no bootloader installation. Only 512-byte sectors are
+   supported. Writes never happen on an ordinary boot: the only write paths are
+   the explicit `wtest` console command (a reserved 8-sector scratch window) and
+   the explicit `put`, `write` and `mkdir` commands. All of this has been verified
+   only through an in-memory sector array and the emulated test disk — **no real
+   disk has ever been written or read.**
+
+   Two consequences are worth stating because they are properties, not bugs:
+   an overwrite needs free space for **both** versions at once (a volume with room
+   for one chain but not two is refused with no writes), and a nearly full volume
+   costs O(clusters) sector reads to scan. Nothing here is crash-consistent
+   against a real power cut: the write ordering guarantees that an interruption
+   leaves either the old content intact or the new content complete, plus at worst
+   a leaked chain that the operation reports — **not** that the volume is always
+   mountable without a filesystem check. See ADR-015 and §15.9 of
+   `docs/TEST_RESULTS.md`.
 6. **No USB stack.** No USB host controller driver exists, therefore no
    DualSense, no USB storage, no USB Ethernet.
 7. **No network stack.** PCI network adapters are enumerated, but no driver,

@@ -14,7 +14,10 @@
  *       kernel/lib.c kernel/mem.c kernel/chain.c
  *
  * Usage:
- *   fat32-write-check IMAGE BASE_LBA SECTORS NAME SIZE --out FILE [options]
+ *   fat32-write-check IMAGE BASE_LBA SECTORS PATH SIZE --out FILE [options]
+ *
+ * PATH may be a path ("DIR/FILE.TXT"), not just a name: kernel/fat32.c resolves
+ * it.  The operation is `create` unless `--overwrite` or `--mkdir` is given.
  *
  * Options:
  *   --text TEXT          payload is TEXT (size must match, or be omitted=0)
@@ -27,8 +30,14 @@
  *   --no-flush           no flush callback at all (a source that cannot flush)
  *   --read-only-io       no write callback at all (a read-only source)
  *   --lba-log FILE       append every written LBA to FILE, one per line
- *
- * Exit status: 0 when the create returned FAT32_OK, 1 when it returned an
+ *   --overwrite          replace the content of an existing file (M1i)
+ *   --mkdir              create a directory (M1i)
+ *   --read               only read PATH through the kernel's read path and
+ *                        report its status; nothing is written (M1i)
+ *   --fail-lba LBA       fail the first write whose LBA equals LBA
+ *   --fail-fat-copy N    fail the first write that lands in FAT copy N
+
+ * Exit status: 0 when the operation returned FAT32_OK, 1 when it returned an
  * error, 2 on a usage or I/O problem.
  */
 #include <stdio.h>
@@ -50,6 +59,16 @@ struct sink {
     long corrupt_write;      /* -1: never */
     int fail_flush;
     FILE *lba_log;
+    /* M1i: region-targeted injection, so a fault lands in the *kind* of write
+     * the test means (a FAT mirror, the switch of the directory entry) instead
+     * of at a position the test has to guess from a write count. */
+    long fail_lba;           /* -1: never; first write to this LBA fails */
+    int fail_fat_copy;       /* -1: never; first write into this FAT copy fails */
+    unsigned long base_lba;
+    unsigned long reserved;
+    unsigned long fat_sectors;
+    unsigned long fat_count;
+    int hit_lba, hit_fat;
 };
 
 static int bounded(const struct image *img, u32 lba, u32 count, long *off, long *len)
@@ -86,6 +105,19 @@ static int mem_write(void *ctx, u32 lba, u32 count, const void *buf)
     long index = s->writes++;
     if (s->lba_log)
         fprintf(s->lba_log, "%u %u\n", lba, count);
+    if (s->fail_lba >= 0 && !s->hit_lba && (unsigned long)lba == (unsigned long)s->fail_lba) {
+        s->hit_lba = 1;
+        return -1;
+    }
+    if (s->fail_fat_copy >= 0 && !s->hit_fat) {
+        unsigned long copy = (unsigned long)lba - s->base_lba - s->reserved;
+        if ((long)copy >= 0 && (unsigned long)lba >= s->base_lba + s->reserved &&
+            copy / s->fat_sectors == (unsigned long)s->fail_fat_copy &&
+            copy / s->fat_sectors < s->fat_count) {
+            s->hit_fat = 1;
+            return -1;
+        }
+    }
     if (s->fail_write >= 0 && index == s->fail_write)
         return -1;
     if (s->fail_write_after >= 0 && index >= s->fail_write_after)
@@ -123,7 +155,9 @@ int main(int argc, char **argv)
     const char *out_path = NULL;
     const char *lba_path = NULL;
     long fail_write = -1, fail_write_after = -1, corrupt_write = -1;
+    long fail_lba = -1, fail_fat_copy = -1;
     int fail_flush = 0, no_flush = 0, read_only_io = 0;
+    int op = 0;                   /* 0 create, 1 overwrite, 2 mkdir, 3 read */
 
     for (int i = 6; i < argc; i++) {
         if (!strcmp(argv[i], "--text") && i + 1 < argc) {
@@ -146,6 +180,16 @@ int main(int argc, char **argv)
             read_only_io = 1;
         } else if (!strcmp(argv[i], "--lba-log") && i + 1 < argc) {
             lba_path = argv[++i];
+        } else if (!strcmp(argv[i], "--overwrite")) {
+            op = 1;
+        } else if (!strcmp(argv[i], "--mkdir")) {
+            op = 2;
+        } else if (!strcmp(argv[i], "--read")) {
+            op = 3;
+        } else if (!strcmp(argv[i], "--fail-lba") && i + 1 < argc) {
+            fail_lba = strtol(argv[++i], NULL, 0);
+        } else if (!strcmp(argv[i], "--fail-fat-copy") && i + 1 < argc) {
+            fail_fat_copy = strtol(argv[++i], NULL, 0);
         } else {
             fprintf(stderr, "unknown option: %s\n", argv[i]);
             return 2;
@@ -176,7 +220,10 @@ int main(int argc, char **argv)
 
     unsigned char *payload = NULL;
     u32 size = 0;
-    if (text) {
+    if (op == 3) {
+        /* read-only probe: the payload is irrelevant and SIZE is ignored */
+        payload = (unsigned char *)malloc(1);
+    } else if (text) {
         size = (u32)strlen(text);
         if (size_arg > 0 && (u32)size_arg != size) {
             fprintf(stderr, "--text length %u does not match SIZE %lld\n", size, size_arg);
@@ -204,6 +251,12 @@ int main(int argc, char **argv)
     sink.fail_write_after = fail_write_after;
     sink.corrupt_write = corrupt_write;
     sink.fail_flush = fail_flush;
+    sink.fail_lba = fail_lba;
+    sink.fail_fat_copy = fail_fat_copy;
+    sink.base_lba = base;
+    sink.reserved = 0;
+    sink.fat_sectors = 0;
+    sink.fat_count = 0;
     if (lba_path) {
         sink.lba_log = fopen(lba_path, "w");
         if (!sink.lba_log) {
@@ -243,16 +296,65 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    sink.reserved = vol.reserved_sectors;
+    sink.fat_sectors = vol.fat_sectors;
+    sink.fat_count = vol.fat_count;
+
+    if (op == 3) {
+        /* The kernel's read path, with no write callback attached at all: this
+         * is the same question the shell's `read` command asks. */
+        u32 len = 0;
+        unsigned char *back = (unsigned char *)malloc(1u << 20);
+        int rc_read = FAT32_E_IO;
+        if (back)
+            rc_read = fat32_read_file(&io, &vol, name, back, 1u << 20, &len);
+        char hex[65] = "-";
+        if (back && rc_read == FAT32_OK) {
+            struct sha256_ctx sctx;
+            unsigned char digest[32];
+            sha256_init(&sctx);
+            sha256_update(&sctx, back, len);
+            sha256_final(&sctx, digest);
+            sha256_hex(digest, hex);
+        }
+        printf("read path=%s status=%s size=%u sha256=%s writes=%ld\n",
+               name, fat32_status_name(rc_read), rc_read == FAT32_OK ? len : 0,
+               hex, sink.writes);
+        free(back);
+        if (out_path) {
+            FILE *out = fopen(out_path, "wb");
+            if (out) {
+                fwrite(img.data, 1, (size_t)bytes, out);
+                fclose(out);
+            }
+        }
+        if (sink.lba_log)
+            fclose(sink.lba_log);
+        free(img.data);
+        free(payload);
+        return rc_read == FAT32_OK ? 0 : 1;
+    }
+
     struct fat32_write_report rep;
     memset(&rep, 0, sizeof(rep));
-    int create_rc = fat32_create_file(&io, &vol, name, payload, size, &rep);
+    int rc_op;
+    const char *op_name = op == 1 ? "overwrite" : op == 2 ? "mkdir" : "create";
+    if (op == 1)
+        rc_op = fat32_overwrite_file(&io, &vol, name, payload, size, &rep);
+    else if (op == 2)
+        rc_op = fat32_create_dir(&io, &vol, name, &rep);
+    else
+        rc_op = fat32_create_file(&io, &vol, name, payload, size, &rep);
 
-    printf("create name=%s status=%s stage=%d size=%u clusters=%u first=%u "
+    printf("%s path=%s status=%s stage=%d size=%u clusters=%u first=%u "
+           "old_first=%u old_clusters=%u freed=%u grew=%d grown=%u "
            "dir_sector=%u dir_offset=%u free_before=%u free_after=%u "
            "fsinfo_valid=%d fsinfo_claimed=%u fsinfo_updated=%d mirrors=%d "
            "flush=%d verified=%d writes=%u\n",
-           name, fat32_status_name(create_rc), rep.stage, size, rep.clusters,
-           rep.first_cluster, rep.dir_sector, rep.dir_offset, rep.free_before,
+           op_name, name, fat32_status_name(rc_op), rep.stage, size, rep.clusters,
+           rep.first_cluster, rep.old_first_cluster, rep.old_clusters, rep.freed,
+           rep.grew, rep.grown_cluster,
+           rep.dir_sector, rep.dir_offset, rep.free_before,
            rep.free_after, rep.fsinfo_valid, rep.fsinfo_claimed,
            rep.fsinfo_updated, rep.mirrors_equal, rep.flush_state, rep.verified,
            rep.writes);
@@ -260,10 +362,13 @@ int main(int argc, char **argv)
     /* The kernel's own read path, used as a sanity check; the Python reader is
      * what the tests actually trust. */
     struct fat32_volume vol2;
+    int read_rc = FAT32_E_IO;
     if (fat32_mount(&io, base, sectors, &vol2) == FAT32_OK) {
         u32 len = 0;
         unsigned char *back = (unsigned char *)malloc(1u << 20);
-        if (back && fat32_read_file(&io, &vol2, name, back, 1u << 20, &len) == FAT32_OK) {
+        if (back)
+            read_rc = fat32_read_file(&io, &vol2, name, back, 1u << 20, &len);
+        if (back && read_rc == FAT32_OK) {
             struct sha256_ctx sctx;
             unsigned char digest[32];
             char hex[65];
@@ -274,7 +379,7 @@ int main(int argc, char **argv)
             printf("readback name=%s status=ok size=%u sha256=%s\n", name, len, hex);
         } else {
             printf("readback name=%s status=%s\n", name,
-                   back ? "error" : "no-memory");
+                   back ? fat32_status_name(read_rc) : "no-memory");
         }
         free(back);
     }
@@ -301,5 +406,5 @@ int main(int argc, char **argv)
 
     free(img.data);
     free(payload);
-    return create_rc == FAT32_OK ? 0 : 1;
+    return rc_op == FAT32_OK ? 0 : 1;
 }

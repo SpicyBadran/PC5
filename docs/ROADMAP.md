@@ -23,10 +23,14 @@ the current tree and corrects nine documented contradictions.
   1.44 MB UEFI ESP, which is why it grew from the 96,256-byte BIOS-only baseline
   recorded in `docs/TEST_RESULTS.md` §1).
 * `make verify` → 75/75 structural checks (M1h added the system-area MBR).
-* `make boot-test` → 87/87 checks on the v86/SeaBIOS emulated PC, including the
+* `make check` → 280 host tests (25 tools + 41 UEFI + 10 release + 32
+  architecture + 14 storage + 13 partitions + 20 FAT32 read + 38 FAT32 write + 50
+  FAT32 expand + 37 hybrid MBR).
+* `make boot-test` → 116/116 checks on the v86/SeaBIOS emulated PC, including the
   kernel mounting its own volume through its ATAPI/ISO9660 driver, the ATA write
-  test (M1d), partition discovery (M1e), FAT32 read/create (M1f, M1g) and the
-  hybrid-MBR boot with the CD detached (M1h).
+  test (M1d), partition discovery (M1e), FAT32 read/create/replace/mkdir (M1f,
+  M1g, M1i), the hybrid-MBR boot with the CD detached (M1h) and a second boot that
+  reads back what the first one wrote.
 
 ## M1c — UEFI boot path · **IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF)**
 
@@ -185,13 +189,57 @@ M1h (see the milestone list below and ADR-014).
   nothing about a particular machine's USB-HDD mode. See
   `docs/KNOWN_LIMITATIONS.md` item 2 and ADR-014.
 
+## M1i — FAT32 write expansion: overwrite, directories, paths · **COMPLETE (emulated disk + host driver)**
+
+* **Overwrite.** `fat32_overwrite_file()` replaces a regular file's content in
+  place: same name, same attributes, same directory slot, new first cluster and
+  size. The replacement is built in unreferenced clusters, linked in every FAT
+  copy and re-read, flushed, and only then does **one** 32-byte directory-entry
+  write switch the name over. The replaced chain is freed afterwards, cluster by
+  cluster, re-verified and re-counted. A shorter, longer, same-length, empty and
+  fragmented replacement are all covered.
+* **Directories.** `fat32_create_dir()` writes a zeroed cluster with `.` and `..`
+  (parent, or cluster 0 when the parent is the root), links and verifies its
+  chain, then writes the parent entry and reads the whole thing back through the
+  path. A parent with no free slot grows by one cluster — new cluster zeroed and
+  terminated *before* the old tail links to it — instead of refusing.
+* **Paths.** Every entry point takes `COMPONENT { "/" COMPONENT }`: at most 8
+  components, 63 characters, each an 8.3 name matched case-insensitively. Missing
+  parents, a file used as a directory, trailing or doubled separators, `.`/`..`
+  and over-long paths are refused with a distinct status and never truncated.
+* **Integrity before speed.** Both versions must fit on the volume at once, or the
+  overwrite is refused with zero writes. The root's own cluster, bad and reserved
+  clusters are never allocated; a divergent mirror, an invalid chain or a
+  nonsensical entry is refused as `corrupt` before anything destructive happens.
+  The growth cluster is reserved in the *same* allocation as the content, because
+  a second scan of the FAT would hand out the same still-unlinked cluster.
+* **Failure model, measured.** Every write of every operation was failed in turn:
+  before the switch the old content is intact, after it the new content is
+  complete, and the only possible damage is a leaked chain, which the report
+  counts (`freed`/`old_clusters`) and the independent reader confirms. No
+  unrelated file was damaged, no cluster was ever claimed twice, and the
+  accounting `freed + leaked + freed-in-one-copy-only == old chain` closed on all
+  26 failures of the overwrite sweep. **Not claimed: power-loss atomicity.**
+* **Console.** `put PATH text` (create, refuses existing), `write PATH text`
+  (replace), `mkdir PATH`, `ls [PATH]`, `read PATH`. Nothing on the boot path
+  calls any of them.
+* **Evidence.** 50 new host tests (`tests/test_fat32_expand.py`), +29 boot checks
+  including a second boot of the image the first boot wrote, 18 milestones in
+  sync, two identical pinned builds. See §15 of `docs/TEST_RESULTS.md` and
+  ADR-015.
+* Not claimed: any physical disk, delete/rename/truncate, long file names, or
+  crash consistency. See `docs/KNOWN_LIMITATIONS.md` item 5.
+
 ## M2 — Physical boot and safe installation · **IN PROGRESS**
 
 * Physical boot: **not attempted** (no hardware access in this environment).
   Instructions and the troubleshooting matrix exist; the evidence does not.
 * Installer: **not started**. Block write (M1d), partition discovery (M1e),
-  read-only FAT32 (M1f), FAT32 create (M1g) and the hybrid medium (M1h) exist; the
-  remaining blockers are a bootloader installer and overwrite/rename support.
+  read-only FAT32 (M1f), FAT32 create (M1g), the hybrid medium (M1h) and
+  overwrite/directories/paths (M1i) exist. A writable directory tree is now
+  available; the remaining blockers are a bootloader installer, delete/rename for
+  a real update path, and AHCI/NVMe so the installer can target the machines it
+  claims.
 * USB writing: implemented and safe (`pc5ctl usb`), and since M1h the image is
   hybrid — it boots through El Torito *and* through its MBR when firmware
   presents the stick as a hard disk. The emulated proof is §14 of

@@ -315,3 +315,68 @@ evidence, the choice, and what would reverse it.
   is replaced by two explicit extents and the builder's `build_hybrid_mbr()` is
   the one place that changes. The bootstrap does not care where the boot image
   lives, because the LBA is patched in.
+
+## ADR-015 — Overwrite builds a second copy and switches one entry; it is not a transaction
+
+* **Problem**: the installer M2 needs cannot be built on a filesystem that can
+  only create files. It has to replace a file whose name is already taken (a
+  bootloader configuration, a kernel image, a manifest) and it has to create
+  directories. Replacing data in place is the most dangerous operation a
+  filesystem performs: if the entry is updated before the new bytes are on the
+  medium, the file reads back as rubbish; if the old chain is freed before the
+  new one is safe, a crash loses both versions; if anything is half-done, the
+  volume itself can become unreadable. Three constraints bound the design: the
+  kernel is freestanding with a fixed stack and no heap, there is no journal and
+  there will not be one in this milestone, and the only durable primitive
+  available is "write a 512-byte sector, then issue FLUSH CACHE".
+* **Alternatives**: (a) overwrite the existing clusters in place — cheapest in
+  space, but every interruption lands *inside* the live file, so the result is a
+  file that reads back as a mixture of both versions, and a longer replacement
+  cannot fit at all; (b) allocate the new chain, free the old one first, then
+  write the new data and update the entry — a failure in between leaves a name
+  pointing at freed clusters, which a later allocation can hand to another file
+  (silent cross-linked corruption); (c) build the new chain in unreferenced
+  clusters, switch the entry with one sector write, and only then free the old
+  chain — costs transient space for both versions and can leak; (d) do nothing
+  and require a full filesystem check after every failure — there is no fsck in
+  this tree, and telling an operator to run a repair tool that does not exist is
+  not a design.
+* **Evidence**: the failure sweep in §15.5 of `docs/TEST_RESULTS.md` fails each of
+  the 26 writes of an overwrite in turn and classifies the resulting image with
+  an independent FAT32 reader. In every run the target was either the old bytes
+  (failures 0–11, i.e. up to and including the switch) or the complete new bytes
+  (failures 12–25), no unrelated file changed, no cluster was ever claimed by two
+  chains, and the cluster accounting closed exactly as
+  `freed + leaked + freed-in-one-copy-only = 6`. The same sweep on mkdir leaves
+  either nothing or one well-formed empty directory nothing points at.
+* **Decision**: (c). The order is: plan and validate the entire allocation in
+  memory (free count from the FAT, never from FSInfo; the old chain walked and
+  refused if it is not coherent) → write the replacement into clusters nothing
+  references → link it in **every** FAT copy and re-read every copy → recompute
+  FSInfo (over-reporting usage is the safe direction) → flush → **one** 32-byte
+  directory-entry write, which is the only instant at which the operation becomes
+  visible → flush → read the file back through its own name → free the replaced
+  chain, re-verifying every copy → correct FSInfo → flush. A volume that cannot
+  hold both chains at once is refused with `full` **before anything is written**:
+  space is what the property costs, and refusing is the honest answer. Directory
+  creation uses the same discipline with `.`/`..` as the payload, and a full
+  parent is grown by reserving the growth cluster in the *same* allocation as the
+  content — a second scan of the FAT would see the reserved-but-unlinked clusters
+  as free and hand one out twice.
+* **Consequence**: the failure model is now stated, testable and tested, and it is
+  deliberately narrower than "atomic". Before the switch the volume holds the old
+  file plus a leaked chain; after it, the new file plus (until freed) the old
+  chain. There is no state in which a name refers to unwritten data, no state in
+  which two objects share a cluster, and no false "ok": every failure path returns
+  a status and a stage, and the report never claims a verification it did not
+  perform (`mirrors` is 1 only after the copies were re-read, `verified` only
+  after the read-back). What is **not** claimed is anything about a power cut: a
+  failing `write()` in the host driver returns before the sector reaches the
+  medium, so the tests prove ordering, not durability. A real power loss between
+  the switch and the free leaves a leaked chain that needs a filesystem check.
+  Delete, rename and truncate-in-place are still absent — each needs its own
+  ordering argument, and M1i did not need them.
+* **Reversal**: if a journal ever lands, the switch and the free become one logged
+  transaction and the transient-space requirement disappears; the code already
+  isolates the three moments (link, switch, reclaim) as separate stages, which is
+  the structure a log would replay.

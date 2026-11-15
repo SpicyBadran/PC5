@@ -22,13 +22,14 @@ What *does* work today, verified in this repository:
 | Capability | Status | Evidence |
 |---|---|---|
 | Reproducible ISO build (`build/pc5.iso`) | COMPLETE AND VERIFIED | `make iso`, [`docs/TEST_RESULTS.md`](docs/TEST_RESULTS.md) |
-| ISO structure (ISO9660 + El Torito BIOS and UEFI sections + boot descriptor) | COMPLETE AND VERIFIED | `make verify` → 53/53 checks |
-| Boots on an emulated x86 PC (SeaBIOS, CD-ROM) | COMPLETE AND VERIFIED | `make boot-test` → 68/68 checks |
+| ISO structure (ISO9660 + El Torito BIOS and UEFI sections + boot descriptor + hybrid MBR) | COMPLETE AND VERIFIED | `make verify` → 75/75 checks |
+| Boots on an emulated x86 PC (SeaBIOS, CD-ROM and, with the CD detached, its hybrid MBR) | COMPLETE AND VERIFIED | `make boot-test` → 116/116 checks |
 | ATA PIO write, cache flush and verified read-back (explicit test only) | COMPLETE AND VERIFIED (emulated IDE disk) | `wtest` over the serial console; `make boot-test` compares the image and SHA-256 |
 | Kernel reads its own medium (ATAPI + ISO9660, no firmware calls) | COMPLETE AND VERIFIED (emulated) | `storage_mounted volume=PC5` in the boot log |
 | MBR/GPT partition discovery, read-only | COMPLETE AND VERIFIED (emulated disk + unit tests) | `partitions device=0 scheme=gpt count=2 status=ok`; a damaged table reports `status=crc` |
 | FAT32 read-only: mount, list, find, read, digest | COMPLETE AND VERIFIED (emulated disk + host driver) | kernel SHA-256 equals an independent reader's for every fixture file; image byte-identical after reading |
 | FAT32 create: allocate, FAT copies, FSInfo, flush, read-back | COMPLETE AND VERIFIED (emulated disk + host driver) | `put NEW.TXT hello-m1g` → independent reader extracts `hello-m1g`; originals intact, mirrors equal, no orphans |
+| FAT32 overwrite, directories and 8.3 paths | COMPLETE AND VERIFIED (emulated disk + host driver + a second boot) | `write PATH text` replaces in place and frees the old chain only after the switch; `mkdir NEWDIR` then `put NEWDIR/A.TXT` reads back after a reboot; 50 host tests and a per-write failure sweep |
 | Hardware inventory (CPUID, E820, PCI, ACPI, SMBIOS) | IMPLEMENTED — TESTING REQUIRED | hardware page + serial log |
 | Framebuffer console with VGA text fallback | COMPLETE AND VERIFIED (emulated) | boot log, framebuffer self-test |
 | PS/2 keyboard navigation | IMPLEMENTED — TESTING REQUIRED | 8042 driver, emulator input |

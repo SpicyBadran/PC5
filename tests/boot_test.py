@@ -521,6 +521,173 @@ def main(argv=None):
     res.check("a malformed name is refused before any write",
               "fat32 create name=BAD*.TXT" in w_log and "status=name" in w_log)
 
+    # ---- M1i: overwrite, directory creation and paths, driven through the same
+    # console on a disposable image -- and then proved across a *reboot*: the
+    # second boot reads the files the first boot wrote, from the dumped image.
+    e_image = fat32_images.build_fat32_image(valid_subdir=True)
+    e_path = os.path.join(args.out_dir, "fat32-expand-hda.img")
+    with open(e_path, "wb") as fh:
+        fh.write(e_image)
+    e_after = os.path.join(args.out_dir, "fat32-expand-after.img")
+    e_grown = os.path.join(args.out_dir, "fat32-expand-reboot.img")
+    e_serial = os.path.join(args.out_dir, "serial-fat32-expand.log")
+    new_text = "replaced-by-m1i"
+    inner_text = "hello-m1i"
+    e_keys = ",".join([
+        "serial:mkdir NEWDIR\\r", "wait:1",
+        "serial:ls NEWDIR\\r", "wait:1",
+        f"serial:put NEWDIR/A.TXT {inner_text}\\r", "wait:2",
+        "serial:read NEWDIR/A.TXT\\r", "wait:1",
+        "serial:ls NEWDIR\\r", "wait:1",
+        f"serial:write PC5TEST.TXT {new_text}\\r", "wait:2",
+        "serial:read PC5TEST.TXT\\r", "wait:1",
+        "serial:write NOPE.TXT x\\r", "wait:1",        # must be refused
+        "serial:write SUBDIR x\\r", "wait:1",          # must be refused
+        "serial:write SUBDIR/ x\\r", "wait:1",         # must be refused
+        "serial:put PC5TEST.TXT x\\r", "wait:1",       # put never replaces
+        "serial:mkdir SUBDIR\\r", "wait:1",            # must be refused
+        "serial:mkdir MISSING/X\\r", "wait:1",         # must be refused
+        "serial:mkdir BAD*NAME\\r", "wait:1",          # must be refused
+        "serial:read SUBDIR/INNER.TXT\\r", "wait:1",
+        "serial:ls SUBDIR\\r", "wait:1",
+    ])
+    run_vm(args.iso, max(args.seconds, 34), e_serial, keys=e_keys,
+           hda_buffer=e_path, hda_out=e_after)
+    with open(e_serial, "r", errors="replace") as fh:
+        e_log = fh.read()
+
+    e_bytes = b""
+    e_new = e_inner = e_deep = None
+    e_dir = {}
+    e_originals_ok = e_copies_equal = e_no_double = e_no_orphans = False
+    e_fsinfo_ok = False
+    if os.path.exists(e_after):
+        with open(e_after, "rb") as fh:
+            e_bytes = fh.read()
+        try:
+            e_new = fat32_images.read_path(e_bytes, "PC5TEST.TXT")
+            e_inner = fat32_images.read_path(e_bytes, "NEWDIR/A.TXT")
+            e_deep = fat32_images.read_path(e_bytes, "SUBDIR/INNER.TXT")
+        except Exception:
+            pass
+        try:
+            e_dir = fat32_images.check_directory(e_bytes, "NEWDIR")
+        except Exception:
+            e_dir = {}
+        originals = fat32_images.all_files(e_image)
+        originals.pop("PC5TEST.TXT", None)          # deliberately replaced
+        e_originals_ok = all(fat32_images.read_path(e_bytes, n) == d
+                             for n, d in originals.items())
+        copies = fat32_images.fat_copies(e_bytes)
+        e_copies_equal = all(c == copies[0] for c in copies)
+        e_no_double = fat32_images.double_allocated(e_bytes) == set()
+        e_no_orphans = fat32_images.orphan_clusters(e_bytes) == set()
+        e_fsinfo_ok = (fat32_images.fsinfo_fields(e_bytes)["free_count"]
+                       == fat32_images.free_cluster_count(e_bytes))
+
+    res.check("the console creates a directory", 
+              _has_line(e_log, "fat32 mkdir path=NEWDIR")
+              and "status=ok" in _first_line(e_log, "fat32 mkdir path=NEWDIR"),
+              _first_line(e_log, "fat32 mkdir path=NEWDIR"))
+    res.check("the new directory is empty and is listed as such",
+              "fat32 list path=NEWDIR count=0 status=ok" in e_log,
+              _first_line(e_log, "fat32 list path=NEWDIR"))
+    res.check("a file can be created inside the new directory",
+              _has_line(e_log, "fat32 create name=NEWDIR/A.TXT")
+              and "status=ok" in _first_line(e_log, "fat32 create name=NEWDIR/A.TXT"),
+              _first_line(e_log, "fat32 create name=NEWDIR/A.TXT"))
+    res.check("the new directory then lists the file it holds",
+              "fat32 list path=NEWDIR count=1 status=ok" in e_log,
+              _first_line(e_log, "fat32 list path=NEWDIR count=1"))
+    res.check("the console replaces an existing file's content",
+              _has_line(e_log, "fat32 overwrite path=PC5TEST.TXT")
+              and "status=ok" in _first_line(e_log, "fat32 overwrite path=PC5TEST.TXT"),
+              _first_line(e_log, "fat32 overwrite path=PC5TEST.TXT"))
+    overwrite_line = _first_line(e_log, "fat32 overwrite path=PC5TEST.TXT")
+    res.check("the overwrite reports the chain it replaced and freed",
+              "old_clusters=6" in overwrite_line and "freed=6" in overwrite_line,
+              overwrite_line)
+    res.check("the overwrite reports both FAT copies and the read-back",
+              "mirrors=1" in overwrite_line and "verified=1" in overwrite_line
+              and "flush=1" in overwrite_line, overwrite_line)
+    res.check("the independent reader sees exactly the replacement bytes",
+              e_new == new_text.encode(), repr(e_new))
+    res.check("the file created inside the directory reads back byte for byte",
+              e_inner == inner_text.encode(), repr(e_inner))
+    res.check("the directory has valid '.' and '..' entries",
+              bool(e_dir) and e_dir.get("dot_ok") and e_dir.get("dotdot_ok")
+              and e_dir.get("dotdot") == 0, repr(e_dir.get("dotdot")))
+    res.check("the directory holds exactly the one file that was created in it",
+              [e["name"] for e in e_dir.get("live", [])] == ["A.TXT"],
+              repr([e["name"] for e in e_dir.get("live", [])]))
+    res.check("every other file on the volume is unchanged", e_originals_ok)
+    res.check("both FAT copies are identical after the M1i operations", e_copies_equal)
+    res.check("no cluster is claimed by two objects", e_no_double)
+    res.check("no cluster is left allocated and unnamed", e_no_orphans)
+    res.check("FSInfo's free count matches the FAT", e_fsinfo_ok)
+    res.check("overwriting a missing file is refused", 
+              "fat32 overwrite path=NOPE.TXT" in e_log
+              and "status=no-file" in _first_line(e_log, "fat32 overwrite path=NOPE.TXT"),
+              _first_line(e_log, "fat32 overwrite path=NOPE.TXT"))
+    res.check("a directory is not overwritten as if it were a file",
+              "fat32 overwrite path=SUBDIR " in e_log
+              and "status=directory" in _first_line(e_log, "fat32 overwrite path=SUBDIR "),
+              _first_line(e_log, "fat32 overwrite path=SUBDIR "))
+    res.check("'put' still refuses an existing name instead of replacing it",
+              "fat32 create name=PC5TEST.TXT size=1 status=exists" in e_log,
+              _first_line(e_log, "fat32 create name=PC5TEST.TXT"))
+    res.check("a duplicate directory name is refused",
+              "fat32 mkdir path=SUBDIR status=exists" in e_log,
+              _first_line(e_log, "fat32 mkdir path=SUBDIR"))
+    res.check("a directory under a missing parent is refused",
+              "fat32 mkdir path=MISSING/X status=no-file" in e_log,
+              _first_line(e_log, "fat32 mkdir path=MISSING/X"))
+    res.check("a malformed directory name is refused before any write",
+              "fat32 mkdir path=BAD*NAME status=name" in e_log,
+              _first_line(e_log, "fat32 mkdir path=BAD*NAME"))
+    res.check("the console reads a file through a path, not just a bare name",
+              _has_line(e_log, "fat32 read name=SUBDIR/INNER.TXT")
+              and "status=ok" in _first_line(e_log, "fat32 read name=SUBDIR/INNER.TXT"),
+              _first_line(e_log, "fat32 read name=SUBDIR/INNER.TXT"))
+    res.check("the disposable M1i image was never modified by the host",
+              sha256(e_path) == hashlib.sha256(e_image).hexdigest())
+
+    # ---- the same image, booted again: what the first boot wrote is still there
+    r_serial = os.path.join(args.out_dir, "serial-fat32-reboot.log")
+    r_keys = ",".join([
+        "serial:read PC5TEST.TXT\\r", "wait:1",
+        "serial:read NEWDIR/A.TXT\\r", "wait:1",
+        "serial:ls NEWDIR\\r", "wait:1",
+        "serial:read SUBDIR/INNER.TXT\\r", "wait:1",
+    ])
+    if e_bytes:
+        run_vm(args.iso, max(args.seconds, 26), r_serial, keys=r_keys,
+               hda_buffer=e_after, hda_out=e_grown)
+    with open(r_serial, "r", errors="replace") as fh:
+        r_log = fh.read()
+    res.check("a second boot mounts the volume the first boot wrote",
+              "PC5-LOG fat32 device=0 partition=1 status=ok label=\"PC5FS\"" in r_log,
+              _first_line(r_log, "PC5-LOG fat32"))
+    res.check("the replaced file is intact after a reboot",
+              _has_line(r_log, f"fat32 read name=PC5TEST.TXT size={len(new_text)} "
+                               f"status=ok")
+              and _first_line(r_log, "fat32 read name=PC5TEST.TXT").split("sha256=")[-1]
+              == hashlib.sha256(new_text.encode()).hexdigest(),
+              _first_line(r_log, "fat32 read name=PC5TEST.TXT"))
+    res.check("the file created in a new directory survives a reboot",
+              _has_line(r_log, "fat32 read name=NEWDIR/A.TXT")
+              and "status=ok" in _first_line(r_log, "fat32 read name=NEWDIR/A.TXT")
+              and _first_line(r_log, "fat32 read name=NEWDIR/A.TXT").split("sha256=")[-1]
+              == hashlib.sha256(inner_text.encode()).hexdigest(),
+              _first_line(r_log, "fat32 read name=NEWDIR/A.TXT"))
+    res.check("the directory still lists its file after a reboot",
+              ("fat32 list path=NEWDIR count=1 status=ok") in r_log,
+              _first_line(r_log, "fat32 list path=NEWDIR"))
+    res.check("a file that was never touched still reads back after a reboot",
+              _has_line(r_log, "fat32 read name=SUBDIR/INNER.TXT")
+              and "status=ok" in _first_line(r_log, "fat32 read name=SUBDIR/INNER.TXT"),
+              _first_line(r_log, "fat32 read name=SUBDIR/INNER.TXT"))
+
     dumps = screen_dump(ui_log)
     res.check("console shadow buffer dumped over serial", len(dumps) >= 4,
               f"{len(dumps)} dumps")
@@ -595,6 +762,26 @@ def main(argv=None):
             "flush": "ATA FLUSH CACHE (0xE7) after the FAT and after the directory entry",
             "refusals": ["exists (twice)", "name"],
             "input_image_unchanged": sha256(w_path) == hashlib.sha256(w_image).hexdigest(),
+        },
+        "fat32_expand_test": {
+            "fixture": "tests/fat32_images.py(valid_subdir=True); one disposable copy",
+            "image_before": os.path.abspath(e_path),
+            "image_after_first_boot": os.path.abspath(e_after),
+            "image_after_second_boot": os.path.abspath(e_grown) if e_bytes else None,
+            "created_directory": "NEWDIR",
+            "created_file": "NEWDIR/A.TXT",
+            "created_bytes": len(inner_text),
+            "replaced_name": "PC5TEST.TXT",
+            "replaced_bytes": len(new_text),
+            "independent_reader_bytes": len(e_new) if e_new is not None else None,
+            "dot_entries_ok": bool(e_dir.get("dot_ok") and e_dir.get("dotdot_ok")),
+            "fat_copies_identical": e_copies_equal,
+            "no_double_allocation": e_no_double,
+            "orphan_clusters": sorted(fat32_images.orphan_clusters(e_bytes)) if e_bytes else None,
+            "original_files_intact": e_originals_ok,
+            "fsinfo_matches_fat": e_fsinfo_ok,
+            "refusals": ["no-file", "directory", "exists", "not-checked: name"],
+            "input_image_unchanged": sha256(e_path) == hashlib.sha256(e_image).hexdigest(),
         },
         "partition_test": {
             "fixture": "tests/disk_images.py (this file builds the bytes)",

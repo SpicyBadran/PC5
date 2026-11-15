@@ -20,7 +20,7 @@ Track A — PC5 Native
   M0    complete     Architecture freeze and repository audit
         depends on  —
   M1    not_started  Physical boot and installation
-        depends on  M0, M1a, M1c, M1d, M1e, M1f
+        depends on  M0, M1a, M1c, M1d, M1e, M1f, M1i
   M1a   complete     Reproducible BIOS boot medium
         depends on  M0
   M1b   blocked      Automated CI and release publication
@@ -36,6 +36,8 @@ Track A — PC5 Native
   M1g   complete     Safe FAT32 write: create, flush, independent read-back
         depends on  M1f
   M1h   complete     Hybrid MBR: the same ISO boots as a hard disk
+        depends on  M1g
+  M1i   complete     FAT32 write expansion: overwrite, directories, paths
         depends on  M1g
   M2    not_started  Hardware abstraction and drivers
         depends on  M1, M1g
@@ -54,7 +56,7 @@ Track B — Prospero  (never gates Track A)
   M6    not_started  Genuine Prospero research
         depends on  M0
 
-Track A critical path: M0 -> M1d -> M1e -> M1f -> M1 -> M2 -> M3 -> M4 -> M7 -> M8
+Track A critical path: M0 -> M1d -> M1e -> M1f -> M1g -> M1i -> M1 -> M2 -> M3 -> M4 -> M7 -> M8
 Track B milestones: M5, M6  — every one of them may stop without changing a Track A release.
 ```
 <!-- roadmap:end -->
