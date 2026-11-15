@@ -54,7 +54,7 @@ int main(int argc, char **argv)
     u32 base = (u32)strtoul(argv[2], NULL, 0);
     u32 sectors = (u32)strtoul(argv[3], NULL, 0);
 
-    struct fat32_io io = { file_read, NULL };
+    struct fat32_io io = { .read = file_read, .ctx = NULL };
     struct fat32_volume vol;
     int rc = fat32_mount(&io, base, sectors, &vol);
     printf("mount status=%s base=%u sectors=%u clusters=%u label=%s fs=%s\n",

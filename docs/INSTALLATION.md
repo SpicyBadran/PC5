@@ -112,7 +112,8 @@ The installer needs four primitives, and two of them now exist:
 | write 512-byte sectors on an explicit disk | done (M1d), emulated disk only |
 | read MBR/GPT tables without modifying them | done (M1e), read-only |
 | read a filesystem on a partition | done (M1f): FAT32 mount, list, find, read |
-| create files, directories and a boot entry | **missing** — task B |
+| create a file on a partition | done (M1g): create one 8.3 root file, allocate, flush, verify |
+| overwrite, delete, resize, create directories, write a boot entry | **missing** — rest of task B |
 
 What the installer will *not* do: guess a target disk, format without an explicit
 confirmation that names the device and its size, or report success without
