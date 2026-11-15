@@ -954,3 +954,162 @@ A volume whose BPB declares FAT16 is refused in the emulator as
 * **Only 512-byte sectors**, only mirrored or explicitly selected FATs.
 * **No physical hardware.** The disk is v86's in-memory IDE device.
 * **No package or game parsing.** A readable file is not an installable title.
+
+## 13. M1g — safe FAT32 write, 2026-11-15
+
+One write operation exists: create a new 8.3 file in the root directory of an
+explicitly mounted FAT32 volume. It is proved the way M1f was proved — by an
+implementation that shares no code with the kernel — plus a fault injector that
+forces the operation to fail at each stage and then asks the independent reader
+what state the volume is in.
+
+Build inputs are pinned, and two clean builds are byte-identical:
+
+```
+$ make clean
+$ make BUILD_ID=m1g SOURCE_DATE_EPOCH=1763164800
+pc5: kernel image 57692 bytes (limit 585728)
+pc5: wrote build/pc5.iso (1593344 bytes, 778 sectors)
+
+$ sha256sum build/kernel.bin build/pc5.iso
+d4344906d8db1e1fdfe429e8245f8c50da75dbd9bb78132e3e54534eb326e965  build/kernel.bin
+12f4f4e96fe437c025a4a3132a25e29c57e069edf77db4762afd4e3104798b02  build/pc5.iso
+```
+
+| Suite | Result |
+|---|---|
+| `make verify` | **53/53** |
+| `make unit` | **160** checks, 0 failures |
+| `make check` | **192** tests, OK (25 tools + 41 UEFI + 10 release + 32 architecture + 14 storage + 13 partitions + 20 FAT32 read + 37 FAT32 write) |
+| `make boot-test` | **80/80** (was 68: +12 write checks) |
+| `tests/uefi_stubtest.py` | **42/42** |
+| `make roadmap` | 16 milestones, in sync |
+
+### 13.1 What the write path does
+
+`fat32_create_file(io, vol, name, data, size, &report)`:
+
+1. refuses an invalid name, an oversize file, a volume it did not mount, or a
+   sector source without a write callback (`read-only`);
+2. scans the root directory for the name (`exists`) and for the first free slot
+   (`dir-full` if there is none) — a deleted slot is reused, unless it sits
+   directly behind a long-name record, whose orphaned fragments would otherwise
+   attach to the new name;
+3. counts free clusters by reading the FAT (`full` if fewer than needed) and
+   chooses the whole chain in memory before writing anything;
+4. writes content → FAT copies → FSInfo → flush → directory entry → flush →
+   read-back, reporting the stage it reached on failure.
+
+The kernel's own read-back is the last step, and `put` prints
+`verified=`, `mirrors=`, `flush=` and the stage so no partial operation can be
+mistaken for success.
+
+### 13.2 The created file, confirmed three ways
+
+Console session in the emulator (`build/test/serial-fat32-write.log`):
+
+```
+fat32 create name=NEW.TXT size=9 status=ok stage=8 clusters=1 free=65509 mirrors=1 flush=1 verified=1 writes=6
+fat32 read name=NEW.TXT size=9 status=ok sha256=18efaedb92997ed4c9c2b7f13c5d14d1398f4cbde3e166302af07c6908bc7288
+fat32 list count=8 status=ok
+fat32 create name=NEW.TXT size=5 status=exists stage=1 clusters=0 ... writes=0
+fat32 create name=PC5TEST.TXT size=1 status=exists stage=1 ... writes=0
+fat32 create name=BAD*.TXT size=1 status=name stage=0 ... writes=0
+```
+
+| Source | Result |
+|---|---|
+| payload the test asked for | `hello-m1g`, 9 bytes |
+| SHA-256 the kernel computed in the emulator | `18efaedb…c7288` |
+| SHA-256 of the payload on the host | `18efaedb…c7288` |
+| bytes the independent reader extracts from the dumped disk | `hello-m1g` |
+
+The dumped disk was then inspected structurally:
+
+| Check | Result |
+|---|---|
+| every pre-existing file reads back byte for byte | yes (six files) |
+| FAT copy 1 == FAT copy 2 (raw bytes) | yes |
+| orphaned clusters (allocated, unreferenced) | none |
+| changed sectors | 6: `2049` (FSInfo), `2055` (FSInfo backup), `2080`, `2593` (the two FATs), `3106` (root directory), `3130` (the new data cluster) |
+| input image modified by the host | no |
+
+### 13.3 Creation matrix (host driver + independent reader)
+
+Every row starts from a fresh image and is verified with `read_file()`,
+`cluster_chain()`, `fat_copies()`, `fsinfo_fields()`, `orphan_clusters()` and
+`changed_sectors()`:
+
+| Case | Result |
+|---|---|
+| 9-byte text file | 1 cluster, chain `[26]`, digest matches |
+| zero-length file | 0 clusters, first cluster 0, entry size 0 |
+| 100 bytes (sub-cluster) | one cluster, file size stays 100 |
+| 512 bytes (exact cluster) | one cluster, no extra cluster allocated |
+| 3,000 bytes (6 clusters) | contiguous chain, every FAT link checked |
+| 2,000 bytes on a volume with holes | chain `[26, 28, 30, 32]` — fragmented, content correct |
+| volume with exactly 2 free clusters | succeeds, volume ends 0 free |
+| volume with 1 free cluster, 2 needed | `full`, image byte-identical |
+| volume with no free clusters | `full`, zero writes |
+| existing name (`PC5TEST.TXT`, `pc5test.txt`) | `exists`, zero writes |
+| full root directory (16/16 slots live) | `dir-full`, zero writes |
+| invalid names (`BAD*NAME.TXT`, `TOOLONGNAME.TXT`, `A.BBBB`, `name?.txt`, empty) | `name`, zero writes |
+| read-only source (no write callback) | `read-only`, image byte-identical |
+| deleted slot available | reused (`dir_offset=32`), the old name stays invisible |
+| deleted slot behind a long-name record | skipped; entry goes to the end marker instead |
+| FAT falsely marks the root directory's cluster free | cluster 2 is never allocated; every name survives |
+| 65 KiB+ request beyond `FAT32_MAX_CHAIN` | `too-big`, zero writes |
+| two identical runs | byte-identical images (fixed timestamps, deterministic order) |
+
+FSInfo behaviour is tested separately: the fixture *lies* (it claims 65,504 free
+clusters when 65,510 are free) and the write ignores that claim, recomputes from
+the FAT and writes 65,509 after creating one cluster — to both the FSInfo block
+and its backup. A block whose counters are impossible (`0xFFFFFFFF`) or whose
+signature is broken is reported `fsinfo_valid=0`, is **not** rewritten, and the
+create still succeeds.
+
+### 13.4 Fault injection
+
+`tests/fat32_write_check.c` fails or corrupts the N-th sector write, or the
+flush, and the Python verifier classifies the resulting image. 700-byte file =
+2 data clusters; the successful run issues 9 writes in this order: data(0,1),
+FAT copies(2,3,4,5), FSInfo(6), FSInfo backup(7), directory entry(8).
+
+| Injection | Status | Stage reached | Writes applied | File exists | Orphans | Mirrors equal | Originals intact |
+|---|---|---|---|---|---|---|---|
+| none | ok | 8 (done) | 9 | yes | none | yes | yes |
+| `--fail-write 0` (first data write) | io | 3 (data) | 0 | no | none | yes | yes |
+| `--fail-write 2` (first FAT copy) | io | 4 (FAT) | 2 | no | none | yes | yes |
+| `--fail-write 3` (between FAT copies) | io | 4 (FAT) | 3 | no | `[26]` | **no** | yes |
+| `--fail-write 6` (FSInfo) | io | 5 (FSInfo) | 6 | no | `[26, 27]` | yes | yes |
+| `--fail-write 8` (directory entry) | io | 7 (directory) | 8 | no | `[26, 27]` | yes | yes |
+| `--corrupt-write 0` (media corrupts the data) | **verify** | 7 (directory) | 9 | yes, wrong bytes | none | yes | yes |
+| `--fail-flush` | **flush** | 6 (flush) | 8 | no | `[26, 27]` | yes | yes |
+| `--no-flush` (source cannot flush) | ok, `flush=0` | 8 (done) | 9 | yes | none | yes | yes |
+
+What this establishes, stated without rounding up:
+
+* **No injection ever damaged a pre-existing file.** Every original file was
+  byte-identical in every run.
+* **The two worst outcomes are a leaked chain and a divergent mirror**, and both
+  are reported rather than hidden. A leaked chain costs space and nothing else;
+  a divergent mirror is exactly what the per-copy re-read exists to catch
+  (`status=corrupt` if the kernel survives to that check).
+* **A corrupted write is caught**, because the read-back goes through the sector
+  source: the file exists with wrong bytes but the operation returns `verify`,
+  never `ok`.
+* **A failed flush is an error**, even though the directory entry was already
+  written; the caller is told the durability of that entry is unknown.
+* **Not established:** behaviour against real power loss (no cache-flush ordering
+  beyond ATA FLUSH CACHE), torn writes inside a sector, or repair of a volume
+  that is already inconsistent. There is no journal and no fsck.
+
+### 13.5 What this does not establish
+
+* No overwrite, delete, resize, rename, subdirectory write or directory
+  expansion — each is refused, not approximated.
+* No long file names, no 4K sectors, no multiple concurrent writers.
+* No physical disk was written; every disk is v86's in-memory IDE device, filled
+  from a generated image and dumped afterwards.
+* No installer, no bootloader installation, and nothing about PS5 game or
+  firmware compatibility follows from a writable FAT32 file.

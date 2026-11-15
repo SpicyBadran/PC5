@@ -383,6 +383,90 @@ def main(argv=None):
     res.check("a refused filesystem does not stop the boot",
               "PC5-BOOT-OK" in bad_fat_log)
 
+    # ---- FAT32 write: one file, created on a disposable image, proved by an
+    # independent reader.  The image is written by v86 from the buffer, dumped
+    # afterwards with --hda-out, and never opened for writing by the host.
+    w_image = fat32_images.build_fat32_image()
+    w_path = os.path.join(args.out_dir, "fat32-write-hda.img")
+    with open(w_path, "wb") as fh:
+        fh.write(w_image)
+    w_after = os.path.join(args.out_dir, "fat32-write-after.img")
+    w_serial = os.path.join(args.out_dir, "serial-fat32-write.log")
+    payload = "hello-m1g"
+    w_keys = ",".join([
+        f"serial:put NEW.TXT {payload}\\r", "wait:2",
+        "serial:read NEW.TXT\\r", "wait:1",
+        "serial:ls\\r", "wait:1",
+        "serial:put NEW.TXT again\\r", "wait:1",          # must be refused
+        "serial:put PC5TEST.TXT x\\r", "wait:1",           # must be refused
+        "serial:put BAD*.TXT x\\r", "wait:1",              # must be refused
+    ])
+    run_vm(args.iso, max(args.seconds, 24), w_serial, keys=w_keys,
+           hda_buffer=w_path, hda_out=w_after)
+    with open(w_serial, "r", errors="replace") as fh:
+        w_log = fh.read()
+
+    got_payload = None
+    copies_equal = False
+    orphans = []
+    originals_ok = False
+    changed = set()
+    if os.path.exists(w_after):
+        with open(w_after, "rb") as fh:
+            w_bytes = fh.read()
+        try:
+            got_payload = fat32_images.read_file(w_bytes, "NEW.TXT")
+        except Exception:
+            got_payload = None
+        copies = fat32_images.fat_copies(w_bytes)
+        copies_equal = all(c == copies[0] for c in copies)
+        orphans = sorted(fat32_images.orphan_clusters(w_bytes))
+        originals_ok = all(fat32_images.read_file(w_bytes, n) == d
+                           for n, d in expected_files.items())
+        changed = fat32_images.changed_sectors(w_image, w_bytes)
+
+    res.check("the kernel creates a file through its ATA write path",
+              _has_line(w_log, "fat32 create name=NEW.TXT") and "status=ok" in w_log,
+              _first_line(w_log, "fat32 create name=NEW.TXT"))
+    res.check("the create reports both FAT copies and the read-back verification",
+              "mirrors=1" in w_log and "verified=1" in w_log and "flush=1" in w_log,
+              _first_line(w_log, "fat32 create name=NEW.TXT"))
+    res.check("the independent reader extracts exactly the bytes that were written",
+              got_payload == payload.encode(), repr(got_payload))
+    res.check("the kernel can read the new file back inside the emulator",
+              _has_line(w_log, "fat32 read name=NEW.TXT")
+              and f"size={len(payload)} status=ok" in w_log,
+              _first_line(w_log, "fat32 read name=NEW.TXT"))
+    res.check("the root directory lists the new file next to the old ones",
+              "fat32 list count=8 status=ok" in w_log)
+    res.check("every pre-existing file still reads back byte for byte", originals_ok)
+    res.check("both FAT copies are identical after the create", copies_equal)
+    res.check("the create left no orphaned clusters", orphans == [], str(orphans))
+    g = fat32_images.volume_geometry(w_image)
+    data_sectors = set()
+    if got_payload is not None:
+        entry = next(e for e in fat32_images.list_dir(open(w_after, "rb").read())
+                     if e["name"] == "NEW.TXT")
+        chain = fat32_images.cluster_chain(open(w_after, "rb").read(), entry["first_cluster"])
+        data_sectors = {2048 + g["first_data"] + (c - 2) * g["spc"] + s
+                        for c in chain for s in range(g["spc"])}
+    allowed = {2048 + g["fsinfo"], 2048 + g["backup"] + 1}
+    for i in range(g["nfats"]):
+        allowed |= {2048 + g["reserved"] + i * g["fat_sectors"] + s
+                    for s in range(g["fat_sectors"])}
+    allowed |= {2048 + g["first_data"] + (g["root_cluster"] - 2) * g["spc"] + s
+                for s in range(g["spc"])}
+    res.check("only the data, FAT, FSInfo and directory sectors changed",
+              changed <= allowed | data_sectors,
+              f"{len(changed)} sectors: {sorted(changed)}")
+    res.check("the disposable input image was never modified by the host",
+              sha256(w_path) == hashlib.sha256(w_image).hexdigest())
+    res.check("an existing name is refused and nothing is written for it",
+              "fat32 create name=NEW.TXT size=5 status=exists" in w_log
+              and "fat32 create name=PC5TEST.TXT size=1 status=exists" in w_log)
+    res.check("a malformed name is refused before any write",
+              "fat32 create name=BAD*.TXT" in w_log and "status=name" in w_log)
+
     dumps = screen_dump(ui_log)
     res.check("console shadow buffer dumped over serial", len(dumps) >= 4,
               f"{len(dumps)} dumps")
@@ -439,6 +523,25 @@ def main(argv=None):
             "image_unchanged_after_read": unchanged,
             "refused_bpb_image": os.path.abspath(bad_path),
         },
+        "fat32_write_test": {
+            "fixture": "tests/fat32_images.py (same volume, disposable copy per run)",
+            "image_before": os.path.abspath(w_path),
+            "image_after": os.path.abspath(w_after),
+            "image_bytes": len(w_image),
+            "created_name": "NEW.TXT",
+            "created_bytes": len(payload),
+            "independent_reader_bytes": len(got_payload) if got_payload is not None else None,
+            "independent_reader_sha256": (hashlib.sha256(got_payload).hexdigest()
+                                          if got_payload is not None else None),
+            "expected_sha256": hashlib.sha256(payload.encode()).hexdigest(),
+            "fat_copies_identical": copies_equal,
+            "orphan_clusters": orphans,
+            "original_files_intact": originals_ok,
+            "changed_sectors": sorted(changed),
+            "flush": "ATA FLUSH CACHE (0xE7) after the FAT and after the directory entry",
+            "refusals": ["exists (twice)", "name"],
+            "input_image_unchanged": sha256(w_path) == hashlib.sha256(w_image).hexdigest(),
+        },
         "partition_test": {
             "fixture": "tests/disk_images.py (this file builds the bytes)",
             "disk_bytes": WTEST_HDD_BYTES,
@@ -459,12 +562,15 @@ def main(argv=None):
             "writes to the ATAPI boot device are refused by the kernel API",
             "MBR and GPT partition tables parsed read-only from an emulated disk",
             "FAT32 volume mounted read-only, files located and read with SHA-256 matching an independent reader",
+            "FAT32 file created on an emulated disk (content, FAT, FSInfo, directory entry, flush, read-back verified)",
+            "the created file extracted by an independent FAT32 reader and matched byte for byte",
         ],
         "levels_not_proven": [
             "physical hardware boot",
             "physical disk write (no real ATA disk has been written)",
             "extended/logical MBR partitions (not walked)",
-            "FAT32 writing, long file names, subdirectory traversal, non-512-byte sectors",
+            "FAT32 overwriting, deleting, resizing, long file names, subdirectory writes, non-512-byte sectors",
+            "power-loss atomicity (only controlled write and flush failures were injected)",
             "physical hardware",
             "controller, network and audio on physical hardware",
             "genuine PS5 system software execution",

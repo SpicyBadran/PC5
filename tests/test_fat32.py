@@ -243,12 +243,23 @@ class KernelModuleTest(unittest.TestCase):
 
 
 class WiringTest(unittest.TestCase):
-    def test_module_has_no_write_path(self):
+    def test_read_path_never_touches_the_device_directly(self):
+        # M1f asserted "this module contains no write path at all".  M1g adds
+        # one, so the contract is now: the parser, the reader and the directory
+        # walk reach the disk only through `struct fat32_io`, and the sector
+        # write path exists only behind the host-build guard.  Weakening this to
+        # "there is no `outb`" would stop it catching a real regression.
         src = read("kernel/fat32.c")
-        for forbidden in ("ata_write", "outb(", "WRITE SECTORS", "0xe7",
-                          "ata_writable_device", "storage_write"):
-            self.assertNotIn(forbidden, src,
-                             f"the FAT32 module must not touch the device directly ({forbidden})")
+        host = src.split("#ifndef PC5_HOST_TEST")[0]
+        for forbidden in ("outb(", "inb(", "inw(", "outw(", "0xe7",
+                          "ata_read_sectors", "ata_write_sectors", "ata_flush",
+                          "storage_write"):
+            self.assertNotIn(forbidden, host,
+                             f"the filesystem code must not touch the device directly ({forbidden})")
+        # every write goes through the callback, never through a raw buffer copy
+        self.assertIn("io->write(", host)
+        self.assertNotIn("io->write(", src.split("#ifndef PC5_HOST_TEST")[1],
+                         "the device layer supplies the callback; it does not call it")
 
     def test_device_layer_is_excluded_from_host_builds(self):
         src = read("kernel/fat32.c")

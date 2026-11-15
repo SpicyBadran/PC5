@@ -100,7 +100,8 @@ Not done here: isohybrid USB, physical hardware (M2).
   the 16-bit FAT size must be zero, version 0.0, FAT large enough to describe
   every cluster), then walks the FAT, enumerates the root directory, matches
   8.3 names case-insensitively and reads the file through an injected sector
-  reader. There is no write path in the module at all.
+  reader. As of M1f the module had no write path at all; M1g adds exactly one
+  (create a new root file) behind an injected sector writer.
 * Corruption is refused, not guessed: free, bad, reserved, out-of-range and
   cyclic chains each have their own status; a FAT16 BPB is `not-fat32`; a file
   larger than the caller's buffer is `space`, never a silent truncation.
@@ -112,13 +113,47 @@ Not done here: isohybrid USB, physical hardware (M2).
   size is 512 bytes only, subdirectories are listed but not descended, and
   nothing is ever written.
 
+## M1g — Safe FAT32 write · **COMPLETE (create only; emulated disk + host driver)**
+
+* `fat32_create_file()` creates one new 8.3 file in the root directory of an
+  explicitly mounted volume. Nothing else writes: no overwrite, no delete, no
+  resize, no rename, no subdirectory write, no directory expansion.
+* Allocation scans the FAT for free entries and holds the whole chain in memory
+  before touching the disk, so a full volume is refused with **no writes at
+  all**. Out-of-range, bad and reserved entries are never allocated.
+* Every FAT copy is written and then re-read entry by entry; a divergent mirror
+  is reported (`corrupt`), never assumed. FSInfo is validated (three signatures,
+  counters inside the volume) and only rewritten when trustworthy; its free count
+  is recomputed by scanning the FAT instead of being believed.
+* Write order is content → FAT copies → FSInfo → **flush** → directory entry →
+  **flush** → read-back. A directory entry therefore never names data that was
+  not written first. The worst outcome of an interruption is an allocated but
+  unreferenced chain (a leak) — never a file that reads back as rubbish.
+* `ata_flush()` issues FLUSH CACHE (0xE7) on an explicit device and fails on ERR
+  or timeout; ATAPI is refused. A missing flush callback is reported
+  (`flush=0`), not treated as durability.
+* An independent FAT32 implementation reads the resulting image: it extracts the
+  new file, compares SHA-256 with the source payload, walks the chain, checks
+  both FAT copies, the FSInfo counters and every pre-existing file. Changed
+  sectors are confined to the data, the FATs, the FSInfo blocks and the root
+  directory.
+* Fault injection (write failure at each stage, failure between FAT copies,
+  corrupted data, failed flush) is classified by that independent reader:
+  originals always intact, and the resulting state is reported as intact,
+  leaked-chain or inconsistent mirror.
+* Cost, said plainly: allocation walks the FAT entry by entry, so creating a
+  file on a nearly full volume of *N* clusters costs O(*N*) sector reads; the
+  free-space count itself is one read per 128 clusters.
+* Not claimed: crash consistency against real power loss, or any physical disk.
+  See `docs/KNOWN_LIMITATIONS.md` §5 and `docs/TEST_RESULTS.md` §13.
+
 ## M2 — Physical boot and safe installation · **IN PROGRESS**
 
 * Physical boot: **not attempted** (no hardware access in this environment).
   Instructions and the troubleshooting matrix exist; the evidence does not.
-* Installer: **not started**. Block write (M1d), partition discovery (M1e) and
-  read-only FAT32 (M1f) exist; the remaining blocker is FAT32 *writing*, then a
-  bootloader installer and an isohybrid medium.
+* Installer: **not started**. Block write (M1d), partition discovery (M1e),
+  read-only FAT32 (M1f) and FAT32 create (M1g) exist; the remaining blockers are
+  a bootloader installer, an isohybrid medium and overwrite/rename support.
 * USB writing: implemented and safe (`pc5ctl usb`), but the image is not yet
   isohybrid.
 
@@ -128,7 +163,7 @@ Not done here: isohybrid USB, physical hardware (M2).
 |---|---|
 | boot/service management | minimal (no service model; single address space) |
 | hardware detection | implemented (CPUID, E820, PCI, ACPI, SMBIOS) |
-| storage management | reads ISO9660; read/write 512-byte sectors on an explicit ATA disk (emulated); no partitions or filesystem |
+| storage management | reads ISO9660; read/write 512-byte sectors on an explicit ATA disk; MBR/GPT discovery; FAT32 read and create (emulated) |
 | networking | not started |
 | audio | not started |
 | graphics | framebuffer console only |

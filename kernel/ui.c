@@ -253,9 +253,10 @@ static void page_hardware(void)
     const struct fat32_volume *fv = fat32_mounted();
     if (fv->error == FAT32_OK && fat32_mounted_device() >= 0)
         pc5_snprintf(line, sizeof(line),
-                     "filesystem: FAT32 label '%s', %u clusters of %u sectors on partition %d (read-only)",
+                     "filesystem: FAT32 label '%s', %u clusters of %u sectors on partition %d (%s)",
                      fv->label, fv->cluster_count, fv->sectors_per_cluster,
-                     fat32_mounted_partition());
+                     fat32_mounted_partition(),
+                     fat32_mounted_writable() ? "create-file only, via 'put'" : "read-only");
     else
         pc5_snprintf(line, sizeof(line), "filesystem: none mounted (%s)",
                      fv->error == FAT32_OK ? "no volume" : fat32_status_name(fv->error));
@@ -497,7 +498,7 @@ static void serial_command(char *cmd)
 {
     const struct chain_stage *st = chain_stages();
     if (!strcmp(cmd, "help")) {
-        serial_puts("commands: help status chain hw fw storage part ls read wtest diag log screen reboot halt\r\n");
+        serial_puts("commands: help status chain hw fw storage part ls read put wtest diag log screen reboot halt\r\n");
     } else if (!strcmp(cmd, "status")) {
         char line[160];
         pc5_snprintf(line, sizeof(line), "pc5 version=%s build=%s date=%s\r\n", PC5_VERSION,
@@ -609,6 +610,34 @@ static void serial_command(char *cmd)
         pc5_snprintf(line, sizeof(line),
                      "fat32 read name=%s size=%u status=%s sha256=%s\r\n",
                      name, len, fat32_status_name(rc), hex);
+        serial_puts(line);
+    } else if (!strcmp(cmd, "put")) {
+        serial_puts("put: usage 'put NAME.EXT text' (creates a new file; never overwrites)\r\n");
+    } else if (!strncmp(cmd, "put ", 4)) {
+        /* The one operation in PC5 that modifies a filesystem, and it only ever
+         * runs because an operator typed it.  Nothing on the boot path calls
+         * this.  Refusals (exists/full/dir-full/name/read-only) are printed as
+         * they are; a partial write reports its stage instead of "ok". */
+        char name[16], text[160];
+        const char *rest = cmd + 4;
+        int n = 0;
+        while (rest[n] && rest[n] != ' ' && n < (int)sizeof(name) - 1) {
+            name[n] = rest[n];
+            n++;
+        }
+        name[n] = 0;
+        str_copy(text, rest[n] ? rest + n + 1 : "", sizeof(text));
+        u32 len = (u32)strlen(text);
+
+        struct fat32_write_report rep;
+        int rc = fat32_create_mounted(name, text, len, &rep);
+        char line[220];
+        pc5_snprintf(line, sizeof(line),
+                     "fat32 create name=%s size=%u status=%s stage=%d clusters=%u "
+                     "free=%u mirrors=%d flush=%d verified=%d writes=%u\r\n",
+                     name, len, fat32_status_name(rc), rep.stage, rep.clusters,
+                     rep.free_after, rep.mirrors_equal, rep.flush_state,
+                     rep.verified, rep.writes);
         serial_puts(line);
     } else if (!strcmp(cmd, "part")) {
         const struct part_report *pr = part_report();
