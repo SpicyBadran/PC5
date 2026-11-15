@@ -385,3 +385,27 @@ int ata_write_sectors(int device, u32 lba, u32 count, const void *buf)
     }
     return BLK_OK;
 }
+
+/* FLUSH CACHE on an explicit device.  ata_write_sectors() already ends every
+ * command with a flush, so this exists for callers that want a separate
+ * durability barrier *after* a sequence of writes (FAT32 create does: it flushes
+ * once the directory entry is on the medium).  A device that reports ERR here,
+ * or never answers, fails the call: "the write returned" is not "the data is
+ * durable".  ATAPI is refused, as everywhere else on this path. */
+int ata_flush(int device)
+{
+    if (device < 0 || device >= drive_count || !drives[device].present)
+        return BLK_E_NO_DEVICE;
+    struct ata_drive *d = &drives[device];
+    if (d->atapi)
+        return BLK_E_READ_ONLY;
+
+    int rc = wait_not_busy(d->io, 1000000);
+    if (rc)
+        return ata_wait_status(rc);
+    outb(d->io + REG_COMMAND, 0xe7); /* FLUSH CACHE */
+    rc = wait_not_busy(d->io, 1000000);
+    if (rc)
+        return ata_wait_status(rc);
+    return BLK_OK;
+}

@@ -71,9 +71,10 @@ Why each non-OK stage has that state:
 | Kernel ATAPI PIO driver + ISO9660 reader | COMPLETE AND VERIFIED (emulated) | `storage_mounted volume=PC5 … signature=ok` |
 | Kernel MBR + GPT partition discovery (read-only) | COMPLETE AND VERIFIED (emulated disk + unit tests) | `partitions device=0 scheme=gpt count=2 status=ok`, and `status=crc` for a damaged table |
 | Kernel FAT32 read-only filesystem | COMPLETE AND VERIFIED (emulated disk + host driver) | `fat32 device=0 partition=1 status=ok label="PC5FS"`; file SHA-256 matches an independent reader |
+| Kernel FAT32 create (one root file) | COMPLETE AND VERIFIED (emulated disk + host driver) | `put NEW.TXT hello-m1g` → independent reader matches, originals intact, both FAT copies equal |
 | Kernel ATA PIO write path (explicit test only) | COMPLETE AND VERIFIED (emulated IDE disk) | `storage_write=ok … verify=ok sha256=…`; host-side image comparison in `make boot-test` |
 | UEFI boot path | IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF) | `make stubtest` 42/42 running the real `BOOTX64.EFI`; no OVMF or hardware run yet |
-| Writable filesystem, installer | NOT STARTED | FAT32 is read (M1f); nothing creates, modifies or installs a file |
+| Writable filesystem, installer | PARTIAL (create only) | a new 8.3 root file can be created (M1g); no overwrite, delete, resize or install |
 | AHCI / NVMe | NOT STARTED | legacy ATA channels only |
 | USB stack / DualSense | NOT STARTED | — |
 | Network stack | NOT STARTED | — |
@@ -86,6 +87,6 @@ PC5 today is a real, reproducible, bootable PC environment with working
 diagnostics, a verified raw-sector write path, read-only partition discovery and
 a read-only FAT32 filesystem, and an honest compatibility model. It is **not** a PlayStation 5: no Sony code
 runs, no PS5 game runs, and no stage of the genuine-PS5 chain has been reached.
-The next real engineering step is FAT32 *writing* (create, flush, independent
-read-back), then the installer; the UEFI run under real firmware stays blocked on
-OVMF or hardware.
+The next real engineering step is an isohybrid medium so the same image boots
+from USB (M1h), then the installer; the UEFI run under real firmware stays
+blocked on OVMF or hardware.

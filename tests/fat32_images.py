@@ -109,7 +109,9 @@ def _lfn_record(long_name: str, name83: bytes, ordinal: int = 1, last: bool = Tr
 def build_fat32_image(partition_lba: int = 2048,
                       partition_sectors: int = 66592,
                       sectors_per_cluster: int = 1,
-                      label: str = "PC5FS") -> bytes:
+                      label: str = "PC5FS",
+                      holes: int = 0,
+                      fill_root: bool = False) -> bytes:
     """A complete disk image with one FAT32 partition and deterministic files.
 
     The file set is fixed so tests can assert exact sizes and digests:
@@ -121,6 +123,11 @@ def build_fat32_image(partition_lba: int = 2048,
       FRAG.BIN     2000 bytes  (4 clusters, deliberately out of order)
       SUBDIR/                   (directory entry; not descended)
       DELETED.TXT               (marked 0xE5: must be ignored)
+
+    `holes` marks that many clusters as allocated-with-no-owner, one cluster
+    apart, so the next allocation by a writer lands on non-contiguous clusters.
+    `fill_root` consumes every remaining root-directory slot with empty files,
+    so a create has nowhere to put its entry.
     """
     fat_sectors, first_data, clusters = _fat_geometry(partition_sectors, sectors_per_cluster)
     total = partition_sectors
@@ -239,6 +246,20 @@ def build_fat32_image(partition_lba: int = 2048,
     payload[sub_cluster] = bytes(SECTOR)
     root_entries += _dirent(_name83("SUBDIR"), ATTR_DIRECTORY, sub_cluster, 0)
 
+    # fragmentation holes: allocated clusters nothing points at, one apart, so
+    # the next two-cluster allocation is physically non-contiguous
+    hole_clusters = []
+    for _ in range(holes):
+        hole_clusters.append(allocate(1)[0])
+        allocate(1)  # left free, so the free space is a comb, not a run
+
+    # fill the root directory: 16 slots per 512-byte sector, and the fixture
+    # uses slots 0..10, so five dummy entries make the directory exactly full
+    if fill_root:
+        free_slots = (sectors_per_cluster * SECTOR // 32) - len(root_entries) // 32
+        for i in range(free_slots):
+            root_entries += _dirent(_name83(f"FULL{i}"), ATTR_ARCHIVE, 0, 0)
+
     if len(root_entries) > sectors_per_cluster * SECTOR:
         raise ValueError("root directory does not fit in one cluster")
 
@@ -260,6 +281,9 @@ def build_fat32_image(partition_lba: int = 2048,
     for i, cl in enumerate(frag_chain):
         _p32(fat, cl * 4, frag_chain[i + 1] if i + 1 < len(frag_chain) else EOC)
     _p32(fat, sub_cluster * 4, EOC)
+    _p32(fat, 2 * 4, EOC)  # the root directory cluster is allocated
+    for cl in hole_clusters:
+        _p32(fat, cl * 4, EOC)
 
     for cl, chunk in payload.items():
         start = (first_data + (cl - 2) * sectors_per_cluster) * SECTOR
@@ -284,13 +308,12 @@ def _u32(b, o):
     return struct.unpack_from("<I", b, o)[0]
 
 
-def read_file(image: bytes, name: str) -> bytes:
-    """Read `name` (8.3, case-insensitive) from the FAT32 partition at LBA 2048.
+def read_file(image: bytes, name: str, part_lba: int = 2048) -> bytes:
+    """Read `name` (8.3, case-insensitive) from the FAT32 partition at `part_lba`.
 
     This deliberately re-derives everything from the bytes: BPB, FAT, directory
     walk and cluster chain.  It shares no code with kernel/fat32.c.
     """
-    part_lba = 2048
     boot = image[part_lba * SECTOR:(part_lba + 1) * SECTOR]
     if boot[510:512] != b"\x55\xaa":
         raise ValueError("no boot signature")
@@ -389,3 +412,175 @@ if __name__ == "__main__":  # tiny self-check, useful when editing fixtures
     for n in ("PC5TEST.TXT", "SMALL.BIN", "EXACT.BIN", "EMPTY.TXT", "MULTI.BIN", "FRAG.BIN"):
         data = read_file(img, n)
         print(f"{n:12s} {len(data):6d} {zlib.crc32(data) & 0xFFFFFFFF:08x}")
+
+
+# --------------------------------------------------------------------------
+# Structural helpers used to check what a *writer* did.  A test that only asks
+# "can the file be read back" cannot tell a shared chain from an orphaned one,
+# so these read the volume's structures directly.
+# --------------------------------------------------------------------------
+
+def volume_geometry(image: bytes, part_lba: int = 2048) -> dict:
+    """Everything the checks below need, derived from the boot sector."""
+    boot = image[part_lba * SECTOR:(part_lba + 1) * SECTOR]
+    if boot[510:512] != b"\x55\xaa":
+        raise ValueError("no boot signature")
+    spc = boot[13]
+    reserved = _u16(boot, 14)
+    nfats = boot[16]
+    fat_sectors = _u32(boot, 36)
+    total = _u32(boot, 32)
+    first_data = reserved + nfats * fat_sectors
+    clusters = (total - first_data) // spc if total > first_data else 0
+    return {
+        "part_lba": part_lba,
+        "spc": spc,
+        "reserved": reserved,
+        "nfats": nfats,
+        "fat_sectors": fat_sectors,
+        "total": total,
+        "first_data": first_data,
+        "clusters": clusters,
+        "root_cluster": _u32(boot, 44),
+        "fsinfo": _u16(boot, 48),
+        "backup": _u16(boot, 50),
+        "sector": SECTOR,
+    }
+
+
+def fat_copies(image: bytes, part_lba: int = 2048) -> list[bytes]:
+    """Every FAT copy, as raw bytes.  Mirrored volumes must have identical copies."""
+    g = volume_geometry(image, part_lba)
+    start = (part_lba + g["reserved"]) * SECTOR
+    size = g["fat_sectors"] * SECTOR
+    return [image[start + i * size:start + (i + 1) * size] for i in range(g["nfats"])]
+
+
+def fat_entries(image: bytes, part_lba: int = 2048, copy: int = 0) -> list[int]:
+    """The FAT as a list of masked 32-bit entries (entry N describes cluster N)."""
+    g = volume_geometry(image, part_lba)
+    raw = fat_copies(image, part_lba)[copy]
+    count = g["clusters"] + 2
+    return [struct.unpack_from("<I", raw, i * 4)[0] & 0x0FFFFFFF for i in range(count)]
+
+
+def list_dir(image: bytes, part_lba: int = 2048) -> list[dict]:
+    """Every live short-name entry in the root directory, in slot order."""
+    g = volume_geometry(image, part_lba)
+    entries = []
+    cluster = g["root_cluster"]
+    fat = fat_entries(image, part_lba)
+    seen = 0
+    while True:
+        seen += 1
+        if seen > g["clusters"] + 2:
+            raise ValueError("directory loop")
+        start = (part_lba + g["first_data"] + (cluster - 2) * g["spc"]) * SECTOR
+        block = image[start:start + g["spc"] * SECTOR]
+        for off in range(0, len(block), 32):
+            ent = block[off:off + 32]
+            if ent[0] == 0x00:
+                return entries
+            if ent[0] == 0xE5 or ent[11] == ATTR_LFN or ent[11] & ATTR_VOLUME_ID:
+                continue
+            name = ent[0:8].decode("ascii", "replace").rstrip()
+            ext = ent[8:11].decode("ascii", "replace").rstrip()
+            entries.append({
+                "name": f"{name}.{ext}" if ext else name,
+                "attr": ent[11],
+                "size": _u32(ent, 28),
+                "first_cluster": (_u16(ent, 20) << 16) | _u16(ent, 26),
+                "slot_sector": None,
+                "slot_offset": off,
+            })
+        nxt = fat[cluster]
+        if nxt >= 0x0FFFFFF8:
+            return entries
+        cluster = nxt
+
+
+def cluster_chain(image: bytes, first: int, part_lba: int = 2048,
+                  limit: int | None = None) -> list[int]:
+    fat = fat_entries(image, part_lba)
+    g = volume_geometry(image, part_lba)
+    chain = []
+    cur = first
+    while True:
+        if len(chain) > (limit if limit is not None else g["clusters"] + 2):
+            raise ValueError("chain loop")
+        chain.append(cur)
+        nxt = fat[cur] if cur < len(fat) else 0x0FFFFFFF
+        if nxt >= 0x0FFFFFF8:
+            return chain
+        if nxt == 0:
+            raise ValueError("chain runs into a free cluster")
+        cur = nxt
+
+
+def allocated_clusters(image: bytes, part_lba: int = 2048) -> set[int]:
+    """Clusters the FAT marks as in use (anything that is not free)."""
+    fat = fat_entries(image, part_lba)
+    return {c for c in range(2, len(fat)) if fat[c] != 0}
+
+
+def referenced_clusters(image: bytes, part_lba: int = 2048) -> set[int]:
+    """Clusters reachable from a live root-directory entry, plus the root
+    directory itself (which no directory entry points at)."""
+    used = {volume_geometry(image, part_lba)["root_cluster"]}
+    for ent in list_dir(image, part_lba):
+        if ent["size"] == 0 or ent["first_cluster"] < 2:
+            if ent["attr"] & ATTR_DIRECTORY and ent["first_cluster"] >= 2:
+                used.add(ent["first_cluster"])
+            continue
+        used.update(cluster_chain(image, ent["first_cluster"], part_lba))
+    return used
+
+
+def orphan_clusters(image: bytes, part_lba: int = 2048) -> set[int]:
+    """Allocated but unreachable: a leak, which is the worst a failed create may do."""
+    return allocated_clusters(image, part_lba) - referenced_clusters(image, part_lba)
+
+
+def free_cluster_count(image: bytes, part_lba: int = 2048) -> int:
+    fat = fat_entries(image, part_lba)
+    return sum(1 for c in range(2, len(fat)) if fat[c] == 0)
+
+
+def fsinfo_fields(image: bytes, part_lba: int = 2048, sector: int | None = None) -> dict:
+    g = volume_geometry(image, part_lba)
+    sec = g["fsinfo"] if sector is None else sector
+    block = image[(part_lba + sec) * SECTOR:(part_lba + sec + 1) * SECTOR]
+    return {
+        "sector": sec,
+        "lead": _u32(block, 0),
+        "struct": _u32(block, 484),
+        "free_count": _u32(block, 488),
+        "next_free": _u32(block, 492),
+        "trail": _u32(block, 508),
+        "signatures_ok": (_u32(block, 0) == 0x41615252
+                          and _u32(block, 484) == 0x61417272
+                          and _u32(block, 508) == 0xAA550000),
+    }
+
+
+def changed_sectors(before: bytes, after: bytes) -> set[int]:
+    """Sector indices whose 512-byte content differs.  A write test asserts this
+    set is confined to the regions a create is allowed to touch."""
+    if len(before) != len(after):
+        raise ValueError("images differ in size")
+    out = set()
+    for i in range(0, len(before), SECTOR):
+        if before[i:i + SECTOR] != after[i:i + SECTOR]:
+            out.add(i // SECTOR)
+    return out
+
+
+def volume_files(image: bytes, part_lba: int = 2048) -> dict[str, bytes]:
+    """Every regular file in the root directory, read by the independent reader.
+    Raises if any of them cannot be read, which is itself a corruption signal."""
+    out = {}
+    for ent in list_dir(image, part_lba):
+        if ent["attr"] & ATTR_DIRECTORY:
+            continue
+        out[ent["name"]] = read_file(image, ent["name"], part_lba)
+    return out

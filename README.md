@@ -28,6 +28,7 @@ What *does* work today, verified in this repository:
 | Kernel reads its own medium (ATAPI + ISO9660, no firmware calls) | COMPLETE AND VERIFIED (emulated) | `storage_mounted volume=PC5` in the boot log |
 | MBR/GPT partition discovery, read-only | COMPLETE AND VERIFIED (emulated disk + unit tests) | `partitions device=0 scheme=gpt count=2 status=ok`; a damaged table reports `status=crc` |
 | FAT32 read-only: mount, list, find, read, digest | COMPLETE AND VERIFIED (emulated disk + host driver) | kernel SHA-256 equals an independent reader's for every fixture file; image byte-identical after reading |
+| FAT32 create: allocate, FAT copies, FSInfo, flush, read-back | COMPLETE AND VERIFIED (emulated disk + host driver) | `put NEW.TXT hello-m1g` → independent reader extracts `hello-m1g`; originals intact, mirrors equal, no orphans |
 | Hardware inventory (CPUID, E820, PCI, ACPI, SMBIOS) | IMPLEMENTED — TESTING REQUIRED | hardware page + serial log |
 | Framebuffer console with VGA text fallback | COMPLETE AND VERIFIED (emulated) | boot log, framebuffer self-test |
 | PS/2 keyboard navigation | IMPLEMENTED — TESTING REQUIRED | 8042 driver, emulator input |
@@ -103,7 +104,7 @@ Write it to a USB stick and boot a real machine: [`docs/INSTALLATION.md`](docs/I
 * an ATA write path that is never used automatically: `wtest` writes a 4 KiB
   pattern to a reserved window, flushes, reads it back and reports a SHA-256,
 * a serial console on COM1 at 115200 8N1 (`status`, `chain`, `hw`, `fw`,
-  `storage`, `part`, `ls`, `read NAME.EXT`, `wtest`, `diag`, `log`, `screen`, `page N`, `reboot`, `halt`) so a
+  `storage`, `part`, `ls`, `read NAME.EXT`, `put NAME.EXT text`, `wtest`, `diag`, `log`, `screen`, `page N`, `reboot`, `halt`) so a
   machine with no display can still be diagnosed.
 
 ## Documentation

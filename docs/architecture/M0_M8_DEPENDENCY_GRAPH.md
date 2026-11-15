@@ -33,8 +33,10 @@ Track A — PC5 Native
         depends on  M1d
   M1f   complete     Read-only FAT32 filesystem
         depends on  M1e
+  M1g   complete     Safe FAT32 write: create, flush, independent read-back
+        depends on  M1f
   M2    not_started  Hardware abstraction and drivers
-        depends on  M1
+        depends on  M1, M1g
   M3    not_started  PC5 operating system
         depends on  M2
   M4    not_started  PlayStation experience

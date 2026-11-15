@@ -7,12 +7,17 @@
     "A": {
       "name": "PC5 Native",
       "objective": "An installable, PlayStation-inspired PC operating system on qualified mainstream x86-64 hardware.",
-      "may_depend_on": ["A"]
+      "may_depend_on": [
+        "A"
+      ]
     },
     "B": {
       "name": "Prospero",
       "objective": "Evidence-backed research into PS5 executable compatibility and genuine PS5 system-software execution, isolated from Track A's release path.",
-      "may_depend_on": ["A", "B"]
+      "may_depend_on": [
+        "A",
+        "B"
+      ]
     }
   },
   "roles": [
@@ -32,7 +37,9 @@
       "state": "complete",
       "owner_role": "lead-architect",
       "depends_on": [],
-      "legacy": ["repository M0"],
+      "legacy": [
+        "repository M0"
+      ],
       "deliverables": [
         "docs/architecture/REPOSITORY_AUDIT_2026-11-15.md",
         "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
@@ -68,8 +75,13 @@
       "title": "Reproducible BIOS boot medium",
       "state": "complete",
       "owner_role": "release-engineer",
-      "depends_on": ["M0"],
-      "legacy": ["repository M1", "repository M1b (local half)"],
+      "depends_on": [
+        "M0"
+      ],
+      "legacy": [
+        "repository M1",
+        "repository M1b (local half)"
+      ],
       "deliverables": [
         "tools/mkiso.py (ISO9660 + El Torito writer)",
         "tools/verify_iso.py (independent verifier)",
@@ -93,8 +105,12 @@
       "title": "Automated CI and release publication",
       "state": "blocked",
       "owner_role": "release-engineer",
-      "depends_on": ["M1a"],
-      "legacy": ["repository M1b, milestone B3"],
+      "depends_on": [
+        "M1a"
+      ],
+      "legacy": [
+        "repository M1b, milestone B3"
+      ],
       "blocker": "GitHub App installation lacks the Workflows permission, so ci/build.yml cannot be pushed to .github/workflows/; see ci/README.md.",
       "deliverables": [
         "ci/build.yml",
@@ -117,8 +133,12 @@
       "title": "UEFI boot path under real firmware",
       "state": "in_progress",
       "owner_role": "kernel-engineer",
-      "depends_on": ["M0"],
-      "legacy": ["repository M1c"],
+      "depends_on": [
+        "M0"
+      ],
+      "legacy": [
+        "repository M1c"
+      ],
       "deliverables": [
         "boot/uefi/ (PE32+ EFI application)",
         "tools/mkefiimg.py (FAT ESP writer)",
@@ -126,9 +146,9 @@
         "tests/uefi_stub_firmware.py (Unicorn stub firmware harness)"
       ],
       "acceptance": [
-        "the loader's logic is executed end to end against the stub firmware (42 checks) — done",
-        "the same BOOTX64.EFI boots under OVMF and the serial log is recorded — NOT done",
-        "one physical UEFI machine reaches the PC5 kernel with Secure Boot off and the log is committed — NOT done",
+        "the loader's logic is executed end to end against the stub firmware (42 checks) \u2014 done",
+        "the same BOOTX64.EFI boots under OVMF and the serial log is recorded \u2014 NOT done",
+        "one physical UEFI machine reaches the PC5 kernel with Secure Boot off and the log is committed \u2014 NOT done",
         "GOP-only machines get a working framebuffer console and the text fallback is no longer required"
       ],
       "evidence": [
@@ -143,8 +163,12 @@
       "title": "ATA PIO storage write path (emulated HDD)",
       "state": "complete",
       "owner_role": "kernel-engineer",
-      "depends_on": ["M0"],
-      "legacy": ["docs/architecture/FIRST_THREE_TASKS.md Task 1"],
+      "depends_on": [
+        "M0"
+      ],
+      "legacy": [
+        "docs/architecture/FIRST_THREE_TASKS.md Task 1"
+      ],
       "deliverables": [
         "kernel/ata.c (device-indexed 512-byte sector read/write, LBA28, cache flush)",
         "kernel/block.c (block-request rules, no port I/O)",
@@ -177,8 +201,18 @@
       "title": "Physical boot and installation",
       "state": "not_started",
       "owner_role": "kernel-engineer",
-      "depends_on": ["M0", "M1a", "M1c", "M1d", "M1e", "M1f"],
-      "legacy": ["repository M2", "repository M3 (partial)"],
+      "depends_on": [
+        "M0",
+        "M1a",
+        "M1c",
+        "M1d",
+        "M1e",
+        "M1f"
+      ],
+      "legacy": [
+        "repository M2",
+        "repository M3 (partial)"
+      ],
       "deliverables": [
         "bootable USB image (isohybrid MBR plus UEFI entry)",
         "installer with explicit target confirmation",
@@ -201,8 +235,12 @@
       "title": "Read-only MBR and GPT partition discovery",
       "state": "complete",
       "owner_role": "kernel-engineer",
-      "depends_on": ["M1d"],
-      "legacy": ["docs/architecture/FIRST_THREE_TASKS.md (next three, task 2)"],
+      "depends_on": [
+        "M1d"
+      ],
+      "legacy": [
+        "docs/architecture/FIRST_THREE_TASKS.md (next three, task 2)"
+      ],
       "deliverables": [
         "kernel/part.c (pure MBR/GPT parsers, CRC-32, explicit-device scan)",
         "kernel/include/pc5.h (partition types, statuses, bounds)",
@@ -235,8 +273,12 @@
       "title": "Read-only FAT32 filesystem",
       "state": "complete",
       "owner_role": "kernel-engineer",
-      "depends_on": ["M1e"],
-      "legacy": ["docs/architecture/FIRST_THREE_TASKS.md (next three, task A)"],
+      "depends_on": [
+        "M1e"
+      ],
+      "legacy": [
+        "docs/architecture/FIRST_THREE_TASKS.md (next three, task A)"
+      ],
       "deliverables": [
         "kernel/fat32.c (BPB validation, FAT chains, root directory, 8.3 lookup, file read)",
         "kernel/include/pc5.h (volume, entry and status types; injected sector reader)",
@@ -264,7 +306,49 @@
         "tests/fat32_images.py",
         "kernel/fat32.c"
       ],
-      "next_action": "FAT32 write (create, flush, independent read-back) behind an explicit command, then isohybrid USB boot."
+      "next_action": "FAT32 write (M1g): create, flush, independent read-back."
+    },
+    {
+      "id": "M1g",
+      "track": "A",
+      "title": "Safe FAT32 write: create, flush, independent read-back",
+      "state": "complete",
+      "owner_role": "kernel-engineer",
+      "depends_on": [
+        "M1f"
+      ],
+      "legacy": [
+        "docs/architecture/FIRST_THREE_TASKS.md (next three, task B)"
+      ],
+      "deliverables": [
+        "kernel/fat32.c (fat32_create_file: allocation, FAT copies, FSInfo, directory entry, bounded write order, read-back)",
+        "kernel/include/pc5.h (write/flush callbacks, write report, stage enum, new refusal statuses)",
+        "kernel/ata.c (ata_flush: explicit FLUSH CACHE on an explicit device, ATAPI refused)",
+        "kernel/ui.c (`put NAME.EXT text` command and storage-page write line)",
+        "tests/fat32_write_check.c (host driver with deterministic payload and write/flush fault injection)",
+        "tests/test_fat32_write.py (36 tests: creation matrix, refusals, FSInfo, flush, fault injection, harness safety)",
+        "tests/fat32_images.py (independent reader plus structural checks: FAT copies, chains, orphans, FSInfo, changed sectors)",
+        "tests/boot_test.py (create in the emulator, dumped image read back by the independent reader)"
+      ],
+      "acceptance": [
+        "an explicitly mounted FAT32 volume on an explicitly indexed ATA disk gains one new 8.3 root file",
+        "clusters are chosen from free FAT entries only, with the allocator refusing instead of overwriting",
+        "every FAT copy is written and then re-read, and a divergent mirror is reported rather than assumed",
+        "the FSInfo block is validated before use; an implausible block is neither trusted nor rewritten",
+        "the file's bytes, FAT chain, directory entry and FSInfo counters are all confirmed by an independent FAT32 reader",
+        "every pre-existing file still reads back byte for byte, and both FAT copies remain identical",
+        "changed sectors are confined to the allocated data, the FATs, the FSInfo blocks and the root directory",
+        "existing names, full volumes, full root directories, invalid names, read-only sources and oversize files are refused without writing",
+        "write, flush and corruption failures leave a documented state (intact, leaked chain or reported inconsistency), never a silent success",
+        "reads remain unchanged and the boot path never attaches a write callback"
+      ],
+      "evidence": [
+        "docs/TEST_RESULTS.md",
+        "tests/test_fat32_write.py",
+        "tests/fat32_write_check.c",
+        "kernel/fat32.c"
+      ],
+      "next_action": "Hybrid MBR / isohybrid so the same ISO boots as USB media (M1h); later the installer (M4)."
     },
     {
       "id": "M2",
@@ -272,8 +356,14 @@
       "title": "Hardware abstraction and drivers",
       "state": "not_started",
       "owner_role": "kernel-engineer",
-      "depends_on": ["M1"],
-      "legacy": ["repository M3", "repository M6 (input/network part)"],
+      "depends_on": [
+        "M1g",
+        "M1"
+      ],
+      "legacy": [
+        "repository M3",
+        "repository M6 (input/network part)"
+      ],
       "deliverables": [
         "Linux-kernel-based hardware support for the qualified device set",
         "PC5 hardware abstraction layer over display, input, storage, audio and network",
@@ -296,8 +386,13 @@
       "title": "PC5 operating system",
       "state": "not_started",
       "owner_role": "platform-engineer",
-      "depends_on": ["M2"],
-      "legacy": ["repository M3", "repository M8 (partial)"],
+      "depends_on": [
+        "M2"
+      ],
+      "legacy": [
+        "repository M3",
+        "repository M8 (partial)"
+      ],
       "deliverables": [
         "PC5 system image (immutable base plus update slots)",
         "console session and desktop session",
@@ -320,8 +415,12 @@
       "title": "PlayStation experience",
       "state": "not_started",
       "owner_role": "platform-engineer",
-      "depends_on": ["M3"],
-      "legacy": ["repository M3/M6 interface work"],
+      "depends_on": [
+        "M3"
+      ],
+      "legacy": [
+        "repository M3/M6 interface work"
+      ],
       "deliverables": [
         "controller-first home screen",
         "game library and launch manager",
@@ -343,8 +442,12 @@
       "title": "PS5 executable compatibility (research and runtime)",
       "state": "not_started",
       "owner_role": "compatibility-engineer",
-      "depends_on": ["M0"],
-      "legacy": ["repository M7 (execution path)"],
+      "depends_on": [
+        "M0"
+      ],
+      "legacy": [
+        "repository M7 (execution path)"
+      ],
       "deliverables": [
         "PS5 ELF/SELF intake analysis with documented, lawful input requirements",
         "loader and relocation support for user-space executables",
@@ -367,8 +470,13 @@
       "title": "Genuine Prospero research",
       "state": "not_started",
       "owner_role": "compatibility-engineer",
-      "depends_on": ["M0"],
-      "legacy": ["repository M4", "repository M5"],
+      "depends_on": [
+        "M0"
+      ],
+      "legacy": [
+        "repository M4",
+        "repository M5"
+      ],
       "deliverables": [
         "firmware structure research on lawfully obtained images (never distributed)",
         "public boot-chain and hardware-dependency documentation",
@@ -394,8 +502,12 @@
       "title": "Performance and compatibility expansion",
       "state": "not_started",
       "owner_role": "qa-engineer",
-      "depends_on": ["M4"],
-      "legacy": ["repository M8"],
+      "depends_on": [
+        "M4"
+      ],
+      "legacy": [
+        "repository M8"
+      ],
       "deliverables": [
         "reproducible benchmark suite",
         "multi-vendor compatibility database",
@@ -417,8 +529,13 @@
       "title": "Release-quality PC5",
       "state": "not_started",
       "owner_role": "release-engineer",
-      "depends_on": ["M7", "M1b"],
-      "legacy": ["repository M9"],
+      "depends_on": [
+        "M7",
+        "M1b"
+      ],
+      "legacy": [
+        "repository M9"
+      ],
       "deliverables": [
         "installer and recovery media",
         "signed update manifest with rollback",

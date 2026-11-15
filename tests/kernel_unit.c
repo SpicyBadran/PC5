@@ -657,7 +657,7 @@ static void test_fat32(void)
     /* FAT too small to describe the clusters it claims */
     struct tdisk big;
     tdisk_init(&big, 300);
-    struct fat32_io io_big = { tdisk_read, &big };
+    struct fat32_io io_big = { .read = tdisk_read, .ctx = &big };
     check_int("fat32 FAT capacity enforced", fat32_mount(&io_big, 0, big.sectors, &v), FAT32_E_GEOMETRY);
     free(big.data);
 

@@ -270,6 +270,18 @@ a read path that handles the fixture set, not every historical variant.
 
 ### Task B — FAT32 write: create a file, flush, and prove it from the host
 
+**Status: create executed 2026-11-15 as milestone M1g; the rest is open.**
+Done: allocation from the FAT, both FAT copies maintained and re-read, FSInfo
+validated and recomputed, one root-directory entry written, two ATA flushes, and
+a read-back through the sector source — with a fault injector for each stage and
+an independent FAT32 reader confirming the dumped image
+(`docs/TEST_RESULTS.md` §13). Not done: overwrite, delete, resize, rename,
+subdirectory creation, directory expansion, and a boot-entry installer. The
+original plan below is kept because the remaining work is still that plan; two
+details changed in execution: the driver lives in `tests/fat32_write_check.c`
+rather than `kernel/storage_test.c`, and the reader already existed in
+`tests/fat32_images.py` (there is no `tests/mkfat.py`).
+
 **Paths:** `kernel/fat32.c` (write path), `kernel/storage_test.c` (extend the
 self-test to a filesystem round-trip), `tests/boot_test.py`, `tests/mkfat.py`.
 
