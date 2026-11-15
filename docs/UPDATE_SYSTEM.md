@@ -40,7 +40,8 @@ Target design, in the order it will be built:
   `PC5_BUILD_DATE`) and shown on every screen.
 
 Missing: any notion of applying an update, slots, signatures, or a network
-transport. Because PC5 has no storage driver yet, it cannot write an update at
+transport. PC5 has a 512-byte write path but no partition table, filesystem or
+metadata safety, so it cannot write an update at
 all — the first real update mechanism has to wait for the installer milestone.
 
 ## 4. Sony firmware version tracking

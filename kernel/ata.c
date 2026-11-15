@@ -7,9 +7,20 @@
  * stage 4 from "the loader proved the firmware can read the medium" into "the
  * operating environment has a storage stack".
  *
- * Supported: ATA PIO (LBA28) for hard disks and ATAPI PACKET (READ(10)) for
- * CD/DVD, on both legacy channels, master and slave.  No DMA, no interrupts, no
- * AHCI/NVMe (see docs/ROADMAP.md).
+ * Supported: ATA PIO (LBA28) reads and writes for hard disks, and ATAPI
+ * PACKET (READ(10)) reads for CD/DVD, on both legacy channels, master and
+ * slave.  Writes are refused for every ATAPI device by construction — a
+ * packet device has no WRITE SECTORS command here and must never be treated
+ * as one.  No DMA, no interrupts, no AHCI/NVMe (see docs/ROADMAP.md).
+ *
+ * Two interfaces, deliberately not interchangeable (ADR-013):
+ *   ata_read_blocks()  2048-byte optical/logical blocks on the *selected* boot
+ *                      device — what ISO9660 has always used.
+ *   ata_read_sectors() / ata_write_sectors()
+ *                      512-byte disk sectors on an *explicitly indexed* device —
+ *                      what a filesystem, installer or self-test uses.
+ * Writes cannot reach the boot medium implicitly: there is no write call that
+ * takes no device index.
  */
 #include "pc5.h"
 
@@ -130,6 +141,57 @@ static int atapi_read(u16 io, u16 ctl, u8 drive, u32 lba, u8 count, void *buf)
         delay_400ns(ctl);
     }
     return 0;
+}
+
+/* Map a wait result to a block status without losing the difference between
+ * "the device reported an error" and "the device never answered". */
+static int ata_wait_status(int rc)
+{
+    return rc == -2 ? BLK_E_TIMEOUT : BLK_E_IO;
+}
+
+/* Write one bounded chunk of 512-byte sectors (LBA28) and flush the device
+ * cache.  The caller has already validated the range and the device type. */
+static int ata_write_chunk(u16 io, u16 ctl, u8 drive, u32 lba, u8 count, const void *buf)
+{
+    const u16 *in = (const u16 *)buf;
+
+    int rc = wait_not_busy(io, 1000000);
+    if (rc)
+        return ata_wait_status(rc);
+    outb(io + REG_DRIVE, (u8)(0xe0 | ((drive & 1) << 4) | ((lba >> 24) & 0x0f)));
+    delay_400ns(ctl);
+    rc = wait_not_busy(io, 1000000);
+    if (rc)
+        return ata_wait_status(rc);
+    outb(io + REG_FEATURES, 0);
+    outb(io + REG_SECTOR_COUNT, count);
+    outb(io + REG_LBA_LO, (u8)(lba & 0xff));
+    outb(io + REG_LBA_MID, (u8)((lba >> 8) & 0xff));
+    outb(io + REG_LBA_HI, (u8)((lba >> 16) & 0xff));
+    outb(io + REG_COMMAND, 0x30); /* WRITE SECTORS (with retry) */
+
+    for (u8 s = 0; s < count; s++) {
+        rc = wait_drq(io, 1000000);
+        if (rc)
+            return ata_wait_status(rc);
+        for (int i = 0; i < 256; i++)
+            outw(io + REG_DATA, *in++);
+        delay_400ns(ctl);
+    }
+
+    /* FLUSH CACHE: the write is not durable until the device says it is, and a
+     * read-back that skips this would be testing the device's write buffer.  A
+     * device that reports ERR here (write-protect, media error) fails the whole
+     * operation rather than returning BLK_OK. */
+    rc = wait_not_busy(io, 1000000);
+    if (rc)
+        return ata_wait_status(rc);
+    outb(io + REG_COMMAND, 0xe7);
+    rc = wait_not_busy(io, 1000000);
+    if (rc)
+        return ata_wait_status(rc);
+    return BLK_OK;
 }
 
 /* Wait until the device is not busy.  Returns 0 even if the error bit is set:
@@ -258,4 +320,68 @@ int ata_read_blocks(u32 lba, u32 count, void *buf)
         count -= chunk;
     }
     return 0;
+}
+
+/* ------------------------------------------------------- disk sectors ---- */
+
+/* The first ATA (non-ATAPI) device that reported a capacity, or -1.  This is
+ * the "explicit target" for writes: it is never the selected boot device by
+ * accident, because selection prefers ATAPI. */
+int ata_writable_device(void)
+{
+    for (int i = 0; i < drive_count; i++) {
+        if (!drives[i].atapi && drives[i].sectors > 0)
+            return i;
+    }
+    return -1;
+}
+
+int ata_read_sectors(int device, u32 lba, u32 count, void *buf)
+{
+    if (device < 0 || device >= drive_count || !drives[device].present)
+        return BLK_E_NO_DEVICE;
+    struct ata_drive *d = &drives[device];
+    if (d->atapi)
+        return BLK_E_RANGE; /* optical media has no 512-byte sector API */
+    if (!buf)
+        return BLK_E_ALIGN;
+    int rc = blk_check_disk_request(lba, count, d->sectors, 0, 0);
+    if (rc != BLK_OK)
+        return rc;
+
+    u8 *out = (u8 *)buf;
+    while (count) {
+        u32 chunk = blk_chunk_sectors(count, ATA_MAX_SECTORS_PER_CMD);
+        if (ata_read(d->io, d->ctl, d->drive, lba, (u8)chunk, out))
+            return BLK_E_IO;
+        lba += chunk;
+        count -= chunk;
+        out += chunk * PC5_SECTOR_SIZE;
+    }
+    return BLK_OK;
+}
+
+int ata_write_sectors(int device, u32 lba, u32 count, const void *buf)
+{
+    if (device < 0 || device >= drive_count || !drives[device].present)
+        return BLK_E_NO_DEVICE;
+    struct ata_drive *d = &drives[device];
+    if (!buf || ((u32)buf & 1u))
+        return BLK_E_ALIGN;
+
+    int rc = blk_check_disk_request(lba, count, d->sectors, 1, d->atapi);
+    if (rc != BLK_OK)
+        return rc;
+
+    const u8 *in = (const u8 *)buf;
+    while (count) {
+        u32 chunk = blk_chunk_sectors(count, ATA_MAX_SECTORS_PER_CMD);
+        rc = ata_write_chunk(d->io, d->ctl, d->drive, lba, (u8)chunk, in);
+        if (rc != BLK_OK)
+            return rc;
+        lba += chunk;
+        count -= chunk;
+        in += chunk * PC5_SECTOR_SIZE;
+    }
+    return BLK_OK;
 }

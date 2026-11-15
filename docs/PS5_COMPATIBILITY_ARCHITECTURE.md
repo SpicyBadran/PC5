@@ -38,7 +38,7 @@ implementation.
 | 7 | Graphics command translation | framebuffer console only | NOT STARTED |
 | 8 | Shader processing and caching | none | NOT STARTED |
 | 9 | GPU memory and synchronisation | none | NOT STARTED |
-| 10 | Storage and filesystem | kernel ATAPI PIO + ISO9660 (read-only); loader also probes the medium | PARTIAL — no write path, no partitions, no writable filesystem |
+| 10 | Storage and filesystem | kernel ATAPI PIO + ISO9660 read; ATA PIO 512-byte read/write on an explicit device; loader also probes the medium | PARTIAL — write path exists (emulated only), but no partitions and no writable filesystem |
 | 11 | Game package / executable handling | `FIH`/`CNT` signature identification only | RESEARCH |
 | 12 | Audio | PCI audio class counted only | NOT STARTED |
 | 13 | Controller / input translation | 8042 PS/2 keyboard driver behind `kbd_read()` | PARTIAL (keyboard only) |

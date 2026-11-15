@@ -21,8 +21,9 @@ the current tree and corrects nine documented contradictions.
 
 * `make iso` → `build/pc5.iso` (1,570,816 bytes, reproducible; the image carries a 1.44 MB UEFI ESP, which is why it grew from the 96,256-byte BIOS-only baseline recorded in `docs/TEST_RESULTS.md` §1).
 * `make verify` → 53/53 structural checks.
-* `make boot-test` → 25/25 checks on the v86/SeaBIOS emulated PC, including the
-  kernel mounting its own volume through its ATAPI/ISO9660 driver.
+* `make boot-test` → 45/45 checks on the v86/SeaBIOS emulated PC, including the
+  kernel mounting its own volume through its ATAPI/ISO9660 driver and the ATA
+  write test added in M1d.
 
 ## M1c — UEFI boot path · **IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF)**
 
@@ -34,8 +35,9 @@ the current tree and corrects nine documented contradictions.
 * `tools/mkefiimg.py` (FAT12/16 ESP) and `tools/eficheck.py` (PE32+ validator)
   are new; `tools/mkiso.py` now emits the BIOS default entry plus a UEFI section
   and `tools/verify_iso.py` walks the ESP out of the finished ISO.
-* The BIOS path still boots and passes 25/25 in the emulator, which is what
-  caught the catalog-layout bug this milestone started with.
+* The BIOS path still boots and passes its checks in the emulator (25 at the
+  time; 45 today with the write test added in M1d), which is what caught the
+  catalog-layout bug this milestone started with.
 * **Executed, but not under real firmware:** no OVMF/UEFI firmware and no
   UEFI-capable VM exist in the build environment. `tests/uefi_stub_firmware.py`
   therefore runs the real `BOOTX64.EFI` machine code on the Unicorn CPU emulator
@@ -62,12 +64,27 @@ Not done here: isohybrid USB, physical hardware (M2).
   GitHub App token used in this session has no *workflows* permission; see
   `ci/README.md`. Therefore no CI run and no published assets yet.
 
+## M1d — ATA storage write path · **COMPLETE (emulated disk only)**
+
+* A device-indexed 512-byte sector API (`ata_read_sectors` / `ata_write_sectors`)
+  alongside the untouched 2048-byte ISO9660 path, with the unit distinction
+  recorded as ADR-013.
+* Writes are refused for ATAPI devices, unknown capacity, out-of-range or
+  overflowing requests, invalid indices and NULL buffers — each with its own
+  status, checked at runtime and in `tests/kernel_unit.c`.
+* The explicit `wtest` console command writes 4 KiB of a deterministic pattern
+  to a reserved 8-sector window, flushes the device cache, reads it back and
+  compares it. `make boot-test` then verifies the same bytes in the emulator's
+  disk image and matches the kernel's SHA-256 against the host's.
+* No ordinary boot path calls the test, and nothing outside the scratch window
+  is written. **No physical disk has been written.**
+
 ## M2 — Physical boot and safe installation · **IN PROGRESS**
 
 * Physical boot: **not attempted** (no hardware access in this environment).
   Instructions and the troubleshooting matrix exist; the evidence does not.
-* Installer: **not started**. Blocked on a storage driver, because an installer
-  without disk access would be a menu of buttons that do nothing.
+* Installer: **not started**. The block-write primitives now exist (M1d); the
+  remaining blockers are a partition-table parser and a writable filesystem.
 * USB writing: implemented and safe (`pc5ctl usb`), but the image is not yet
   isohybrid.
 
@@ -77,7 +94,7 @@ Not done here: isohybrid USB, physical hardware (M2).
 |---|---|
 | boot/service management | minimal (no service model; single address space) |
 | hardware detection | implemented (CPUID, E820, PCI, ACPI, SMBIOS) |
-| storage management | read-only: ATA/ATAPI PIO + ISO9660 in the kernel |
+| storage management | reads ISO9660; read/write 512-byte sectors on an explicit ATA disk (emulated); no partitions or filesystem |
 | networking | not started |
 | audio | not started |
 | graphics | framebuffer console only |
@@ -121,9 +138,9 @@ is reproducible; that is not a release-quality product.
 
 ## The next twelve engineering tasks, in dependency order
 
-1. **AHCI/NVMe and write support** — the legacy PIO path and the ISO9660 reader
-   are done; partitions, a writable filesystem (and therefore an installer)
-   are next.
+1. **Partitions and a writable filesystem** — the legacy PIO read path and the
+   512-byte write path are done (M1d); a partition-table parser and a writable
+   filesystem are next, then AHCI/NVMe behind the same sector interface.
 2. **Package intake from the medium** — the kernel can already read a file from
    its own volume; the missing piece is a container parser behind that call.
 3. **UEFI loader** — PE32+ application filling the same `struct pc5_boot_info`,

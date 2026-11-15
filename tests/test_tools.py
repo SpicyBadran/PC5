@@ -178,11 +178,23 @@ class KernelUnitTests(unittest.TestCase):
                os.path.join(ROOT, "tests", "kernel_unit.c"),
                os.path.join(ROOT, "kernel", "lib.c"),
                os.path.join(ROOT, "kernel", "mem.c"),
-               os.path.join(ROOT, "kernel", "chain.c")]
+               os.path.join(ROOT, "kernel", "chain.c"),
+               os.path.join(ROOT, "kernel", "block.c"),
+               os.path.join(ROOT, "kernel", "sha256.c")]
         build = subprocess.run(cmd, capture_output=True, text=True)
         self.assertEqual(build.returncode, 0, build.stderr[-2000:])
         run = subprocess.run([out], capture_output=True, text=True)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+
+
+class ReproducibilityTests(unittest.TestCase):
+    def test_command_line_epoch_pins_the_build_date(self):
+        """A make command-line variable is not exported to the shell; the build
+        must still honour `make SOURCE_DATE_EPOCH=...` when computing the date."""
+        out = subprocess.run(["make", "-s", "info", "SOURCE_DATE_EPOCH=1700000000"],
+                             cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr[-2000:])
+        self.assertIn("2023-11-14T22:13:20Z", out.stdout)
 
 
 class BuiltImageTests(unittest.TestCase):

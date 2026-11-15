@@ -17,7 +17,7 @@ mitigation and a trigger for the weekly review.
 
 | ID | Blocker | Impact | Likelihood | Score | Clears when | Owner |
 |---|---|---|---|---|---|---|
-| B1 | **No storage write path.** The kernel can read ATAPI/ISO9660 but cannot write a block, parse a partition table or mount a writable filesystem. | 3 | 3 | **9** | AHCI/NVMe block write + GPT parser + writable filesystem land behind the existing block interface, with a test that writes and re-reads a file | kernel-engineer |
+| B1 | **Storage write exists only in emulation.** ATA PIO 512-byte write/read-back works on the test disk (M1d), but no physical disk has been written, there is no partition-table parser or writable filesystem, and AHCI/NVMe are absent. | 3 | 2 | **6** | a physical write on REF-AMD, then GPT parsing + a writable filesystem behind the same sector interface, with a test that writes and re-reads a file | kernel-engineer |
 | B2 | **No real UEFI firmware run.** The loader is executed only against `tests/uefi_stub_firmware.py`. | 3 | 3 | **9** | OVMF (or a UEFI-capable VM) is available and the recorded run is committed; a physical UEFI machine reaches the kernel | kernel-engineer |
 | B3 | **No physical hardware access.** Nothing here has ever run on a real machine; no KVM either. | 3 | 3 | **9** | One reference machine produces a committed `docs/evidence/` record | qa-engineer |
 | B4 | **Linux cannot be built or booted here.** `flex`, `bison`, `bc`, libssl/zlib headers absent; `apt` unreachable; no QEMU/KVM. Source is reachable via `codeload` but untestable. | 3 | 3 | **9** | A build host with the prerequisite set and a test vehicle exists; ADR-009 exit condition met | lead-architect |
@@ -92,8 +92,9 @@ Ordered by what unblocks the most work per unit of effort:
 1. **B2 — run the UEFI loader under OVMF.** No code change expected; it converts
    an "implemented and stub-executed" claim into a firmware result and de-risks
    the entire physical bring-up.
-2. **B1 — storage write.** Unblocks the installer, updates, recovery and
-   persistent evidence. Largest downstream fan-out of any single task.
+2. **B1 — physical storage write, then partitions and a filesystem.** The
+   emulated write path (M1d) removed the API question; what remains is proving
+   it on real iron and building installation on top of it.
 3. **B3 — one physical boot.** Cheapest way to find out which of A2, A5, A13 are
    false.
 4. **B4 — a Linux-capable build host.** Required before M2 can even be planned

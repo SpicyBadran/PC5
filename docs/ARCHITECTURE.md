@@ -57,7 +57,10 @@ kernel and the loader cannot drift apart silently.
 | `kernel/pci.c` | configuration mechanism #1 enumeration and classification |
 | `kernel/acpi.c` | RSDP discovery (EBDA + BIOS area), RSDT walk, table signatures |
 | `kernel/smbios.c` | `_SM_`/`_SM3_` anchor, structure walk (BIOS, system, board, CPU, DIMMs) |
-| `kernel/ata.c` | legacy ATA/ATAPI PIO block driver (LBA28 reads, packet reads on 2048-byte blocks) |
+| `kernel/ata.c` | legacy ATA/ATAPI PIO driver: LBA28 512-byte sector read/write for disks, packet reads on 2048-byte blocks for optical media |
+| `kernel/block.c` | block-request rules with no port I/O, so the host tests can prove them |
+| `kernel/sha256.c` | SHA-256 for write verification (and, later, update manifests) |
+| `kernel/storage_test.c` | explicit `wtest` write/read-back self-test on a reserved window |
 | `kernel/iso9660.c` | ECMA-119 volume mount, root directory walk, file read on top of `ata.c` |
 | `kernel/kbd.c` | 8042 PS/2 keyboard, polled, scan-code set 1 translation, E0 handling |
 | `kernel/timer.c` | PIT calibration against the TSC; millisecond timeouts and uptime |
@@ -65,7 +68,7 @@ kernel and the loader cannot drift apart silently.
 | `kernel/fw.c` | firmware probe (manifest presence), never a claim of execution |
 | `kernel/ui.c` | six pages, controller/keyboard navigation, serial recovery console, audit log |
 
-The kernel is deliberately small (36,508 bytes) and freestanding: no libc, no
+The kernel is deliberately small (about 41 KB in the 0.2.0 line) and freestanding: no libc, no
 allocator, no paging, no interrupts beyond the IDT gates. Everything is
 polled, which keeps the boot deterministic and makes failures reproducible.
 
@@ -79,7 +82,8 @@ polled, which keeps the boot deterministic and makes failures reproducible.
 | `tools/pc5ctl.py` | operator CLI: `info`, `verify`, `boot`, `chain`, `fw`, `usb` |
 | `tests/v86_runner.mjs` | boots an image in v86, captures serial and the VGA text screen, injects serial/PS2 input |
 | `tests/boot_test.py` | asserts boot markers and the rendered interface, writes `build/test/boot-evidence.json` |
-| `tests/kernel_unit.c` | host-side unit tests for the kernel's pure logic |
+| `tests/kernel_unit.c` | host-side unit tests for the kernel's pure logic, including the block rules and SHA-256 vectors |
+| `tests/test_storage.py` | contracts for the write test, its scratch window and harness safety |
 | `tests/test_tools.py` | unit tests for the ISO writer, verifier and firmware tool |
 | `tests/uefi_stub_firmware.py` | executes the real `BOOTX64.EFI` on the Unicorn CPU emulator against a stub firmware (protocols at their specified slots, two file-system volumes); emulates `lgdt`/segment loads/`lretq` |
 | `tests/uefi_stubtest.py` | asserts 42 properties of that run, plus two negative runs; `make stubtest` |
@@ -91,9 +95,13 @@ polled, which keeps the boot deterministic and makes failures reproducible.
   console.
 * **Input**: `kbd_read()` is the only input source in the UI; a USB HID or
   DualSense translator is a second source behind the same interface.
-* **Storage**: `ata_read_blocks()` is the only block interface; AHCI, NVMe and
-  USB storage plug in behind it. `iso_read_file()` is what a package reader will
-  call once a PS5 container parser exists (chain stage 4).
+* **Storage**: two interfaces with different units, deliberately (ADR-013).
+  `ata_read_blocks()` reads 2048-byte ISO9660 blocks from the selected boot
+  device and is what `iso_read_file()` uses; `ata_read_sectors()` and
+  `ata_write_sectors()` move 512-byte sectors on an explicitly indexed ATA disk
+  and are what a filesystem, partition parser or installer will use. AHCI, NVMe
+  and USB storage implement the same sector contract behind the same rules
+  (`kernel/block.c` validates every request).
 * **Firmware**: `fw_probe()` consumes a manifest compiled into the kernel; the
   manifest is produced by `tools/firmware.py` from a user-supplied image.
 * **Compatibility chain**: `chain_evaluate()` takes one argument per subsystem,
