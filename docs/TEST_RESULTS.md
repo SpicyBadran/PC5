@@ -997,7 +997,8 @@ d4344906d8db1e1fdfe429e8245f8c50da75dbd9bb78132e3e54534eb326e965  build/kernel.b
 1. refuses an invalid name, an oversize file, a volume it did not mount, or a
    sector source without a write callback (`read-only`);
 2. scans the root directory for the name (`exists`) and for the first free slot
-   (`dir-full` if there is none) — a deleted slot is reused, unless it sits
+   (`dir-full` if there is none — as M1g behaved; since M1i the directory is
+   grown by one cluster instead, §15.3) — a deleted slot is reused, unless it sits
    directly behind a long-name record, whose orphaned fragments would otherwise
    attach to the new name;
 3. counts free clusters by reading the FAT (`full` if fewer than needed) and
@@ -1057,7 +1058,7 @@ Every row starts from a fresh image and is verified with `read_file()`,
 | volume with 1 free cluster, 2 needed | `full`, image byte-identical |
 | volume with no free clusters | `full`, zero writes |
 | existing name (`PC5TEST.TXT`, `pc5test.txt`) | `exists`, zero writes |
-| full root directory (16/16 slots live) | `dir-full`, zero writes |
+| full root directory (16/16 slots live) | `dir-full`, zero writes — **M1g's behaviour; M1i grows it instead (§15.3)** |
 | invalid names (`BAD*NAME.TXT`, `TOOLONGNAME.TXT`, `A.BBBB`, `name?.txt`, empty) | `name`, zero writes |
 | read-only source (no write callback) | `read-only`, image byte-identical |
 | deleted slot available | reused (`dir_offset=32`), the old name stays invisible |
@@ -1165,7 +1166,7 @@ builds are 57,692 bytes. The whole difference between the two images is the firs
 | `make check` | **229** tests, OK (25 tools + 41 UEFI + 10 release + 32 architecture + 14 storage + 13 partitions + 20 FAT32 read + 37 FAT32 write + **37 hybrid MBR**) |
 | `make boot-test` | **87/87** (was 80: +7 MBR checks, one of them a negative control) |
 | `tests/uefi_stubtest.py` | **42/42** |
-| `make roadmap` | 17 milestones, in sync |
+| `make roadmap` | 18 milestones, in sync |
 
 ### 14.1 The layout, before and after
 
@@ -1338,3 +1339,288 @@ in the source (the builder owns the signature).
   times with a drive reset, but it does not verify the boot image itself — the
   stage-1 loader verifies the kernel (`pc5: kernel image verified`), and a wrong
   loader fails visibly on the serial console rather than silently.
+
+## 15. M1i — FAT32 write expansion: overwrite, directories, paths, 2026-11-15
+
+M1g created a file. M1i makes the filesystem usable for the installer that M2
+needs: an existing file can be **replaced in place**, a **directory** can be
+created and used immediately, and every entry point takes a **path** instead of a
+bare root name. The priority order the milestone was held to is data integrity →
+correctness → fault tolerance → coverage → performance; this section records what
+that produced and, in §15.9, what it does not.
+
+Build inputs are pinned, and two clean builds are byte-identical:
+
+```
+$ make clean && make BUILD_ID=m1i SOURCE_DATE_EPOCH=1763164800
+pc5: MBR bootstrap 440 bytes
+pc5: loader image 4096 bytes
+pc5: kernel image 66828 bytes (limit 585728)
+pc5: wrote build/pc5.iso (1601536 bytes, 782 sectors)
+pc5: sha256 5252e9b23427d7def196312352385da02b6d4b351854651e79da59ace5fc7ce2
+
+$ sha256sum build/loader.bin build/mbr.bin build/kernel.bin build/efi.img build/pc5.iso
+f121b34a7ebc0e7dd6855e429496b7f3bbb636ac4249fad62542b8c6503da1bb  build/loader.bin   (4096 bytes)
+d07ec2ba3aeb06b200ed8e918d9a14dfa18b730477f03cbd632dec06ab19d107  build/mbr.bin      (440 bytes)
+10bc3b7bac23676d80be8f8b8f48bc802fa97b9754578904622a766b97e44ea7  build/kernel.bin   (66828 bytes)
+568c8d2966c67ad2b125b20eb15b714007c230fb67658b12301d8272dd52c8fc  build/efi.img      (1474560 bytes)
+5252e9b23427d7def196312352385da02b6d4b351854651e79da59ace5fc7ce2  build/pc5.iso      (1601536 bytes)
+```
+
+| Artifact | M1h (`1ff03e3f…`) | M1i (`5252e9b2…`) | Why it changed |
+|---|---|---|---|
+| `pc5.iso` | 1,593,344 B / 778 blocks | 1,601,536 B / 782 blocks | the kernel grew by 9,136 B, so the kernel extent and everything after it moved |
+| `kernel.bin` | 57,692 B `cd00af6b…` | 66,828 B `10bc3b7b…` | new code (overwrite, mkdir, paths) **and** `PC5_BUILD_ID` is now `m1i` |
+| `loader.bin` | 4,096 B `f121b34a…` | 4,096 B `f121b34a…` | untouched source |
+| `mbr.bin` | 440 B `d07ec2ba…` | 440 B `d07ec2ba…` | untouched source |
+| `efi.img` | 1,474,560 B `568c8d29…` | 1,474,560 B `568c8d29…` | untouched source |
+
+The two builds were made from a clean tree with the same `BUILD_ID`,
+`SOURCE_DATE_EPOCH`, toolchain and inputs, and every one of the five artefacts
+hashed identically in both. The kernel hash differs from M1h for exactly two
+reasons, both named above; the loader, MBR and ESP did not change **at all**, so
+their hashes and sizes are the M1h values. The ISO's size change is arithmetic:
++9,136 bytes of kernel = +2 ISO blocks (the kernel extent is block-aligned), and
+the hybrid MBR's partition length, CHS end and patch words are recomputed from
+the new layout, which is why sector 0 differs while `mbr.bin` does not.
+
+| Suite | Result | Was |
+|---|---|---|
+| `make verify` | **75/75** | 75 (no layout change beyond the kernel extent) |
+| `make unit` | **160** checks, 0 failures | 160 |
+| `make check` | **280** tests, OK (25 tools + 41 UEFI + 10 release + 32 architecture + 14 storage + 13 partitions + 20 FAT32 read + 38 FAT32 write + **50 FAT32 expand** + 37 hybrid MBR) | 229 |
+| `make boot-test` | **116/116** checks | 87 (+29 M1i) |
+| `tests/uefi_stubtest.py` | **42/42** | 42 |
+| `make roadmap` | **18** milestones, in sync | 17 (+M1i) |
+
+### 15.1 What the three operations do, precisely
+
+| | create (`put`) | overwrite (`write`) | mkdir (`mkdir`) |
+|---|---|---|---|
+| same directory slot | new slot | **yes**, the existing one | new slot |
+| new clusters before the name exists | yes | yes (the replacement) | yes (the directory) |
+| old data freed | — | after the switch, flush and re-read | — |
+| needs space for both versions | no | **yes** | no |
+| sector writes, base fixture | 6 | 26 (1,500 B over a 6-cluster chain) | 7 (12 when the parent is full) |
+| refusal statuses exercised | exists, full, name, too-big, read-only, io, verify, flush | no-file, directory, read-only, corrupt, full, too-big, name, io, verify, flush | exists, no-file, not-dir, name, full, read-only, io |
+
+Paths are `COMPONENT { "/" COMPONENT }`, at most 8 components and 63 characters,
+each component an 8.3 short name matched case-insensitively and stored upper
+case. Anything else — a leading, trailing or doubled separator, `.` or `..`, an
+empty component, a name longer than 8.3, more than 8 levels, a 70-character
+path — is refused with `name`, never truncated and never guessed. A missing
+parent is `no-file`, a file used as a directory is `not-dir`.
+
+### 15.2 Overwrite: the ordering, and what it costs
+
+The replacement chain is allocated in clusters the FAT says are free, filled, and
+linked in **every** FAT copy, and the copies are then re-read entry by entry.
+Only after that, and after a flush, is the single 32-byte directory entry
+rewritten — same name, same attributes, same slot, new first cluster and size.
+Then a flush, then the old chain is freed cluster by cluster, then the freed
+entries are re-verified in every copy, then FSInfo is corrected, then the file is
+read back **through its own name** and compared byte for byte.
+
+Measured on the fixture (65,534 clusters, `pc5: free=65510`):
+
+| Operation | clusters | old chain | freed | free after | writes | read-back |
+|---|---|---|---|---|---|---|
+| `PC5TEST.TXT` 3,000 → 1,500 B | 3 | 6 | 6 | 65,513 | 26 | ok |
+| `PC5TEST.TXT` 3,000 → 0 B | 0 | 6 | 6 | 65,516 | 17 | ok |
+| `EMPTY.TXT` 0 → 700 B | 2 | 0 | 0 | 65,508 | 9 | ok |
+| `FRAG.BIN` 2,000 → 8 B (fragmented chain 21,23,22,24) | 1 | 4 | 4 | 65,513 | 16 | ok |
+
+The cost is stated rather than hidden: an overwrite needs free space for **both**
+versions at once, so a volume with room for one chain but not two is refused with
+`full` and **zero writes**. That is the price of never having a name point at
+unwritten data, and it is the reason a nearly-full volume cannot be compacted by
+overwriting in place.
+
+Two refusals exist only for damaged metadata: a non-empty file whose first
+cluster is 0, and a zero-length file that owns a chain, are both `corrupt` and
+untouched.
+
+### 15.3 Directories
+
+A new directory costs one zeroed cluster carrying `.` (itself) and `..` (the
+parent, or cluster 0 when the parent is the root — the convention Windows, Linux
+and this reader all expect), its chain written to every FAT copy and verified,
+then the parent's entry. `fat32_list_dir()` must then return zero entries, and
+the read-back re-checks `.`, `..`, the parent's entry and the size before the
+operation reports `verified=1`. It is readable the instant the call returns: the
+boot test creates a file inside a directory created seconds earlier.
+
+A parent with no free slot **grows by one cluster** instead of refusing. The
+growth is ordered so an interruption can only leave an allocated, unreferenced
+cluster: the new cluster is zeroed and given its end-of-chain marker *before* the
+old last cluster links to it, and no existing entry is rewritten. `grew=1` is
+reported only after the link is verified in every copy.
+
+The growth cluster is reserved by the **same** allocation as the content, not by
+a second scan of the FAT. Two scans would each see the other's cluster as free
+until it is linked — a double allocation waiting for a full volume. That bug was
+found on the way (the FAT still shows reserved-but-unlinked clusters as free), and
+`test_a_directory_with_no_free_slot_grows_when_a_file_is_created_in_it` is what
+holds the fix in place.
+
+### 15.4 Integrity invariants, checked after every successful operation
+
+* the root directory's own cluster is never handed out as data, and no chain
+  contains a free, bad, reserved or out-of-range entry;
+* no cluster belongs to two objects (`chains()` from `tests/fat32_images.py`
+  intersected across every object, root and subdirectories included);
+* every pre-existing file, in the root and in subdirectories, still reads back
+  byte for byte through an implementation that shares no code with the kernel;
+* both FAT copies are identical, and FSInfo's free count equals the number of
+  free entries the FAT actually holds;
+* every written sector lies inside the partition, and the changed-sector set is
+  confined to the data, the FATs, the FSInfo blocks and the directory clusters;
+* the volume is left with no allocated-and-unreferenced cluster.
+
+### 15.5 Fault injection: every write of every operation, failed in turn
+
+The host driver (`--fail-write N`) fails the N-th write call and dumps the image;
+the independent reader then classifies the result. "The switch" is read from the
+successful run — the write to the sector holding the new directory entry — not
+guessed from a count. A failure **on** the switch counts as "before": that write
+did not happen, so nothing was named.
+
+Overwrite of `PC5TEST.TXT` (3,000 → 1,500 B): 26 writes, switch at index 11.
+
+| Failures | Target after the failure | Leaked clusters | freed | mirrors |
+|---|---|---|---|---|
+| 0–3 (data) | old content, byte for byte | 0–1 | 0 | 1 (chain not yet touched) |
+| 4–8 (FAT copies of the new chain) | old content | 1–3 | 0 | 0 |
+| 9–11 (FSInfo, the switch itself) | old content | 3 | 0 | 1 |
+| 12–23 (freeing the replaced chain) | **new content, complete** | 6→0 | 0→5 | 0 |
+| 24–25 (counters after the free) | new content | 0 | 6 | 1 |
+
+Every one of the 26 failures returned an error status (`io`), never `ok`. In all
+26 runs: no unrelated file was damaged, no cluster belonged to two chains, no
+invalid FAT entry was written, and the accounting closed exactly —
+`freed + leaked + clusters freed in one copy only == 6`, the size of the chain
+being reclaimed. `mirrors` was `1` only when the copies were verified equal after
+the operation and `0` whenever the free was interrupted, including the case where
+a copy write failed *after* the other copy had already been updated (a real
+divergence, reported as one).
+
+Directory create (`NEWDIR`): 7 writes, switch at index 6.
+
+| Failures | Directory named? | Leaked | mirrors |
+|---|---|---|---|
+| 0–1 (zeroing the cluster, writing `.`/`..`) | no | 0 | 0 |
+| 2–3 (its FAT entry) | no | 1 | 0–1 |
+| 4–5 (FSInfo) | no | 1 | 1 |
+| 6 (the parent entry — the switch) | **no** | 1 | 1 |
+
+A mkdir that fails anywhere leaves either nothing or one allocated cluster that
+is a well-formed empty directory nothing points at; there is no state in which a
+name refers to a half-initialised directory. When the *growth* of the parent
+fails, the parent's chain is byte-for-byte unchanged, the directory is not named,
+and exactly one cluster (the initialised directory) is leaked — asserted,
+including that the leaked cluster still carries a valid `.` and `..`.
+
+Corruption of the stored payload is caught by the read-back (`verify`, never
+`ok`); a failing flush is `flush` with `flush=-1`; a failed FAT mirror is
+reported rather than hidden; a source with no write callback is `read-only` and
+writes nothing.
+
+### 15.6 Through the real shell, and across a reboot
+
+`kernel/ui.c` gained the verbs M1i needs, and `put` kept its promise:
+
+| Command | Behaviour |
+|---|---|
+| `put PATH text` | create; an existing name is refused (`exists`) and nothing is written |
+| `write PATH text` | replace the content of an existing file, keeping its name and slot |
+| `mkdir PATH` | create one directory in an existing parent |
+| `ls [PATH]` | list the root, or a subdirectory |
+| `read PATH` | read through the path (was: a bare root name) |
+
+`make boot-test` drives all of them on a disposable copy of the fixture and then
+boots that dumped image **a second time** and reads the results back:
+
+```
+fat32 mkdir path=NEWDIR status=ok stage=8 clusters=1 first=28 grew=0 free=65507 mirrors=1 flush=1 verified=1 writes=7
+fat32 list path=NEWDIR count=0 status=ok
+fat32 create name=NEWDIR/A.TXT size=9 status=ok stage=8 clusters=1 free=65506 mirrors=1 flush=1 verified=1 writes=6
+fat32 list path=NEWDIR count=1 status=ok
+fat32 overwrite path=PC5TEST.TXT size=15 status=ok stage=8 clusters=1 first=30 old_first=3 old_clusters=6 freed=6 free=65511 mirrors=1 flush=1 verified=1 writes=20
+fat32 overwrite path=NOPE.TXT size=1 status=no-file ... writes=0
+fat32 overwrite path=SUBDIR size=1 status=directory ... writes=0
+fat32 create name=PC5TEST.TXT size=1 status=exists ... writes=0
+fat32 mkdir path=SUBDIR status=exists ... writes=0
+fat32 mkdir path=MISSING/X status=no-file ... writes=0
+fat32 mkdir path=BAD*NAME status=name ... writes=0
+fat32 read name=SUBDIR/INNER.TXT size=700 status=ok sha256=d2e919d6…b2e331
+```
+
+Second boot, same disk image, fresh kernel:
+
+```
+PC5-LOG fat32 device=0 partition=1 status=ok label="PC5FS" fs=FAT32 clusters=65534 spc=1 base=2048
+fat32 read name=PC5TEST.TXT size=15 status=ok sha256=b13f0d4d…5bf4f8
+fat32 read name=NEWDIR/A.TXT size=9 status=ok sha256=496b7ee6…3f83b209
+fat32 list path=NEWDIR count=1 status=ok
+fat32 read name=SUBDIR/INNER.TXT size=700 status=ok sha256=d2e919d6…b2e331
+```
+
+The two SHA-256 values are what the independent reader computed for the bytes the
+first boot wrote, so "readable after a reboot" is a measurement, not an
+assumption. Every other file on the volume still read back identically, both FAT
+copies matched, no cluster was double-allocated or orphaned, and FSInfo agreed
+with the FAT. 29 new boot checks, 116/116 total.
+
+### 15.7 What the test suite refuses to do
+
+No test was deleted or weakened to reach these numbers. The one M1g test that M1i
+made obsolete — "a full root directory is refused" — was replaced by two that
+assert the new, stronger behaviour: the directory *grows by exactly one cluster
+and keeps every entry*, and a directory that cannot grow is still refused with no
+writes. Its assertion count went up, not down.
+
+The new suite (50 tests) states its invariants once, in `classify()`, and every
+fault-injection test consumes them: the "unrelated files" oracle is derived from
+the image *before* the operation, by the independent reader, so it cannot drift
+when a fixture changes, and the target file is compared separately as the subject
+of the operation.
+
+Three harness-safety guards carry over to the new entry points: nothing on the
+boot path may call a write, the only callers of the write entry points are
+console commands, and a mount without a write callback refuses every write.
+
+### 15.8 Cost, said plainly
+
+* Free space is counted by scanning the FAT: one sector read per 128 clusters,
+  and an allocation scan that is O(clusters) in the worst case. A 65,534-cluster
+  fixture costs ~512 sector reads before the first write.
+* An overwrite reads and writes 12 sectors of FAT to free a 6-cluster chain,
+  because every copy is written and then re-read. Correctness over speed, in the
+  order the milestone ranks them.
+* A directory grows by one cluster at a time; a directory that needs a second
+  cluster of entries pays for a second growth.
+* The kernel has no clock: entry timestamps are the fixed constant M1g chose
+  (2026-11-15, 12:00), so two identical operations produce identical images.
+
+### 15.9 What this does not establish
+
+* **No power-loss atomicity, and none claimed.** A failing `write()` call is not a
+  power cut: the driver returns an error before the sector reaches the medium, so
+  the tests prove the *ordering* the code promises, not what a real disk does with
+  a write that was issued and never completed. There is no journal, no repair pass
+  and no second copy of anything. The strongest safe statement is the one in
+  ADR-015: an interruption leaves the old content intact or the new content
+  complete, plus at worst a leaked chain that the report counts.
+* **No physical disk.** Everything here ran through an in-memory sector array and
+  an emulated ATA disk. A real drive's cache, write-back and reordering are
+  outside this evidence.
+* **No delete, rename, truncate-in-place or attribute change.** The operations are
+  exactly create, replace and mkdir.
+* **No long file names.** They are skipped by design in the read path and never
+  produced by the write path; accepting them would mean a second name format and
+  checksum scheme.
+* **One cluster per growth.** A directory needing many new clusters is grown one
+  at a time, and a volume with one free cluster cannot grow a full parent.
+* **Efficiency is not a goal here.** The allocation scan and the mirror re-reads
+  are O(clusters)-ish deliberately; M2 and later can revisit them once AHCI/NVMe
+  make the I/O cheaper.

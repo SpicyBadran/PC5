@@ -207,7 +207,8 @@
         "M1c",
         "M1d",
         "M1e",
-        "M1f"
+        "M1f",
+        "M1i"
       ],
       "legacy": [
         "repository M2",
@@ -227,7 +228,7 @@
         "evidence for each machine is committed under docs/evidence/m1/<machine>/ with the firmware version and Secure Boot state"
       ],
       "evidence": [],
-      "next_action": "Sector write (M1d), partition discovery (M1e) and read-only FAT32 (M1f) exist. Next: FAT32 write, then the installer and isohybrid USB medium; AHCI/NVMe follow behind the same sector interface."
+      "next_action": "Sector write (M1d), partition discovery (M1e), read-only FAT32 (M1f), create (M1g), hybrid MBR (M1h) and overwrite/directories/paths (M1i) exist. Next: the installer and isohybrid USB medium on a writable directory tree; AHCI/NVMe follow behind the same sector interface."
     },
     {
       "id": "M1e",
@@ -348,7 +349,7 @@
         "tests/fat32_write_check.c",
         "kernel/fat32.c"
       ],
-      "next_action": "Physical boot and the installer (M2), starting with overwrite/rename and directory creation."
+      "next_action": "Overwrite, directory creation and path handling (M1i); then the installer (M2)."
     },
     {
       "id": "M1h",
@@ -388,6 +389,49 @@
         "tools/verify_iso.py"
       ],
       "next_action": "Physical boot on a real machine with a USB stick (M2); then overwrite/rename and directory creation for the installer."
+    },
+    {
+      "id": "M1i",
+      "track": "A",
+      "title": "FAT32 write expansion: overwrite, directories, paths",
+      "state": "complete",
+      "owner_role": "kernel-engineer",
+      "depends_on": [
+        "M1g"
+      ],
+      "legacy": [
+        "docs/architecture/FIRST_THREE_TASKS.md (M1g follow-on)"
+      ],
+      "deliverables": [
+        "kernel/fat32.c (fat32_overwrite_file, fat32_create_dir, dir_grow, chain_free, path-aware parent resolution, mounted write callbacks)",
+        "kernel/include/pc5.h (path grammar constants, new stages, report fields, path/overwrite/mkdir prototypes)",
+        "kernel/ui.c (`write PATH text`, `mkdir PATH`, `ls [PATH]`, `read PATH`)",
+        "tests/fat32_write_check.c (PATH argument, --overwrite, --mkdir, --read, region-targeted fault injection)",
+        "tests/fat32_images.py (directory-aware independent reader: resolve_dir, list_path, read_path, check_directory, chains, double_allocated, all_files)",
+        "tests/test_fat32_expand.py (50 tests: overwrite, directories, paths, invariants, fault-injection sweeps, harness safety)",
+        "tests/test_fat32_write.py (full-root tests replaced by the grown-directory pair)",
+        "tests/boot_test.py (console create/replace/mkdir/ls/read on a disposable image, then a second boot that reads them back)"
+      ],
+      "acceptance": [
+        "an existing regular file is replaced in place: same name, same directory slot, new size and first cluster, no duplicate entry",
+        "the replacement is built in unreferenced clusters and the old chain is freed only after the switch and its flush, so no name ever refers to unwritten data",
+        "a shorter, longer, identical-length and empty replacement all produce a valid volume, including a fragmented chain reclaimed in full",
+        "directories are created with a zeroed cluster, valid '.' and '..', a consistent chain in every FAT copy, and are readable immediately",
+        "a full parent directory is grown by one cluster, preserving every existing entry, and is refused without writing when the volume cannot afford it",
+        "paths are 8.3, case-insensitive, up to 8 components; missing parents, file-as-directory, trailing separators, '.'/'..' and over-long paths are refused by status, never truncated",
+        "the root directory's own cluster, bad and reserved clusters are never allocated, and a divergent FAT mirror or an inconsistent entry is refused before any destructive write",
+        "distinct statuses are reported for ok, exists, no-file, directory, not-dir, full, name, too-big, read-only, corrupt, io, verify and flush",
+        "every write of every operation is failed in turn: the original stays readable before the switch, the new state is complete after it, and any leak is counted and quantified",
+        "the console reaches the new operations only through explicit commands, and files written by one boot are read back by a second boot of the same image",
+        "all gates stay green, two pinned builds are byte-identical, and no test is deleted or weakened"
+      ],
+      "evidence": [
+        "docs/TEST_RESULTS.md",
+        "tests/test_fat32_expand.py",
+        "tests/fat32_write_check.c",
+        "kernel/fat32.c"
+      ],
+      "next_action": "Boot path and installer work (M2), which needs the directory tree this milestone can now create."
     },
     {
       "id": "M2",

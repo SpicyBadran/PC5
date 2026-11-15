@@ -64,6 +64,20 @@ entry, during the flush, and a corrupted data write — and the Python verifier
 classifies the result as intact, leaked-chain, partial-file or inconsistent
 mirror. No case is allowed to report a failed operation as a success.
 
+`tests/test_fat32_expand.py` is the M1i layer and keeps that shape, extended to
+the three operations that came after create. Overwrite, mkdir and the path
+grammar are each driven through the real module and judged by the resulting
+image: the file's bytes, its slot (unchanged for an overwrite), both FAT copies,
+the chains of every object, `.` and `..`, FSInfo, the changed-sector set and every
+other file in the volume. The refusals (missing file, directory, read-only entry,
+volume without room for both versions, over-long name, nine components, missing
+parent, file used as a directory) must leave the image byte-identical. The
+failure half is a sweep rather than a handful of cases: every write of an
+overwrite and of a mkdir is failed in turn, and an independent reader classifies
+what each failure left behind — old state or new state, the exact leak, the exact
+mirror divergence — with the accounting required to close. "Readable after a
+reboot" is checked by booting the dumped image a second time, not by assuming it.
+
 `tests/test_partitions.py` protects the partition work's seams: that the
 fixture images really carry the CRCs and backup header the kernel checks, that
 the module contains no write call, that ATAPI is refused before any read, and

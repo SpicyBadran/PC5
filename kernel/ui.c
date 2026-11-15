@@ -498,7 +498,10 @@ static void serial_command(char *cmd)
 {
     const struct chain_stage *st = chain_stages();
     if (!strcmp(cmd, "help")) {
-        serial_puts("commands: help status chain hw fw storage part ls read put wtest diag log screen reboot halt\r\n");
+        serial_puts("commands: help status chain hw fw storage part ls read put write mkdir "
+                    "wtest diag log screen reboot halt\r\n");
+        serial_puts("filesystem: ls [PATH]  read PATH  put PATH text (create)  "
+                    "write PATH text (replace)  mkdir PATH\r\n");
     } else if (!strcmp(cmd, "status")) {
         char line[160];
         pc5_snprintf(line, sizeof(line), "pc5 version=%s build=%s date=%s\r\n", PC5_VERSION,
@@ -566,7 +569,9 @@ static void serial_command(char *cmd)
                      storage_selftest_state() == 1 ? "ok"
                      : storage_selftest_state() == 0 ? "not-run" : "failed");
         serial_puts(line);
-    } else if (!strcmp(cmd, "ls")) {
+    } else if (!strcmp(cmd, "ls") || !strncmp(cmd, "ls ", 3)) {
+        /* `ls` lists the root; `ls PATH` lists a subdirectory (M1i). */
+        const char *path = (cmd[2] == ' ') ? cmd + 3 : "";
         const struct fat32_volume *fv = fat32_mounted();
         if (fv->error != FAT32_OK || fat32_mounted_device() < 0) {
             serial_puts("ls: no FAT32 volume mounted\r\n");
@@ -575,24 +580,31 @@ static void serial_command(char *cmd)
         } else {
             struct fat32_entry list[16];
             int count = 0;
-            int rc = fat32_list_mounted(list, 16, &count);
-            char line[160];
+            int rc = path[0] ? fat32_list_path(path, list, 16, &count)
+                             : fat32_list_mounted(list, 16, &count);
+            char line[200];
             (void)fv;
             for (int i = 0; i < count && i < 16; i++) {
                 pc5_snprintf(line, sizeof(line), "fat32 entry name=%s size=%u attr=0x%02x\r\n",
                              list[i].name, list[i].size, list[i].attr);
                 serial_puts(line);
             }
-            pc5_snprintf(line, sizeof(line), "fat32 list count=%d status=%s\r\n", count,
-                         fat32_status_name(rc));
+            if (path[0])
+                pc5_snprintf(line, sizeof(line),
+                             "fat32 list path=%s count=%d status=%s\r\n",
+                             path, count, fat32_status_name(rc));
+            else
+                pc5_snprintf(line, sizeof(line), "fat32 list count=%d status=%s\r\n",
+                             count, fat32_status_name(rc));
             serial_puts(line);
         }
     } else if (!strcmp(cmd, "read")) {
-        char line[80];
-        pc5_snprintf(line, sizeof(line), "read: usage 'read NAME.EXT'\r\n");
+        char line[120];
+        pc5_snprintf(line, sizeof(line), "read: usage 'read PATH' (e.g. read SUBDIR/FILE.TXT)\r\n");
         serial_puts(line);
     } else if (!strncmp(cmd, "read ", 5)) {
-        char name[16];
+        /* A path, not just a name: the read path resolves it (M1i). */
+        char name[FAT32_PATH_MAX + 1];
         str_copy(name, cmd + 5, sizeof(name));
         u32 len = 0;
         int rc = fat32_read_named(name, fat_read_buf, FAT_READ_MAX, &len);
@@ -612,13 +624,14 @@ static void serial_command(char *cmd)
                      name, len, fat32_status_name(rc), hex);
         serial_puts(line);
     } else if (!strcmp(cmd, "put")) {
-        serial_puts("put: usage 'put NAME.EXT text' (creates a new file; never overwrites)\r\n");
+        serial_puts("put: usage 'put PATH text' (creates a new file; never overwrites)\r\n");
     } else if (!strncmp(cmd, "put ", 4)) {
-        /* The one operation in PC5 that modifies a filesystem, and it only ever
-         * runs because an operator typed it.  Nothing on the boot path calls
-         * this.  Refusals (exists/full/dir-full/name/read-only) are printed as
-         * they are; a partial write reports its stage instead of "ok". */
-        char name[16], text[160];
+        /* Filesystem-modifying commands, and they only ever run because an
+         * operator typed one.  Nothing on the boot path calls this.  Refusals
+         * (exists/full/name/read-only) are printed as they are; a partial write
+         * reports its stage instead of "ok".  `put` never replaces: that is
+         * what `write` is for, so a typo cannot destroy a file. */
+        char name[FAT32_PATH_MAX + 1], text[160];
         const char *rest = cmd + 4;
         int n = 0;
         while (rest[n] && rest[n] != ' ' && n < (int)sizeof(name) - 1) {
@@ -638,6 +651,53 @@ static void serial_command(char *cmd)
                      name, len, fat32_status_name(rc), rep.stage, rep.clusters,
                      rep.free_after, rep.mirrors_equal, rep.flush_state,
                      rep.verified, rep.writes);
+        serial_puts(line);
+    } else if (!strcmp(cmd, "write")) {
+        serial_puts("write: usage 'write PATH text' (replaces an existing file, "
+                    "keeping its name)\r\n");
+    } else if (!strncmp(cmd, "write ", 6)) {
+        /* Replace a file's content.  Same argument shape as `put`, deliberately:
+         * the operator chooses the verb, and the verb decides whether an
+         * existing file is replaced or refused. */
+        char path[FAT32_PATH_MAX + 1], text[160];
+        const char *rest = cmd + 6;
+        int n = 0;
+        while (rest[n] && rest[n] != ' ' && n < (int)sizeof(path) - 1) {
+            path[n] = rest[n];
+            n++;
+        }
+        path[n] = 0;
+        str_copy(text, rest[n] ? rest + n + 1 : "", sizeof(text));
+        u32 len = (u32)strlen(text);
+
+        struct fat32_write_report rep;
+        int rc = fat32_overwrite_mounted(path, text, len, &rep);
+        char line[240];
+        pc5_snprintf(line, sizeof(line),
+                     "fat32 overwrite path=%s size=%u status=%s stage=%d clusters=%u "
+                     "first=%u old_first=%u old_clusters=%u freed=%u free=%u "
+                     "mirrors=%d flush=%d verified=%d writes=%u\r\n",
+                     path, len, fat32_status_name(rc), rep.stage, rep.clusters,
+                     rep.first_cluster, rep.old_first_cluster, rep.old_clusters,
+                     rep.freed, rep.free_after, rep.mirrors_equal, rep.flush_state,
+                     rep.verified, rep.writes);
+        serial_puts(line);
+    } else if (!strcmp(cmd, "mkdir")) {
+        serial_puts("mkdir: usage 'mkdir PATH' (creates one directory in an "
+                    "existing parent)\r\n");
+    } else if (!strncmp(cmd, "mkdir ", 6)) {
+        char path[FAT32_PATH_MAX + 1];
+        str_copy(path, cmd + 6, sizeof(path));
+        struct fat32_write_report rep;
+        int rc = fat32_mkdir_mounted(path, &rep);
+        char line[240];
+        pc5_snprintf(line, sizeof(line),
+                     "fat32 mkdir path=%s status=%s stage=%d clusters=%u first=%u "
+                     "grew=%d grown=%u free=%u mirrors=%d flush=%d verified=%d "
+                     "writes=%u\r\n",
+                     path, fat32_status_name(rc), rep.stage, rep.clusters,
+                     rep.first_cluster, rep.grew, rep.grown_cluster, rep.free_after,
+                     rep.mirrors_equal, rep.flush_state, rep.verified, rep.writes);
         serial_puts(line);
     } else if (!strcmp(cmd, "part")) {
         const struct part_report *pr = part_report();
