@@ -29,6 +29,7 @@ RUNNER = os.path.join(ROOT, "tests", "v86_runner.mjs")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import disk_images  # noqa: E402  (test fixture builder, see tests/disk_images.py)
+import fat32_images  # noqa: E402  (FAT32 fixtures + independent reader)
 
 # The write test gets its own disposable disk: a zero-filled file created here,
 # loaded into the emulator's memory through --hda-buffer and dumped back with
@@ -306,6 +307,82 @@ def main(argv=None):
     res.check("a refused partition table does not stop the boot",
               "PC5-BOOT-OK" in bad_log)
 
+    # ---- FAT32: mount, list, read, and independent digest checks ----
+    fat_image = fat32_images.build_fat32_image()
+    fat_path = os.path.join(args.out_dir, "fat32-hda.img")
+    with open(fat_path, "wb") as fh:
+        fh.write(fat_image)
+    fat_after = os.path.join(args.out_dir, "fat32-hda-after.img")
+    expected_files = fat32_images.expected_files()
+    wanted = ["PC5TEST.TXT", "SMALL.BIN", "EXACT.BIN", "EMPTY.TXT", "MULTI.BIN", "FRAG.BIN"]
+    keys = ",".join([k for name in wanted for k in (f"serial:read {name}\\r", "wait:1")]
+                    + ["serial:ls\\r", "wait:1",
+                       "serial:read SUBDIR\\r", "wait:1",
+                       "serial:read NOPE.TXT\\r", "wait:1"])
+    fat_serial = os.path.join(args.out_dir, "serial-fat32.log")
+    run_vm(args.iso, max(args.seconds, 22), fat_serial, keys=keys,
+           hda_buffer=fat_path, hda_out=fat_after)
+    with open(fat_serial, "r", errors="replace") as fh:
+        fat_log = fh.read()
+
+    res.check("kernel mounts the FAT32 partition read-only",
+              'PC5-LOG fat32 device=0 partition=1 status=ok label="PC5FS" fs=FAT32' in fat_log,
+              _first_line(fat_log, "PC5-LOG fat32"))
+    res.check("root directory enumerates every short-name entry",
+              "fat32 list count=7 status=ok" in fat_log,
+              _first_line(fat_log, "fat32 list"))
+    res.check("root listing skips the volume label and the deleted entry",
+              _has_line(fat_log, "fat32 entry name=PC5TEST.TXT")
+              and not _has_line(fat_log, "DELETED"))
+    res.check("a directory is refused as a file",
+              _has_line(fat_log, "fat32 read name=SUBDIR") and "status=directory" in fat_log)
+    res.check("a missing file is refused",
+              _has_line(fat_log, "fat32 read name=NOPE.TXT") and "status=no-file" in fat_log)
+
+    kernel_digests = {}
+    for line in fat_log.splitlines():
+        if line.startswith("fat32 read name=") and "status=ok" in line:
+            fields = dict(f.split("=", 1) for f in line.split() if "=" in f)
+            kernel_digests[fields["name"]] = (int(fields["size"]), fields["sha256"])
+    host_digests = {}
+    for name, data in expected_files.items():
+        host_digests[name] = (len(data), hashlib.sha256(data).hexdigest())
+    for name in wanted:
+        with_host = host_digests[name]
+        with_kernel = kernel_digests.get(name)
+        res.check(f"kernel reads {name} and its digest matches the fixture",
+                  with_kernel == with_host,
+                  f"kernel={with_kernel} host={with_host}")
+    reading_independent = {name: hashlib.sha256(fat32_images.read_file(fat_image, name)).hexdigest()
+                           for name in wanted}
+    res.check("kernel digests also match the independent FAT32 reader",
+              all(kernel_digests.get(n, (0, ""))[1] == reading_independent[n] for n in wanted),
+              "tests/fat32_images.py is a second implementation")
+
+    unchanged = False
+    if os.path.exists(fat_after):
+        with open(fat_after, "rb") as fh:
+            after_bytes = fh.read()
+        with open(fat_path, "rb") as fh:
+            before_bytes = fh.read()
+        unchanged = after_bytes == before_bytes and before_bytes == fat_image
+    res.check("the FAT32 disk image is byte-identical after reading", unchanged)
+
+    # A volume whose BPB says FAT16 must be refused, and the boot must continue.
+    bad_fat = fat32_images.corrupt_bpb(fat_image, 17, 512)
+    bad_path = os.path.join(args.out_dir, "fat32-hda-fat16-bpb.img")
+    with open(bad_path, "wb") as fh:
+        fh.write(bad_fat)
+    bad_serial = os.path.join(args.out_dir, "serial-fat32-bad.log")
+    run_vm(args.iso, args.seconds, bad_serial, hda_buffer=bad_path)
+    with open(bad_serial, "r", errors="replace") as fh:
+        bad_fat_log = fh.read()
+    res.check("a FAT16 BPB is refused, not mounted as FAT32",
+              "PC5-LOG fat32 status=not-fat32" in bad_fat_log,
+              _first_line(bad_fat_log, "PC5-LOG fat32"))
+    res.check("a refused filesystem does not stop the boot",
+              "PC5-BOOT-OK" in bad_fat_log)
+
     dumps = screen_dump(ui_log)
     res.check("console shadow buffer dumped over serial", len(dumps) >= 4,
               f"{len(dumps)} dumps")
@@ -351,6 +428,17 @@ def main(argv=None):
             "input_image_unchanged": input_ok,
             "disk_image_after": os.path.abspath(disk_out) if attached else None,
         },
+        "fat32_test": {
+            "fixture": "tests/fat32_images.py (builds the volume and an independent reader)",
+            "image": os.path.abspath(fat_path),
+            "image_bytes": len(fat_image),
+            "mount": "device=0 partition=1 label=PC5FS clusters=65534",
+            "kernel_digests": {k: {"size": v[0], "sha256": v[1]} for k, v in kernel_digests.items()},
+            "host_digests": {k: {"size": v[0], "sha256": v[1]} for k, v in host_digests.items()},
+            "independent_reader_digests": reading_independent,
+            "image_unchanged_after_read": unchanged,
+            "refused_bpb_image": os.path.abspath(bad_path),
+        },
         "partition_test": {
             "fixture": "tests/disk_images.py (this file builds the bytes)",
             "disk_bytes": WTEST_HDD_BYTES,
@@ -370,12 +458,14 @@ def main(argv=None):
             "ATA PIO 512-byte sector write, flush and verified read-back on an emulated IDE disk",
             "writes to the ATAPI boot device are refused by the kernel API",
             "MBR and GPT partition tables parsed read-only from an emulated disk",
+            "FAT32 volume mounted read-only, files located and read with SHA-256 matching an independent reader",
         ],
         "levels_not_proven": [
             "physical hardware boot",
             "physical disk write (no real ATA disk has been written)",
             "extended/logical MBR partitions (not walked)",
-            "any filesystem on a discovered partition (not implemented)",
+            "FAT32 writing, long file names, subdirectory traversal, non-512-byte sectors",
+            "physical hardware",
             "controller, network and audio on physical hardware",
             "genuine PS5 system software execution",
             "actual PS5 game execution",

@@ -426,6 +426,79 @@ const struct part_report *part_report(void);
 const char *part_scheme_name(int scheme);
 const char *part_status_name(int status);
 
+/* ------------------------------------------------------------ fat32 */
+/* Read-only FAT32.  The filesystem code never receives a device index: it is
+ * handed a sector-read callback, so the host tests can mount a complete image
+ * held in memory and the kernel can mount a partition on an explicit disk.
+ * There is no write path in this module at all (docs/ROADMAP.md M1f). */
+#define FAT32_OK 0
+#define FAT32_E_IO -1          /* the sector source failed                       */
+#define FAT32_E_SIGNATURE -2   /* no 55 AA boot signature                        */
+#define FAT32_E_BPB -3         /* a BPB field is missing or impossible           */
+#define FAT32_E_NOT_FAT32 -4   /* structurally FAT12/FAT16 or another filesystem */
+#define FAT32_E_GEOMETRY -5    /* totals, FAT size or root cluster inconsistent  */
+#define FAT32_E_NAME -6        /* the requested name is not a legal 8.3 name     */
+#define FAT32_E_NO_FILE -7
+#define FAT32_E_IS_DIR -8
+#define FAT32_E_SPACE -9       /* the file is larger than the caller's buffer    */
+#define FAT32_E_CHAIN -10      /* chain ended before the declared file size      */
+#define FAT32_E_FREE -11       /* free cluster inside a chain                    */
+#define FAT32_E_BAD -12        /* cluster marked bad                             */
+#define FAT32_E_RESERVED -13   /* reserved cluster value in a chain              */
+#define FAT32_E_CLUSTER -14    /* cluster number outside the volume              */
+#define FAT32_E_LOOP -15       /* the chain revisits clusters                    */
+#define FAT32_E_CORRUPT -16    /* directory entry or metadata inconsistent       */
+
+struct fat32_io {
+    int (*read)(void *ctx, u32 lba, u32 count, void *buf);
+    void *ctx;
+};
+
+struct fat32_volume {
+    u32 base_lba;             /* partition first sector (512-byte units)        */
+    u32 sectors;              /* partition size in 512-byte sectors             */
+    u32 bytes_per_sector;     /* 512 only: see docs/KNOWN_LIMITATIONS.md        */
+    u32 sectors_per_cluster;
+    u32 reserved_sectors;
+    u32 fat_count;
+    u32 fat_sectors;
+    u32 active_fat;           /* 0 when the FATs are mirrored                    */
+    u32 total_sectors;
+    u32 first_data_sector;    /* relative to the partition                      */
+    u32 cluster_count;
+    u32 root_cluster;
+    u32 fsinfo_sector;        /* 0 when the BPB declares none                   */
+    u32 backup_boot_sector;   /* 0 when the BPB declares none                   */
+    char label[12];
+    char fs_type[9];
+    int error;                /* last status, for diagnostics                   */
+};
+
+struct fat32_entry {
+    char name[13];            /* 8.3, upper case, dot-separated                 */
+    u32 size;
+    u8 attr;
+};
+
+int fat32_mount(const struct fat32_io *io, u32 base_lba, u32 sectors,
+                struct fat32_volume *vol);
+int fat32_find(const struct fat32_io *io, const struct fat32_volume *vol,
+               const char *name, u32 *cluster, u32 *size, u8 *attr);
+int fat32_read_file(const struct fat32_io *io, const struct fat32_volume *vol,
+                    const char *name, void *buf, u32 max, u32 *out_len);
+int fat32_list_root(const struct fat32_io *io, const struct fat32_volume *vol,
+                    struct fat32_entry *out, int max, int *count);
+const char *fat32_status_name(int status);
+
+/* Device layer: mount the first FAT32 partition on `device` (an explicit disk
+ * index), never ATAPI, never the boot medium implicitly. */
+int fat32_mount_partition(int device);
+const struct fat32_volume *fat32_mounted(void);
+int fat32_mounted_device(void);
+int fat32_mounted_partition(void);
+int fat32_read_named(const char *name, void *buf, u32 max, u32 *out_len);
+int fat32_list_mounted(struct fat32_entry *out, int max, int *count);
+
 int iso_mount(void);
 int iso_mounted(void);
 const char *iso_volume_id(void);
