@@ -15,9 +15,11 @@
 #include "pc5.h"
 
 #define SHADOW_DUMP_MAX 20000
+#define FAT_READ_MAX 32768   /* the `read` command refuses anything larger */
 #define LOG_LINES 64
 #define LOG_WIDTH 200
 
+static u8 fat_read_buf[FAT_READ_MAX];
 static char log_lines[LOG_LINES][LOG_WIDTH];
 static int log_count, log_next;
 
@@ -247,6 +249,17 @@ static void page_hardware(void)
     else
         pc5_snprintf(line, sizeof(line), "partitions: no writable disk attached");
     row_text(y++, line, (pr->device >= 0 && pr->error == PART_OK) ? COL_LGREEN : COL_YELLOW, COL_BLACK);
+
+    const struct fat32_volume *fv = fat32_mounted();
+    if (fv->error == FAT32_OK && fat32_mounted_device() >= 0)
+        pc5_snprintf(line, sizeof(line),
+                     "filesystem: FAT32 label '%s', %u clusters of %u sectors on partition %d (read-only)",
+                     fv->label, fv->cluster_count, fv->sectors_per_cluster,
+                     fat32_mounted_partition());
+    else
+        pc5_snprintf(line, sizeof(line), "filesystem: none mounted (%s)",
+                     fv->error == FAT32_OK ? "no volume" : fat32_status_name(fv->error));
+    row_text(y++, line, (fv->error == FAT32_OK) ? COL_LGREEN : COL_YELLOW, COL_BLACK);
 
     row_text(y++, "", COL_LGREY, COL_BLACK);
     row_text(y++, "PCI device list (bus:slot.func vendor:device class)", COL_LCYAN, COL_BLACK);
@@ -484,7 +497,7 @@ static void serial_command(char *cmd)
 {
     const struct chain_stage *st = chain_stages();
     if (!strcmp(cmd, "help")) {
-        serial_puts("commands: help status chain hw fw storage part wtest diag log screen reboot halt\r\n");
+        serial_puts("commands: help status chain hw fw storage part ls read wtest diag log screen reboot halt\r\n");
     } else if (!strcmp(cmd, "status")) {
         char line[160];
         pc5_snprintf(line, sizeof(line), "pc5 version=%s build=%s date=%s\r\n", PC5_VERSION,
@@ -551,6 +564,51 @@ static void serial_command(char *cmd)
                      ata_writable_device(),
                      storage_selftest_state() == 1 ? "ok"
                      : storage_selftest_state() == 0 ? "not-run" : "failed");
+        serial_puts(line);
+    } else if (!strcmp(cmd, "ls")) {
+        const struct fat32_volume *fv = fat32_mounted();
+        if (fv->error != FAT32_OK || fat32_mounted_device() < 0) {
+            serial_puts("ls: no FAT32 volume mounted\r\n");
+        } else if (fat32_mounted_device() != part_report()->device) {
+            serial_puts("ls: volume is not on the scanned disk\r\n");
+        } else {
+            struct fat32_entry list[16];
+            int count = 0;
+            int rc = fat32_list_mounted(list, 16, &count);
+            char line[160];
+            (void)fv;
+            for (int i = 0; i < count && i < 16; i++) {
+                pc5_snprintf(line, sizeof(line), "fat32 entry name=%s size=%u attr=0x%02x\r\n",
+                             list[i].name, list[i].size, list[i].attr);
+                serial_puts(line);
+            }
+            pc5_snprintf(line, sizeof(line), "fat32 list count=%d status=%s\r\n", count,
+                         fat32_status_name(rc));
+            serial_puts(line);
+        }
+    } else if (!strcmp(cmd, "read")) {
+        char line[80];
+        pc5_snprintf(line, sizeof(line), "read: usage 'read NAME.EXT'\r\n");
+        serial_puts(line);
+    } else if (!strncmp(cmd, "read ", 5)) {
+        char name[16];
+        str_copy(name, cmd + 5, sizeof(name));
+        u32 len = 0;
+        int rc = fat32_read_named(name, fat_read_buf, FAT_READ_MAX, &len);
+        char line[200];
+        char hex[65];
+        hex[0] = 0;
+        if (rc == FAT32_OK) {
+            struct sha256_ctx ctx;
+            u8 digest[32];
+            sha256_init(&ctx);
+            sha256_update(&ctx, fat_read_buf, len);
+            sha256_final(&ctx, digest);
+            sha256_hex(digest, hex);
+        }
+        pc5_snprintf(line, sizeof(line),
+                     "fat32 read name=%s size=%u status=%s sha256=%s\r\n",
+                     name, len, fat32_status_name(rc), hex);
         serial_puts(line);
     } else if (!strcmp(cmd, "part")) {
         const struct part_report *pr = part_report();

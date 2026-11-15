@@ -23,10 +23,11 @@ What *does* work today, verified in this repository:
 |---|---|---|
 | Reproducible ISO build (`build/pc5.iso`) | COMPLETE AND VERIFIED | `make iso`, [`docs/TEST_RESULTS.md`](docs/TEST_RESULTS.md) |
 | ISO structure (ISO9660 + El Torito BIOS and UEFI sections + boot descriptor) | COMPLETE AND VERIFIED | `make verify` → 53/53 checks |
-| Boots on an emulated x86 PC (SeaBIOS, CD-ROM) | COMPLETE AND VERIFIED | `make boot-test` → 53/53 checks |
+| Boots on an emulated x86 PC (SeaBIOS, CD-ROM) | COMPLETE AND VERIFIED | `make boot-test` → 68/68 checks |
 | ATA PIO write, cache flush and verified read-back (explicit test only) | COMPLETE AND VERIFIED (emulated IDE disk) | `wtest` over the serial console; `make boot-test` compares the image and SHA-256 |
 | Kernel reads its own medium (ATAPI + ISO9660, no firmware calls) | COMPLETE AND VERIFIED (emulated) | `storage_mounted volume=PC5` in the boot log |
 | MBR/GPT partition discovery, read-only | COMPLETE AND VERIFIED (emulated disk + unit tests) | `partitions device=0 scheme=gpt count=2 status=ok`; a damaged table reports `status=crc` |
+| FAT32 read-only: mount, list, find, read, digest | COMPLETE AND VERIFIED (emulated disk + host driver) | kernel SHA-256 equals an independent reader's for every fixture file; image byte-identical after reading |
 | Hardware inventory (CPUID, E820, PCI, ACPI, SMBIOS) | IMPLEMENTED — TESTING REQUIRED | hardware page + serial log |
 | Framebuffer console with VGA text fallback | COMPLETE AND VERIFIED (emulated) | boot log, framebuffer self-test |
 | PS/2 keyboard navigation | IMPLEMENTED — TESTING REQUIRED | 8042 driver, emulator input |
@@ -102,7 +103,7 @@ Write it to a USB stick and boot a real machine: [`docs/INSTALLATION.md`](docs/I
 * an ATA write path that is never used automatically: `wtest` writes a 4 KiB
   pattern to a reserved window, flushes, reads it back and reports a SHA-256,
 * a serial console on COM1 at 115200 8N1 (`status`, `chain`, `hw`, `fw`,
-  `storage`, `part`, `wtest`, `diag`, `log`, `screen`, `page N`, `reboot`, `halt`) so a
+  `storage`, `part`, `ls`, `read NAME.EXT`, `wtest`, `diag`, `log`, `screen`, `page N`, `reboot`, `halt`) so a
   machine with no display can still be diagnosed.
 
 ## Documentation

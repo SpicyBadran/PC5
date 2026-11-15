@@ -27,17 +27,18 @@ work that has secretly been done.
 
 ## Environment
 
-5. **Storage is legacy-only, read-only at the filesystem level, and has no
+5. **Storage is legacy-only, filesystem access is read-only, and there is no
    installer.** The kernel drives ATA PIO and ATAPI on the two legacy channels.
    It reads ISO9660 from the boot medium, reads and writes 512-byte sectors on
-   an explicitly indexed ATA disk, and reads MBR and GPT partition tables
-   without modifying them. There is no AHCI, no NVMe, no USB storage, no
-   filesystem driver (so a discovered partition is a number, not a file), no
-   installer and no bootloader installation. Writes never happen on an ordinary
-   boot: the only write path is the explicit `wtest` console command, which is
-   restricted to a reserved 8-sector scratch window. All of this has been
-   verified only on the emulated test disk — **no real disk has ever been
-   written or read.**
+   an explicitly indexed ATA disk, reads MBR and GPT partition tables, and
+   mounts a FAT32 partition to list and read files. There is no AHCI, no NVMe,
+   no USB storage, no filesystem *writing* (no create, no delete, no FAT update),
+   no installer and no bootloader installation. FAT32 long file names are
+   skipped, only 512-byte sectors are supported, and subdirectories are listed
+   but not descended. Writes never happen on an ordinary boot: the only write
+   path is the explicit `wtest` console command, restricted to a reserved
+   8-sector scratch window. All of this has been verified only on the emulated
+   test disk — **no real disk has ever been written or read.**
 6. **No USB stack.** No USB host controller driver exists, therefore no
    DualSense, no USB storage, no USB Ethernet.
 7. **No network stack.** PCI network adapters are enumerated, but no driver,
