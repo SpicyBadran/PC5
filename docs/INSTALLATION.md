@@ -87,3 +87,45 @@ The serial console accepts: `status`, `chain`, `hw`, `fw`, `diag`, `log`,
 
 There is no installer yet: PC5 runs entirely from the medium and writes nothing
 to the host. Remove the USB stick, or restore the firmware boot order.
+
+## 5. Image targets
+
+PC5 intends four distinct images. Only the first three may ever be distributed;
+the fourth exists in the plan so that the boundary is explicit.
+
+| Target | Boots | Contains | Distributable |
+|---|---|---|---|
+| **PC5 Native installation ISO** | BIOS (El Torito) today; UEFI via ESP | kernel, loader, installer, docs | yes |
+| **PC5 Native recovery ISO** | same as above | kernel, diagnostics, repair tools | yes |
+| **PC5 diagnostic/research ISO** | same as above | kernel, inventory, serial console, analysis tools | yes |
+| **Experimental Prospero compatibility image** | would depend on authorised material | never Sony firmware, keys or derived binaries | only if feasibility is demonstrated *and* distribution is authorised — today: does not exist |
+
+The `.PUP` an owner may supply is an input to analysis, never to an image. See
+`docs/FIRMWARE_ANALYSIS.md` §7.
+
+## 6. Installer architecture (not implemented)
+
+The installer needs four primitives, and two of them now exist:
+
+| Primitive | State |
+|---|---|
+| write 512-byte sectors on an explicit disk | done (M1d), emulated disk only |
+| read MBR/GPT tables without modifying them | done (M1e), read-only |
+| read a filesystem on a partition | **missing** — task A |
+| create files, directories and a boot entry | **missing** — task B |
+
+What the installer will *not* do: guess a target disk, format without an explicit
+confirmation that names the device and its size, or report success without
+re-reading what it wrote. Those rules are already enforced in the write path
+(explicit device index, refuses ATAPI, refuses unknown capacity). An installation
+is only "verified" when the installed system boots with the medium removed and
+the serial log is committed — which requires physical hardware, so it stays
+unproven here.
+
+## 7. USB boot today
+
+The image is BIOS/El Torito only and is not isohybrid: firmware that insists on
+booting a USB stick as a hard disk will not start it. Writing is safe
+(`pc5ctl usb` verifies the checksum and refuses the root device) but the result
+may not boot. Task C in `docs/architecture/FIRST_THREE_TASKS.md` is the hybrid
+MBR work.

@@ -151,3 +151,13 @@ sources reproducibly when a host has the build prerequisites.
 4. AnyPS5 is an execution-layer asset for game binaries, not a boot solution →
    PC5 keeps a firmware/software-boot path and an execution-layer path separate,
    and reports them separately in the compatibility chain.
+
+---
+
+## Addendum, 2026-11-15
+
+The counts and status in this document describe the repository as it was
+received. Two later milestones changed them: M1d (verified sector write) and M1e
+(read-only MBR/GPT discovery). The current, measured inventory is §7 of
+`docs/architecture/REPOSITORY_AUDIT_2026-11-15.md`; the evidence is
+`docs/TEST_RESULTS.md` §10 and §11.

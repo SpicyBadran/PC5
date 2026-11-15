@@ -62,6 +62,12 @@ static void storage_init(void)
     } else {
         storage.error = 4;
     }
+
+    /* Read-only: find out what is already on the disk before anything may
+     * write to it.  A failure here is reported, never fatal. */
+    int disk = ata_writable_device();
+    if (disk >= 0)
+        part_scan(disk);
 }
 
 static void log_boot_evidence(const struct cpu_info *cpu, const struct mem_info *mem,
@@ -110,6 +116,24 @@ static void log_boot_evidence(const struct cpu_info *cpu, const struct mem_info 
                 storage.file_signature ? "ok" : "BAD");
     } else {
         pc5_log("PC5-LOG storage_mounted=no error=%d", storage.error);
+    }
+
+    const struct part_report *pr = part_report();
+    if (pr->device >= 0) {
+        pc5_log("PC5-LOG partitions device=%d scheme=%s count=%d status=%s capacity=%u",
+                pr->device, part_scheme_name(pr->scheme), pr->count,
+                part_status_name(pr->error), pr->capacity);
+        for (int i = 0; i < pr->count; i++) {
+            const struct pc5_partition *pp = &pr->parts[i];
+            char guid[PART_GUID_HEX_LEN];
+            part_guid_hex(pp->type_guid, guid);
+            pc5_log("PC5-LOG partition index=%u scheme=%s type=0x%02x guid=%s "
+                    "first=%u sectors=%u name=\"%s\"",
+                    pp->index, part_scheme_name(pp->scheme), pp->type, guid,
+                    pp->first_lba, pp->sectors, pp->name);
+        }
+    } else {
+        pc5_log("PC5-LOG partitions=none");
     }
 }
 
