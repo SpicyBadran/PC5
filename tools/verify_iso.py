@@ -193,6 +193,105 @@ def verify_esp(rep, fat):
     rep.check("BOOTX64.EFI subsystem is EFI application", subsys == 10, str(subsys))
 
 
+# ---------------- hybrid MBR (M1h) ----------------
+# The first 512 bytes of the ISO9660 system area are a hard-disk MBR.  These
+# checks read the sector the way firmware does: pure bytes, no help from
+# tools/mkiso.py, and every claim is cross-checked against the El Torito entry
+# the same image carries.
+CHS_HEADS = 255
+CHS_SECTORS = 63
+CHS_MAX_CYLINDERS = 1023
+
+
+def mbr_entry(image, index):
+    off = 446 + 16 * index
+    return {
+        "status": image[off],
+        "chs_start": image[off + 1 : off + 4],
+        "ptype": image[off + 4],
+        "chs_end": image[off + 5 : off + 8],
+        "start": struct.unpack("<I", image[off + 8 : off + 12])[0],
+        "sectors": struct.unpack("<I", image[off + 12 : off + 16])[0],
+    }
+
+
+def chs_to_lba(chs):
+    head, sector, cylinder = chs[0], chs[1] & 0x3F, chs[2] | ((chs[1] >> 6) << 8)
+    return (cylinder * CHS_HEADS + head) * CHS_SECTORS + sector - 1
+
+
+def verify_hybrid_mbr(rep, image, boot_image_lba, boot_image_sectors):
+    total = len(image) // 512
+    rep.check("image is a whole number of 512-byte sectors", len(image) % 512 == 0,
+              f"{len(image)} bytes")
+    rep.check("hybrid MBR signature 55AA at offset 510",
+              image[510:512] == b"\x55\xaa", image[510:512].hex())
+    rep.check("hybrid MBR carries a bootstrap", image[0:440] != bytes(440),
+              f"{len(image[0:440])} code bytes")
+    signature = struct.unpack("<I", image[440:444])[0]
+    rep.check("hybrid MBR disk signature is set", signature != 0, f"0x{signature:08x}")
+    rep.check("hybrid MBR reserved bytes are zero", image[444:446] == b"\x00\x00",
+              image[444:446].hex())
+
+    entries = [mbr_entry(image, i) for i in range(4)]
+    used = [e for e in entries if e["ptype"] != 0 or e["sectors"] != 0 or e["status"] != 0]
+    rep.data["mbr"] = {
+        "disk_signature": f"0x{signature:08x}",
+        "codes_bytes": 440,
+        "partitions": [
+            {"status": f"0x{e['status']:02x}", "type": f"0x{e['ptype']:02x}",
+             "start_lba_512": e["start"], "sectors_512": e["sectors"]}
+            for e in used
+        ],
+        "total_sectors_512": total,
+    }
+    rep.check("hybrid MBR declares exactly one partition", len(used) == 1,
+              f"{len(used)} in use")
+    if len(used) != 1:
+        return
+
+    part = used[0]
+    rep.check("hybrid MBR boot indicator is 0x80", part["status"] == 0x80,
+              hex(part["status"]))
+    rep.check("hybrid MBR partition type is 0x17", part["ptype"] == 0x17, hex(part["ptype"]))
+    rep.check("hybrid MBR partition covers every sector of the image",
+              part["start"] == 0 and part["sectors"] == total,
+              f"LBA {part['start']} +{part['sectors']} of {total}")
+    rep.check("hybrid MBR partition does not run past the end of the image",
+              part["start"] + part["sectors"] <= total,
+              f"{part['start'] + part['sectors']} > {total}")
+    rep.check("hybrid MBR partitions do not overlap",
+              len(used) == 1 or all(
+                  a["start"] + a["sectors"] <= b["start"] or b["start"] + b["sectors"] <= a["start"]
+                  for i, a in enumerate(used) for b in used[i + 1:]),
+              f"{len(used)} partitions")
+    rep.check("hybrid MBR partition ends on the last image sector",
+              part["start"] + part["sectors"] == total,
+              f"{part['start'] + part['sectors']} vs {total}")
+
+    for label, chs, lba in (("start", part["chs_start"], part["start"]),
+                            ("end", part["chs_end"], part["start"] + part["sectors"] - 1)):
+        saturated = lba >= CHS_MAX_CYLINDERS * CHS_HEADS * CHS_SECTORS
+        ok = chs == b"\xfe\xff\xff" if saturated else chs_to_lba(chs) == lba
+        rep.check(f"hybrid MBR CHS {label} address is consistent with its LBA", ok,
+                  f"{chs.hex()} -> LBA {chs_to_lba(chs)}, expected {lba}")
+
+    patch_lba = struct.unpack("<I", image[0x1B0:0x1B4])[0]
+    patch_sectors = struct.unpack("<I", image[0x1B4:0x1B8])[0]
+    rep.data["mbr"]["boot_image_lba_512"] = patch_lba
+    rep.data["mbr"]["boot_image_sectors_512"] = patch_sectors
+    rep.check("hybrid MBR names the El Torito boot image LBA",
+              patch_lba == boot_image_lba * 4, f"{patch_lba} vs {boot_image_lba * 4}")
+    rep.check("hybrid MBR names the El Torito boot image length",
+              patch_sectors == boot_image_sectors, f"{patch_sectors} vs {boot_image_sectors}")
+    rep.check("hybrid MBR boot image lies inside the partition",
+              patch_lba + patch_sectors <= part["start"] + part["sectors"],
+              f"{patch_lba} +{patch_sectors} vs {part['start'] + part['sectors']}")
+    rep.check("El Torito boot image lies inside the partition",
+              boot_image_lba * 4 + boot_image_sectors <= part["start"] + part["sectors"],
+              f"{boot_image_lba * 4} +{boot_image_sectors}")
+
+
 def read_dir_records(image, lba, size):
     raw = image[lba * SECTOR : lba * SECTOR + size]
     out = []
@@ -348,6 +447,9 @@ def verify(path, info_path=None):
     boot_bytes = image[image_lba * SECTOR : image_lba * SECTOR + vsectors * 512]
     rep.data["boot_image_bytes"] = len(boot_bytes)
 
+    # ---------------- hybrid MBR in the system area ----------------
+    verify_hybrid_mbr(rep, image, image_lba, vsectors)
+
     # ---------------- UEFI section, if the medium has one ----------------
     uefi = next((sec for sec in sections if sec["platform"] == 0xEF), None)
     rep.data["has_uefi"] = uefi is not None
@@ -418,6 +520,19 @@ def verify(path, info_path=None):
             return rep
         rep.check("image SHA-256 matches build info", info.get("sha256") == rep.data["sha256"],
                   info.get("sha256", "")[:16])
+        mbr_info = info.get("hybrid_mbr")
+        if rep.check("build info describes the hybrid MBR", isinstance(mbr_info, dict)):
+            rep.check("build info MBR sector count matches the image",
+                      mbr_info.get("sectors_512") == rep.data["mbr"]["total_sectors_512"],
+                      f"{mbr_info.get('sectors_512')} vs {rep.data['mbr']['total_sectors_512']}")
+            rep.check("build info MBR partition type matches the table",
+                      mbr_info.get("partition_type")
+                      == rep.data["mbr"]["partitions"][0]["type"]
+                      if rep.data["mbr"]["partitions"] else False,
+                      str(mbr_info.get("partition_type")))
+            rep.check("build info MBR boot image LBA matches the table",
+                      mbr_info.get("boot_image_lba_512") == rep.data["mbr"]["boot_image_lba_512"],
+                      str(mbr_info.get("boot_image_lba_512")))
         for f in info.get("files", []):
             ent = files.get(f["identifier"])
             if not rep.check(f"file {f['identifier']} is present", ent is not None):

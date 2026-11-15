@@ -4,7 +4,12 @@
 
 ```
  firmware (BIOS/SeaBIOS)
-   │  El Torito no-emulation entry written by tools/mkiso.py
+   │  two paths, one boot image (ADR-014):
+   │    El Torito no-emulation entry written by tools/mkiso.py
+   │      -> firmware copies the 4096-byte image to 07C0:0000 and jumps
+   │    hybrid MBR in the ISO9660 system area (sector 0 of the image)
+   │      -> boot/mbr.S (440 bytes) reads that same image with INT 13h
+   │         extended read into 0000:7C00 and jumps there with DL intact
    ▼
  boot/loader.S         real mode, 4096 bytes, loaded at 07C0:0000
    ├─ COM1 serial console (115200 8N1) + failure codes
@@ -79,8 +84,9 @@ polled, which keeps the boot deterministic and makes failures reproducible.
 
 | Tool | Purpose |
 |---|---|
-| `tools/mkiso.py` | ISO9660 (ECMA-119) + El Torito writer, byte-exact control of the boot descriptor, deterministic layout |
-| `tools/verify_iso.py` | independent verifier: volume descriptors, catalog checksum, boot entry, descriptor CRC, kernel signature, per-file SHA-256 |
+| `boot/mbr.S` | 440-byte hybrid MBR bootstrap: relay at 0000:0500, INT 13h extended read of the boot image, hand-off at 0000:7C00 |
+| `tools/mkiso.py` | ISO9660 (ECMA-119) + El Torito writer plus the hybrid MBR in the system area, byte-exact control of the boot descriptor, deterministic layout |
+| `tools/verify_iso.py` | independent verifier: system-area MBR (signature, one entry, type/flag/extent, CHS, patch words), volume descriptors, catalog checksum, boot entry, descriptor CRC, kernel signature, per-file SHA-256 |
 | `tools/firmware.py` | firmware container identification, entropy profile, manifest generation — no decryption |
 | `tools/pc5ctl.py` | operator CLI: `info`, `verify`, `boot`, `chain`, `fw`, `usb` |
 | `tests/v86_runner.mjs` | boots an image in v86, captures serial and the VGA text screen, injects serial/PS2 input |
@@ -94,6 +100,8 @@ polled, which keeps the boot deterministic and makes failures reproducible.
 | `tests/fat32_write_check.c` | host driver for the create path, with write/flush fault injection |
 | `tests/test_fat32.py` | three-way digest comparison and refusal contracts |
 | `tests/test_fat32_write.py` | creation matrix, refusals, FSInfo and flush behaviour, fault-injection classification |
+| `tests/test_hybrid.py` | the assembled MBR bootstrap byte by byte, the layout it produces, and one rejection test per way the table can lie about the image |
+| `tests/mbr_fixture.py` | synthetic and really-assembled bootstrap fixtures shared by the unit tests |
 | `tests/test_tools.py` | unit tests for the ISO writer, verifier and firmware tool |
 | `tests/uefi_stub_firmware.py` | executes the real `BOOTX64.EFI` on the Unicorn CPU emulator against a stub firmware (protocols at their specified slots, two file-system volumes); emulates `lgdt`/segment loads/`lretq` |
 | `tests/uefi_stubtest.py` | asserts 42 properties of that run, plus two negative runs; `make stubtest` |

@@ -14,6 +14,11 @@ node 22.22.3, v86 (npm `v86-system` 0.5.0) for the emulated boot test.
 Every number below was produced by the command quoted next to it, in this
 session, on this source tree.
 
+Sections 9–14 are later milestones (M1d, M1e, M1f, M1g, M1h). Each one starts
+with its own build inputs, sizes and hashes; the artifact numbers in §1 describe
+base `5ab7c48` and are kept as history, not as the current image. The current
+image is the one in §14.
+
 ## 1. Artifact
 
 ```
@@ -1113,3 +1118,223 @@ What this establishes, stated without rounding up:
   from a generated image and dumped afterwards.
 * No installer, no bootloader installation, and nothing about PS5 game or
   firmware compatibility follows from a writable FAT32 file.
+
+## 14. M1h — hybrid MBR, 2026-11-15
+
+The image now boots two ways from one file: El Torito (CD/DVD, USB presented as
+CD-ROM) and a hard-disk MBR in the ISO9660 system area (USB presented as HDD).
+This section records what was measured, with the commands, and — separately —
+what was not.
+
+Build inputs are pinned, and two clean builds are byte-identical:
+
+```
+$ make clean && make BUILD_ID=m1h SOURCE_DATE_EPOCH=1763164800
+pc5: MBR bootstrap 440 bytes
+pc5: loader image 4096 bytes
+pc5: kernel image 57692 bytes (limit 585728)
+pc5: wrote build/pc5.iso (1593344 bytes, 778 sectors)
+pc5: sha256 1ff03e3fd1eafd8906f7c1b785006e0d0812715249fb561456966f880e1b3ce7
+
+$ sha256sum build/loader.bin build/mbr.bin build/kernel.bin build/efi.img build/pc5.iso
+f121b34a7ebc0e7dd6855e429496b7f3bbb636ac4249fad62542b8c6503da1bb  build/loader.bin   (4096 bytes)
+d07ec2ba3aeb06b200ed8e918d9a14dfa18b730477f03cbd632dec06ab19d107  build/mbr.bin      (440 bytes)
+cd00af6bff84979ca300074c157045788b75df0e21046bed39ec6d4d69029816  build/kernel.bin   (57692 bytes)
+568c8d2966c67ad2b125b20eb15b714007c230fb67658b12301d8272dd52c8fc  build/efi.img      (1474560 bytes)
+1ff03e3fd1eafd8906f7c1b785006e0d0812715249fb561456966f880e1b3ce7  build/pc5.iso      (1593344 bytes)
+```
+
+| Property | M1g (`12f4f4e9…`) | M1h (`1ff03e3f…`) |
+|---|---|---|
+| image bytes / ISO blocks | 1,593,344 / 778 | 1,593,344 / 778 (unchanged) |
+| kernel image | 57,692 B, `d4344906…` | 57,692 B, `cd00af6b…` |
+| stage-1 loader | 4,096 B | 4,096 B (identical source, identical size) |
+| El Torito entries | BIOS `0x00` + UEFI `0xEF` | unchanged |
+| kernel LBA / ESP | 747 / FAT12 1,474,560 B | 747 / unchanged |
+| system area LBA 0 | all zero | **hybrid MBR** |
+
+The kernel changed hash only because `PC5_BUILD_ID` is now `m1h` (the build id is
+compiled into the version string); no kernel source file was touched, and both
+builds are 57,692 bytes. The whole difference between the two images is the first
+512 bytes.
+
+| Suite | Result |
+|---|---|
+| `make verify` | **75/75** (was 53: +18 MBR checks, +4 build-info cross-checks) |
+| `make unit` | **160** checks, 0 failures |
+| `make check` | **229** tests, OK (25 tools + 41 UEFI + 10 release + 32 architecture + 14 storage + 13 partitions + 20 FAT32 read + 37 FAT32 write + **37 hybrid MBR**) |
+| `make boot-test` | **87/87** (was 80: +7 MBR checks, one of them a negative control) |
+| `tests/uefi_stubtest.py` | **42/42** |
+| `make roadmap` | 17 milestones, in sync |
+
+### 14.1 The layout, before and after
+
+```
+LBA 0   system area, sector 0 .. 0x1FE  MBR bootstrap (440 B), signature,
+        reserved, partition table, 55AA         <- added by M1h
+        LBA 0, bytes 512..32767: zero          <- unchanged
+LBA 16  primary volume descriptor              unchanged
+LBA 17  boot record volume descriptor          unchanged (catalog LBA at byte 71)
+LBA 18  volume descriptor set terminator       unchanged
+LBA 19  path table L (2 blocks)                unchanged
+LBA 21  path table M (2 blocks)                unchanged
+LBA 23  El Torito boot catalog                 unchanged
+LBA 24  BIOS boot image, 4096 B (2 blocks)     unchanged (loader, descriptor at 0xE00)
+LBA 26  UEFI image, 1,474,560 B (720 blocks)   unchanged (FAT12 ESP + BOOTX64.EFI)
+LBA 746 root directory                         unchanged
+LBA 747 KERNEL.BIN (57,692 B)
+LBA 776 README.TXT, BUILDINFO.TXT
+total   778 blocks = 3,112 x 512-byte sectors
+```
+
+### 14.2 The MBR, byte for byte
+
+`dd if=build/pc5.iso bs=1 skip=440 count=72 | od -Ax -tx1z`:
+
+```
+000000 30 35 43 50 00 00 80 00 01 00 17 31 19 00 00 00  >05CP.......1....<
+000010 00 00 28 0c 00 00 00 00 00 00 00 00 00 00 00 00  >..(.............<
+000040 00 00 00 00 00 00 55 aa                          >......U.<
+```
+
+| Field | Offset | Value | Meaning |
+|---|---|---|---|
+| disk signature | 440 | `0x50433530` (`05CP`) | fixed constant, so builds stay reproducible |
+| reserved | 444 | `00 00` | must be zero |
+| boot indicator | 446 | `0x80` | bootable |
+| CHS start | 447 | `00 01 00` | head 0, sector 1, cylinder 0 = LBA 0 |
+| partition type | 450 | `0x17` | hidden; never auto-mounted (ADR-014) |
+| CHS end | 451 | `31 19 00` | head 49, sector 25, cylinder 0 = LBA 3111 |
+| start LBA | 454 | `0x00000000` | 0 |
+| sector count | 458 | `0x00000C28` | 3,112 = every 512-byte sector of the file |
+| entries 2–4 | 462–509 | all zero | no further partitions |
+| signature | 510 | `55 AA` | |
+
+Decoded by a throwaway script that shares no code with the repository
+(`int.from_bytes` on the raw dump, `(c*255 + h)*63 + s - 1` for CHS):
+
+```
+image bytes 1593344 = 512-sector count 3112 exact: True
+55AA: 55aa sig32: 0x50433530
+flag 0x80 type 0x17 start 0 count 3112 end inclusive 3111 fits: True
+chs start -> 0  chs end -> 3111
+entries 2-4 all zero: True
+patch lba*512 = 49152 (LBA 96 = ISO block 24)  patch sectors: 8
+bytes at patch LBA: fa31c0   (= the stage-1 loader's first instructions)
+```
+
+The two patch words the bootstrap reads at `0x7DB0`/`0x7DB4` (file offsets
+`0x1B0`/`0x1B4`) hold the El Torito boot image's LBA in 512-byte units (96) and
+its length in 512-byte sectors (8 = the 4096-byte loader), so the MBR and El
+Torito entries cannot disagree: the builder writes both from one computation and
+`make verify` re-checks the equality.
+
+### 14.3 El Torito compatibility
+
+Nothing in the catalog moved. `make verify` passes the same 53 checks it did in
+M1g plus the MBR ones, including the catalog checksum, the initial entry at
+offset 32 (`0x88`, no-emulation, segment `0x7C0`, 8 virtual sectors), the UEFI
+section header `0x91`, the ESP's FAT/PE32+ structure and the boot descriptor's
+CRC32 (`stored dc97e002 computed dc97e002`). Files: `KERNEL.BIN`, `README.TXT`,
+`BUILDINFO.TXT` all verify by SHA-256 against `build-info.json`.
+
+### 14.4 Boot evidence, including a control
+
+`tests/v86_runner.mjs` can detach the CD (`--no-cdrom`); the new boot-test section
+therefore proves the MBR on its own rather than proving that the firmware found
+some other way to boot:
+
+```
+$ node tests/v86_runner.mjs --cdrom build/pc5.iso --no-cdrom \
+      --hda-buffer build/test/hybrid-hda.img --boot-order 2 --seconds 14
+pc5: medium is ISO9660, disk unit bytes 0200        <- 512-byte units
+PC5 loader 0.2.0
+pc5: kernel image verified
+PC5 KERNEL 0.2.0 (build m1h, ...)
+PC5-BOOT-OK
+```
+
+| Check | Result |
+|---|---|
+| MBR path produced a serial log | PASS (2,628 bytes) |
+| the MBR bootstrap handed control to the stage-1 loader | PASS |
+| the loader read the volume through the 512-byte-unit probe | PASS (`disk unit bytes 0200`) |
+| the loader verified the kernel image on the MBR path | PASS |
+| the kernel started from the MBR path | PASS (`PC5-BOOT-OK`) |
+| CD and MBR boots reach the same kernel build | PASS (`version=0.2.0 build=m1h`) |
+| **control**: the same disk with sector 0 blanked does not boot | PASS (0 bytes of output) |
+
+The CD path is unchanged: `disk unit bytes 0800`, `storage_mounted volume=PC5
+blocks=778 file=KERNEL.BIN bytes=57692 signature=ok`, `PC5-BOOT-OK`. The only
+differences between the two logs are the ones the medium implies (unit size, and
+that the disk path has two drives and no ATAPI volume to mount).
+
+Appendix: the first version of the control kept the CD attached, and it booted —
+the firmware simply fell back to El Torito after the disk failed. That is correct
+firmware behaviour and a wrong test, which is why the control now detaches the
+CD before it claims anything.
+
+### 14.5 What can now be rejected
+
+`tests/test_hybrid.py` (37 tests) does not trust the generator: it rebuilds the
+expected table from the image's own geometry, assembles `boot/mbr.S` with the
+same `as`/`ld` invocation the Makefile uses and inspects the bytes, and then
+corrupts the image one field at a time, requiring `tools/verify_iso.py` to fail
+with the *named* check each time:
+
+| Corruption | Rejected by |
+|---|---|
+| `55 AA` zeroed | `hybrid MBR signature 55AA at offset 510` |
+| whole system area zeroed | `hybrid MBR signature 55AA at offset 510` |
+| 440 code bytes zeroed | `hybrid MBR carries a bootstrap` |
+| disk signature zeroed | `hybrid MBR disk signature is set` |
+| reserved bytes non-zero | `hybrid MBR reserved bytes are zero` |
+| boot indicator cleared | `hybrid MBR boot indicator is 0x80` |
+| type changed to `0x83` | `hybrid MBR partition type is 0x17` |
+| start LBA moved to 1 | `hybrid MBR partition covers every sector of the image` |
+| length = whole + 1 | `hybrid MBR partition does not run past the end of the image` |
+| length = whole − 1 | `hybrid MBR partition ends on the last image sector` |
+| stale CHS start | `hybrid MBR CHS start address is consistent with its LBA` |
+| a second entry | `hybrid MBR declares exactly one partition` |
+| a second, overlapping entry | `hybrid MBR declares exactly one partition` |
+| patch LBA pointing elsewhere | `hybrid MBR names the El Torito boot image LBA` |
+| patch length shorter | `hybrid MBR names the El Torito boot image length` |
+| patch LBA past the partition | `hybrid MBR boot image lies inside the partition` |
+| image truncated by one sector | invalid (volume size vs file size, and the table) |
+
+Generator-side refusals are tested too: a 439- or 441-byte bootstrap, a build with
+no bootstrap at all, an empty partition, and CHS saturation above 1023 cylinders
+(`0xFE 0xFF 0xFF`, never a wrapped CHS value).
+
+The bootstrap's own contract is asserted on the assembled bytes: exactly 440
+bytes, an INT 13h extended read, a far jump to `0000:7C00`, both patch words zero
+in the source, the two absolute reads of `0x7DB0`/`0x7DB4`, the relay copy to
+`0000:0500` with a length that keeps it inside one sector, and no `55 AA` anywhere
+in the source (the builder owns the signature).
+
+### 14.6 What this does not establish
+
+* **No physical boot.** The medium has never been on real hardware. SeaBIOS
+  accepting it in an emulator is evidence about the image, not about a
+  particular machine's USB-HDD mode, its USB enumeration or its BIOS quirks.
+* **No independent partition tool.** `fdisk`, `sfdisk`, `parted`, `file` and
+  `gdisk` are **not installed** in this environment (checked with `command -v`),
+  so the table was not cross-checked by util-linux/parted. Verification here is
+  the repository's own byte-level verifier, a throwaway decoder that shares no
+  code with it, and SeaBIOS — which parsed the MBR and booted from it.
+* **No UEFI firmware.** The ESP is unchanged and the stub test still passes, but
+  no OVMF or hardware UEFI run happened (M1c stays blocked).
+* **No kernel change and no new storage feature.** The kernel still reads ISO9660
+  and FAT32 and writes one FAT32 create; nothing about partitions, AHCI/NVMe,
+  overwrite/delete/rename or directory creation changed.
+* **One partition type.** Only type `0x17` was produced and tested. A BIOS that
+  insists on `0x0C`/`0x83`/`0x07` before it will boot a USB disk is not covered.
+* **INT 13h extensions are required.** The bootstrap uses the extended read
+  (`AH=0x42`, disk address packet). A pre-1994 BIOS without extensions cannot use
+  the MBR path; it can still boot the same medium through El Torito. The LBA is a
+  full 64-bit field in the packet but only the low 32 bits are exercised (the
+  image is 3,112 sectors).
+* **The bootstrap trusts the read.** It checks the carry flag and retries three
+  times with a drive reset, but it does not verify the boot image itself — the
+  stage-1 loader verifies the kernel (`pc5: kernel image verified`), and a wrong
+  loader fails visibly on the serial console rather than silently.

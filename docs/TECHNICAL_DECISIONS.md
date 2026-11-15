@@ -256,3 +256,62 @@ evidence, the choice, and what would reverse it.
 * **Reversal**: if a filesystem ever needs 4096-byte units, it composes them
   from sectors at the filesystem layer. The ATA contract itself is fixed by the
   hardware and will not change.
+
+## ADR-014 — One boot image, two firmware paths: the hybrid MBR covers the whole image
+
+* **Problem**: El Torito boots a CD/DVD and any medium the firmware presents as
+  an ATAPI device, and nothing else. Firmware that treats a USB stick as a hard
+  disk reads sector 0, looks for `55 AA` and jumps to `0000:7C00`; with the
+  system area zero-filled it finds nothing and the stick is unbootable. The
+  support case this creates ("the ISO works in a VM, the stick does nothing") is
+  exactly the kind nobody can debug remotely. Two constraints bound the fix: the
+  El Torito entry, the ISO9660 layout and the 4096-byte stage-1 loader must not
+  change, and the builds must stay byte-identical.
+* **Alternatives**: (a) ship a second, separate "USB image" — a second artifact,
+  a second checksum, and two things that can diverge; (b) write a real
+  filesystem and a real partition table (a full isohybrid with a FAT partition
+  at a fixed offset, as `isohybrid`/`xorriso` do) — that duplicates the ESP,
+  breaks the 1,593,344-byte layout and buys nothing, since the loader reads the
+  ISO9660 volume, not a FAT filesystem; (c) cover the whole image with a single
+  partition entry and let the stage-1 loader boot exactly as it does from CD.
+* **Evidence**: ISO9660 (ECMA-119 §6.2.2) defines the first 32 KiB — 16 logical
+  blocks — as *system area*: bytes the filesystem does not interpret and the
+  producer may use. The first 512 bytes of that area are a hard-disk MBR as far
+  as a BIOS is concerned, and no ISO9660 reader ever looks at them. The loader
+  already probes the transfer unit (`read_pvd` tries 2048-byte units at LBA 16
+  then 512-byte units at LBA 64) and already converts LBAs by `<<2` when the
+  medium turns out to be a 512-byte-unit disk, so it needs no change at all. The
+  image is 778 ISO blocks = 3,112 512-byte sectors, well inside the 32-bit LBA
+  field, and 4-sector aligned. Measured after the change: the same image booted
+  disk-only in the emulator reached `PC5-BOOT-OK` with `disk unit bytes 0200`
+  (512-byte units) while the CD path reported `0800`, and zeroing sector 0 of
+  that same image produced no output at all.
+* **Decision**: (c), with the table derived from the layout, never from a
+  template. `boot/mbr.S` is the first 440 bytes: it copies a relay to `0000:0500`
+  (out of the way of the loader it is about to load), reads the boot image with
+  INT 13h extended read into `0000:7C00`, and jumps there with `DL` preserved —
+  the same hand-off El Torito performs, at the same address. `tools/mkiso.py`
+  owns bytes 440..511: a fixed disk signature (`0x50433530`), one entry with the
+  boot flag set, type `0x17`, start LBA 0 and length = the whole image in
+  512-byte sectors, four CHS fields computed from the real geometry, and `55 AA`.
+  It also patches the boot-image LBA and length into the bootstrap from the El
+  Torito values, so the two paths cannot disagree. Type `0x17` is the
+  "hidden/automount-suppressed" value the syslinux isohybrid uses: the entry is a
+  BIOS compatibility shim, not a claim that the image contains a FAT or ext
+  filesystem, and an entry that makes Windows or macOS offer to format the stick
+  would be worse than no entry at all.
+* **Consequence**: one artifact boots both ways; `tools/verify_iso.py` now reads
+  sector 0 the way firmware does and rejects a table that disagrees with the
+  image (wrong type or flag, short or over-long extent, stale CHS, a second or
+  overlapping entry, patch words that no longer name the El Torito image);
+  `tests/test_hybrid.py` corrupts each of those fields and requires the
+  verifier to say so; the boot test boots the ISO with *no CD attached* and
+  fails if it does not reach the kernel. The kernel's own partition scanner will
+  report the medium as an MBR disk with one type-`0x17` partition when it is
+  attached as an ATA disk, which is the truth about the image. Physical USB
+  firmware behaviour is still not tested — see `docs/KNOWN_LIMITATIONS.md`.
+* **Reversal**: if a real FAT partition on the stick ever becomes necessary (for
+  example to carry files on a Windows-visible volume), the single covering entry
+  is replaced by two explicit extents and the builder's `build_hybrid_mbr()` is
+  the one place that changes. The bootstrap does not care where the boot image
+  lives, because the LBA is patched in.

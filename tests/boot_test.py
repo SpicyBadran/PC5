@@ -82,9 +82,15 @@ class Result:
 
 
 def run_vm(iso, seconds, serial_out, screen_out=None, keys=None,
-           hda_buffer=None, hda_out=None):
+           hda_buffer=None, hda_out=None, boot_order=None, no_cdrom=False):
     cmd = ["node", RUNNER, "--cdrom", iso, "--seconds", str(seconds),
            "--serial-out", serial_out, "--mem", "128M"]
+    if no_cdrom:
+        # A machine with no optical drive at all: the disk is the only device
+        # that can boot, so nothing else can quietly take over.
+        cmd += ["--no-cdrom"]
+    if boot_order is not None:
+        cmd += ["--boot-order", str(boot_order)]
     if screen_out:
         cmd += ["--screen-out", screen_out]
     if keys:
@@ -174,6 +180,54 @@ def main(argv=None):
               "signature=ok" in serial)
     res.check("chain reports a blocked stage with evidence",
               "chain_blocked_at=" in serial and "chain_blocked_evidence=" in serial)
+
+    # ---- the hybrid MBR: this same image booted as a hard disk ----
+    # Firmware that finds no El Torito entry (a USB stick presented as a hard
+    # disk is the common case) reads sector 0 instead.  The image must boot that
+    # way too, and it must reach the same kernel through the same boot image.
+    hdd_path = os.path.join(args.out_dir, "hybrid-hda.img")
+    with open(args.iso, "rb") as fh:
+        hdd_bytes = fh.read()
+    with open(hdd_path, "wb") as fh:
+        fh.write(hdd_bytes)
+    hdd_serial = os.path.join(args.out_dir, "serial-mbr.log")
+    # boot_order 2 = hard disk first, and the CD is not attached at all: the
+    # only way this can produce a serial log is the hybrid MBR.
+    run_vm(args.iso, args.seconds, hdd_serial, hda_buffer=hdd_path,
+           boot_order=2, no_cdrom=True)
+    with open(hdd_serial, "r", errors="replace") as fh:
+        mbr_log = fh.read()
+
+    res.check("the MBR path produced a serial log", len(mbr_log) > 0, f"{len(mbr_log)} bytes")
+    res.check("the MBR bootstrap handed control to the stage-1 loader",
+              "PC5 loader" in mbr_log, _first_line(mbr_log, "PC5 loader"))
+    res.check("the loader read the volume through the 512-byte-unit probe",
+              "pc5: medium is ISO9660, disk unit bytes 0200" in mbr_log,
+              _first_line(mbr_log, "pc5: medium is ISO9660"))
+    res.check("the loader verified the kernel image on the MBR path",
+              "pc5: kernel image verified" in mbr_log)
+    res.check("the kernel started from the MBR path",
+              "PC5 KERNEL" in mbr_log and "PC5-BOOT-OK" in mbr_log,
+              _first_line(mbr_log, "PC5 KERNEL"))
+    # Same bytes, same kernel: the two paths must not diverge.
+    cd_version = _first_line(serial, "PC5-LOG version=")
+    mbr_version = _first_line(mbr_log, "PC5-LOG version=")
+    res.check("CD and MBR boots reach the same kernel build",
+              cd_version == mbr_version and "no line containing" not in cd_version,
+              mbr_version)
+
+    # Negative control: without the signature the same disk must not boot.  If
+    # this ever passes, the check above proves nothing.
+    blank_path = os.path.join(args.out_dir, "hybrid-hda-nombr.img")
+    with open(blank_path, "wb") as fh:
+        fh.write(bytes(512) + hdd_bytes[512:])
+    blank_serial = os.path.join(args.out_dir, "serial-mbr-blank.log")
+    run_vm(args.iso, min(args.seconds, 10), blank_serial, hda_buffer=blank_path,
+           boot_order=2, no_cdrom=True)
+    with open(blank_serial, "r", errors="replace") as fh:
+        blank_log = fh.read()
+    res.check("a disk without an MBR signature does not boot as a hard disk",
+              "PC5 loader" not in blank_log, f"{len(blank_log)} bytes of output")
 
     # ---- the write test: a disposable disk, an explicit command ----
     disk_in = os.path.join(args.out_dir, "wtest-hda.img")

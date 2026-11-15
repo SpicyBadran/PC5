@@ -31,13 +31,20 @@ python3 tools/pc5ctl.py usb --iso build/pc5.iso --device /dev/sdX --yes
 
 Or use a graphical imager (balenaEtcher, Rufus in DD mode, `dd` directly).
 
-**Important, and honest:** the current image carries a *BIOS/El Torito* boot
-path only. It boots from CD/DVD and from USB media that the firmware presents
-as a CD-ROM class device. It is **not** isohybrid — there is no MBR for
-firmware that insists on booting a USB stick as a hard disk. If your machine
-only offers UEFI, or boots USB sticks strictly as HDDs, the image will not
-start yet; see `docs/KNOWN_LIMITATIONS.md`. Writing the ISO to a stick is safe
-(the image is read-only in this respect), but it may not boot.
+**What the image boots from, and what is proven:** one file boots three ways.
+El Torito (a real CD/DVD, or a USB stick the firmware presents as a CD-ROM class
+device, `disk unit bytes 0800`), the UEFI El Torito entry (a FAT ESP holding
+`\EFI\BOOT\BOOTX64.EFI`), and — since M1h — the hybrid MBR in the ISO9660 system
+area, which is what firmware that insists on a USB stick being a *hard disk*
+reads (`disk unit bytes 0200`). All three reach the same stage-1 loader and the
+same kernel; the emulated evidence is in §14 of `docs/TEST_RESULTS.md`.
+
+What is *not* proven: physical hardware. The MBR path has been booted in an
+emulator with the CD detached (and, as a control, does not boot at all when
+sector 0 is blanked), never on a real USB stick on a real machine. Firmware with
+quirks — a BIOS that ignores the partition table, one that demands a `0x0C`/`0x83`
+type, or one whose USB-HDD mode mis-detects the geometry — may still refuse.
+See `docs/KNOWN_LIMITATIONS.md` and `docs/HARDWARE_COMPATIBILITY.md`.
 
 ## 3. Boot the machine
 
@@ -125,8 +132,15 @@ unproven here.
 
 ## 7. USB boot today
 
-The image is BIOS/El Torito only and is not isohybrid: firmware that insists on
-booting a USB stick as a hard disk will not start it. Writing is safe
-(`pc5ctl usb` verifies the checksum and refuses the root device) but the result
-may not boot. Task C in `docs/architecture/FIRST_THREE_TASKS.md` is the hybrid
-MBR work.
+The image is hybrid: the same file boots through El Torito (CD/DVD, USB presented
+as CD-ROM) and through the MBR in the ISO9660 system area (USB presented as hard
+disk). The MBR bootstrap loads the very same 4096-byte stage-1 loader that El
+Torito names, so both paths converge before the first PC5 instruction runs. On
+the hard-disk path the loader sees 512-byte units and says so.
+
+Writing to a stick is safe (`pc5ctl usb` verifies the checksum and refuses the
+root device), and the medium no longer has to be a CD on a firmware level. What
+remains unproven is the stick on real hardware: the emulator proves the MBR and
+the boot path, not that a particular BIOS likes them. `docs/KNOWN_LIMITATIONS.md`
+item 2 states the boundary, and `docs/HARDWARE_COMPATIBILITY.md` §6 lists the
+firmware behaviours that could still refuse the medium.
