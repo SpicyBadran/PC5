@@ -96,7 +96,7 @@ log                <attached serial log>
 |---|---|---|
 | UEFI-only firmware | the image has no UEFI loader yet | UEFI milestone (`docs/ROADMAP.md`) |
 | Secure Boot enforced | unsigned bootloader | signed shim, or documented CSM requirement |
-| USB sticks presented as HDD | no MBR in the image | isohybrid MBR |
+| USB sticks presented as HDD | the MBR path is emulator-verified only; a BIOS may still refuse the medium | hybrid MBR shipped (M1h, ADR-014): type `0x17` whole-image entry; a physical stick boot is still to be recorded (§7 of `docs/TEST_RESULTS.md`) |
 | Firmware with no linear-framebuffer VBE mode | text fallback only | GOP path in the UEFI loader |
 | Optimus/hybrid graphics | which GPU owns the framebuffer | report both from PCI; no driver yet |
 | Firmware quirks in VBE mode info | wrong pitch or bpp | framebuffer write/read-back self-test on the Diagnostics page |

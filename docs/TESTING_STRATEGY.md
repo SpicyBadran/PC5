@@ -132,10 +132,15 @@ host, and the input file is never written back to. `tests/boot_test.py` then ass
   and malformed names were refused with no writes;
 * all six interface pages by dumping the console's shadow character grid over
   the serial console (`page N` + `screen`), so the assertions cover the
-  *rendered* interface rather than a separate reporting path.
+  *rendered* interface rather than a separate reporting path;
+* the **hybrid MBR** path: the ISO is attached as a writable disk and booted with
+  the CD *detached* (`--no-cdrom`, `boot_order=2`), and the run must show the
+  loader banner, `disk unit bytes 0200`, kernel verification and `PC5-BOOT-OK`;
+  a second run with sector 0 blanked must produce no output at all, so the
+  evidence cannot be the firmware falling back to El Torito.
 
 Evidence is written to `build/test/boot-evidence.json`, `serial.log`,
-`serial-ui.log` and `screens.txt`.
+`serial-ui.log`, `serial-mbr.log`, `serial-mbr-blank.log` and `screens.txt`.
 
 ### 2.5 What the emulator cannot prove
 

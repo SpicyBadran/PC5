@@ -57,14 +57,14 @@ Why each non-OK stage has that state:
 
 | Feature | Status | Evidence |
 |---|---|---|
-| Bootable ISO (BIOS/El Torito + UEFI El Torito section) | COMPLETE AND VERIFIED | `make verify` 53/53, `make boot-test` 68/68 |
+| Bootable ISO (BIOS/El Torito + UEFI El Torito section + hybrid MBR) | COMPLETE AND VERIFIED (emulated) | `make verify` 75/75, `make boot-test` 87/87; MBR path booted with the CD detached, control with sector 0 blanked did not boot |
 | Loader (A20, E820, VBE, font, ISO probe, kernel load, PM handoff) | COMPLETE AND VERIFIED (emulated) | serial log |
 | Framebuffer console + text fallback + read-back self-test | COMPLETE AND VERIFIED (emulated) | Diagnostics page |
 | CPUID / E820 / PCI / ACPI / SMBIOS inventory | IMPLEMENTED — TESTING REQUIRED | hardware page; needs physical runs |
 | PS/2 keyboard navigation | IMPLEMENTED — TESTING REQUIRED | 8042 driver; emulator input only |
 | Serial console with 11 commands | COMPLETE AND VERIFIED | boot test drives it |
 | Compatibility chain + evidence reporting | COMPLETE AND VERIFIED | unit tests + boot test |
-| ISO writer + independent verifier (reproducible under SOURCE_DATE_EPOCH) | COMPLETE AND VERIFIED | 32 host tests, `docs/TEST_RESULTS.md` |
+| ISO writer + independent verifier + hybrid MBR (reproducible under SOURCE_DATE_EPOCH) | COMPLETE AND VERIFIED | 62 host tests (25 tools + 37 hybrid MBR), `docs/TEST_RESULTS.md` §14 |
 | Release packaging (`make release-assets`) + provenance in `build-info.json` | COMPLETE AND VERIFIED (local) | `docs/TEST_RESULTS.md` §6 |
 | CI pipeline that publishes releases | WRITTEN, ACTIVATION BLOCKED (token lacks the workflows permission) | `ci/README.md` |
 | Firmware analysis tool (no decryption) | COMPLETE AND VERIFIED | unit tests on synthetic containers |
@@ -87,6 +87,8 @@ PC5 today is a real, reproducible, bootable PC environment with working
 diagnostics, a verified raw-sector write path, read-only partition discovery and
 a read-only FAT32 filesystem, and an honest compatibility model. It is **not** a PlayStation 5: no Sony code
 runs, no PS5 game runs, and no stage of the genuine-PS5 chain has been reached.
-The next real engineering step is an isohybrid medium so the same image boots
-from USB (M1h), then the installer; the UEFI run under real firmware stays
-blocked on OVMF or hardware.
+The hybrid medium is done (M1h): the image carries an MBR in the ISO9660 system
+area and boots as a hard disk in the emulator with the CD detached, so the next
+real engineering step is the installer (overwrite/rename, directory creation, a
+boot entry), followed by a recorded USB boot on physical hardware. The UEFI run
+under real firmware stays blocked on OVMF or hardware.

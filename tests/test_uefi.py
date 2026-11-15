@@ -27,8 +27,10 @@ from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import eficheck  # noqa: E402
+import mbr_fixture  # noqa: E402
 import mkefiimg  # noqa: E402
 import mkiso  # noqa: E402
 import verify_iso  # noqa: E402
@@ -290,6 +292,7 @@ class UefiIsoTests(unittest.TestCase):
             image, _ = esp.build()
             builder.set_uefi_image(image)
         builder.add_file("KERNEL.BIN", b"\xeb\x05PC5K\x01" + bytes(2048))
+        builder.set_mbr_code(mbr_fixture.synthetic())
         return builder.build()
 
     def verify(self, image):
@@ -376,6 +379,7 @@ class UefiIsoTests(unittest.TestCase):
         image, _ = esp.build()
         builder.set_uefi_image(image)
         builder.add_file("KERNEL.BIN", b"\xeb\x05PC5K\x01" + bytes(2048))
+        builder.set_mbr_code(mbr_fixture.synthetic())
         iso, _ = builder.build()
         rep = self.verify(iso)
         self.assertFalse(rep.ok)
