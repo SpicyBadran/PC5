@@ -47,7 +47,31 @@ record; nothing else is accepted.
 | Display | `VBE` mode list | framebuffer address, geometry, pitch, bpp |
 | Input | 8042 controller | presence/initialisation status |
 
-## 4. Compatibility matrix template
+## 4. Qualification matrix — the honest version
+
+Nothing below has been run on physical hardware by this project. The matrix is
+therefore mostly `UNTESTED`, and that column is the finding, not a placeholder.
+
+| Class | Tested | Partially supported | Unsupported | Untested |
+|---|---|---|---|---|
+| Firmware: BIOS/CSM legacy | v86/SeaBIOS (emulated) | — | UEFI-only firmware (no OVMF run yet) | every physical BIOS |
+| Firmware: UEFI | Unicorn stub harness only (not firmware) | — | Secure Boot enforced (unsigned loader) | every physical UEFI machine |
+| CPU: Intel | — | — | — | Kaby Lake reference laptop, everything else |
+| CPU: AMD | — | — | — | all |
+| GPU: Intel / AMD / NVIDIA | emulated Bochs VBE | framebuffer console only | no GPU driver exists | all |
+| Storage: legacy ATA/ATAPI PIO | v86 IDE (emulated) | read/write sectors, partition tables | AHCI, NVMe, USB, RAID | all |
+| Storage: AHCI / NVMe | — | — | no driver | all |
+| USB: xHCI, HID, audio | — | — | no driver | all |
+| Network: Ethernet / Wi-Fi | PCI enumeration only | inventory | no driver, no stack | all |
+| Audio | PCI class counted | — | no driver | all |
+| Input: PS/2 keyboard | v86 emulated keyboard | navigation | USB HID, Bluetooth | all |
+| Input: DualSense | — | — | no USB stack | all |
+| Power management | — | reset/halt | ACPI power-off, suspend | all laptops |
+
+The reference machine (section 2) has never booted PC5. Until its log is
+committed, it is a target, not a supported configuration.
+
+## 5. Compatibility matrix template
 
 Every tested machine gets a row. Copy this block into a pull request:
 
@@ -66,7 +90,7 @@ notes              <anything the log does not show>
 log                <attached serial log>
 ```
 
-## 5. Known interoperability risks on real machines
+## 6. Known interoperability risks on real machines
 
 | Risk | Why it matters | Mitigation planned |
 |---|---|---|

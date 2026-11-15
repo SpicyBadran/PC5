@@ -21,9 +21,9 @@ the current tree and corrects nine documented contradictions.
 
 * `make iso` → `build/pc5.iso` (1,570,816 bytes, reproducible; the image carries a 1.44 MB UEFI ESP, which is why it grew from the 96,256-byte BIOS-only baseline recorded in `docs/TEST_RESULTS.md` §1).
 * `make verify` → 53/53 structural checks.
-* `make boot-test` → 45/45 checks on the v86/SeaBIOS emulated PC, including the
-  kernel mounting its own volume through its ATAPI/ISO9660 driver and the ATA
-  write test added in M1d.
+* `make boot-test` → 53/53 checks on the v86/SeaBIOS emulated PC, including the
+  kernel mounting its own volume through its ATAPI/ISO9660 driver, the ATA write
+  test (M1d) and partition discovery (M1e).
 
 ## M1c — UEFI boot path · **IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF)**
 
@@ -79,12 +79,28 @@ Not done here: isohybrid USB, physical hardware (M2).
 * No ordinary boot path calls the test, and nothing outside the scratch window
   is written. **No physical disk has been written.**
 
+## M1e — MBR and GPT partition discovery · **COMPLETE (read-only, emulated + unit tests)**
+
+* `kernel/part.c` parses the four MBR primary slots and a GPT entry array,
+  verifies the header and entry CRC-32, and refuses a table that overlaps or
+  extends past the device.
+* The device layer takes an explicit disk index, refuses ATAPI before reading a
+  sector, and reads only 512-byte sectors — it cannot write, format or mount.
+* A protective MBR is treated as "the table is GPT"; a damaged GPT is reported
+  as `status=crc` and is never offered as a target.
+* Fixtures are generated deterministically in `tests/disk_images.py`, so the
+  boot test knows the exact bytes it is asking the kernel to parse.
+* Boot evidence: `partitions device=0 scheme=gpt count=2 status=ok` with both
+  partitions and their LBAs; a CRC-damaged table yields `count=0 status=crc` and
+  the boot continues.
+
 ## M2 — Physical boot and safe installation · **IN PROGRESS**
 
 * Physical boot: **not attempted** (no hardware access in this environment).
   Instructions and the troubleshooting matrix exist; the evidence does not.
-* Installer: **not started**. The block-write primitives now exist (M1d); the
-  remaining blockers are a partition-table parser and a writable filesystem.
+* Installer: **not started**. The block-write primitives (M1d) and read-only
+  partition discovery (M1e) exist; the remaining blocker is a writable
+  filesystem, then a bootloader installer and an isohybrid medium.
 * USB writing: implemented and safe (`pc5ctl usb`), but the image is not yet
   isohybrid.
 
@@ -138,9 +154,10 @@ is reproducible; that is not a release-quality product.
 
 ## The next twelve engineering tasks, in dependency order
 
-1. **Partitions and a writable filesystem** — the legacy PIO read path and the
-   512-byte write path are done (M1d); a partition-table parser and a writable
-   filesystem are next, then AHCI/NVMe behind the same sector interface.
+1. **A writable filesystem on a discovered partition** — the read path, the
+   512-byte write path (M1d) and MBR/GPT discovery (M1e) are done; the missing
+   piece is a filesystem that can create and read back a file, followed by
+   AHCI/NVMe behind the same sector interface.
 2. **Package intake from the medium** — the kernel can already read a file from
    its own volume; the missing piece is a container parser behind that call.
 3. **UEFI loader** — PE32+ application filling the same `struct pc5_boot_info`,

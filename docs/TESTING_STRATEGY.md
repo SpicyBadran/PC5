@@ -39,10 +39,15 @@ anywhere, in any document, on any screen.
     result, manifest → C embedding.
   * Kernel unit binary: built and executed.
   * Built image: verifies the real `build/pc5.iso` when present.
-* `tests/kernel_unit.c` — 61 assertions over the kernel's pure logic:
+* `tests/kernel_unit.c` — 99 assertions over the kernel's pure logic:
   formatter (`%s`, `%-4s`, `%08x`, `%llu`, `%%`), number conversion, E820
   accounting, chain state machine (including "a firmware manifest never turns
   execution into OK").
+
+`tests/test_partitions.py` protects the partition work's seams: that the
+fixture images really carry the CRCs and backup header the kernel checks, that
+the module contains no write call, that ATAPI is refused before any read, and
+that both build systems compile the parser.
 
 `tests/test_storage.py` separately protects the write test's seams: that the
 scratch window in the boot test matches `kernel/include/pc5.h`, that the host
@@ -92,6 +97,10 @@ host, and the input file is never written back to. `tests/boot_test.py` then ass
   back and verified it; every unsafe request (zero count, out-of-range,
   overflow, invalid index, NULL buffer, ATAPI write) was refused with
   `ok=1`, and the host's SHA-256 of the written sectors equals the kernel's;
+* with a GPT disk attached, the kernel parsed the protective MBR, verified the
+  header and entry CRC-32 and reported both partitions and their LBAs; with one
+  entry byte flipped it reported `status=crc`, offered no target and still
+  booted; with a zero-filled disk it reported `scheme=none`;
 * all six interface pages by dumping the console's shadow character grid over
   the serial console (`page N` + `screen`), so the assertions cover the
   *rendered* interface rather than a separate reporting path.

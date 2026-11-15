@@ -16,7 +16,9 @@
                      └─────────────────────────────────────────────┘
 ```
 
-The firmware path and the execution path are reported separately everywhere:
+The firmware path and the execution path are reported separately everywhere.
+The dependency chain behind the firmware path, and why it cannot be scheduled
+today, is assessed in `docs/playstation/BOOT_FEASIBILITY.md`.
 in the compatibility chain (stages 5–13 are the firmware path), in
 `docs/GAMING_COMPATIBILITY.md`, and in the UI. Neither is ever used as evidence
 for the other.
@@ -38,7 +40,7 @@ implementation.
 | 7 | Graphics command translation | framebuffer console only | NOT STARTED |
 | 8 | Shader processing and caching | none | NOT STARTED |
 | 9 | GPU memory and synchronisation | none | NOT STARTED |
-| 10 | Storage and filesystem | kernel ATAPI PIO + ISO9660 read; ATA PIO 512-byte read/write on an explicit device; loader also probes the medium | PARTIAL — write path exists (emulated only), but no partitions and no writable filesystem |
+| 10 | Storage and filesystem | kernel ATAPI PIO + ISO9660 read; ATA PIO 512-byte read/write on an explicit device; MBR/GPT discovery (read-only); loader also probes the medium | PARTIAL — sectors and partition tables exist (emulated only); no filesystem, so no install or package storage |
 | 11 | Game package / executable handling | `FIH`/`CNT` signature identification only | RESEARCH |
 | 12 | Audio | PCI audio class counted only | NOT STARTED |
 | 13 | Controller / input translation | 8042 PS/2 keyboard driver behind `kbd_read()` | PARTIAL (keyboard only) |
@@ -78,13 +80,13 @@ a parsed container is not an executed game. The project's vocabulary:
 
 ## 5. Next three implementations, in order
 
-1. **Writable storage**: block write, partition-table parsing and a writable
-   filesystem behind the existing block interface. The read path (ATAPI +
-   ISO9660) is complete and verified; without write support there is no installer,
-   no update and no persistent log.
-2. **UEFI under real firmware**: the loader exists and is executed against stub
+1. **Filesystem**: FAT32 read, then write, on a partition discovered by M1e.
+   Block write (M1d) and partition discovery (M1e) are complete and verified on
+   an emulated disk; without a filesystem there is no installer, no update and no
+   package storage. See tasks A and B in `docs/architecture/FIRST_THREE_TASKS.md`.
+2. **isohybrid medium**: the same ISO booting as a USB hard disk, which removes a
+   distribution blocker without new kernel code (task C there).
+3. **UEFI under real firmware**: the loader exists and is executed against stub
    firmware; it needs an OVMF or hardware run before UEFI machines can be called
-   supported (M1c in `docs/architecture/roadmap.json`).
-3. **USB HID**: xHCI enumeration and a HID parser, then a DualSense driver
-   (input reports, touchpad, motion, adaptive triggers) behind a
-   `controller_read()` interface that mirrors `kbd_read()`.
+   supported (M1c in `docs/architecture/roadmap.json`). This is an environment
+   blocker, not an engineering one.

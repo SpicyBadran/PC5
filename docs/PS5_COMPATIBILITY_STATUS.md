@@ -10,7 +10,7 @@ build; nothing is aspirational.
 | Firmware analysed | **NO** | no image supplied; `tools/firmware.py` ready, nothing to run it on |
 | Firmware loading pathway implemented | **NO** | `kernel/chain.c` stage 7 is BLOCKED by design |
 | Firmware initialisation attempted | **NO** | stage 8 NOT-STARTED |
-| Firmware executing | **NO** | stage 9 NOT-STARTED |
+| Firmware executing | **NO** | stage 9 NOT-STARTED; why any PC route is blocked is recorded in [`playstation/BOOT_FEASIBILITY.md`](playstation/BOOT_FEASIBILITY.md) |
 | PS5 system services operating | **NO** | stage 10 NOT-STARTED |
 | Genuine PS5 home screen operating | **NO** | stage 11 NOT-STARTED |
 | Controller navigation operating | **NO** (PC5 environment only) | PS/2 keyboard works in the PC5 UI; no controller driver |
@@ -57,7 +57,7 @@ Why each non-OK stage has that state:
 
 | Feature | Status | Evidence |
 |---|---|---|
-| Bootable ISO (BIOS/El Torito + UEFI El Torito section) | COMPLETE AND VERIFIED | `make verify` 53/53, `make boot-test` 25/25 |
+| Bootable ISO (BIOS/El Torito + UEFI El Torito section) | COMPLETE AND VERIFIED | `make verify` 53/53, `make boot-test` 53/53 |
 | Loader (A20, E820, VBE, font, ISO probe, kernel load, PM handoff) | COMPLETE AND VERIFIED (emulated) | serial log |
 | Framebuffer console + text fallback + read-back self-test | COMPLETE AND VERIFIED (emulated) | Diagnostics page |
 | CPUID / E820 / PCI / ACPI / SMBIOS inventory | IMPLEMENTED — TESTING REQUIRED | hardware page; needs physical runs |
@@ -69,9 +69,10 @@ Why each non-OK stage has that state:
 | CI pipeline that publishes releases | WRITTEN, ACTIVATION BLOCKED (token lacks the workflows permission) | `ci/README.md` |
 | Firmware analysis tool (no decryption) | COMPLETE AND VERIFIED | unit tests on synthetic containers |
 | Kernel ATAPI PIO driver + ISO9660 reader | COMPLETE AND VERIFIED (emulated) | `storage_mounted volume=PC5 … signature=ok` |
+| Kernel MBR + GPT partition discovery (read-only) | COMPLETE AND VERIFIED (emulated disk + unit tests) | `partitions device=0 scheme=gpt count=2 status=ok`, and `status=crc` for a damaged table |
 | Kernel ATA PIO write path (explicit test only) | COMPLETE AND VERIFIED (emulated IDE disk) | `storage_write=ok … verify=ok sha256=…`; host-side image comparison in `make boot-test` |
 | UEFI boot path | IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF) | `make stubtest` 42/42 running the real `BOOTX64.EFI`; no OVMF or hardware run yet |
-| Partitions, writable filesystem, installer | NOT STARTED | the sector write path exists (M1d); these three do not |
+| Writable filesystem, installer | NOT STARTED | partition tables are read (M1e); nothing reads or writes a filesystem |
 | AHCI / NVMe | NOT STARTED | legacy ATA channels only |
 | USB stack / DualSense | NOT STARTED | — |
 | Network stack | NOT STARTED | — |
@@ -81,8 +82,9 @@ Why each non-OK stage has that state:
 ## 4. Honest summary
 
 PC5 today is a real, reproducible, bootable PC environment with working
-diagnostics and an honest compatibility model. It is **not** a PlayStation 5:
-no Sony code runs, no PS5 game runs, and no stage of the genuine-PS5 chain has
-been reached. The next real engineering step is the one that unblocks the most
-downstream work: partitions and a writable filesystem on top of the new
-sector-write path, followed by the installer and a UEFI run under real firmware.
+diagnostics, a verified raw-sector write path and read-only partition discovery,
+and an honest compatibility model. It is **not** a PlayStation 5: no Sony code
+runs, no PS5 game runs, and no stage of the genuine-PS5 chain has been reached.
+The next real engineering step is the one that unblocks the most downstream
+work: a filesystem on a discovered partition, then the installer; the UEFI run
+under real firmware stays blocked on OVMF or hardware.

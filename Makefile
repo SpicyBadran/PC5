@@ -160,7 +160,7 @@ unit: | $(BUILD)
 	$(CC) -std=gnu11 -O1 -Wall -Wextra -Wno-unused-parameter -ffreestanding \
 	  -fno-builtin -fno-stack-protector -DPC5_HOST_TEST -Ikernel/include \
 	  -o $(BUILD)/kernel-unit tests/kernel_unit.c kernel/lib.c kernel/mem.c kernel/chain.c \
-	  kernel/block.c kernel/sha256.c
+	  kernel/block.c kernel/sha256.c kernel/part.c
 	$(BUILD)/kernel-unit
 
 roadmap:

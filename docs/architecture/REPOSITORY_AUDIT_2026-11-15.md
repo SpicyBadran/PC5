@@ -161,9 +161,9 @@ The UEFI stub run and the emulated boot were both reproduced here, which matters
 because the previous record was produced in a different session. Neither is a
 hardware result.
 
-These are the M0 numbers. The M1d storage-write change later the same day raised
-them to 122 host tests, 61 unit assertions and 45 boot checks; see
-`docs/TEST_RESULTS.md` §10 for that record.
+These are the M0 numbers, kept as the record of what was measured then. The
+same day's later work raised them further; the current figures are in §7.4 below
+and in `docs/TEST_RESULTS.md` §10 (M1d) and §11 (M1e).
 
 ---
 
@@ -307,3 +307,116 @@ here: an empty `desktop/` would imply work that does not exist.
    succeed without one. The dependency graph enforces that.
 5. **The next move is small and physical**: close M1c (OVMF), then build the
    storage write path that makes installation measurable.
+
+## 7. Re-audit at `9912c78`, after M1d and M1e
+
+Scope: the tree as merged at `9912c78` plus the M1e change under review. Method:
+read every kernel, boot, tool and test file; run every gate; count what is
+there. Numbers below are from this working tree on 2026-11-15 and are dated for
+that reason.
+
+### 7.1 Size and shape
+
+| Item | Measured |
+|---|---|
+| tracked files | 90 |
+| kernel + boot sources (`kernel/**`, `boot/**`) | 5,986 lines |
+| tests (`tests/**`) | 4,157 lines |
+| host tools (`tools/**`) | 3,061 lines |
+| documentation (`docs/**`) | 4,616 lines |
+| dependency footprint | node (v86 for tests); python3 stdlib; gcc/binutils; unicorn in a venv for the UEFI stub |
+
+### 7.2 The seven categories, with evidence
+
+**1. Implemented and verified** (a test in this repository records the result)
+
+| Capability | Evidence |
+|---|---|
+| ISO9660 image writer, verifier, reproducible under `SOURCE_DATE_EPOCH` | `make verify` 53/53; `tests/test_tools.py`, `tests/test_release.py` |
+| BIOS boot: loader, E820, VBE, kernel load, protected-mode handoff | `make boot-test` 53/53 |
+| Freestanding 32-bit kernel: console, serial, PIT, CPUID, E820, PCI, ACPI, SMBIOS, PS/2 keyboard | boot log lines in `build/test/serial.log` |
+| ATAPI PIO read + ISO9660 mount + file read-back | `storage_mounted volume=PC5 … signature=ok` |
+| ATA PIO 512-byte sector write, flush, read-back, digest | `storage_write=ok … sha256=80fdc122…`; host-side image comparison |
+| MBR and GPT partition discovery (read-only) | `partitions device=0 scheme=gpt count=2 status=ok`; `make unit` 99 checks |
+| Compatibility chain reporting, 13 stages, evidence strings | `tests/kernel_unit.c`; Status page assertions |
+| Serial console with 12 commands | driven by the boot test |
+| Firmware container identification (no decryption) | `tests/test_tools.py` synthetic containers |
+| Roadmap graph and Track A/B isolation gate | `make roadmap`; `tests/test_architecture.py` |
+| Release packaging + provenance | `tests/test_release.py` |
+
+**2. Implemented but insufficiently tested**
+
+| Capability | What is missing |
+|---|---|
+| UEFI loader (`boot/uefi/`) | executed against a Unicorn stub firmware (42/42), never under OVMF or real UEFI firmware |
+| CPUID / E820 / PCI / ACPI / SMBIOS inventory | emulated v86 only; no physical machine has run it |
+| PS/2 keyboard and the six-page UI | emulated input only |
+| ATA write path | verified on v86's IDE disk; no physical disk, no fault injection |
+| Partition discovery | GPT validated in emulation and in unit tests; MBR parsed only in unit tests; extended/logical partitions not walked |
+| `SOURCE_DATE_EPOCH`-pinned builds | verified by two clean builds; the CI job that would enforce it cannot run (see 7.5) |
+
+**3. Experimental / research**
+
+| Item | State |
+|---|---|
+| AnyPS5 relinker route (`vendor/anyps5/README.md`, `tools/fetch_anyps5.sh`) | source snapshot only; never built here; no PS5 binary has been relinked or executed |
+| Firmware container research | third-party reports only; no image analysed |
+| Genuine-PS5 boot and game execution | no path exists; `docs/playstation/BOOT_FEASIBILITY.md` records why |
+
+**4. Stubbed or simulated**
+
+| Item | Honest description |
+|---|---|
+| UEFI firmware (`tests/uefi_stub_firmware.py`) | a Unicorn harness that supplies the EFI table the loader calls; it is not firmware |
+| Emulator GPU/VGA | v86's VGA and Bochs VBE, not real GPU initialisation |
+| Physical hardware qualification | no machine has been tested; the matrix marks everything UNTESTED |
+| Controller support | chain stage 3 is PARTIAL by construction; no USB stack |
+
+**5. Planned but not implemented**
+
+Writable filesystem, installer, bootloader installation, isohybrid MBR, AHCI,
+NVMe, USB/xHCI, DualSense, networking, audio, power-off, paging/long mode,
+Secure Boot, shell, PS5 package parser, PS5 executable loader, PS5 services.
+
+**6. Blocked on unavailable hardware or access**
+
+| Blocker | Consequence |
+|---|---|
+| no UEFI firmware (no OVMF) and no VM with UEFI | M1c cannot progress past the stub |
+| no physical reference machine in this environment | every "physical" column stays UNTESTED |
+| GitHub token lacks the workflows permission | CI cannot be activated |
+| no PS5 console and no authorised firmware image | Track B intake remains unexecuted (the tooling exists) |
+
+**7. Potentially infeasible under current constraints**
+
+Running genuine PS5 system software on a PC requires the console's
+security-processor trust root or full SoC emulation including it. No public
+solution exists, Sony has not authorised it, and PC5 will not circumvent it.
+The project therefore keeps Track B honest: research, tooling and evidence,
+never a claimed boot. This is a constraint, not a scheduling problem — see
+`docs/playstation/BOOT_FEASIBILITY.md`.
+
+### 7.3 Findings that are not capabilities
+
+1. **A 19 MB archive is committed at the repository root**
+   (`AnyPS5-main (1).zip`). It is third-party source, not PC5 code, it is never
+   built by any target, and it inflates every clone. Recommendation: remove it
+   from the tree and rely on `tools/fetch_anyps5.sh` plus the provenance note in
+   `vendor/anyps5/README.md`. Not done here because deleting a tracked artefact
+   is an owner decision, not a side effect of a storage task.
+2. **`.venv` is not reproducible in a fresh sandbox.** `make stubtest` needs
+   unicorn; the check prints the install command and exits 2 rather than
+   skipping silently. Documented in `docs/BUILDING.md`.
+3. **The compatibility chain stage 4 stays PARTIAL** even with partition
+   discovery: a readable table is not an installer and not an installed game.
+
+### 7.4 Gate results at this commit
+
+| Gate | Result |
+|---|---|
+| `make verify` | 53/53 |
+| `make check` | 135 tests, OK |
+| `make unit` | 99 checks, 0 failures |
+| `make boot-test` | 53/53 |
+| `make stubtest` | 42/42 |
+| `make roadmap` | 14 milestones, tracks separated, in sync |
