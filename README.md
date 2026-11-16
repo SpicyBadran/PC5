@@ -320,6 +320,15 @@ records · [`docs/PRESENTATION.md`](docs/PRESENTATION.md): how this page is gene
 [`docs/TECHNICAL_DECISIONS.md`](docs/TECHNICAL_DECISIONS.md) ·
 [`docs/UPDATE_SYSTEM.md`](docs/UPDATE_SYSTEM.md)
 
+**Brand** — [`docs/BRAND.md`](docs/BRAND.md): the PC5 logo, its monochrome and boot
+variants, the colours and type it is drawn with, clear space, and the minimum
+sizes · [`brand/`](brand): the generated SVG assets themselves, written by
+`tools/brand.py` and checked by `make brand-check`
+
+<p align="center">
+  <img src="brand/pc5-logo-boot.svg" alt="PC5 logo: the PC monogram followed by the PC5 wordmark, in white on black" width="420">
+</p>
+
 **Contributing and audit** — [`CONTRIBUTING.md`](CONTRIBUTING.md), which also states
 which document is authoritative for what ·
 [`docs/PROJECT_AUDIT.md`](docs/PROJECT_AUDIT.md) · [`ci/README.md`](ci/README.md) · [`LICENSE`](LICENSE)
