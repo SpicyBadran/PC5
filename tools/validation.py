@@ -147,6 +147,19 @@ def iso_sha() -> str:
         return ""
 
 
+# Paths that are *renderings* of the records rather than code: the presentation
+# layer draws the README block and the SVG figures from these JSON files, so
+# re-recording necessarily rewrites them.  Excluding them is what makes the check
+# answer "is the code that ran this commit?" instead of "has anything changed since
+# the last commit?" - and a hand edit to them still fails presentation-check.
+GENERATED_FROM_RECORDS = (
+    ":(exclude)docs/evidence/validation",
+    ":(exclude)README.md",
+    ":(exclude)docs/assets/pc5-dashboard.svg",
+    ":(exclude)docs/assets/pc5-evidence.svg",
+)
+
+
 def tree_is_dirty() -> bool:
     """True when the worktree differs from HEAD outside the evidence directory.
 
@@ -157,7 +170,7 @@ def tree_is_dirty() -> bool:
     mean.
     """
     return bool(git("status", "--porcelain", "--", ".",
-                    ":(exclude)docs/evidence/validation").strip())
+                    *GENERATED_FROM_RECORDS).strip())
 
 
 def run(gate: str, write: bool = True) -> dict:
