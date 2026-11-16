@@ -48,7 +48,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: ovmf-setup ovmf-check all iso uefi check test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets
+.PHONY: ovmf-setup ovmf-check all iso uefi check test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render
 
 all: iso
 
@@ -186,7 +186,21 @@ unit: | $(BUILD)
 roadmap:
 	python3 tools/roadmap.py check
 
-check: unit
+# The platform contract's own gates: the registry's rules, the claim-to-interface
+# linkage audit, the conformance suite against the PC5-authored doubles, and the
+# check that the document's generated tables match their renderers.  None of this
+# touches hardware or the PS5 package, and none of it is evidence about Sony's
+# system software (docs/architecture/PS5_PLATFORM_CONTRACT.md §7).
+psm:
+	python3 -m psm.contract
+	python3 -m psm.audit
+	python3 -m psm.conformance
+	python3 -m psm.render --check
+
+psm-render:
+	python3 -m psm.render --write
+
+check: unit psm
 	python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 verify: $(ISO)
