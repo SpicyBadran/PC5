@@ -22,14 +22,16 @@ distribution tool, or network access.
 ```sh
 make info        # version, build id, timestamp, source list
 make             # build/pc5.iso, build/pc5.iso.sha256, build/build-info.json
-make unit        # host-side kernel unit tests (160 checks)
+make unit        # host-side kernel unit tests (165 checks)
 make check       # unit tests + python test suite
 make verify      # independent ISO verification (+ build/verify-report.json)
 make roadmap     # validate the milestone graph, release isolation and the destination path
 make uefi        # just the UEFI application and the FAT ESP (build/efi.img)
 make boot-test   # boot the ISO in the emulator; 119 assertions (incl. FAT32 write)
-make stubtest    # execute the UEFI loader against a stub firmware (48 checks)
+make stubtest    # execute the UEFI loader against a stub firmware (58 checks)
 make ovmf-test   # boot the ISO under genuine OVMF; exit 3 = NOT TESTED
+make ovmf-setup  # provision QEMU + TianoCore OVMF from the distribution
+make ovmf-check  # verify that provisioning, without installing anything
 make metadata    # add provenance to build/build-info.json
 make release-assets  # stage pc5.iso, pc5.iso.sha256, build-info.json
 make clean

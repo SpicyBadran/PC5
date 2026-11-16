@@ -106,8 +106,11 @@ the same code goes to COM1 when a serial port probes successfully.
 | E5 | kernel boot protocol version mismatch |
 | E6 | kernel larger than the load window |
 | E8–E12 | memory map query, allocation or descriptor size failed |
-| E13 | `ExitBootServices` was refused |
+| E13 | `ExitBootServices` was refused, including after a fresh key was taken |
 | E14 | handover address is not the protocol address |
+| E15 | the kernel handover window is not conventional memory in the map firmware reported |
+| E16 | the memory map does not fit in the E820 buffer (it is never truncated) |
+| E17 | the kernel copy at the handover address does not match the file |
 
 ## Testing it
 
@@ -182,6 +185,24 @@ running rather than reading:
 * nothing is written to the console protocol once `ExitBootServices` has
   returned: the post-exit markers go to the 16550 only.
 
+Five things it does because the destination needs a platform it can trust, not
+just a boot that works once:
+
+* the handover window `[0x2000, 0x9F000)` — E820 buffer, VBE block, PVD buffer,
+  boot info, kernel, stack — is checked against the firmware memory map before
+  `ExitBootServices`. A machine whose low memory is partly reserved stops with
+  `E15` instead of copying the kernel into firmware memory (`docs/TEST_RESULTS.md` §18.3);
+* descriptors are merged when adjacent and of the same class, and a map that
+  still does not fit is `E16` rather than a truncation: a truncated map
+  under-reports memory and can hide a reserved region;
+* the kernel copy is read back and compared with the file (`E17`), because a
+  handover that jumps to bytes which are not the kernel fails where nobody can
+  see the cause;
+* `SetWatchdogTimer(0,…)` is called while boot services are still available, so
+  a firmware watchdog cannot reset the machine in the middle of the handover;
+* every boot-service slot the stub can see is wrapped by the test harness, which
+  records any call made after `ExitBootServices`.
+
 Still open: physical hardware, Secure Boot, disk-style UEFI boot (this medium has
 no ESP partition) and an ACPI RSDP handover — the kernel reports `acpi=absent` on
 this path. See `docs/KNOWN_LIMITATIONS.md`.
@@ -193,4 +214,4 @@ this path. See `docs/KNOWN_LIMITATIONS.md`.
 | what runs | the real `BOOTX64.EFI` on Unicorn, protocols served by a Python stub | the real ISO under real OVMF in QEMU |
 | proves | the loader's own logic, including the 32-bit handover trampoline | firmware → loader → kernel on a real UEFI machine model |
 | cannot prove | anything about firmware | nothing about physical hardware |
-| result today | 48 checks | 40 checks + 1 NOT APPLICABLE |
+| result today | 58 checks | 40 checks + 1 NOT APPLICABLE (§16), **not re-run** on the machine that wrote §18 |

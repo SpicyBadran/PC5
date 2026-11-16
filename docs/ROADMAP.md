@@ -39,7 +39,7 @@ the destination needs:
 |---|---|---|
 | `M0` | one platform, one destination: this realignment, ADR-019…022 | `ARCHITECTURE_DISCREPANCY_REPORT.md`, `PC5_ARCHITECTURE_SPEC_v2.md` |
 | `M1a` | reproducible BIOS boot medium | `make iso`, `make verify`, `TEST_RESULTS.md` |
-| `M1c` | UEFI boot path, booted by genuine OVMF firmware | `make ovmf-test`, `TEST_RESULTS.md` §16 |
+| `M1c` | UEFI boot path, booted by genuine OVMF firmware; handover window validated against the firmware memory map, retry policy and read-back exercised against stub firmware | `make ovmf-test` (§16), `make stubtest` 58/58 (§18) |
 | `M1h` | hybrid MBR: the same image boots as a hard disk | MRB-disk boot with the CD detached |
 | `M1d` | ATA PIO write with verified read-back | `wtest`, boot-test image comparison |
 | `M1e` | MBR/GPT partition discovery | `partitions … status=ok` / `status=crc` |

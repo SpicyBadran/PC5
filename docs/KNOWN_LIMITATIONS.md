@@ -9,14 +9,29 @@ work that has secretly been done.
    `boot/uefi/` builds a PE32+ `\EFI\BOOT\BOOTX64.EFI` application and the ISO
    carries the El Torito UEFI section that points at it. Three levels of
    evidence exist and are never conflated: the loader's machine code runs against
-   a protocol stub (`make stubtest`, 48 checks); genuine TianoCore OVMF boots the
+   a protocol stub (`make stubtest`, 58 checks); genuine TianoCore OVMF boots the
    ISO cold and warm and the kernel reaches `PC5-BOOT-OK` (`make ovmf-test`,
    40 checks, 1 NOT APPLICABLE, `docs/TEST_RESULTS.md` §16); and **no physical
    UEFI machine has done it** — `M1` is not started. On this path the loader also cannot report the
    ISO volume id, the kernel LBA or the ISO9660 descriptor (the file protocol
    does not expose them), and it hands over no VGA font, so the kernel's
    framebuffer console falls back to text mode.
-2. **USB-HDD boot is implemented, not proven on hardware.** Since M1h the image
+2. **The UEFI gate has not been re-run under OVMF on every machine that tests
+   this tree.** The environment that produced §18 has no QEMU and no OVMF and no
+   way to install them, so `make ovmf-test` exits 3 (NOT TESTED) and says so;
+   the executed evidence there is the stub firmware (58 checks), the BIOS path
+   (119 checks) and the host unit tests (165 checks). `make ovmf-setup` and the
+   `ovmf` CI job exist so the gate runs where OVMF is available, and exit code 3
+   fails that job by design.
+3. **Secure Boot is not supported and is never claimed.** PC5 ships no signing
+   key and no shim, so firmware with a policy enabled refuses the image. The
+   harness asserts that *refusal*; a boot under an armed policy would be
+   evidence that the policy was not in force, not evidence of compatibility.
+4. **The UEFI path hands over no ACPI RSDP**, so the kernel reports
+   `acpi=absent` there. Passing one means adding a field to
+   `struct pc5_boot_info`, a protocol bump under invariant I4, and is
+   deliberately not smuggled into a hardening change.
+5. **USB-HDD boot is implemented, not proven on hardware.** Since M1h the image
    carries a hybrid MBR (type `0x17`, covering the whole image) and the stage-1
    loader loads the same boot image through INT 13h, verified in the emulator
    with the CD detached. It has never been booted from a physical USB stick: the
@@ -27,13 +42,12 @@ work that has secretly been done.
    use that path at all (El Torito still works on such a machine). Treat "boots
    from USB on machine X" as untested until it has been recorded per §7 of
    `docs/TEST_RESULTS.md`.
-3. **No Secure Boot support.** No signed shim, no enrolled keys.
-4. **No installer.** PC5 runs from the medium; nothing is written to disk.
+6. **No installer.** PC5 runs from the medium; nothing is written to disk.
    Partitioning, data-loss confirmation and installed-system boot do not exist.
 
 ## Environment
 
-5. **Storage is legacy-only, the filesystem is a small writable subset, and
+7. **Storage is legacy-only, the filesystem is a small writable subset, and
    there is no installer.** The kernel drives ATA PIO and ATAPI on the two legacy
    channels. It reads ISO9660 from the boot medium, reads and writes 512-byte
    sectors on an explicitly indexed ATA disk, reads MBR and GPT partition tables,
@@ -67,23 +81,23 @@ work that has secretly been done.
    a leaked chain that the operation reports — **not** that the volume is always
    mountable without a filesystem check. See ADR-015 and §15.9 of
    `docs/TEST_RESULTS.md`.
-6. **No USB stack.** No USB host controller driver exists, therefore no
+8. **No USB stack.** No USB host controller driver exists, therefore no
    DualSense, no USB storage, no USB Ethernet.
-7. **No network stack.** PCI network adapters are enumerated, but no driver,
+9. **No network stack.** PCI network adapters are enumerated, but no driver,
    DHCP or DNS exists.
-8. **No audio.** The audio class is counted in the inventory; there is no
+10. **No audio.** The audio class is counted in the inventory; there is no
    driver.
-9. **Input is PS/2 keyboard only.** USB HID and Bluetooth are not implemented;
+11. **Input is PS/2 keyboard only.** USB HID and Bluetooth are not implemented;
    controller support is chain stage 3 and is reported as PARTIAL for exactly
    this reason.
-10. **No real-time clock and no interrupt timers.** Timing is PIT-calibrated
+12. **No real-time clock and no interrupt timers.** Timing is PIT-calibrated
     TSC deltas; the clock shown is uptime, not wall time.
-11. **No power-off.** ACPI PM1 control is not driven. The Power page says so
+13. **No power-off.** ACPI PM1 control is not driven. The Power page says so
     instead of showing a button that does nothing.
-12. **No ACPI AML interpreter.** Only table signatures are read.
-13. **Framebuffer console only at 16/24/32 bpp VBE modes ≤ 1600×1200.** If
+14. **No ACPI AML interpreter.** Only table signatures are read.
+15. **Framebuffer console only at 16/24/32 bpp VBE modes ≤ 1600×1200.** If
     firmware offers no such mode, the environment falls back to 80×25 VGA text.
-14. **32-bit kernel, no paging.** Physical memory above 4 GiB is reported but
+16. **32-bit kernel, no paging.** Physical memory above 4 GiB is reported but
     not used; long mode is not entered.
 
 ## UEFI boot path
@@ -114,7 +128,7 @@ Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
 
 ## PS5 compatibility
 
-15. **Genuine PS5 system software does not run and no lawful path to run it is
+17. **Genuine PS5 system software does not run and no lawful path to run it is
     known.** Stages 5–13 of the compatibility chain are BLOCKED or NOT-STARTED by
     measurement, milestones `M17`–`M21` are `blocked` in the graph, and the trust
     analysis (`M17`) is the milestone that decides whether level 5 is reachable
@@ -126,20 +140,20 @@ Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
     `docs/PS5_SYSTEM_SOFTWARE_TARGET.md`).
 15b. **Nothing in this repository is a PS5 platform model.** `M10` is a contract
     document with UNKNOWN rows; `M11`–`M16` do not exist.
-16. **No PS5 package parsing.** The `FIH`/`CNT` structures are identified by
+18. **No PS5 package parsing.** The `FIH`/`CNT` structures are identified by
     signature in the host tool only; nothing in the kernel understands them.
-17. **No PS5 executable execution.** No SELF/ELF loader, no PRX shim, no
+19. **No PS5 executable execution.** No SELF/ELF loader, no PRX shim, no
     graphics translation for titles.
-18. **No PSN or any Sony service access**, authorised or otherwise.
-19. **No game compatibility claims.** `docs/PS5_GAME_TEST_RESULTS.md` is empty
+20. **No PSN or any Sony service access**, authorised or otherwise.
+21. **No game compatibility claims.** `docs/PS5_GAME_TEST_RESULTS.md` is empty
     because no title has been executed.
 
 ## Engineering process
 
-20. **Physical hardware is untested.** Nothing in this repository has run on the
+22. **Physical hardware is untested.** Nothing in this repository has run on the
     reference Dell Inspiron 15 7577; the sandbox has no hardware access and no
     KVM. Emulated boot is the highest evidence level reached.
-21. **No UEFI boot has run under real firmware.** The loader's own machine code
+23. **No UEFI boot has run under real firmware.** The loader's own machine code
     has been executed against the stub in `tests/uefi_stub_firmware.py` (42
     checks), and the PE32+ image, FAT ESP and ISO layout are checked structurally
     (`tools/eficheck.py`, `tools/mkefiimg.py`, `tools/verify_iso.py`; 41 UEFI host

@@ -90,6 +90,10 @@ The serial console accepts: `status`, `chain`, `hw`, `fw`, `diag`, `log`,
 | Screen blank but serial log complete | framebuffer address wrong on this firmware | report with the `PC5-LOG display=` line |
 | Nothing at all | machine offered no legacy/CSM boot path | the image has a UEFI boot path too (`M1c`, verified under OVMF only) — try a UEFI boot, but no physical UEFI machine has been tested |
 | `PC5-OVMF-BOOT-OK` appears instead of `PC5-BOOT-OK` | the UEFI loader ran | expected on the UEFI path; see `docs/TEST_RESULTS.md` §16 |
+| `PC5-UEFI FAILURE E15` | the loader's handover window is not conventional memory on this machine | not a bad medium: this firmware reserves low memory PC5 needs. Report the machine and its firmware version; the boot is refused rather than corrupting firmware memory |
+| `PC5-UEFI FAILURE E16` | the firmware memory map has more distinct regions than the 40-entry E820 buffer | report the machine; the map is never truncated, because a truncated map under-reports memory |
+| `PC5-UEFI FAILURE E17` | the kernel copy at the handover address did not read back as the file | memory fault or a loader bug; the handover is refused instead of jumping into wrong bytes |
+| `PC5-UEFI FAILURE E13` | `ExitBootServices` was refused eight times with a fresh map key | firmware keeps invalidating the map; the boot stops instead of pretending boot services ended |
 
 ## 6. Image targets
 
@@ -142,7 +146,7 @@ Writing to a stick is safe (`pc5ctl usb` verifies the checksum and refuses the
 root device), and the medium no longer has to be a CD on a firmware level. What
 remains unproven is the stick on real hardware: the emulator proves the MBR and
 the boot path, not that a particular BIOS likes them. `docs/KNOWN_LIMITATIONS.md`
-item 2 states the boundary, and `docs/HARDWARE_COMPATIBILITY.md` §6 lists the
+item 5 states the boundary, and `docs/HARDWARE_COMPATIBILITY.md` §6 lists the
 firmware behaviours that could still refuse the medium.
 
 ## 9. Removing PC5
