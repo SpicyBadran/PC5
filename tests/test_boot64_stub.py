@@ -50,6 +50,42 @@ class StubFirmware64Tests(unittest.TestCase):
             **options)
         return machine, machine.run()
 
+    def assert_hierarchy_maps(self, machine, address):
+        """Prove `address` translates through the page tables the loader installed.
+
+        The audit finding was that a framebuffer above 1 GiB was reported usable
+        while no PDPT entry referenced its page directory.  Reading the bot info or
+        the span is not enough: the question is whether the *installed hierarchy*
+        reaches the address, so this walks PML4 -> PDPT -> PD in the emulated
+        memory, using the CR3 root the loader recorded.
+        """
+        # The loader prints the CR3 root it installed; the kernel independently
+        # re-reads it from CR3 and fails the boot if the two disagree, so this value
+        # is confirmed by the run that just happened rather than assumed.
+        marker = "PC5-64-LOADER-JUMP entry="
+        line = next((l for l in machine.trace.serial.splitlines()
+                     if marker in l), None)
+        self.assertIsNotNone(line, "loader never reached the handover")
+        token = next(t for t in line.split() if t.startswith("bootinfo="))
+        boot_info = int(token.split("=", 1)[1], 16)
+        # struct pc5_boot64: pagetable_addr is at offset 104 (pinned both sides).
+        root = machine.read_u64(boot_info + 104)
+        pml4e = machine.read_u64(root + ((address >> 39) & 0x1FF) * 8)
+        self.assertTrue(pml4e & 1, f"{address:#x}: PML4 entry not present")
+        pdpte = machine.read_u64((pml4e & 0x000FFFFFFFFFF000)
+                                 + ((address >> 30) & 0x1FF) * 8)
+        self.assertTrue(pdpte & 1,
+                        f"{address:#x}: PDPT entry for the 1 GiB region is not present"
+                        f" - the region is outside the installed hierarchy")
+        self.assertFalse(pdpte & (1 << 7),
+                         f"{address:#x}: PDPT entry is a 1 GiB leaf, unexpected here")
+        pde = machine.read_u64((pdpte & 0x000FFFFFFFFFF000)
+                               + ((address >> 21) & 0x1FF) * 8)
+        self.assertTrue(pde & 1, f"{address:#x}: PD entry not present")
+        self.assertTrue(pde & (1 << 7), f"{address:#x}: PD entry is not a 2 MiB page")
+        self.assertEqual(pde & ~0x1FFFFF, address & ~0x1FFFFF,
+                         f"{address:#x}: leaf maps the wrong physical page")
+
     def test_the_whole_boot_path_passes_every_check(self):
         _, trace = self.run_once()
         checks = self.runner.checks_for(trace)
@@ -167,9 +203,28 @@ class StubFirmware64Tests(unittest.TestCase):
     def test_a_framebuffer_ending_exactly_at_the_span_is_accepted(self):
         span = 4 << 30
         base = span - (4096 * 768)
-        _machine, trace = self.run_once(gop={"base": base})
+        machine, trace = self.run_once(gop={"base": base})
         self.assertNotIn("unusable=", trace.serial)
         self.assertIn("PC5-64-LOADER framebuffer=0xffd00000", trace.serial)
+        # Accepting it is only correct if the address is actually reachable through
+        # the hierarchy the loader just built.  0xffd00000 sits in the last 1 GiB
+        # region, which is the region a PDPT[0]-only map leaves unmapped - so this
+        # assertion failed against the pre-fix loader even though the two above it
+        # passed.  Without it the test blessed an unmapped framebuffer as usable.
+        self.assert_hierarchy_maps(machine, 0xffd00000)
+
+    def test_a_framebuffer_in_every_gibibyte_region_is_reachable(self):
+        # A framebuffer is only usable if the loader's own page tables map it.  Each
+        # of the four 1 GiB regions is exercised, because a map that installs only
+        # PDPT[0] still reports every region as inside the span.
+        span = 4 << 30
+        for region in range(4):
+            base = region * (1 << 30) + 0x08000000
+            with self.subTest(region=region, base=hex(base)):
+                machine, trace = self.run_once(gop={"base": base})
+                self.assertNotIn("unusable=", trace.serial)
+                self.assert_hierarchy_maps(machine, base)
+                self.assertIn("usability=ok", trace.serial)
 
     def test_a_framebuffer_crossing_the_span_is_refused(self):
         span = 4 << 30

@@ -32,6 +32,7 @@ SPAN = 4 << 30
 TWO_MIB = 2 << 20
 PD_BASE_OFFSET = 2 * PAGE
 CANARY = 0xAA
+PC5_UC_BITS = 0x18          # PWT | PCD on a 2 MiB leaf
 
 _LIBRARY = {}
 
@@ -252,3 +253,198 @@ class UncachedBoundaryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IdentityHierarchyTests(unittest.TestCase):
+    """The installed 4-level hierarchy, walked from PML4 - not the PD array alone.
+
+    The defect these tests exist for is precisely the one a page-directory test
+    cannot see: four PD pages were populated, but only PDPT[0] pointed at one of
+    them, so three quarters of the "4 GiB map" was unreachable while
+    pc5_pt_build_identity() still returned 2048.  Every assertion here therefore
+    goes through pc5_pt_lookup(), which performs the real PML4 -> PDPT -> PD walk,
+    or reads the PDPT entries themselves.
+    """
+
+    def setUp(self):
+        self.lib = library()
+        self.block = Block()
+        # Poison, so a structure the builder forgets to initialise is caught rather
+        # than happening to read as zero.
+        ctypes.memset(self.block.base, CANARY, PT_PAGES * PAGE)
+        self.mapped = self.lib.pc5_pt_build_identity(self.block.base, SPAN)
+
+    # ---------------------------------------------------------- helpers ----
+    def pml4(self, index=0):
+        return ctypes.c_ulonglong.from_address(self.block.base + index * 8).value
+
+    def pdpt(self, index):
+        return ctypes.c_ulonglong.from_address(
+            self.block.base + PAGE + index * 8).value
+
+    def lookup(self, address):
+        entry = ctypes.c_ulonglong(0)
+        found = self.lib.pc5_pt_lookup(self.block.base, address,
+                                       ctypes.byref(entry))
+        return found, entry.value
+
+    def assert_mapped(self, address, message=""):
+        found, entry = self.lookup(address)
+        self.assertEqual(found, 1, f"{address:#x} is not reachable through the "
+                                  f"hierarchy {message}".strip())
+        self.assertTrue(entry & 1, f"{address:#x} leaf not present")
+        self.assertTrue(entry & 2, f"{address:#x} leaf not writable")
+        self.assertTrue(entry & (1 << 7), f"{address:#x} leaf is not a 2 MiB page")
+        return entry
+
+    def assert_unmapped(self, address, message=""):
+        found, _ = self.lookup(address)
+        self.assertEqual(found, 0, f"{address:#x} must not be mapped {message}".strip())
+
+    # ----------------------------------------------- hierarchy integrity ----
+    def test_returned_count_is_what_the_hierarchy_actually_reaches(self):
+        self.assertEqual(self.mapped, 2048)
+        # Count the reachable 2 MiB pages by walking, independently of the return
+        # value: one present leaf per 2 MiB with the correct physical address.
+        reachable = 0
+        for address in range(0, SPAN, TWO_MIB):
+            found, entry = self.lookup(address)
+            if found and entry & 1 and entry & (1 << 7):
+                self.assertEqual(entry & ~0xFFF, address,
+                                 f"leaf at {address:#x} points elsewhere")
+                reachable += 1
+        self.assertEqual(reachable, self.mapped,
+                         f"returned {self.mapped} but the hierarchy reaches {reachable}")
+
+    def test_every_pdpt_entry_points_at_its_own_page_directory(self):
+        expected_pd = [self.block.base + PD_BASE_OFFSET + g * PAGE for g in range(4)]
+        for g in range(4):
+            entry = self.pdpt(g)
+            self.assertTrue(entry & 1, f"PDPT[{g}] not present")
+            self.assertTrue(entry & 2, f"PDPT[{g}] not writable")
+            self.assertFalse(entry & (1 << 7),
+                             f"PDPT[{g}] must be a table pointer, not a 1 GiB leaf")
+            self.assertEqual(entry & 0x000FFFFFFFFFF000, expected_pd[g],
+                             f"PDPT[{g}] points at {entry & 0x000FFFFFFFFFF000:#x}, "
+                             f"expected the PD page at {expected_pd[g]:#x}")
+
+    def test_pml4_points_at_the_pdpt_and_nowhere_else(self):
+        entry = self.pml4()
+        self.assertTrue(entry & 1)
+        self.assertFalse(entry & (1 << 7))
+        self.assertEqual(entry & 0x000FFFFFFFFFF000, self.block.base + PAGE)
+        for index in range(1, 512):
+            self.assertEqual(self.pml4(index), 0,
+                             f"PML4[{index}] must be empty: only the low 4 GiB is mapped")
+
+    def test_every_active_structure_is_zero_beyond_the_span(self):
+        # No stale firmware value may survive in any page the walk can reach.
+        self.assertEqual(self.pdpt(4), 0, "PDPT[4] must be zero")
+        for index in range(5, 512):
+            self.assertEqual(self.pdpt(index), 0, f"PDPT[{index}] must be zero")
+        # The PD array is four pages of 512 entries; 2048 of them carry the map,
+        # and every remaining entry must be zero rather than leftover firmware data.
+        for index in range(2048, 4 * 512):
+            entry = self.block.entry(index)
+            if entry:
+                self.fail(f"PD entry {index} is {entry:#x}, expected 0")
+        self.assertTrue(self.block.guards_intact())
+
+    # --------------------------------------- translation at every 1 GiB ----
+    def test_all_four_gibibyte_regions_are_reachable(self):
+        # Immediately below, at, and immediately above each 1 GiB boundary, plus the
+        # first and last byte of the whole span.
+        probes = [
+            0x00000000, 0x00100000,
+            0x3FFFFFff,                     # last byte below 1 GiB
+            0x40000000,                     # exactly 1 GiB
+            0x40000001, 0x7FFFFFFF,         # first/last byte of region 1
+            0x80000000, 0x80000001, 0xBFFFFFFF,
+            0xC0000000, 0xC0000001, 0xFFFFFFFF,
+        ]
+        for address in probes:
+            with self.subTest(address=hex(address)):
+                self.assert_mapped(address)
+
+    def test_the_last_two_mib_page_below_the_span_is_mapped(self):
+        entry = self.assert_mapped(SPAN - TWO_MIB)
+        self.assertEqual(entry & ~0xFFF, SPAN - TWO_MIB)
+        # and the entry that covers the final byte
+        self.assert_mapped(SPAN - 1)
+
+    def test_the_span_boundary_is_exclusive(self):
+        self.assert_unmapped(SPAN, "the first byte above the map")
+        self.assert_unmapped(SPAN + 0x1000)
+        self.assert_unmapped(1 << 32)
+        self.assert_unmapped(MASK64)
+
+    def test_lookup_disagrees_with_a_leaked_pd_entry(self):
+        """pc5_pt_lookup must report reachability, not the existence of a PD entry.
+
+        This is the exact false-positive the defect produced: PD entry 1024 was
+        populated, but no PDPT entry referenced its page, so the address was not
+        mapped.  Here the PDPT link is removed by hand after building and the
+        lookup must stop reporting a mapping even though the leaf is still there.
+        """
+        self.assert_mapped(0x80000000)
+        self.assertTrue(self.block.entry(1024) & 1,
+                        "precondition: the leaf for 2 GiB exists in the PD array")
+        # Break the hierarchy only.
+        pdpt2 = ctypes.c_ulonglong.from_address(self.block.base + PAGE + 2 * 8)
+        pdpt2.value = 0
+        self.assertTrue(self.block.entry(1024) & 1,
+                        "the leaf must still be populated - only the link is gone")
+        self.assert_unmapped(0x80000000,
+                             "an unreferenced PD page must not translate")
+        self.assert_unmapped(0x90000000)
+
+    # --------------------------------------------- uncached in every GiB ----
+    def test_mark_uncached_reaches_entries_in_every_pdpt_region(self):
+        for region in range(4):
+            start = region * (1 << 30) + 0x40 * TWO_MIB
+            with self.subTest(region=region):
+                block_before = self.block.entry(start // TWO_MIB) & PC5_UC_BITS
+                self.assertEqual(block_before, 0, "precondition: entry starts cached")
+                changed = self.lib.pc5_pt_mark_uncached(
+                    self.block.base, start, start + 2 * TWO_MIB)
+                self.assertEqual(changed, 2, f"region {region}: expected 2 entries")
+                found, entry = self.lookup(start)
+                self.assertEqual(found, 1)
+                self.assertEqual(entry & PC5_UC_BITS, PC5_UC_BITS,
+                                 f"region {region}: reachable leaf not marked uncached")
+                neighbours = self.lookup(start - TWO_MIB)[1]
+                self.assertEqual(neighbours & PC5_UC_BITS, 0,
+                                 f"region {region}: marking leaked to a neighbour")
+
+    def test_marking_a_range_above_the_span_changes_nothing(self):
+        before = [self.block.entry(i) for i in (0, 512, 1024, 1536, 2047)]
+        self.assertEqual(self.lib.pc5_pt_mark_uncached(
+            self.block.base, SPAN, SPAN + 0x400000), 0)
+        after = [self.block.entry(i) for i in (0, 512, 1024, 1536, 2047)]
+        self.assertEqual(before, after)
+        self.assertTrue(self.block.guards_intact())
+
+    # -------------------------------------------------- invalid inputs ----
+    def test_short_spans_install_only_the_pdpt_entries_they_need(self):
+        self.block2 = Block()
+        ctypes.memset(self.block2.base, CANARY, PT_PAGES * PAGE)
+        # 1 GiB needs exactly one PDPT entry; 2 GiB needs two.
+        self.assertEqual(self.lib.pc5_pt_build_identity(self.block2.base, 1 << 30), 512)
+        first = ctypes.c_ulonglong.from_address(self.block2.base + PAGE).value
+        second = ctypes.c_ulonglong.from_address(self.block2.base + PAGE + 8).value
+        self.assertTrue(first & 1, "PDPT[0] must point at the first PD")
+        self.assertEqual(second, 0, "a 1 GiB map must not install PDPT[1]")
+        probe = ctypes.c_ulonglong(0)
+        self.assertEqual(
+            self.lib.pc5_pt_lookup(self.block2.base, 1 << 30, ctypes.byref(probe)), 0,
+            "with a 1 GiB span the first byte of region 1 must not translate")
+
+    def test_invalid_inputs_leave_the_block_untouched(self):
+        for pt, span in ((0, SPAN), (self.block.base + 4, SPAN),
+                         (self.block.base, 0), (self.block.base, SPAN + 1),
+                         (self.block.base, SPAN * 2)):
+            fresh = Block()
+            ctypes.memset(fresh.base, CANARY, PT_PAGES * PAGE)
+            self.assertEqual(self.lib.pc5_pt_build_identity(pt, span), 0,
+                             f"pt={pt:#x} span={span:#x} must be refused")
+            self.assertTrue(fresh.guards_intact())
