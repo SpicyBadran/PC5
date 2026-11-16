@@ -148,6 +148,18 @@ not the product, and the forbidden claims stay in the historical documents.
 
 ### 2.3 Structural image test — `make verify`
 
+`make verify` runs two readers. `tools/verify_iso.py` checks the structure:
+volume descriptors, El Torito catalog, the FAT ESP, the kernel payload and the
+hybrid MBR, cross-checked against `build/build-info.json`. `tools/iso_manifest.py`
+is the second reader — it does not import the writer — and it writes
+`build/pc5.iso.manifest.json` (every file with its SHA-256, the boot entries and the
+build record) and then verifies the image against it. A release ships both, so a
+third party can confirm the contents without trusting the build.
+
+The manifest reader found a real four-byte offset error in the primary volume
+descriptor, recorded in `docs/TEST_RESULTS.md` §21.1: nothing PC5 ships read those
+fields, and only an independent parser noticed.
+
 A second, independent ISO9660/El Torito parser checks:
 volume descriptor, block size, volume size vs file size, root directory walk,
 boot record volume descriptor, catalog validation checksum, bootable
