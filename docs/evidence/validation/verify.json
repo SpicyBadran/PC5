@@ -1,8 +1,9 @@
 {
+  "code_revision": "196f504812dbecc226078d11045851ac473e1b56",
   "command": "make verify",
-  "commit": "e69d2a6d4d88ae21f478735939c38bae4e32484b",
+  "commit": "196f504812dbecc226078d11045851ac473e1b56",
   "date": "2026-11-16",
-  "dirty": true,
+  "dirty": false,
   "exit_code": 0,
   "gate": "verify",
   "level": "ISO structure",
