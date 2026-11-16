@@ -1,0 +1,15 @@
+{
+  "command": "make verify",
+  "commit": "6d8ed5b6e769502fcf18b4516a0d2946b226899d",
+  "date": "2026-11-16",
+  "dirty": false,
+  "exit_code": 0,
+  "gate": "verify",
+  "level": "ISO structure",
+  "notes": "structural verification and the independent manifest",
+  "result": "passed",
+  "schema": "pc5.validation/1",
+  "source_date_epoch": 1763251200,
+  "summary": "MANIFEST VALID: build/pc5.iso matches build/pc5.iso.manifest.json",
+  "tool": "tools/validation.py"
+}

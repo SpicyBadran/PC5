@@ -44,6 +44,8 @@ none of them is folded into a single "pass".
 | `make hw-record` | every filed physical-boot record is complete; the template is not | that a boot happened | exit 1 on an incomplete record |
 | `make boot-test` | PC5's own boot path runs under the v86 emulator and prints the expected interface | firmware, or hardware | exit 77 and a SKIP message without node/v86 |
 | `make stubtest` | the real `BOOTX64.EFI` runs against a stub firmware | real UEFI firmware | exit 2 without unicorn, 0/1 otherwise |
+| `make validation` | the committed records are coherent: schema, exit code against verdict, commit and date present | that any gate was run just now | exit 1 on an inconsistent record |
+| `make record-validation` | *writes* one record per gate, by running it — never part of `make check` | anything it does not run | exit 1 only if a gate reports `failed`/`error` |
 | `make ovmf-test` | a boot under genuine TianoCore OVMF | physical hardware, or Sony software | 0 verified, 1 failed, **NOT TESTED when the tool exits 3** (make then exits 2 and prints the reason) |
 
 `make check` deliberately does not include the emulator, stub, OVMF or hardware gates:

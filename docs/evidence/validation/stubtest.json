@@ -1,0 +1,20 @@
+{
+  "checks": {
+    "passed": 58,
+    "skipped": 0,
+    "total": 58
+  },
+  "command": "make stubtest",
+  "commit": "6d8ed5b6e769502fcf18b4516a0d2946b226899d",
+  "date": "2026-11-16",
+  "dirty": false,
+  "exit_code": 0,
+  "gate": "stubtest",
+  "level": "stub-firmware execution",
+  "notes": "the real BOOTX64.EFI against a stub firmware",
+  "result": "passed",
+  "schema": "pc5.validation/1",
+  "source_date_epoch": 1763251200,
+  "summary": "PASSED: 58/58 checks against the stub firmware",
+  "tool": "tools/validation.py"
+}

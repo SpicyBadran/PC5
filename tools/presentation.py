@@ -489,6 +489,360 @@ def workflow(data) -> str:
                "PC are not tested; the destination is blocked.")
 
 
+# ---------------------------------------------------------------- validation records
+VALIDATION = ROOT / "docs/evidence/validation"
+BLOCKS = ("stats", "status", "evidence", "blockers", "pup")
+
+STATE_LABEL = {"complete": "complete", "in_progress": "in progress",
+               "not_started": "not started", "blocked": "blocked"}
+
+
+def load_records(directory: Path | None = None) -> dict:
+    """Every committed validation record, keyed by gate. Unreadable records are absent."""
+    found = {}
+    for path in sorted((directory or VALIDATION).glob("*.json")):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if record.get("schema") != "pc5.validation/1":
+            continue
+        record["file"] = f"docs/evidence/validation/{path.name}"
+        found[record.get("gate", path.stem)] = record
+    return found
+
+
+def distribution(data) -> dict:
+    counts = {state: 0 for state in STATE_ORDER}
+    for milestone in data["milestones"]:
+        counts[milestone["state"]] = counts.get(milestone["state"], 0) + 1
+    return counts
+
+
+def record_line(records: dict, gate: str) -> tuple:
+    """(text, colour) for one gate's recorded result, and never a promotion."""
+    record = records.get(gate)
+    if not record:
+        return ("no record", MUTED)
+    result = record.get("result", "error")
+    colour = {"passed": GREEN, "not-tested": AMBER, "skipped": AMBER,
+              "failed": RED, "error": RED}.get(result, MUTED)
+    checks = record.get("checks") or {}
+    detail = f" {checks['passed']}/{checks['total']}" if checks else ""
+    return (f"{result}{detail} @ {record.get('commit', '')[:7]}", colour)
+
+
+def physical_records() -> list:
+    records = []
+    for path in sorted((ROOT / "docs/evidence").glob("*.json")):
+        if "TEMPLATE" in path.name:
+            continue
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if str(record.get("level", "")).startswith("physical"):
+            records.append((path.name, record))
+    return records
+
+
+def pup_facts() -> dict:
+    """What the tracked package actually is, read from the pointer, not remembered."""
+    import hashlib
+
+    path = ROOT / "PS5UPDATE.PUP"
+    raw = path.read_bytes()
+    facts = {"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(),
+             "pointer": raw.startswith(b"version https://git-lfs"), "oid": "", "size": ""}
+    if facts["pointer"]:
+        for line in raw.decode("ascii", "replace").splitlines():
+            if line.startswith("oid sha256:"):
+                facts["oid"] = line.split(":", 1)[1].strip()
+            elif line.startswith("size "):
+                facts["size"] = line.split(None, 1)[1].strip()
+    return facts
+
+
+# ---------------------------------------------------------------- generated blocks
+def stats_markdown(data, records) -> str:
+    counts = distribution(data)
+    total = len(data["milestones"])
+    destination = data["product"]["destination"]["milestone"]
+    by_id = milestones(data)
+    lines = [f"<!-- pc5:stats:begin -->",
+             "| | |",
+             "|---|---|",
+             f"| Roadmap | `{data['version']}`, updated {data['updated']} |",
+             f"| Milestones | {total} in {len(data['workstreams'])} workstreams |",
+             f"| Complete | {counts['complete']} |",
+             f"| In progress | {counts['in_progress']} |",
+             f"| Blocked | {counts['blocked']} |",
+             f"| Not started | {counts['not_started']} |",
+             f"| Destination | `{destination}` — {by_id[destination]['title']} |",
+             f"| Destination state | **{STATE_STYLE[by_id[destination]['state']][0]}** |"]
+    build, _colour = record_line(records, "verify")
+    lines.append(f"| Last recorded ISO verification | {build} |")
+    checks, _colour = record_line(records, "check")
+    lines.append(f"| Last recorded test run | {checks} |")
+    filed = physical_records()
+    lines.append(f"| Physical boot evidence | "
+                 f"{'filed: ' + ', '.join(name for name, _ in filed) if filed else '**none filed**'} |")
+    lines.append("| Genuine Sony software execution | **BLOCKED — nothing executed** |")
+    lines.append("")
+    lines.append("Every cell is generated from `docs/architecture/roadmap.json` and "
+                 "`docs/evidence/validation/*.json` by `tools/presentation.py`; a "
+                 "statistic that is typed into the prose instead fails "
+                 "`make presentation-check`.")
+    lines.append("<!-- pc5:stats:end -->")
+    return "\n".join(lines)
+
+
+def evidence_markdown(records) -> str:
+    filed = physical_records()
+    rows = [
+        ("Host and kernel tests", "check", "`make check`"),
+        ("ISO structure and manifest", "verify", "`make verify`"),
+        ("Emulator execution (v86)", "boot-test", "`make boot-test`"),
+        ("Stub firmware (unicorn)", "stubtest", "`make stubtest`"),
+        ("Real OVMF firmware", "ovmf-test", "`make ovmf-test`"),
+    ]
+    lines = ["<!-- pc5:evidence:begin -->",
+             "| Evidence | Gate | Result | Recorded at | Date |",
+             "|---|---|---|---|---|"]
+    for title, gate, command in rows:
+        record = records.get(gate)
+        if not record:
+            lines.append(f"| {title} | {command} | **no record** | — | — |")
+            continue
+        checks = record.get("checks") or {}
+        detail = f", {checks['passed']}/{checks['total']}" if checks else ""
+        lines.append(f"| {title} | {command} | **{record.get('result')}**{detail} | "
+                     f"`{record.get('commit', '')[:7]}` | {record.get('date', '')} |")
+    for name, record in filed:
+        lines.append(f"| Physical PC boot (UEFI/BIOS) | `{name}` | "
+                     f"**{record.get('outcome', 'filed')}** | — | {record.get('date', '')} |")
+    if not filed:
+        lines.append("| Physical PC boot (UEFI/BIOS) | `tools/hw_record.py` | "
+                     "**NOT TESTED** — no record filed | — | — |")
+    lines.append("| Genuine Sony system software | — | **BLOCKED** — not present, not executed | — | — |")
+    lines.append("")
+    lines.append("A record is a snapshot of one run at one commit. A run recorded against an "
+                 "earlier commit is not evidence for the current one, and no gate here is "
+                 "promoted by the existence of another gate's record.")
+    lines.append("<!-- pc5:evidence:end -->")
+    return "\n".join(lines)
+
+
+def blockers_markdown(data) -> str:
+    blocked = [m for m in data["milestones"] if m["state"] == "blocked"]
+    lines = ["<!-- pc5:blockers:begin -->"]
+    if not blocked:
+        lines.append("No milestone is blocked.")
+    else:
+        lines.append("| Milestone | What is blocked | Why |")
+        lines.append("|---|---|---|")
+        for milestone in blocked:
+            reason = " ".join(str(milestone.get("blocker", "")).split())
+            if len(reason) > 220:
+                reason = reason[:217].rstrip() + "…"
+            lines.append(f"| `{milestone['id']}` | {milestone['title']} | {reason} |")
+    lines.append("")
+    lines.append("A blocker is a dependency that cannot be satisfied here — a machine, a "
+                 "workflow permission, or a lawful path to Sony's authentication. None of "
+                 "them is work in progress.")
+    lines.append("<!-- pc5:blockers:end -->")
+    return "\n".join(lines)
+
+
+def pup_markdown() -> str:
+    facts = pup_facts()
+    lines = ["<!-- pc5:pup:begin -->",
+             "| Property | Value |",
+             "|---|---|",
+             f"| working-tree content | {'a Git LFS pointer' if facts['pointer'] else 'unknown'} "
+             f"({facts['bytes']} bytes, `sha256 {facts['sha256'][:12]}…`) |"]
+    if facts["size"]:
+        lines.append(f"| declared object | `oid {facts['oid'][:12]}…`, size "
+                     f"{int(facts['size']):,} B |")
+    lines.append("| payload in this checkout | **no** — only the pointer is tracked |")
+    lines.append("| analysed, decrypted or executed | **no**, in any sense |")
+    lines.append("")
+    lines.append("Read from the tracked file on every generation, so the sizes cannot drift. "
+                 "Package type and version remain **UNVERIFIED**: a pointer is not an analysis.")
+    lines.append("<!-- pc5:pup:end -->")
+    return "\n".join(lines)
+
+
+def dashboard(data, records) -> str:
+    counts = distribution(data)
+    total = len(data["milestones"])
+    destination = data["product"]["destination"]["milestone"]
+    dest_state = milestones(data)[destination]["state"]
+    dest_label, dest_colour = STATE_STYLE[dest_state]
+
+    body = text(48, 44, "PC5 DASHBOARD", size=20, weight="bold")
+    body += text(48, 68, "every number below is generated from roadmap.json and the "
+                         "committed validation records", size=12, fill=MUTED)
+
+    cards = [
+        ("MILESTONES", f"{counts['complete']}/{total}", "complete",
+         GREEN if counts["complete"] else MUTED),
+        ("WORKSTREAMS", str(len(data["workstreams"])), "defined", CYAN),
+        ("IN PROGRESS", str(counts["in_progress"]), "milestones", CYAN),
+        ("BLOCKED", str(counts["blocked"]), "milestones", RED if counts["blocked"] else MUTED),
+        ("NOT STARTED", str(counts["not_started"]), "milestones", MUTED),
+        ("DESTINATION", destination, dest_label.lower(), dest_colour),
+    ]
+    top = 92
+    width, height, gap = 356, 86, 18
+    for index, (label, value, detail, colour) in enumerate(cards):
+        column, row = index % 3, index // 3
+        x = 48 + column * (width + gap)
+        y = top + row * (height + gap)
+        body += panel(x, y, width, height, fill=PANEL if row % 2 == 0 else PANEL_2,
+                      stroke=colour if colour != MUTED else LINE)
+        body += text(x + 20, y + 26, label, size=11, fill=MUTED, spacing="1.5")
+        body += text(x + 20, y + 62, value, size=26, weight="bold", fill=colour)
+        body += text(x + 20, y + 78, detail, size=11, fill=MUTED)
+
+    footer = top + 2 * (height + gap) + 18
+    body += (f'  <line x1="48" y1="{footer}" x2="1152" y2="{footer}" stroke="{LINE}"/>\n')
+    verify_text, verify_colour = record_line(records, "verify")
+    check_text, check_colour = record_line(records, "check")
+    ovmf_text, ovmf_colour = record_line(records, "ovmf-test")
+    body += text(48, footer + 24, "ISO VERIFICATION", size=10, fill=MUTED, spacing="1.5")
+    body += text(48, footer + 44, verify_text, size=13, fill=verify_colour, weight="bold")
+    body += text(328, footer + 24, "TEST RUN", size=10, fill=MUTED, spacing="1.5")
+    body += text(328, footer + 44, check_text, size=13, fill=check_colour, weight="bold")
+    body += text(608, footer + 24, "REAL OVMF", size=10, fill=MUTED, spacing="1.5")
+    body += text(608, footer + 44, ovmf_text, size=13, fill=ovmf_colour, weight="bold")
+    filed = physical_records()
+    body += text(888, footer + 24, "PHYSICAL BOOT", size=10, fill=MUTED, spacing="1.5")
+    body += text(888, footer + 44, f"{len(filed)} record(s)" if filed else "not tested",
+                 size=13, fill=GREEN if filed else AMBER, weight="bold")
+    return svg(1200, footer + 64, body, "PC5 project dashboard",
+               f"{counts['complete']} of {total} milestones complete across "
+               f"{len(data['workstreams'])} workstreams, {counts['in_progress']} in progress, "
+               f"{counts['blocked']} blocked, destination {destination} {dest_label.lower()}; "
+               "the latest recorded verification and test results are stamped with the commit "
+               "they ran at.")
+
+
+def evidence_ladder(data, records) -> str:
+    filed = physical_records()
+    rows = [
+        ("Host and kernel tests", "check", GREEN),
+        ("ISO structure and manifest", "verify", GREEN),
+        ("Emulator execution (v86 + SeaBIOS)", "boot-test", GREEN),
+        ("Stub firmware (unicorn)", "stubtest", GREEN),
+        ("Real OVMF firmware", "ovmf-test", AMBER),
+    ]
+    body = text(48, 44, "WHAT HAS ACTUALLY BEEN DEMONSTRATED", size=20, weight="bold")
+    body += text(48, 68, "one row per evidence level; a stronger row is not implied by a "
+                         "weaker one below or above it", size=12, fill=MUTED)
+    top, height, gap = 94, 54, 10
+    index = 0
+    for title, gate, fallback in rows:
+        textline, colour = record_line(records, gate)
+        y = top + index * (height + gap)
+        body += panel(48, y, 904, height, fill=PANEL if index % 2 == 0 else PANEL_2,
+                      stroke=colour if colour in (AMBER, RED) else LINE)
+        body += text(72, y + 24, title, size=14, weight="bold")
+        body += text(72, y + 42, record_hint(records, gate), size=11, fill=MUTED)
+        body += badge(770, y + 16, textline, colour, size=10)
+        index += 1
+    for title, colour, hint, label in (
+            ("Physical PC boot (BIOS or UEFI)",
+             GREEN if filed else AMBER,
+             (f"{len(filed)} record(s) filed under docs/evidence/" if filed
+              else "no record filed — the procedure exists, the machine does not"),
+             "verified" if filed else "not tested"),
+            ("Genuine Sony system software executing", RED,
+             "no lawful path exists; nothing has been loaded or executed", "blocked")):
+        y = top + index * (height + gap)
+        body += panel(48, y, 904, height, fill=PANEL if index % 2 == 0 else PANEL_2,
+                      stroke=colour if colour in (AMBER, RED) else LINE,
+                      dash="6 5" if colour == RED else None)
+        body += text(72, y + 24, title, size=14, weight="bold", fill=RED if colour == RED else INK)
+        body += text(72, y + 42, hint, size=11, fill=MUTED)
+        body += badge(770, y + 16, label, colour, size=10)
+        index += 1
+    body += text(48, top + index * (height + gap) + 10,
+                 "records live in docs/evidence/validation/ and carry the command, exit code, "
+                 "commit and date of the run", size=11, fill=MUTED)
+    return svg(1000, top + index * (height + gap) + 30, body,
+               "PC5 evidence ladder",
+               "Six rows from host tests to genuine Sony system software. The first four "
+               "have recorded passes, real OVMF is not tested here, physical boot has no "
+               "record, and Sony software execution is blocked.")
+
+
+def record_hint(records: dict, gate: str) -> str:
+    record = records.get(gate)
+    if not record:
+        return "no record has been committed for this gate"
+    checks = record.get("checks") or {}
+    detail = f" — {checks['passed']}/{checks['total']} checks" if checks else ""
+    return (f"{record.get('command', gate)} at {record.get('commit', '')[:7]}"
+            f" on {record.get('date', '')}{detail}")
+
+
+# ---------------------------------------------------------------- block plumbing
+BLOCK_RENDERERS = {
+    "stats": lambda data, records: stats_markdown(data, records),
+    "status": lambda data, records: status_markdown(data),
+    "evidence": lambda data, records: evidence_markdown(records),
+    "blockers": lambda data, records: blockers_markdown(data),
+    "pup": lambda data, records: pup_markdown(),
+}
+
+
+def block_markers(name: str) -> tuple:
+    return f"<!-- pc5:{name}:begin -->", f"<!-- pc5:{name}:end -->"
+
+
+def apply_block(text: str, name: str, body: str) -> str:
+    begin, end = block_markers(name)
+    if begin not in text or end not in text:
+        raise SystemExit(f"README.md is missing the {begin} … {end} markers")
+    head, rest = text.split(begin, 1)
+    _, tail = rest.split(end, 1)
+    return head + body + tail
+
+
+def render_blocks(data, records) -> dict:
+    return {name: renderer(data, records) for name, renderer in BLOCK_RENDERERS.items()}
+
+
+def readme_with_status(text: str, block: str) -> str:  # kept for callers/tests
+    return apply_block(text, "status", block)
+
+
+STRAY = (
+    re.compile(r"\b\d+\s+checks\b", re.I),
+    re.compile(r"\b\d+\s+milestones\b", re.I),
+    re.compile(r"\b\d+\s+workstreams\b", re.I),
+    re.compile(r"\b\d+\s*[- ]byte", re.I),
+    re.compile(r"\b\d\.\d+\s*GB\b", re.I),
+)
+
+
+def stray_statistics(readme: str) -> list:
+    """Statistics outside a generated block are the ones that go stale."""
+    stripped = readme
+    for name in BLOCKS:
+        begin, end = block_markers(name)
+        while begin in stripped and end in stripped:
+            head, rest = stripped.split(begin, 1)
+            _, tail = rest.split(end, 1)
+            stripped = head + tail
+    found = []
+    for pattern in STRAY:
+        for match in pattern.finditer(stripped):
+            found.append(f"README.md: {match.group(0)!r} is a statistic outside a generated "
+                         f"block — put it in one so it cannot go stale")
+    return found
+
 TEXT_ELEMENT = re.compile(
     r'<text x="([\d.]+)" y="[\d.]+"[^>]*font-size="([\d.]+)"[^>]*'
     r'text-anchor="(\w+)"[^>]*>(.*?)</text>', re.S)
@@ -502,7 +856,6 @@ def overflow(body: str, width: int, margin: int = 12) -> list:
     reader's font is narrower than the estimate.
     """
     problems = []
-    height = int(re.search(r'height="(\d+)"', body).group(1))
     for x, size, anchor, content in TEXT_ELEMENT.findall(body):
         label = re.sub(r"<[^>]+>", "", content)
         if not label:
@@ -516,29 +869,23 @@ def overflow(body: str, width: int, margin: int = 12) -> list:
         if right > width - margin or left < margin:
             problems.append(f"text runs outside the figure: {label[:48]!r} "
                             f"(x={x}, ~{int(estimate)}px wide)")
-    del height
     return problems
 
 
 FIGURES = {
-    "pc5-banner.svg": banner,
-    "pc5-architecture.svg": architecture,
-    "pc5-progress.svg": progress,
-    "pc5-boot-workflow.svg": workflow,
+    "pc5-banner.svg": lambda data, records: banner(data),
+    "pc5-dashboard.svg": dashboard,
+    "pc5-architecture.svg": lambda data, records: architecture(data),
+    "pc5-progress.svg": lambda data, records: progress(data),
+    "pc5-boot-workflow.svg": lambda data, records: workflow(data),
+    "pc5-evidence.svg": evidence_ladder,
 }
 
 
 # ---------------------------------------------------------------- commands
-def rendered(data) -> dict:
-    return {name: build(data) for name, build in FIGURES.items()}
-
-
-def readme_with_status(text: str, block: str) -> str:
-    if BEGIN not in text or END not in text:
-        raise SystemExit(f"README.md is missing the {BEGIN} … {END} markers")
-    head, rest = text.split(BEGIN, 1)
-    _, tail = rest.split(END, 1)
-    return head + block + tail
+def rendered(data, records=None) -> dict:
+    records = load_records() if records is None else records
+    return {name: build(data, records) for name, build in FIGURES.items()}
 
 
 LINK = re.compile(r"!?\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
@@ -583,13 +930,15 @@ FORBIDDEN = (
     ("ci passing", "the pipeline definition is not an activated workflow"),
     ("ps5 firmware included", "no Sony payload is in the tree; the PUP is an LFS pointer"),
     ("production ready", "no physical boot has happened"),
+    ("fully compatible", "no compatibility matrix has been executed on hardware"),
 )
 
 
-def check(data) -> list:
+def check(data, records=None) -> list:
     problems = []
+    records = load_records() if records is None else records
 
-    expected = rendered(data)
+    expected = rendered(data, records)
     for name, body in expected.items():
         path = ASSETS / name
         if not path.exists():
@@ -606,14 +955,14 @@ def check(data) -> list:
                          for problem in overflow(actual, int(measured.group(1)))]
 
     readme = README.read_text(encoding="utf-8")
-    try:
-        wanted = readme_with_status(readme, status_markdown(data))
-    except SystemExit as exc:
-        problems.append(str(exc))
-        wanted = readme
-    if wanted != readme:
-        problems.append("README.md: the generated status block does not match the roadmap "
-                        "— run `make presentation`")
+    for name, body in render_blocks(data, records).items():
+        begin, end = block_markers(name)
+        if begin not in readme or end not in readme:
+            problems.append(f"README.md: the {name} block has lost its markers")
+            continue
+        if apply_block(readme, name, body) != readme:
+            problems.append(f"README.md: the generated {name} block does not match the "
+                            f"data — run `make presentation`")
 
     for document in (README, ROOT / "docs/PRESENTATION.md"):
         if document.exists():
@@ -631,19 +980,29 @@ def check(data) -> list:
     for name in expected:
         if f"docs/assets/{name}" not in readme:
             problems.append(f"README.md does not embed docs/assets/{name}")
+
+    problems += stray_statistics(readme)
+    # the records the dashboard quotes have to be readable and internally honest
+    sys.path.insert(0, str(ROOT / "tools"))
+    import validation  # noqa: WPS433 -- same-directory sibling, imported on demand
+    problems += [f"docs/evidence/validation: {problem}"
+                 for problem in validation.problems(list(records.values()))]
     return problems
 
 
-def write(data) -> list:
+def write(data, records=None) -> list:
+    records = load_records() if records is None else records
     ASSETS.mkdir(parents=True, exist_ok=True)
     written = []
-    for name, body in rendered(data).items():
+    for name, body in rendered(data, records).items():
         path = ASSETS / name
         if not path.exists() or path.read_text(encoding="utf-8") != body:
             path.write_text(body, encoding="utf-8")
             written.append(_label(path))
     readme = README.read_text(encoding="utf-8")
-    updated = readme_with_status(readme, status_markdown(data))
+    updated = readme
+    for name, body in render_blocks(data, records).items():
+        updated = apply_block(updated, name, body)
     if updated != readme:
         README.write_text(updated, encoding="utf-8")
         written.append("README.md")
@@ -655,20 +1014,22 @@ def main(argv=None) -> int:
     parser.add_argument("command", choices=("sync", "check"), nargs="?", default="check")
     args = parser.parse_args(argv)
     data = load()
+    records = load_records()
     if args.command == "sync":
-        for path in write(data):
+        for path in write(data, records):
             print(f"updated {path}")
-        print(f"presentation: {len(FIGURES)} figures and the README status block are current")
+        print(f"presentation: {len(FIGURES)} figures and {len(BLOCKS)} README blocks are current")
         return 0
-    problems = check(data)
+    problems = check(data, records)
     for problem in problems:
         print(f"[FAIL] {problem}")
     if problems:
         print(f"{len(problems)} presentation problem(s)")
         return 1
     rows = status_rows(data)
-    print(f"PRESENTATION OK: {len(FIGURES)} figures current, {len(rows)} status rows match "
-          f"roadmap.json, links and alt text resolve")
+    print(f"PRESENTATION OK: {len(FIGURES)} figures and {len(BLOCKS)} blocks current, "
+          f"{len(rows)} status rows match roadmap.json, "
+          f"{len(records)} validation record(s) read, links and alt text resolve")
     return 0
 
 

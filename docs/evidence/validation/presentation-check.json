@@ -1,0 +1,15 @@
+{
+  "command": "make presentation-check",
+  "commit": "6d8ed5b6e769502fcf18b4516a0d2946b226899d",
+  "date": "2026-11-16",
+  "dirty": true,
+  "exit_code": 0,
+  "gate": "presentation-check",
+  "level": "documentation",
+  "notes": "generated figures and README blocks are current",
+  "result": "passed",
+  "schema": "pc5.validation/1",
+  "source_date_epoch": 1763251200,
+  "summary": "PRESENTATION OK: 6 figures and 5 blocks current, 13 status rows match roadmap.json, 8 validation record(s) read, links and alt text resolve",
+  "tool": "tools/validation.py"
+}

@@ -47,7 +47,7 @@ benchmarks, compatibility percentages, or evidence that does not exist.
   no text smaller than 11 px, and every figure has `<title>` and `<desc>` for screen
   readers plus descriptive `alt` text in the README.
 
-## 3. The four figures
+## 3. The six figures
 
 | Figure | What it shows | Where the facts come from |
 |---|---|---|
@@ -55,8 +55,26 @@ benchmarks, compatibility percentages, or evidence that does not exist.
 | `docs/assets/pc5-architecture.svg` | eight layers from PC hardware to genuine system software, each badged with the state of the milestones it maps to | `roadmap.json` states per layer; firmware forced to **NOT TESTED** because `M1h` completing says nothing about a real machine's firmware |
 | `docs/assets/pc5-progress.svg` | one bar per workstream split by state, blocked counts, and the longest dependency chain to `M19` | `roadmap.json`; the chain is computed by the same longest-path rule `tools/roadmap.py path` uses |
 | `docs/assets/pc5-boot-workflow.svg` | six steps from building the image to Sony software executing, each labelled verified, not tested, testing required or blocked | the gates in `Makefile` plus the state of `M1` and `M19` |
+| `docs/assets/pc5-dashboard.svg` | six stat cards (milestones, workstreams, in progress, blocked, not started, destination) and a footer with the latest recorded verification, test run, OVMF result and physical-boot count | `roadmap.json` plus `docs/evidence/validation/*.json` |
+| `docs/assets/pc5-evidence.svg` | the evidence ladder: host tests, ISO verification, emulator, stub firmware, real OVMF, physical boot, Sony execution — each with its own record, never inferred from the rung below | validation records, `docs/evidence/*.json`, and `M19` |
 
-The README's status table is generated into the block between
+### What is generated into the README
+
+Five blocks, each between its own pair of markers, each from one source:
+
+| Block | Markers | Source | Shows |
+|---|---|---|---|
+| Statistics | `<!-- pc5:stats:begin -->` | `roadmap.json` + validation records + `PS5UPDATE.PUP` pointer | roadmap version and date, milestone and workstream totals, the four state counts, destination and its state, last recorded ISO verification and test run, physical-boot evidence |
+| Milestone status | `<!-- pc5:status:begin -->` | `roadmap.json` | thirteen capability rows with derived labels |
+| Validation evidence | `<!-- pc5:evidence:begin -->` | `docs/evidence/validation/*.json` | gate, result, check count, the commit the run happened at, and its date; `no record` when there is none |
+| Blockers | `<!-- pc5:blockers:begin -->` | `roadmap.json` | every blocked milestone with the blocker it records |
+| The PUP | `<!-- pc5:pup:begin -->` | the tracked `PS5UPDATE.PUP` | pointer size and hash, declared object size, payload absent, package unverified |
+
+**Statistics outside those blocks are rejected.** `make presentation-check` scans the
+prose for `N checks`, `N milestones`, `N workstreams`, `N-byte` and `N.N GB` and fails,
+because those are exactly the numbers that used to be typed once and quietly rot.
+
+The milestone status table is generated into the block between
 `<!-- pc5:status:begin -->` and `<!-- pc5:status:end -->`. Milestone rows take their
 label from milestone state (`complete` → VERIFIED, `in_progress` → IN PROGRESS,
 `not_started` → NOT STARTED, `blocked` → BLOCKED); `M1` renders as **NOT TESTED**
@@ -67,9 +85,11 @@ reworded test record cannot leave a VERIFIED chip behind.
 ## 4. Generation and checking
 
 ```sh
-make presentation           # write: the four SVGs and the README status block
+make presentation           # write: six SVGs and five README blocks
 make presentation-check     # read: are they current?  also run by `make check`
 make docs-check             # read: every link, anchor and documented command in the tree
+make validation             # read: the committed records, and whether they are coherent
+make record-validation      # write: run the gates and replace the records (explicit only)
 ```
 
 `make check` runs `presentation-check` and `docs-check`, never `presentation`, so a test
@@ -89,6 +109,31 @@ specific reason recorded in the tool.
 Determinism: no timestamps, no random ids, no locale-dependent formatting, sorted
 iteration, integer geometry. The same `roadmap.json` produces byte-identical figures on
 any machine, so a diff means the data changed — which is the point.
+
+## 4b. Where the numbers come from
+
+A statistic is only worth printing if somebody can trace it. The chain is:
+
+```
+docs/architecture/roadmap.json            milestones, states, workstreams, version, date
+        │                                   the only source of progress numbers
+docs/evidence/validation/<gate>.json      one record per gate: command, exit code, result,
+        │                                   check counts, commit, date, dirty flag
+docs/evidence/<machine>.json              physical-boot records, validated by hw_record.py
+PS5UPDATE.PUP                             the pointer itself: bytes, hash, declared size
+        ▼
+tools/presentation.py  →  docs/assets/*.svg  +  the five README blocks
+```
+
+`tools/validation.py` is what writes the records, and it can only write one by *running*
+the gate: `run` captures the exit code, reads the test counts from the runner's own
+output, stamps the commit and the date, and classifies the outcome as `passed`, `failed`,
+`not-tested`, `skipped` or `error`. A missing dependency becomes `not-tested`; it cannot
+become a pass. `verify-records` (and `make validation`) re-checks that no record claims
+`passed` without a zero exit code, or `failed` with one.
+
+Records are **snapshots**. Each row states the commit it ran at, and the evidence block
+says so in words: a run at an earlier commit is not evidence for the current tree.
 
 ## 5. What this presentation does not do
 
