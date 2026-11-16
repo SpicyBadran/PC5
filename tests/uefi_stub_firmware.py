@@ -146,7 +146,7 @@ class StubFirmware:
                  support_get_info=True, race_map_key_forever=False,
                  reserve_handover=False, fragment_low_memory=0,
                  overflow_memory_map=False, watchdog_refused=False,
-                 image_load=None):
+                 image_load=None, gop=None):
         if not HAVE_UNICORN:
             raise StubError("the 'unicorn' module is not installed "
                             "(pip install unicorn)")
@@ -194,6 +194,12 @@ class StubFirmware:
         self.overflow_memory_map = overflow_memory_map
         self.watchdog_refused = watchdog_refused
         self.support_get_info = support_get_info
+        # GOP mode overrides, so a test can make firmware report a framebuffer the
+        # loader must reject: extreme timing geometry, a pitch that does not fit
+        # the protocol field, a format the protocol cannot describe, or a base at
+        # the top of the identity span.  Defaults are the ordinary 1024x768 BGRx
+        # mode the other tests boot with.
+        self.gop_options = dict(gop or {})
         self.boot_service_calls_after_exit = []
         self.watchdog_calls = []
         self.map_generation = 1
@@ -412,12 +418,19 @@ class StubFirmware:
         # EFI_GRAPHICS_PIXEL_FORMAT: 0 = RedGreenBlueReserved8BitPerColor,
         # 1 = BlueGreenRedReserved8BitPerColor.  The loader writes 0x00RRGGBB
         # and accepts either, so report the BGR layout that the framebuffer in
-        # this harness is actually filled with.
-        self.write(info, struct.pack("<IIII", 1, FB_WIDTH, FB_HEIGHT, 1))  # BGRx
+        # this harness is actually filled with.  Every field is overridable so the
+        # loader's geometry and format validation can be driven at its boundaries.
+        gop_width = self.gop_options.get("width", FB_WIDTH)
+        gop_height = self.gop_options.get("height", FB_HEIGHT)
+        gop_pixels = self.gop_options.get("pixels_per_scan_line", gop_width)
+        gop_format = self.gop_options.get("format", 1)
+        gop_base = self.gop_options.get("base", FB_BASE)
+        gop_size = self.gop_options.get("size", FB_SIZE)
+        self.write(info, struct.pack("<IIII", 1, gop_width, gop_height, gop_format))
         self.write(info + 0x10, struct.pack("<IIII", 0, 0, 0, 0))
-        self.write(info + 0x20, struct.pack("<I", FB_WIDTH))
+        self.write(info + 0x20, struct.pack("<I", gop_pixels))
         mode = self.alloc(0x28)
-        self.write(mode, struct.pack("<IIQQQQ", 1, 0, info, 0x40, FB_BASE, FB_SIZE))
+        self.write(mode, struct.pack("<IIQQQQ", 1, 0, info, 0x40, gop_base, gop_size))
         self.gop = self._table(4)
         self.write_u64(self.gop + 24, mode)
 

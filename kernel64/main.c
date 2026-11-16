@@ -118,6 +118,13 @@ static struct pc5_map_view validate_memmap(const struct pc5_boot64 *bi)
     }
     if (conventional_pages == 0)
         fail("bootinfo-no-conventional-memory");
+    /* Every descriptor is self-consistent at this point; what is left is the
+     * property of the set.  Two descriptors that claim the same physical bytes
+     * would make every later coverage answer ambiguous, so the whole set is
+     * validated before any range - kernel, stack, page tables, framebuffer, RSDP -
+     * is checked against it. */
+    if (!pc5_map_validate(map.descriptors, map.entries))
+        fail("bootinfo-memmap-overlap");
 
     serial64_write("PC5-64-MAP entries=");
     serial64_dec(map.entries);
@@ -206,17 +213,17 @@ static void report_optional_resources(const struct pc5_boot64 *bi,
 {
     if (bi->flags & PC5_BOOT64_F_FRAMEBUFFER) {
         const char *reason = 0;
-        u64 pixels = 0, bytes = 0;
+        u64 bytes = 0;
         if (bi->framebuffer_addr == 0)
             reason = "null";
+        else if (!pc5_pixel_format_supported(bi->framebuffer_format))
+            reason = "unsupported-format";
         else if (bi->framebuffer_width == 0 || bi->framebuffer_height == 0)
             reason = "empty";
-        else if (pc5_add_overflows((u64)bi->framebuffer_width * 4ull, 0, &pixels))
-            reason = "width-overflow";
-        else if (bi->framebuffer_pitch < pixels)
+        else if (bi->framebuffer_pitch < (u64)bi->framebuffer_width * 4ull)
             reason = "pitch-too-small";
-        else if (pc5_add_overflows((u64)bi->framebuffer_pitch * bi->framebuffer_height,
-                               0, &bytes))
+        else if (!pc5_framebuffer_bytes(bi->framebuffer_width, bi->framebuffer_height,
+                                        bi->framebuffer_pitch, &bytes))
             reason = "size-overflow";
         else if (!pc5_range_within(bi->framebuffer_addr, bytes, bi->identity_span))
             reason = "outside-span";
@@ -238,6 +245,8 @@ static void report_optional_resources(const struct pc5_boot64 *bi,
         } else {
             serial64_write(" usability=ok\n");
         }
+    } else if (bi->flags & PC5_BOOT64_F_FRAMEBUFFER_UNSUPPORTED) {
+        serial64_write("PC5-64-FB usability=unsupported reason=unsupported-by-loader\n");
     } else {
         serial64_write(bi->flags & PC5_BOOT64_F_UNMAPPED_FRAMEBUFFER
                            ? "PC5-64-FB usability=unsupported reason=unmapped-by-loader\n"
@@ -363,17 +372,24 @@ static void report_environment(const struct pc5_boot64 *bi, u32 physical_bits)
     serial64_write(" range=ok\n");
 
     /* Physical address width, when CPUID reports it: a pointer that does not fit
-     * the CPU's physical address is not a pointer, whatever the map says. */
-    if (physical_bits >= 32 && physical_bits <= 52) {
-        u64 limit = 1ull << physical_bits;
+     * the CPU's physical address is not a pointer, whatever the map says.  A zero
+     * or missing CPUID result is *not* read as "every address fits": the kernel
+     * says the check did not run, so the log cannot be mistaken for a validation
+     * that never happened. */
+    if (pc5_physical_width_reported(physical_bits)) {
         const u64 checked[] = {bi->kernel_base, bi->kernel_base + bi->kernel_size,
                                bi->stack_top, bi->pagetable_addr,
                                bi->loader_image_addr + bi->loader_image_size,
                                bi->memmap_addr + bi->memmap_bytes};
         for (unsigned i = 0; i < sizeof(checked) / sizeof(checked[0]); i++) {
-            if (checked[i] > limit)
+            if (!pc5_address_fits_width(checked[i], physical_bits))
                 fail("address-width");
         }
+        serial64_write("PC5-64-ENV physical-address-width=");
+        serial64_dec(physical_bits);
+        serial64_write(" checked=1\n");
+    } else {
+        serial64_write("PC5-64-ENV physical-address-width=not-reported checked=0\n");
     }
 }
 

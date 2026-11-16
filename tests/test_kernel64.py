@@ -33,6 +33,17 @@ LOADER_EFI = BUILD / "uefi64" / "BOOTX64.EFI"
 MARKER = "PC5-64BIT-LONG-MODE-OK"
 MASK64 = (1 << 64) - 1
 
+# A controlled CPUID table for the kernel-contract tests: leaf -> (eax, ebx, ecx,
+# edx).  It advertises long mode and the 0x80000008 address-width leaf, which the
+# emulator's own CPUID does not.
+CPUID_LONG_MODE = {
+    0: (0x0D, 0x756E6547, 0x6C65746E, 0x49656E69),
+    1: (0x000306A4, 0x00100800, 0x7FBAE3BF, 0xBFEBFBFF),
+    0x80000000: (0x80000008, 0, 0, 0),
+    0x80000001: (0, 0, 0, (1 << 29)),
+    0x80000008: (36 | (48 << 8), 0, 0, 0),
+}
+
 _CACHE = {}
 
 
@@ -418,6 +429,90 @@ class KernelContractTests(unittest.TestCase):
             (self.machine_module.FB_BASE, self.machine_module.FB_SIZE // 4096, 11),
         ]
         self.assert_boots(self.run_kernel(memmap=memmap))
+
+    # -------------------------------------------------- memory-map overlaps ----
+    # Every descriptor was already checked for internal consistency; these tests
+    # break the property of the *set*.  A map that assigns one physical address to
+    # two owners cannot be used to decide what is safe, so the kernel refuses it
+    # before it validates the kernel image, stack, page tables, framebuffer or
+    # RSDP against it.
+
+    def test_overlapping_descriptors_are_refused_before_any_coverage(self):
+        base = list(self.machine_module.DEFAULT_MEMMAP)
+        cases = [
+            ("conflicting types", base + [(0x180000, 0x10, 7)]),
+            ("same type", base + [(0x180000, 0x10, 2)]),
+            ("duplicate", base + [base[1]]),
+            ("nested", base + [(0x180000, 0x100, 2)]),
+            ("partial", base + [(0x410000, 0x10, 2)]),
+        ]
+        for name, memmap in cases:
+            with self.subTest(name=name):
+                self.assert_refuses(self.run_kernel(memmap=memmap),
+                                    "bootinfo-memmap-overlap")
+
+    def test_adjacent_and_unsorted_valid_maps_are_accepted(self):
+        memmap = list(reversed(self.machine_module.DEFAULT_MEMMAP))
+        memmap.append((0x420000, 0x10, 2))   # adjacent to the kernel window
+        self.assert_boots(self.run_kernel(memmap=memmap))
+
+    # --------------------------------------------------- framebuffer format ----
+    # The protocol records the firmware's pixel-format value.  Only the two direct
+    # colour layouts can be interpreted from the structure alone; a bit-mask layout
+    # needs masks the structure does not carry and PixelBltOnly has no linear
+    # buffer, so both are unusable rather than usable.
+
+    def test_framebuffer_format_is_validated(self):
+        for fmt, reason in ((0, None), (1, None), (2, "unsupported-format"),
+                            (3, "unsupported-format"), (4, "unsupported-format")):
+            with self.subTest(format=fmt):
+                result = self.run_kernel(framebuffer_format=fmt)
+                self.assert_boots(result)
+                if reason is None:
+                    self.assertIn("PC5-64-FB addr=0x4000000 width=1024 height=768 "
+                                  "pitch=4096 usability=ok", result["serial"])
+                else:
+                    self.assertIn(f"usability=unsupported reason={reason}",
+                                  result["serial"])
+
+    def test_a_loader_that_reports_an_unsupported_format_is_believed(self):
+        flags = (0xF & ~0x2) | 0x40     # clear FB, set FRAMEBUFFER_UNSUPPORTED
+        result = self.run_kernel(flags=flags, framebuffer_addr=0)
+        self.assert_boots(result)
+        self.assertIn("PC5-64-FB usability=unsupported reason=unsupported-by-loader",
+                      result["serial"])
+
+    # --------------------------------------------------------- CPUID report ----
+    # The kernel's address-width check is driven by CPUID.  These runs replace the
+    # emulator's CPUID with a controlled table, so the value the kernel reports and
+    # the value its environment check uses are the same, observed one.
+
+    def test_cpuid_reported_address_width_reaches_the_environment_check(self):
+        result = self.run_kernel(cpuid=CPUID_LONG_MODE)
+        self.assert_boots(result)
+        self.assertIn("PC5-64-CPU phys_bits=36", result["serial"])
+        self.assertIn("PC5-64-CPU virt_bits=48", result["serial"])
+        self.assertIn("PC5-64-ENV physical-address-width=36 checked=1",
+                      result["serial"])
+
+    def test_a_missing_address_width_is_reported_not_assumed(self):
+        cpuid = dict(CPUID_LONG_MODE)
+        cpuid[0x80000000] = (0x80000001, 0, 0, 0)
+        cpuid.pop(0x80000008, None)
+        result = self.run_kernel(cpuid=cpuid)
+        self.assert_boots(result)
+        self.assertIn("PC5-64-CPU phys_bits=0", result["serial"])
+        self.assertIn("PC5-64-ENV physical-address-width=not-reported checked=0",
+                      result["serial"])
+        self.assertNotIn("physical-address-width=36", result["serial"])
+
+    def test_cpuid_invariant_tsc_is_reported(self):
+        cpuid = dict(CPUID_LONG_MODE)
+        cpuid[0x80000000] = (0x80000007, 0, 0, 0)
+        cpuid[0x80000007] = (0, 0, 0, 1 << 8)
+        result = self.run_kernel(cpuid=cpuid)
+        self.assert_boots(result)
+        self.assertIn("PC5-64-CPU invariant_tsc=1", result["serial"])
 
 
 class PlacementPolicyTests(unittest.TestCase):

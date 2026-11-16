@@ -355,15 +355,43 @@ static void collect_framebuffer(struct pc5_boot64 *boot_info, u64 *fb_end)
         return;
 
     struct efi_gop_mode_info *info = gop->mode->info;
-    if (!gop->mode->frame_buffer_base || !info->pixels_per_scan_line)
+    /* A zero base means firmware did not report a linear framebuffer at all, so
+     * there is nothing to record.  A zero pixel count, a zero dimension or an
+     * unrepresentable pitch is different: the firmware *did* offer one, and it is
+     * classified unusable rather than silently dropped. */
+    if (!gop->mode->frame_buffer_base)
         return;
 
     u64 base = gop->mode->frame_buffer_base;
-    u64 pitch = (u64)info->pixels_per_scan_line * 4ull;
+    /* The geometry is validated before it is stored.  A pitch that does not fit
+     * the protocol's 32-bit field, a byte count that wraps, or a zero dimension
+     * would otherwise be truncated or wrapped into a plausible-looking number and
+     * handed to the kernel as usable. */
+    u32 pitch = 0;
     u64 bytes = 0;
-    if (pc5_add_overflows(pitch, 0, &bytes) ||
-        pc5_add_overflows(pitch * info->vertical_resolution, 0, &bytes) ||
-        !pc5_range_within(base, bytes, PC5_PT_SPAN)) {
+    if (!pc5_framebuffer_line(info->pixels_per_scan_line, &pitch) ||
+        !pc5_framebuffer_bytes(info->horizontal_resolution,
+                               info->vertical_resolution, pitch, &bytes)) {
+        serial_write("PC5-64-LOADER framebuffer=");
+        serial_hex(base);
+        serial_write(" unusable=invalid-geometry\n");
+        boot_info->framebuffer_addr = 0;
+        boot_info->flags |= PC5_BOOT64_F_UNMAPPED_FRAMEBUFFER;
+        return;
+    }
+    /* Only the two direct-colour layouts are interpretable from the boot info.
+     * A bit-mask format needs masks the structure does not carry and PixelBltOnly
+     * has no linear buffer, so both are classified unusable rather than trusted. */
+    if (!pc5_pixel_format_supported(info->pixel_format)) {
+        serial_write("PC5-64-LOADER framebuffer=");
+        serial_hex(base);
+        serial_write(" unusable=unsupported-format\n");
+        boot_info->framebuffer_addr = 0;
+        boot_info->flags |= PC5_BOOT64_F_FRAMEBUFFER_UNSUPPORTED;
+        return;
+    }
+    u64 end = 0;
+    if (pc5_add_overflows(base, bytes, &end) || end > PC5_PT_SPAN) {
         /* Firmware offered a framebuffer outside the single region version 2 can
          * map.  Say so, zero the address, and let the kernel record it as
          * unsupported: a 64-bit address that cannot be dereferenced must never be
@@ -378,10 +406,10 @@ static void collect_framebuffer(struct pc5_boot64 *boot_info, u64 *fb_end)
     boot_info->framebuffer_addr = base;
     boot_info->framebuffer_width = info->horizontal_resolution;
     boot_info->framebuffer_height = info->vertical_resolution;
-    boot_info->framebuffer_pitch = (u32)pitch;
+    boot_info->framebuffer_pitch = pitch;
     boot_info->framebuffer_format = info->pixel_format;
     boot_info->flags |= PC5_BOOT64_F_FRAMEBUFFER;
-    *fb_end = base + bytes;
+    *fb_end = end;
     serial_write("PC5-64-LOADER framebuffer=");
     serial_hex(boot_info->framebuffer_addr);
     serial_write(" ");
@@ -490,6 +518,14 @@ static struct pc5_memdesc64 *memmap_and_exit(efi_handle image, u64 *out_entries)
             out[kept].reserved = 0;
             kept++;
         }
+        /* The map is validated as a set before it is handed over, not only entry by
+         * entry.  Two firmware descriptors that claim the same physical bytes would
+         * make the kernel's coverage decisions ambiguous, so the loader refuses the
+         * map rather than passing a contradiction on. */
+        if (kept == 0)
+            die("memory-map-empty");
+        if (!pc5_map_validate(out, kept))
+            die("memory-map-overlap");
 
         status = g_bs->exit_boot_services(image, key);
         if (status == EFI_SUCCESS) {

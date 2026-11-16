@@ -130,6 +130,116 @@ class StubFirmware64Tests(unittest.TestCase):
         self.assertLess(serial.index("PC5-64-LOADER-JUMP"),
                         serial.index("PC5-64-PAGING enabled=1"))
 
+    # ------------------------------------------------------- framebuffer ----
+    # The loader measures the firmware's GOP mode and must refuse a framebuffer it
+    # cannot describe exactly.  Each case below is a boundary of that arithmetic,
+    # driven through the real loader under the stub firmware.
+
+    def test_an_extreme_scan_line_is_refused_for_its_pitch(self):
+        _machine, trace = self.run_once(gop={"pixels_per_scan_line": 0x40000000})
+        self.assertIn("unusable=invalid-geometry", trace.serial)
+
+    def test_a_pitch_above_the_protocol_field_is_refused(self):
+        # 4 * (2^30 + 1) = 2^32 + 4: the pitch does not fit the 32-bit field.  The
+        # old code truncated it into the field and then multiplied, so the wrapped
+        # product could look like a small, mappable framebuffer.
+        _machine, trace = self.run_once(
+            gop={"pixels_per_scan_line": 0x40000001, "height": 0xFFFFFFFD,
+                 "base": 0x1000})
+        self.assertIn("unusable=invalid-geometry", trace.serial)
+
+    def test_a_multiplication_that_wraps_is_refused(self):
+        _machine, trace = self.run_once(
+            gop={"pixels_per_scan_line": 0x40000001, "height": 0xFFFFFFFF,
+                 "base": 0x1000})
+        self.assertIn("unusable=invalid-geometry", trace.serial)
+
+    def test_an_extreme_vertical_resolution_is_refused(self):
+        _machine, trace = self.run_once(gop={"height": 0xFFFFFFFF})
+        self.assertIn("unusable=outside-identity-span", trace.serial)
+
+    def test_zero_dimensions_are_refused(self):
+        for options in ({"width": 0}, {"height": 0}, {"pixels_per_scan_line": 0}):
+            with self.subTest(**options):
+                _machine, trace = self.run_once(gop=options)
+                self.assertIn("unusable=invalid-geometry", trace.serial)
+
+    def test_a_framebuffer_ending_exactly_at_the_span_is_accepted(self):
+        span = 4 << 30
+        base = span - (4096 * 768)
+        _machine, trace = self.run_once(gop={"base": base})
+        self.assertNotIn("unusable=", trace.serial)
+        self.assertIn("PC5-64-LOADER framebuffer=0xffd00000", trace.serial)
+
+    def test_a_framebuffer_crossing_the_span_is_refused(self):
+        span = 4 << 30
+        _machine, trace = self.run_once(gop={"base": span - 0x1000})
+        self.assertIn("unusable=outside-identity-span", trace.serial)
+
+    def test_both_direct_colour_formats_are_accepted(self):
+        for fmt in (0, 1):
+            with self.subTest(format=fmt):
+                _machine, trace = self.run_once(gop={"format": fmt})
+                self.assertNotIn("unusable=", trace.serial)
+                self.assertIn("PC5-64-FB addr=0x4000000", trace.serial)
+                self.assertIn("usability=ok", trace.serial)
+
+    def test_a_bitmask_format_is_classified_unsupported(self):
+        _machine, trace = self.run_once(gop={"format": 2})
+        self.assertIn("unusable=unsupported-format", trace.serial)
+        self.assertIn("PC5-64-FB usability=unsupported reason=unsupported-by-loader",
+                      trace.serial)
+
+    def test_a_blt_only_format_is_classified_unsupported(self):
+        _machine, trace = self.run_once(gop={"format": 3})
+        self.assertIn("unusable=unsupported-format", trace.serial)
+        self.assertIn("PC5-64-FB usability=unsupported reason=unsupported-by-loader",
+                      trace.serial)
+
+    def test_an_unknown_format_is_classified_unsupported(self):
+        _machine, trace = self.run_once(gop={"format": 9})
+        self.assertIn("unusable=unsupported-format", trace.serial)
+
+    # ------------------------------------------------------ memory-map set ----
+    # The loader validates the descriptor set it is about to hand over, not just
+    # each descriptor on its own.
+
+    def test_the_loader_refuses_a_map_with_overlapping_descriptors(self):
+        machine = self.module.StubFirmware64(
+            image=self.image,
+            esp_volume={"\\EFI\\BOOT\\BOOTX64.EFI": self.image,
+                        "\\KERNEL64.BIN": self.kernel},
+            kernel_bytes=self.kernel)
+        original = machine.memory_descriptors
+
+        def overlapping():
+            descriptors = list(original())
+            # (type, physical_start, attributes, pages): conventional bytes
+            # inside the kernel window, which the map already claims as loader data.
+            descriptors.append((7, 0x180000, 0x0, 0x10))
+            return descriptors
+
+        machine.memory_descriptors = overlapping
+        trace = machine.run()
+        self.assertIn("PC5-64-LOADER-FAIL=memory-map-overlap", trace.serial)
+        self.assertNotIn("PC5-64-LOADER-JUMP", trace.serial)
+
+    def test_the_loader_accepts_a_valid_unsorted_map(self):
+        machine = self.module.StubFirmware64(
+            image=self.image,
+            esp_volume={"\\EFI\\BOOT\\BOOTX64.EFI": self.image,
+                        "\\KERNEL64.BIN": self.kernel},
+            kernel_bytes=self.kernel)
+        original = machine.memory_descriptors
+
+        def unsorted():
+            return list(reversed(original()))
+
+        machine.memory_descriptors = unsorted
+        trace = machine.run()
+        self.assertIn("PC5-64-LOADER-JUMP", trace.serial)
+        self.assert_full_boot(trace)
+
 
 if __name__ == "__main__":
     unittest.main()

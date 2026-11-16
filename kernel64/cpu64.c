@@ -13,13 +13,13 @@ static void copy(char *dst, const char *src, u32 max)
     dst[i] = '\0';
 }
 
-void cpu64_report(struct pc5_cpu64 *out)
+void cpu64_report_with(struct pc5_cpu64 *out, pc5_cpuid_fn cpuid_fn)
 {
     u32 regs[4];
     for (u32 i = 0; i < (u32)sizeof(*out); i++)
         ((u8 *)out)[i] = 0;
 
-    cpuid(0, 0, regs);
+    cpuid_fn(0, 0, regs);
     out->max_basic_leaf = regs[0];
     char vendor[13];
     *(u32 *)&vendor[0] = regs[1];
@@ -28,7 +28,7 @@ void cpu64_report(struct pc5_cpu64 *out)
     vendor[12] = '\0';
     copy(out->vendor, vendor, sizeof(out->vendor));
 
-    cpuid(1, 0, regs);
+    cpuid_fn(1, 0, regs);
     out->stepping = regs[0] & 0xF;
     out->model = (regs[0] >> 4) & 0xF;
     out->family = (regs[0] >> 8) & 0xF;
@@ -43,29 +43,40 @@ void cpu64_report(struct pc5_cpu64 *out)
     out->x2apic = (regs[2] >> 21) & 1;
     out->hypervisor = (regs[2] >> 31) & 1;
 
-    cpuid(0x80000000u, 0, regs);
+    cpuid_fn(0x80000000u, 0, regs);
     out->max_extended_leaf = regs[0];
-    if (regs[0] >= 0x80000001u) {
-        cpuid(0x80000001u, 0, regs);
+    /* Every extended leaf is gated on the *saved* maximum, not on regs[0]: the
+     * basic-leaf calls above leave other values in regs, and the 0x80000001 call
+     * in particular overwrites regs[0] with that leaf's EAX.  Testing regs[0]
+     * there queried a leaf the CPU might not implement and left the address-width
+     * fields at zero when it did. */
+    u32 max_extended = regs[0];
+    if (max_extended >= 0x80000001u) {
+        cpuid_fn(0x80000001u, 0, regs);
         out->long_mode = (regs[3] >> 29) & 1;
         out->nx = (regs[3] >> 20) & 1;
         out->pages_1g = (regs[3] >> 26) & 1;
         out->svm = (regs[2] >> 2) & 1;
     }
-    if (regs[0] >= 0x80000008u) {
-        cpuid(0x80000008u, 0, regs);
+    if (max_extended >= 0x80000008u) {
+        cpuid_fn(0x80000008u, 0, regs);
         out->phys_addr_bits = regs[0] & 0xFF;
         out->virt_addr_bits = (regs[0] >> 8) & 0xFF;
     }
-    if (out->max_extended_leaf >= 0x8000000Au && out->svm) {
-        cpuid(0x8000000Au, 0, regs);
+    if (max_extended >= 0x8000000Au && out->svm) {
+        cpuid_fn(0x8000000Au, 0, regs);
         out->svm_asids = regs[0];
         out->svm_npt = regs[3] & 1;
     }
-    if (out->max_extended_leaf >= 0x80000007u) {
-        cpuid(0x80000007u, 0, regs);
+    if (max_extended >= 0x80000007u) {
+        cpuid_fn(0x80000007u, 0, regs);
         out->invariant_tsc = (regs[3] >> 8) & 1;
     }
+}
+
+void cpu64_report(struct pc5_cpu64 *out)
+{
+    cpu64_report_with(out, cpuid);
 }
 
 static void field(const char *name, u64 value, int decimal)

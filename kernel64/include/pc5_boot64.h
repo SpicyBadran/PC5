@@ -107,6 +107,11 @@ typedef unsigned long long u64;
  * kernel must not invent one: it reports the resource as unsupported. */
 #define PC5_BOOT64_F_UNMAPPED_FRAMEBUFFER (1u << 4)
 #define PC5_BOOT64_F_UNMAPPED_RSDP (1u << 5)
+/* The firmware offered a framebuffer whose pixel format the protocol cannot
+ * describe (a bit-mask layout, or PixelBltOnly with no linear buffer).  The
+ * address is zero and the kernel reports the resource as unsupported rather than
+ * interpreting a layout it was never given. */
+#define PC5_BOOT64_F_FRAMEBUFFER_UNSUPPORTED (1u << 6)
 
 /* Memory-map descriptor types.  These are the firmware's own EFI_MEMORY_TYPE values,
  * copied verbatim on purpose: a translation table is one more place for the loader and

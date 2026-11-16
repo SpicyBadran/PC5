@@ -107,12 +107,18 @@ def pack_memmap(descriptors):
 
 
 class Machine:
-    def __init__(self, kernel, rsdp_signature=RSDP_SIGNATURE):
+    def __init__(self, kernel, rsdp_signature=RSDP_SIGNATURE, cpuid=None):
         from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
             UC_HOOK_INSN
-        from unicorn.x86_const import UC_X86_INS_IN, UC_X86_INS_OUT
+        from unicorn.x86_const import UC_X86_INS_IN, UC_X86_INS_OUT, \
+            UC_X86_INS_CPUID
 
         self.uc = Uc(UC_ARCH_X86, UC_MODE_64)
+        # An optional CPUID table: leaf -> (eax, ebx, ecx, edx).  Without it the
+        # emulator's own CPUID runs, which is what the other tests want.  With it,
+        # the kernel's leaf gating and address-width validation can be driven with
+        # controlled results instead of whatever the host CPU happens to report.
+        self.cpuid = cpuid
         self.uc.mem_map(*KERNEL_WINDOW)
         self.uc.mem_map(*BOOT_AREA)
         self.uc.mem_map(*TABLE_AREA)
@@ -127,6 +133,20 @@ class Machine:
         self.uc.hook_add(UC_HOOK_INSN, self._hook_out, None, 1, 0, UC_X86_INS_OUT)
         self.uc.hook_add(UC_HOOK_INSN, self._hook_in, None, 1, 0, UC_X86_INS_IN)
         self.uc.hook_add(UC_HOOK_CODE, self._hook_code)
+        if cpuid is not None:
+            self.uc.hook_add(UC_HOOK_INSN, self._hook_cpuid, None, 1, 0,
+                             UC_X86_INS_CPUID)
+
+    def _hook_cpuid(self, uc, userdata):
+        from unicorn.x86_const import (
+            UC_X86_REG_RAX, UC_X86_REG_RBX, UC_X86_REG_RCX, UC_X86_REG_RDX)
+        leaf = uc.reg_read(UC_X86_REG_RAX)
+        values = self.cpuid.get(leaf, (0, 0, 0, 0))
+        for register, value in zip(
+                (UC_X86_REG_RAX, UC_X86_REG_RBX, UC_X86_REG_RCX, UC_X86_REG_RDX),
+                values):
+            uc.reg_write(register, value)
+        return True
 
     # -------------------------------------------------------------- serial
     def _hook_out(self, uc, port, size, value, userdata):
@@ -202,8 +222,8 @@ class Machine:
 
 
 def run_kernel(kernel, memmap=None, paging=True, rsdp_signature=RSDP_SIGNATURE,
-               **overrides):
-    machine = Machine(kernel, rsdp_signature=rsdp_signature)
+               cpuid=None, **overrides):
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid)
     if memmap is not None:
         overrides.setdefault("memmap_bytes", DESC_SIZE * len(memmap))
     result = machine.run(pack_boot_info(**overrides), paging=paging,
