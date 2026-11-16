@@ -581,13 +581,17 @@
       "advances": "level 1 of the success hierarchy: PC5 has to run on a real machine before it can run anything else",
       "deliverables": [
         "docs/evidence/",
-        "docs/HARDWARE_COMPATIBILITY.md"
+        "docs/HARDWARE_COMPATIBILITY.md",
+        "docs/hardware/M1_PHYSICAL_BOOT_PROCEDURE.md",
+        "docs/evidence/M1_RECORD_TEMPLATE.json",
+        "tools/hw_record.py"
       ],
       "acceptance": [
         "one machine from the qualification list boots the image from USB and reaches the PC5 environment",
         "the serial log is committed with the machine named and the firmware version recorded",
         "a BIOS and a UEFI configuration are both recorded",
-        "an installation writes a bootable target and reboots into it"
+        "an installation writes a bootable target and reboots into it",
+        "the attempt is recorded with tools/hw_record.py, which rejects an unfilled field, a physical-boot claim without a serial log, and an emulator run filed as a PC boot"
       ],
       "evidence": [
         "docs/HARDWARE_COMPATIBILITY.md"
@@ -595,7 +599,8 @@
       "legacy": [
         "M1"
       ],
-      "release_gating": true
+      "release_gating": true,
+      "notes": "Dependencies M1a, M1c, M1h and M1i are complete, so the only thing missing is a machine: no agent has physical hardware, and the procedure, template and validator exist so that the first person with one produces evidence that can be checked instead of a screenshot. State stays not_started until such a record exists."
     },
     {
       "id": "M2",

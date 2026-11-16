@@ -48,7 +48,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: ovmf-setup ovmf-check all iso uefi check test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render
+.PHONY: ovmf-setup ovmf-check all iso uefi check test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record
 
 all: iso
 
@@ -203,9 +203,26 @@ psm-render:
 check: unit psm
 	python3 -m unittest discover -s tests -p 'test_*.py' -v
 
+# The build manifest is the second, independent reader of the image: what files
+# it contains, their sizes and hashes, and which boot entries firmware would
+# execute.  A release ships it so somebody else can confirm the image without
+# trusting our writer (BUILD-VERIFIED, level 1).
+# Every filed physical-boot record has to be complete; the template must not be.
+hw-record:
+	@set -e; for f in docs/evidence/*.json; do \
+	  case "$$f" in *TEMPLATE*) continue;; esac; \
+	  python3 tools/hw_record.py "$$f"; \
+	done
+	python3 tools/hw_record.py --check-template docs/evidence/M1_RECORD_TEMPLATE.json
+
+manifest: $(ISO)
+	python3 tools/iso_manifest.py $(ISO) --output $(BUILD)/pc5.iso.manifest.json
+
 verify: $(ISO)
 	python3 tools/verify_iso.py $(ISO) --info $(BUILD)/build-info.json \
 	  --json-out $(BUILD)/verify-report.json
+	python3 tools/iso_manifest.py $(ISO) --output $(BUILD)/pc5.iso.manifest.json
+	python3 tools/iso_manifest.py $(ISO) --verify $(BUILD)/pc5.iso.manifest.json
 
 boot-test: $(ISO)
 	python3 tests/boot_test.py --iso $(ISO)
@@ -264,6 +281,7 @@ release-assets: metadata
 	cp $(ISO) $(BUILD)/release/pc5.iso
 	cp $(BUILD)/pc5.iso.sha256 $(BUILD)/release/pc5.iso.sha256
 	cp $(BUILD)/build-info.json $(BUILD)/release/build-info.json
+	cp $(BUILD)/pc5.iso.manifest.json $(BUILD)/release/pc5.iso.manifest.json
 	@ls -l $(BUILD)/release
 	@echo "pc5: release assets staged in $(BUILD)/release"
 	@sha256sum $(BUILD)/release/*

@@ -2302,3 +2302,115 @@ because `README.md` is embedded in the image and its licence paragraph changed.
 * **Nothing about Sony's software changed.** This section is repository hygiene:
   it is `BUILD-VERIFIED` at most, and it says nothing about the PS5, `M1`, or any
   execution path.
+
+---
+
+## 21. ISO build manifest, and a defect it found in the writer
+
+Requested as the next engineering step toward a bootable PC5 ISO: make the release
+evidence for *ISO build verified* real, and advance what can be advanced while
+physical hardware is unavailable. Two things came out of it — a real writer defect,
+fixed, and the second reader that found it.
+
+### 21.1 The defect (found here, fixed here)
+
+Writing the independent reader exposed a four-byte error in the primary volume
+descriptor. `tools/mkiso.py` wrote the logical-block-size field (a four-byte 7.3.3
+value at ECMA-119 §8.4.12) with an eight-byte slice, which shortened the descriptor
+by four bytes, and wrote the creation/modification dates 15 bytes wide where 7.4.3
+requires 17. Every field after the block-size field therefore sat at the wrong
+offset:
+
+| Field | ECMA-119 offset | Where it actually was | Effect |
+|---|---|---|---|
+| path table size | 132 | 136 | path tables unreachable by a conformant reader |
+| type L / M path table | 140 / 148 | 144 / 152 | same |
+| volume set identifier, publisher, preparer, application id | 190 / 318 / 446 / 574 | 194 / 322 / 450 / 578 | metadata misplaced |
+
+Nothing PC5 ships reads those fields, so the image booted for two releases and
+`make verify` passed. The defect is fixed at the source, and `tools/verify_iso.py`
+now checks the path-table fields, their both-endian agreement, and that the
+publisher and application identifiers are where the standard puts them — so the
+same shift fails `make verify` instead of shipping.
+
+### 21.2 The second reader
+
+`tools/iso_manifest.py` parses the image from its bytes and **does not import the
+writer**: primary volume descriptor, directory records, file extents, the El Torito
+catalog with its section headers, and the build record inside the image. It writes
+a sorted, wall-clock-free manifest and verifies an image against one.
+
+```
+$ make verify
+VALID: build/pc5.iso  sha256=6cc848514ca1d6450be7b3ed79d48599d158b36ec1ae2617847b8b10d542dba6
+manifest: build/pc5.iso.manifest.json (3 files, 4 boot entries, sha256 6cc84851…)
+MANIFEST VALID: build/pc5.iso matches build/pc5.iso.manifest.json
+```
+
+What the manifest records, for this image:
+
+| Item | Value |
+|---|---|
+| files | `KERNEL.BIN` 67,028 B · `README.TXT` 1,273 B · `BUILDINF.TXT` 96 B, each with SHA-256 |
+| El Torito | validation entry (x86) · initial entry, no-emulation, load segment `0x7C0`, 8 virtual sectors at LBA 24 · UEFI section header · UEFI entry, 2,880 sectors at LBA 26 |
+| volume | id `PC5`, publisher `PC5 Project`, application id `PC5` |
+| build record | `version 0.2.0`, `build 11612ee`, `date 2025-11-16T00:00:00Z` |
+
+`make release-assets` now ships the manifest next to the ISO, so a third party can
+confirm the image's contents without trusting its writer.
+
+### 21.3 What was added around it
+
+* `tests/test_iso_manifest.py` — 17 tests: every file listed with size and hash, both
+  boot platforms identified, section headers understood, a flipped payload byte
+  caught, a changed catalog caught, a manifest for another image caught,
+  determinism, refusal of a non-ISO, refusal of an image without a catalog, a
+  regression test for the shifted path-table field, and an assertion that the
+  reader does not import the writer.
+* `docs/hardware/M1_PHYSICAL_BOOT_PROCEDURE.md` and
+  `docs/evidence/M1_RECORD_TEMPLATE.json` — the procedure for the first physical
+  boot, with the five evidence levels kept separate.
+* `tools/hw_record.py` — the record validator. It rejects an unfilled field, a
+  physical-boot claim without a serial log, a missing log file, a medium whose hash
+  differs from the image's, an emulator or OVMF run filed as a PC boot, a
+  "booted" record that also lists blockers, and the shipped template itself.
+* `tests/test_hw_record.py` — 14 tests, including that the template fails validation
+  (an unfilled record must never look like evidence) and that a genuinely failed
+  attempt validates (only dishonesty is rejected).
+
+**M1 remains `not_started`.** No physical machine was touched; the procedure and the
+validator are what make the first attempt checkable, not a substitute for it.
+
+### 21.4 Gates, actually executed
+
+```
+$ make check
+Ran 434 tests ... OK (skipped=2)
+
+$ make roadmap
+roadmap: OK - 35 milestones in 14 workstreams, destination M19 reachable, document in sync
+
+$ SOURCE_DATE_EPOCH=1763251200 make verify
+VALID ... sha256=6cc84851… ; MANIFEST VALID
+
+$ SOURCE_DATE_EPOCH=1763251200 make boot-test
+PASSED: boot evidence written to build/test/boot-evidence.json   (119 checks)
+
+$ make hw-record
+template: OK (rejected as expected)
+
+$ make ovmf-test
+exit 3 — NOT TESTED: no QEMU and no OVMF on this machine
+```
+
+The ISO changed (the descriptor fix) and therefore its SHA-256 changed with it. The
+image still boots: `make boot-test` passes 119 checks against the rebuilt image,
+which is how the fix was shown not to disturb the boot path.
+
+### 21.5 What this section does not establish
+
+* No Sony software was loaded or executed, and none is present.
+* No physical PC booted the image; level 4 and level 5 evidence do not exist.
+* No real UEFI firmware ran here; the OVMF gate reports `NOT TESTED`.
+* The manifest proves what is *inside* the image, not that the image is *good* on a
+  machine — those are different claims and are recorded separately.
