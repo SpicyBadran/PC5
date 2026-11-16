@@ -145,13 +145,25 @@ def read_e820(fw, count):
 
 
 def run_once(efi_path, esp_path, kernel_path, iso_has_kernel=True,
-             expect_handover=True):
+             expect_handover=True, esp_kernel=None, drop_esp_kernel=False,
+             **firmware_flags):
+    """Boot the loader once.
+
+    `esp_kernel` replaces the ESP's copy of \\KERNEL.BIN (negative runs) and
+    `drop_esp_kernel` removes it, so a run can present the layout real firmware
+    presents: on an El Torito UEFI boot the ESP is the only volume there is.
+    """
     with open(efi_path, "rb") as fh:
         image = fh.read()
     with open(kernel_path, "rb") as fh:
         kernel = fh.read()
     files = esp_files_from_image(esp_path)
-    fw = stub.StubFirmware(image, files, kernel, iso_volume_has_kernel=iso_has_kernel)
+    if drop_esp_kernel:
+        files.pop("\\KERNEL.BIN", None)
+    if esp_kernel is not None:
+        files["\\KERNEL.BIN"] = esp_kernel
+    fw = stub.StubFirmware(image, files, kernel, iso_volume_has_kernel=iso_has_kernel,
+                           **firmware_flags)
     trace = fw.run(expect_handover=expect_handover)
     return fw, trace
 
@@ -180,9 +192,12 @@ def verify(efi_path, esp_path, kernel_path):
     rep.check("the loader reached its own trace output",
               trace.has_serial("PC5-UEFI: firmware_started"))
 
-    # volume discovery: the ESP it came from has no kernel, the other volume has
-    rep.check("the loader searched every file-system volume",
-              trace.calls.get("locate_handle", 0) >= 1)
+    # volume discovery: the ESP carries the kernel, exactly as it does on a real
+    # El Torito UEFI boot (firmware has no ISO9660 driver, so the ISO9660 root
+    # the BIOS path reads is unreachable there)
+    rep.check("the kernel was found on the volume the loader was booted from",
+              trace.has_serial("PC5-UEFI: kernel_volume=image"),
+              "no kernel_volume=image line")
     rep.check("it took the image device from LoadedImage, not a guess",
               trace.has_serial("PC5-UEFI: image_device=media"))
     rep.check("it found the volume holding KERNEL.BIN",
@@ -267,6 +282,43 @@ def verify(efi_path, esp_path, kernel_path):
     rep.check("no harness-level problems were reported", not trace.problems,
               "; ".join(trace.problems))
 
+    # ------------------------------------- firmware behaviours seen under OVMF
+    _fw4, trace4 = run_once(efi_path, esp_path, kernel_path, iso_has_kernel=False)
+    rep.data["esp_only_serial"] = trace4.serial
+    rep.check("a boot with the kernel only in the ESP still reaches the kernel",
+              trace4.kernel_jump is not None and
+              trace4.has_serial("PC5-UEFI: kernel_volume=image"))
+
+    _fw5, trace5 = run_once(efi_path, esp_path, kernel_path, iso_has_kernel=True,
+                            drop_esp_kernel=True)
+    rep.data["scan_serial"] = trace5.serial
+    rep.check("a kernel on another volume is still found by the scan",
+              trace5.kernel_jump is not None and
+              trace5.has_serial("PC5-UEFI: kernel_volume=scan") and
+              trace5.has_serial("PC5-UEFI: filesystem_volumes="))
+
+    _fw6, trace6 = run_once(efi_path, esp_path, kernel_path, race_map_key=True)
+    rep.data["race_serial"] = trace6.serial
+    stale = [e for e in trace6.events if e["event"] == "exit_boot_services_stale_key"]
+    rep.check("a memory map that moves is re-read and ExitBootServices retried",
+              trace6.kernel_jump is not None and len(stale) == 1 and
+              trace6.has_serial("PC5-UEFI: ExitBootServices_retries=1"))
+
+    _fw7, trace7 = run_once(efi_path, esp_path, kernel_path, clamp_seek_past_end=False)
+    rep.data["seek_serial"] = trace7.serial
+    rep.check("the kernel size comes from EFI_FILE_INFO, not from a seek past EOF",
+              trace7.kernel_jump is not None and
+              trace7.has_serial("PC5-UEFI: kernel_bytes_read=%d" % os.path.getsize(kernel_path)))
+
+    _fw8, trace8 = run_once(efi_path, esp_path, kernel_path, support_get_info=False)
+    rep.data["no_getinfo_serial"] = trace8.serial
+    rep.check("a firmware without GetInfo still boots through the seek fallback",
+              trace8.kernel_jump is not None)
+
+    rep.check("the console protocol was never called after ExitBootServices",
+              not trace.problems and not trace6.problems and not trace7.problems,
+              "; ".join(trace.problems + trace6.problems + trace7.problems))
+
     # ------------------------------------------------------ negative runs
     bad_kernel = bytearray(open(kernel_path, "rb").read())
     bad_kernel[2:6] = b"XXXX"                     # break the PC5K signature
@@ -274,8 +326,8 @@ def verify(efi_path, esp_path, kernel_path):
     with open(bad_path, "wb") as fh:
         fh.write(bad_kernel)
     try:
-        _fw2, trace2 = run_once(efi_path, esp_path, bad_path,
-                                expect_handover=False)
+        _fw2, trace2 = run_once(efi_path, esp_path, kernel_path,
+                                expect_handover=False, esp_kernel=bytes(bad_kernel))
         rep.data["negative_signature_serial"] = trace2.serial
         rep.check("a kernel without the PC5K signature is refused",
                   "PC5-UEFI FAILURE E4" in trace2.serial and
@@ -284,7 +336,7 @@ def verify(efi_path, esp_path, kernel_path):
         os.unlink(bad_path)
 
     _fw3, trace3 = run_once(efi_path, esp_path, kernel_path, iso_has_kernel=False,
-                            expect_handover=False)
+                            expect_handover=False, drop_esp_kernel=True)
     rep.data["negative_volume_serial"] = trace3.serial
     rep.check("no kernel on any volume stops the boot with E2",
               "PC5-UEFI FAILURE E2" in trace3.serial and trace3.kernel_jump is None)
