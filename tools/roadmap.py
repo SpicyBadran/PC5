@@ -191,9 +191,48 @@ def validate(data, root=ROOT):
 
     if data.get("schema") != SCHEMA:
         errors.append(f"schema must be {SCHEMA!r}, found {data.get('schema')!r}")
-    for field in ("version", "updated", "authority"):
+    if "version" in data:
+        # Two documents used to publish a "version", and readers could not tell
+        # the roadmap document's revision from the product's.  The product
+        # version lives in `Makefile VERSION`; the roadmap keeps only the
+        # revision of this document, under a name that says so.
+        errors.append("roadmap must use 'document_version'; the product version "
+                      "lives in Makefile VERSION")
+    for field in ("document_version", "product_version_source", "updated", "authority"):
         if not isinstance(data.get(field), str) or not data.get(field, "").strip():
             errors.append(f"{field} must be a non-empty string")
+    # --- foundations -------------------------------------------------------
+    # Delivered work that earns no milestone credit.  A foundation names the
+    # milestone it serves, states what it does *not* complete, and points at
+    # evidence that exists; it can never mark a milestone complete.
+    foundations = data.get("foundations", [])
+    if not isinstance(foundations, list):
+        errors.append("foundations must be a list")
+        foundations = []
+    seen_foundations = set()
+    for index, foundation in enumerate(foundations):
+        where = f"foundations[{index}]"
+        if not isinstance(foundation, dict):
+            errors.append(f"{where}: must be an object")
+            continue
+        for field in ("id", "title", "milestone", "state"):
+            if not isinstance(foundation.get(field), str) or not foundation.get(field, "").strip():
+                errors.append(f"{where}: {field} must be a non-empty string")
+        if foundation.get("id") in seen_foundations:
+            errors.append(f"{where}: duplicate id {foundation.get('id')!r}")
+        seen_foundations.add(foundation.get("id"))
+        for field in ("delivers", "does_not_complete"):
+            values = foundation.get(field)
+            if not isinstance(values, list) or not values or \
+                    not all(isinstance(item, str) and item.strip() for item in values):
+                errors.append(f"{where}: {field} must be a non-empty list of strings")
+        if not isinstance(foundation.get("does_not_complete"), list) or \
+                not foundation.get("does_not_complete"):
+            errors.append(f"{where}: a foundation must say what it does not complete")
+        for path in foundation.get("evidence", []) or []:
+            if not isinstance(path, str) or not os.path.exists(os.path.join(root, path)):
+                errors.append(f"{where}: evidence does not exist: {path}")
+
     authority = data.get("authority")
     if isinstance(authority, str) and authority and not os.path.exists(os.path.join(root, authority)):
         errors.append(f"authority document does not exist: {authority}")

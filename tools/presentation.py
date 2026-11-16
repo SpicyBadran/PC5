@@ -249,7 +249,7 @@ def banner(data) -> str:
                  "an independent operating-system project, built toward genuine "
                  "PS5 system software", size=15, fill=MUTED)
     chips = (
-        ("ROADMAP " + data["version"].upper(), CYAN),
+        ("ROADMAP DOC " + data["document_version"].upper(), CYAN),
         (f"{streams} WORKSTREAMS", VIOLET),
         (f"{complete}/{total} MILESTONES COMPLETE", GREEN),
         (f"DESTINATION M19 {dest_label}", dest_colour),
@@ -563,6 +563,22 @@ def pup_facts() -> dict:
     return facts
 
 
+def product_version(root=None) -> str:
+    """Read the product version from the one place that defines it.
+
+    The roadmap file has its own `document_version`, which is the revision of
+    that document and not the product's.  Anything that shows a product version
+    reads it from `Makefile`, so the two can never drift apart again.
+    """
+    path = (root or ROOT) / "Makefile"
+    try:
+        text = path.read_text()
+    except OSError:
+        return "unknown"
+    match = re.search(r"^VERSION\s*[?:]?=\s*(\S+)\s*$", text, re.MULTILINE)
+    return match.group(1) if match else "unknown"
+
+
 # ---------------------------------------------------------------- generated blocks
 def stats_markdown(data, records) -> str:
     counts = distribution(data)
@@ -572,7 +588,8 @@ def stats_markdown(data, records) -> str:
     lines = [f"<!-- pc5:stats:begin -->",
              "| | |",
              "|---|---|",
-             f"| Roadmap | `{data['version']}`, updated {data['updated']} |",
+             f"| Product version | `{product_version()}` (single source: `Makefile VERSION`) |",
+             f"| Roadmap document | `{data['document_version']}`, updated {data['updated']} |",
              f"| Milestones | {total} in {len(data['workstreams'])} workstreams |",
              f"| Complete | {counts['complete']} |",
              f"| In progress | {counts['in_progress']} |",

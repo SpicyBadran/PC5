@@ -54,6 +54,12 @@ GATES = {
                   "SKIP", "PC5's own boot path under the v86 emulator"),
     "stubtest": (["make", "stubtest"], "stub-firmware execution",
                  "unicorn", "the real BOOTX64.EFI against a stub firmware"),
+    "kernel64": (["make", "kernel64"], "host build of the 64-bit kernel",
+                 "gcc", "the flat long-mode kernel image"),
+    "uefi64": (["make", "uefi64"], "host build of the 64-bit loader",
+               "gcc", "the PE32+ long-mode loader and its ESP image"),
+    "stubtest64": (["make", "stubtest64"], "stub-firmware execution (64-bit)",
+                   "unicorn", "the 64-bit loader and kernel in long-mode emulation"),
     "ovmf-test": (["make", "ovmf-test"], "real firmware execution",
                   "NOT TESTED", "genuine TianoCore OVMF, if this machine has it"),
     "roadmap": (["make", "roadmap"], "governance", "no skip",
@@ -73,6 +79,8 @@ SUMMARY_PATTERNS = (
     re.compile(r"^SKIP[: ].*"),
     re.compile(r"^NOT TESTED[: ].*"),
     re.compile(r"^(DOCS OK|PRESENTATION OK)[: ].*"),
+    re.compile(r"^(KERNEL64|UEFI64) OK[: ].*"),
+    re.compile(r"^64-BIT STUB FIRMWARE (OK|FAILED)[: ].*"),
     re.compile(r"^roadmap: (OK|FAILED).*"),
 )
 

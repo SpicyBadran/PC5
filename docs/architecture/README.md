@@ -24,6 +24,8 @@ Read in this order:
 | 8 | [`MIGRATION_PLAN.md`](MIGRATION_PLAN.md) | How the tree moves to the target structure without breaking what works |
 | 9 | [`RISK_REGISTER.md`](RISK_REGISTER.md) | Blockers and unproven assumptions, each with a way to settle it |
 | 10 | [`FIRST_THREE_TASKS.md`](FIRST_THREE_TASKS.md) | The next three implementation tasks with exact acceptance criteria |
+| + | [`AUDIT_VERIFICATION.md`](AUDIT_VERIFICATION.md) | What the 2026-11-16 audit claimed, and what the tree and a dated measurement say instead |
+| + | [`../GATES.md`](../GATES.md) | Gates A–E: the dependencies each one opens, and what it does not authorise |
 
 Superseded, kept as history: [`PC5_ARCHITECTURE_SPEC_v1.md`](PC5_ARCHITECTURE_SPEC_v1.md)
 (two tracks, Linux as the product foundation) and `M0_M8_DEPENDENCY_GRAPH.md`

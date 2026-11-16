@@ -86,7 +86,7 @@
   <rect x="330" y="670" width="10" height="10" rx="3" fill="#243040"/>
   <text x="348" y="679" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">not started</text>
   <text x="48" y="710" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#f87171" font-weight="bold" text-anchor="start">DESTINATION  M19  Genuine system software boots on PC5 (DESTINATION)</text>
-  <text x="48" y="732" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">longest dependency chain: M0 → M1d → M1e → M1f → M1g → M1i → M1 → M2 → M2a → M2b → M3 → M11 → M12 → M13</text>
+  <text x="48" y="732" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">longest dependency chain: M0 → M1d → M1e → M1f → M1g → M1i → M1 → M2a → M2 → M2b → M3 → M11 → M12 → M13</text>
   <text x="48" y="748" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">→ M14 → M19</text>
   <text x="48" y="770" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">print it from the graph with: python3 tools/roadmap.py path</text>
 </svg>
