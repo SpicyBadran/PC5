@@ -851,3 +851,63 @@ that every claim about how far it has got is machine-checked.**
   (`E15`–`E17`, watchdog, retry loop), `tests/uefi_stubtest.py`,
   `tests/ovmf_boot.py` (`--secure-boot`, `--matrix-out`),
   `tools/ovmf_setup.sh`.
+
+---
+
+## ADR-024 — The platform contract is a registry, and an UNKNOWN operation is a refusal
+
+* **Context**: `M10` produced a contract document written by hand, one table per
+  subsystem, with a source marker in each row. Three failure modes were already
+  visible in it. A sentence could be softened without anyone noticing, because
+  nothing compared the document to a source of truth. A row could keep a claim that
+  a source did not support, because "PUBLIC" was a word someone typed. And the
+  interfaces the subsystem sections described existed only as prose, so no test could
+  prove that an `UNKNOWN` row was actually implemented as a refusal rather than as a
+  plausible zero.
+* **Decision**:
+  1. **Evidence lives in a registry, not in prose.** `psm/registry.py` holds every
+     source and every claim as data: classification, what the source establishes,
+     confidence, remaining uncertainty, the engineering decision that depends on it,
+     and the conformance case that exercises PC5's side. `Contract.problems()`
+     enforces the rules and `tests/test_psm_registry.py` runs them.
+  2. **The document's tables are generated.** Each sits between
+     `<!-- psm:begin … -->` markers; `python3 -m psm.render --write` regenerates them
+     and the document test fails byte-wise when a block and its renderer differ.
+     Prose stays hand-written — that is where judgement lives — but no number, claim
+     or interface surface is typed twice.
+  3. **`UNKNOWN` is a refusal with no handler.** An operation the contract marks
+     unsupported is recorded as unsupported in its operation table and has *no*
+     implementation method at all; dispatch returns `UNSUPPORTED` before a handler
+     could invent a value. A construction-time check fails if a *supported* operation
+     is documented without a handler, so the two directions are both enforced.
+  4. **The linkage is audited.** `psm/audit.py` fails when an operation cites a claim
+     that does not exist, cites a claim from another subsystem, cites only supportable
+     claims while claiming to be unsupported, or implements something a `RESTRICTED`
+     claim says must never be built. It also enforces the eight-group mapping over ten
+     interfaces, so a missing group cannot hide behind a split.
+  5. **The suite must be able to fail.** `tests/test_psm_mutations.py` replaces one
+     double at a time with a deliberately broken variant — overlapping allocations,
+     double release, a fabricated success for an `UNKNOWN` operation, a timeout that
+     returns a message, a log that drops records — and requires the conformance suite
+     to notice. A surviving mutation fails the build.
+  6. **A green suite claims nothing about Sony.** The suite proves PC5's doubles match
+     PC5's contract. It does not prove that the genuine system software accepts the
+     interface, and no document may present it as doing so.
+* **Alternatives considered**: keeping the hand-written tables and reviewing them
+  (rejected: review is exactly what the repository already does, and the three failure
+  modes survived it); generating the entire document including prose (rejected: the
+  judgement — what to say about an unknown, which decision depends on it — is the
+  valuable part and does not belong in a template); implementing `UNKNOWN` operations
+  as handlers that raise (rejected: a handler is a place where someone later returns a
+  zero, and the absence of one is checkable).
+* **Consequences**: the contract cannot drift from the registry without failing
+  `make check`; adding a claim now requires naming a source, an uncertainty, a
+  decision and a conformance case, which is slower and is the point; and `M10`'s
+  acceptance is documentary by construction, asserted against tests rather than
+  against optimism — while its roadmap state stays `in_progress`, because a level-4
+  milestone may not be `complete` on level 1–2 evidence.
+* **Evidence**: `docs/architecture/PS5_PLATFORM_CONTRACT.md` (revision r1, 38 claims,
+  10 interfaces, 261 conformance checks), `psm/` (registry, contract rules, audit,
+  render, ten doubles), `tests/test_psm_registry.py`,
+  `tests/test_psm_conformance.py`, `tests/test_psm_mutations.py`,
+  `tests/test_psm_document.py`.
