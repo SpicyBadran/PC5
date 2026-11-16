@@ -39,7 +39,7 @@ The three things that are often confused, kept apart:
 |---|---|
 | The Sony PUP input (`PS5UPDATE.PUP`) | Git LFS pointer; payload **absent**; package type and version **unverified** |
 | The PC5 bootable ISO (`build/pc5.iso`) | Built and structurally **verified**; boots PC5's own loader and kernel |
-| Genuine Sony system-software execution | **BLOCKED** — no lawful path exists, and nothing has been executed |
+| Genuine Sony system-software execution | **BLOCKED** — no lawful route has been established yet, and nothing has been executed |
 
 A PUP inside an ISO, a rename, a PC5 kernel boot or a PS5-shaped screen does not
 establish the third row. [`docs/PS5_SYSTEM_SOFTWARE_TARGET.md`](docs/PS5_SYSTEM_SOFTWARE_TARGET.md)

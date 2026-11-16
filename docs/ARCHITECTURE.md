@@ -318,10 +318,10 @@ What the kernel establishes before using anything (in this order):
 | Stage | Established |
 |---|---|
 | structure | the structure's own address does not wrap, is 8-byte aligned, lies inside the identity span and passes the header's magic/version/size/stride checks |
-| memory map | the map is non-empty, its byte count is a multiple of the stride, fits in `MEMMAP_MAX_BYTES`, and every descriptor is self-consistent: nonzero page count, no wrap at `physical_start + page_count·4096`, a known type |
+| memory map | the map is non-empty, its byte count is a multiple of the stride, fits in `MEMMAP_MAX_BYTES`, every descriptor is self-consistent (nonzero page count, no wrap at `physical_start + page_count·4096`, a known type), **and the set is validated as a set**: no two descriptors may claim the same physical bytes. Overlap — partial, nested, duplicate, or across conflicting types — is refused (`bootinfo-memmap-overlap`) rather than resolved by picking whichever descriptor is convenient, and this happens before any range is checked against the map |
 | mandatory ranges | kernel image (exactly the linked size, at the link address), stack (page-aligned top, sane size, no underflow), page tables (aligned, 3…514 pages, no overflow, and `identity_span == (pages − 2)·512·2 MiB`), the loader's own image, and the memory-map buffer are each inside the span **and** covered by memory of an acceptable type |
 | environment | `CR0.PG`, `CR4.PAE`, `CR3` equals `pagetable_addr`, 64-bit operand size and arithmetic really work, `RSP` is inside the declared stack and 16-byte aligned, and CPUID reports long mode; the CPU's physical address width is checked when CPUID reports one |
-| optional resources | framebuffer and RSDP are validated (geometry, no overflow, inside the span, memory type, `"RSD PTR "` signature for the RSDP). A resource that fails is reported as `usability=unsupported reason=…`; it is **never** dereferenced and never called usable |
+| optional resources | framebuffer and RSDP are validated (geometry, no overflow, inside the span, memory type, `"RSD PTR "` signature for the RSDP). The framebuffer's pixel format must be one of the two direct-colour layouts the protocol can describe; a bit-mask layout or `PixelBltOnly` is classified unusable rather than interpreted. A resource that fails is reported as `usability=unsupported reason=…`; it is **never** dereferenced and never called usable |
 
 Memory types are a contract, not a guess: the loader's own ranges accept
 LoaderCode/LoaderData/BootServicesCode/BootServicesData/RuntimeServicesData **and
@@ -384,9 +384,13 @@ Widening the map is future work, not a silent behaviour.
 `kernel64/cpu64.c` reports vendor, family/model/stepping, physical and virtual
 address widths, long mode, NX, 1 GiB pages, APIC, x2APIC, maximum APIC IDs and
 the SVM bits (advertised, nested paging, ASIDs) plus whether the CPU is already
-a guest. Reporting SVM is not a hypervisor claim. The six evidence levels are:
-advertised (CPUID), firmware-enabled, permitted, PC5-initialised, guest executed,
-VM-exit tested. This work reaches **level 1 only**, and only in emulation.
+a guest. Every extended leaf is gated on the **saved** maximum extended leaf, not
+on whatever a previous `CPUID` left in `EAX`: the address-width leaf is read only
+when the CPU advertised it, and the invariant-TSC leaf only when that leaf is
+within range. A width the CPU does not report is reported as `not-reported`, never
+as "every address fits". Reporting SVM is not a hypervisor claim. The six evidence
+levels are: advertised (CPUID), firmware-enabled, permitted, PC5-initialised, guest
+executed, VM-exit tested. This work reaches **level 1 only**, and only in emulation.
 
 ### 7.7 Release isolation
 
