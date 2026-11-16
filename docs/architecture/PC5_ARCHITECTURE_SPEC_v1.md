@@ -2,7 +2,8 @@
 
 | | |
 |---|---|
-| Status | **Accepted as the M0 architecture freeze** for the PC5 0.3 development line |
+| Status | **SUPERSEDED on 2026-11-15 by [`PC5_ARCHITECTURE_SPEC_v2.md`](PC5_ARCHITECTURE_SPEC_v2.md).** Kept unedited as history: it is the document that made the destination optional, and `ARCHITECTURE_DISCREPANCY_REPORT.md` cites it as such. |
+| Was | accepted as the M0 architecture freeze for the PC5 0.3 development line |
 | Date | 2026-11-15 |
 | Branch / base | `arena/77118274-pc5`, base `f5e8c78` |
 | Supersedes | the implicit single-track architecture in `docs/ARCHITECTURE.md` (the boot-chain description there remains accurate) |
