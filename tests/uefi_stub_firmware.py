@@ -306,16 +306,33 @@ class StubFirmware:
         data = self.sections.get(".data")
         if not data:
             raise StubError("no .data section")
-        descriptor = self.read(IMAGE_LOAD + data["vaddr"], 24)
-        if descriptor[0:8] != b"PC5HND01":
+        # 40 bytes covers both records: PC5HND01 is 24 bytes (bridge + far jump),
+        # PC5HND02 adds the protocol, boot-info size, page-table pages and span.
+        descriptor = self.read(IMAGE_LOAD + data["vaddr"], 40)
+        if descriptor[0:8] not in (b"PC5HND01", b"PC5HND02"):
             raise StubError("handover descriptor missing from the start of .data")
-        self.bridge_entry = struct.unpack_from("<Q", descriptor, 8)[0]
-        self.kernel_jump = struct.unpack_from("<Q", descriptor, 16)[0]
+        if descriptor[0:8] == b"PC5HND01":
+            # 32-bit loader: a bridge that switches mode, then a far jump.
+            self.bridge_entry = struct.unpack_from("<Q", descriptor, 8)[0]
+            self.kernel_jump = struct.unpack_from("<Q", descriptor, 16)[0]
+        else:
+            # 64-bit loader (`PC5HND02`): no mode switch, so there is no bridge
+            # and no 32-bit far jump to decode.  The record states the protocol
+            # it hands over instead; the harness keeps it for the checks.
+            self.handover64 = dict(
+                protocol=struct.unpack_from("<Q", descriptor, 8)[0],
+                boot_info_size=struct.unpack_from("<Q", descriptor, 16)[0],
+                page_table_pages=struct.unpack_from("<Q", descriptor, 24)[0],
+                identity_span=struct.unpack_from("<Q", descriptor, 32)[0])
+            self.bridge_entry = 0
+            self.kernel_jump = 0
         self.entry = IMAGE_LOAD + self.entry_rva
         self.trace.note("image_loaded", at=hex(IMAGE_LOAD),
                         preferred=hex(self.preferred_base),
                         relocations=self.relocations,
                         bridge=hex(self.bridge_entry))
+        if self.bridge_entry == 0 and self.kernel_jump == 0:
+            self.trace.note("handover64", **self.handover64)
 
     def _file_offset(self, rva):
         # PE places sections at section alignment, so the virtual span of a
