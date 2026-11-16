@@ -513,7 +513,7 @@ accident: the destination became optional.
 
 ### Actual product mission (restated, and now normative)
 
-> **PC5 — a native PlayStation 5 operating system for PC hardware.**
+> **PC5 — An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.**
 > PC5 is an engineering platform whose destination is to run the genuine Sony
 > PlayStation 5 system software on compatible PC hardware, and to deliver the
 > authentic PS5 platform and gaming experience there. PC5 is not a Linux

@@ -1238,8 +1238,9 @@ Torito entries cannot disagree: the builder writes both from one computation and
 
 ### 14.3 El Torito compatibility
 
-Nothing in the catalog moved. `make verify` passes the same 53 checks it did in
-M1g plus the MBR ones, including the catalog checksum, the initial entry at
+Nothing in the catalog moved. `make verify` passed the check set of that time —
+53 checks, the same ones as M1g plus the MBR ones, and fewer than the 80 it runs
+after the descriptor work in §21 — including the catalog checksum, the initial entry at
 offset 32 (`0x88`, no-emulation, segment `0x7C0`, 8 virtual sectors), the UEFI
 section header `0x91`, the ESP's FAT/PE32+ structure and the boot descriptor's
 CRC32 (`stored dc97e002 computed dc97e002`). Files: `KERNEL.BIN`, `README.TXT`,
@@ -2504,3 +2505,84 @@ SHA-256 as the build recorded in §21, rebuilt from scratch to confirm it.
 
 Nothing about hardware or Sony software. It changes how the repository presents what it
 already knows, and every state it presents is one the repository can already prove.
+
+---
+
+## 23. Repository quality audit: the command contradiction, the identity line, and the gaps around them
+
+A repository-wide audit rather than a feature. What follows is what was found, what was
+changed, and the gates that were run afterwards. Everything below was found in the tree
+at `7505a39`, not in a description of it.
+
+### 23.1 Findings and fixes
+
+| # | Finding | Evidence | Fix |
+|---|---|---|---|
+| 1 | **The headline command was inverted.** `README.md`, `CONTRIBUTING.md` and `docs/PRESENTATION.md` all said `make presentation` regenerates the figures; the target ran the *check*, and the write was in an undocumented `presentation-sync` | `Makefile` targets `presentation:` → `tools/presentation.py check` | `presentation` now writes, `presentation-check` reads, `make check` runs the read-only one. The alias is removed rather than kept |
+| 2 | `presentation-sync` was not declared `.PHONY`, so a file of that name could shadow the target | `.PHONY:` line omitted it | every relevant target is declared; a test asserts it |
+| 3 | **No documentation-wide link checker.** Only `README.md` links were tested; the other 41 Markdown files could rot unnoticed | `tests/test_architecture.py` checks `README.md` only | `tools/docs_check.py` checks every Markdown file: relative links, heading anchors (GitHub slug rule), and `make <target>` mentions. Wired as `make docs-check`, run by `make check` |
+| 4 | **The identity line read as a claim.** "A native PlayStation 5 operating system for PC hardware." could be read as asserting PC5 *is* Sony's OS | `product.identity` in `roadmap.json`, repeated in eight documents | identity is now "An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.", with `product.identity_note` in the data and an explicit non-affiliation paragraph directly under it in the README. Rendered graph regenerated with `tools/roadmap.py sync` |
+| 5 | **Stale gate count.** The evidence-level table claimed `make verify` runs "53 checks"; it runs 80 | `build/verify-report.json` reports 80 | the table no longer hard-codes a count; the historical section says 53 *at that time* and points at §21 |
+| 6 | A figure label could clip its bar, and nothing checked text against the canvas | `pc5-progress.svg`, workstream names | labels clip at 34 characters; `tools/presentation.py` now estimates rendered text width and fails if any line leaves its figure. Two tests pin it |
+| 7 | **No contributor templates**, so the first issue a stranger opened would arrive without machine, firmware, evidence level or log | `.github/` did not exist | issue forms for bugs and proposals and a pull-request template that makes the evidence level a required checkbox list, plus a security-model contact link |
+| 8 | The gate inventory was implicit: which command proves what, and which ones may legitimately say `NOT TESTED` | `docs/TESTING_STRATEGY.md` | new §1b table: each command, what it proves, what it cannot prove, and its exit-code semantics |
+
+Audited and found clean, for the record: no `TODO`/`FIXME` in `kernel/`, `boot/`, `tools/`
+or `psm/`; no bare or blanket `except` in the Python tools; no committed secrets, keys or
+tokens; no file over 200 KB outside `.git`; `make clean` removes only `build/`, and
+`distclean` only the generated firmware manifest; every relative link and anchor in the
+tree resolved before the change and still does.
+
+### 23.2 The command contract, now tested
+
+`tests/test_presentation.py` gained a class that reads the `Makefile` and fails if:
+`presentation` stops writing, `presentation-check` starts writing, `check` depends on the
+writing target, a command is not `.PHONY`, or the old alias returns. Alongside it:
+generation repairs stale output, a clean generation writes nothing, `check` leaves every
+tracked file byte-identical, and two renders of the same data are identical.
+
+### 23.3 Gates, actually executed on the final commit
+
+```
+$ make check
+DOCS OK: 42 Markdown files, 25 make targets, links, anchors and commands resolve
+PRESENTATION OK: 4 figures current, 13 status rows match roadmap.json, links and alt text resolve
+Ran 501 tests ... OK (skipped=2)
+```
+
+The emulator, stub-firmware and firmware gates are not part of `make check` and were run
+separately, on the same commit:
+
+```
+$ SOURCE_DATE_EPOCH=1763251200 make && make verify
+pc5: sha256 b1810431c15d04b98628aef678cacd15aca0e96d3c163e055a750d404c10fb7e
+VALID: build/pc5.iso  sha256=b1810431…
+MANIFEST VALID: build/pc5.iso matches build/pc5.iso.manifest.json   (80 verify checks)
+
+$ make boot-test
+PASSED: 119 checks against the emulator
+
+$ make stubtest
+PASSED: 58/58 checks against the stub firmware
+
+$ make ovmf-test
+NOT TESTED: genuine OVMF firmware and/or QEMU is not available on this machine.
+required matrix rows: 22, none executed here   (tool exit 3; make exits 2)
+
+$ make roadmap && make hw-record
+roadmap: OK — 35 milestones in 14 workstreams, destination M19 reachable, document in sync
+template: OK (rejected as expected)
+```
+
+The ISO's SHA-256 changed from `846ef41c…` because `build/build-info.json` records the
+commit, and the commit changed. The image's structure and contents did not.
+
+### 23.4 What this audit did not do
+
+* No kernel, bootloader or driver rewrite: nothing was found that justified one in a
+  focused quality pass, and inventing work there would be worse than recording the gap.
+* No change to what PC5 can execute. The ISO still boots PC5's own loader and kernel; the
+  destination `M19` is still blocked; no Sony software exists in the tree.
+* No CI activation: the workflow definition still cannot be installed with the token in
+  use, so no badge is shown and `make check` remains what CI would run, not proof that CI
+  ran it.

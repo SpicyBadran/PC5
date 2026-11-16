@@ -1,6 +1,6 @@
 # The PS5 system-software target — what the protected input is, and what it is not
 
-**PC5 — a native PlayStation 5 operating system for PC hardware.** This document
+**PC5 — An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.** This document
 is part of the destination workstream (WS10): it establishes what the protected
 input is before anything is built around it. Architecture authority:
 [`architecture/PC5_ARCHITECTURE_SPEC_v2.md`](architecture/PC5_ARCHITECTURE_SPEC_v2.md).

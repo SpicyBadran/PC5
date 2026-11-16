@@ -242,6 +242,131 @@ class CheckTest(unittest.TestCase):
                             for problem in problems), problems)
 
 
+class CommandContractTest(unittest.TestCase):
+    """`make presentation` writes; `make presentation-check` reads; `make check` reads.
+
+    The repository shipped the opposite for one release: the documentation said
+    `presentation` regenerated the figures, while the target only checked them and the
+    write lived in an undocumented, non-phony `presentation-sync`. These tests make the
+    three-way contract explicit, so a future rename cannot quietly invert it again.
+    """
+
+    def setUp(self):
+        self.makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+        self.targets = dict()
+        current = None
+        for line in self.makefile.splitlines():
+            if line and not line[0].isspace() and line.rstrip().endswith(":") or (
+                    line and not line[0].isspace() and ":" in line and "=" not in line.split(":")[0]):
+                if ":" in line and not line.startswith("#"):
+                    name = line.split(":")[0].strip()
+                    if name and " " not in name and "=" not in name:
+                        current = name
+                        self.targets.setdefault(current, [])
+                        continue
+            if line.startswith("\t") and current:
+                self.targets[current].append(line.strip())
+
+    def recipe(self, name: str) -> str:
+        return "\n".join(self.targets.get(name, []))
+
+    def test_presentation_writes(self):
+        self.assertIn("presentation.py sync", self.recipe("presentation"))
+
+    def test_presentation_check_reads(self):
+        self.assertIn("presentation.py check", self.recipe("presentation-check"))
+        self.assertNotIn("sync", self.recipe("presentation-check"))
+
+    def test_make_check_uses_the_read_only_target(self):
+        prerequisites = [line for line in self.makefile.splitlines() if line.startswith("check:")]
+        self.assertTrue(prerequisites)
+        line = prerequisites[0]
+        self.assertIn("presentation-check", line)
+        self.assertNotIn("presentation ", line + " ", "check must not regenerate figures")
+
+    def test_every_documented_presentation_command_is_phony(self):
+        phony = [line for line in self.makefile.splitlines() if line.startswith(".PHONY:")][0]
+        for name in ("presentation", "presentation-check", "docs-check"):
+            self.assertIn(name, phony.split(), f"{name} is not declared .PHONY")
+
+    def test_the_old_alias_is_gone(self):
+        self.assertNotIn("presentation-sync:", self.makefile)
+
+    def test_generation_updates_stale_output_and_check_notices(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            (tmp / "docs").mkdir()
+            for entry in (REPO / "docs").iterdir():
+                if entry.name != "assets":
+                    (tmp / "docs" / entry.name).symlink_to(
+                        entry, target_is_directory=entry.is_dir())
+            for name in ("CONTRIBUTING.md", "LICENSE", "ci"):
+                (tmp / name).symlink_to(REPO / name,
+                                        target_is_directory=(REPO / name).is_dir())
+            (tmp / "docs/assets").mkdir(parents=True)
+            for name, body in P.rendered(roadmap()).items():
+                (tmp / "docs/assets" / name).write_text("stale\n", encoding="utf-8")
+            (tmp / "README.md").write_text(
+                (REPO / "README.md").read_text().replace(
+                    P.status_markdown(roadmap()), P.BEGIN + "\n" + P.END),
+                encoding="utf-8")
+            with redirected(tmp):
+                self.assertTrue(P.check(roadmap()), "stale output must fail the check")
+                P.write(roadmap())
+                self.assertEqual(P.check(roadmap()), [], "generation must fix it")
+                before = {p: p.read_bytes() for p in (tmp / "docs/assets").iterdir()}
+                self.assertEqual(P.write(roadmap()), [], "a clean generation writes nothing")
+                self.assertEqual(before, {p: p.read_bytes() for p in (tmp / "docs/assets").iterdir()})
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_check_does_not_modify_the_repository(self):
+        tracked = [REPO / "README.md"] + sorted((REPO / "docs/assets").iterdir())
+        before = {path: path.read_bytes() for path in tracked}
+        P.check(roadmap())
+        self.assertEqual(before, {path: path.read_bytes() for path in tracked})
+
+    def test_generation_is_deterministic_byte_for_byte(self):
+        first = P.rendered(roadmap())
+        second = P.rendered(roadmap())
+        self.assertEqual({k: v.encode() for k, v in first.items()},
+                         {k: v.encode() for k, v in second.items()})
+
+
+class LayoutGuardTest(unittest.TestCase):
+    """Figures are geometry; text that leaves its box is a defect, not a taste question."""
+
+    def test_no_text_runs_outside_a_figure(self):
+        data = roadmap()
+        for name, body in P.rendered(data).items():
+            width = int(re.search(r'width="(\d+)"', body).group(1))
+            self.assertEqual(P.overflow(body, width), [], name)
+
+    def test_the_overflow_guard_actually_fires(self):
+        long_line = P.text(10, 20, "x" * 200, size=14)
+        body = P.svg(400, 60, long_line, "t", "d")
+        self.assertTrue(P.overflow(body, 400))
+
+    def test_workstream_labels_stay_clear_of_the_bars(self):
+        body = P.rendered(roadmap())["pc5-progress.svg"]
+        bar_x = 372
+        for x, size, anchor, content in P.TEXT_ELEMENT.findall(body):
+            if float(x) != 96.0:
+                continue
+            label = re.sub(r"<[^>]+>", "", content)
+            self.assertLess(float(x) + len(label) * float(size) * 0.62, bar_x - 6,
+                            f"label would overlap its bar: {label!r}")
+
+    def test_every_figure_scales_for_mobile(self):
+        for name, body in P.rendered(roadmap()).items():
+            width = int(re.search(r'width="(\d+)"', body).group(1))
+            self.assertLessEqual(width, 1200, name)
+            largest = max(float(size) for _x, size, _a, _c in P.TEXT_ELEMENT.findall(body))
+            smallest = min(float(size) for _x, size, _a, _c in P.TEXT_ELEMENT.findall(body))
+            self.assertGreaterEqual(smallest, 10, f"{name} has text too small to read")
+            self.assertLessEqual(largest, 64, name)
+
+
 class PresentationHygieneTest(unittest.TestCase):
     def test_no_screenshots_are_shipped_as_evidence(self):
         """There is no physical boot to photograph, so there are no photographs."""

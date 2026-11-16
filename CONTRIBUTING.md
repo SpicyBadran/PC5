@@ -30,19 +30,41 @@ the chain to the destination.
 6. **Facts, not adjectives.** A published specification does not establish an internal
    register, a firmware interface or a boot process. Cite what you measured.
 
+## Which document is authoritative for what
+
+Several documents describe the project, and they are not equal. When they disagree, the
+higher entry wins, and the lower one is a bug to fix:
+
+| Question | Authority | Everything else |
+|---|---|---|
+| What exists, in what state, depending on what | `docs/architecture/roadmap.json` | `docs/ROADMAP.md` and `docs/architecture/PC5_MILESTONE_GRAPH.md` are rendered from it; README tables are generated from it |
+| What the architecture is | `docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md` | `docs/ARCHITECTURE.md` describes what is implemented today |
+| Why a decision was made | `docs/TECHNICAL_DECISIONS.md` (ADR-001 … ADR-025) | summaries elsewhere cite the ADR, they do not restate it |
+| What was measured, and when | `docs/TEST_RESULTS.md` (append-only, section per change) | README claims must be traceable to a section |
+| What a boot attempt proved | the records under `docs/evidence/`, validated by `tools/hw_record.py` | `M1` stays `not_started` until one exists |
+| What the destination is | `product.destination` in `roadmap.json` | every entry-point document must repeat it verbatim, and a test enforces that |
+| What the public sees | `README.md` and `docs/assets/*.svg`, both generated/checked by `tools/presentation.py` | hand edits fail `make presentation-check` |
+
+Nothing in that table is aspirational: each row is enforced by a test or a gate, which is
+why the documents can be trusted to disagree loudly rather than quietly.
+
 ## The loop
 
 ```sh
-make            # build
-make check      # host + kernel tests, platform contract, documentation guards
-make verify     # structural verification of the image and its manifest
-make roadmap    # the graph still validates
+make                    # build
+make check              # host + kernel tests, contract, docs and generated-file guards
+make verify             # structural verification of the image and its manifest
+make roadmap            # the graph still validates
+make docs-check         # links, heading anchors and documented commands
+make presentation-check # figures and status block are current (make check runs it too)
 ```
 
 If you touch the milestone graph, run `python3 tools/roadmap.py sync` so the rendered
 document matches the data. If you touch the README or an architecture figure, run
-`make presentation` — it regenerates the status table and figures from `roadmap.json`
-and fails if a hand edit overstates progress.
+`make presentation` to regenerate the status table and figures from `roadmap.json`, then
+`make presentation-check` — the read-only check that `make check` also runs, and which
+fails if a hand edit overstates progress. `make docs-check` does the same job for every
+document in the tree: links, heading anchors and documented commands.
 
 If you have physical hardware, the most valuable contribution is
 [`docs/hardware/M1_PHYSICAL_BOOT_PROCEDURE.md`](docs/hardware/M1_PHYSICAL_BOOT_PROCEDURE.md):

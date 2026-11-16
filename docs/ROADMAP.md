@@ -1,6 +1,6 @@
 # Roadmap
 
-**PC5 — a native PlayStation 5 operating system for PC hardware.**
+**PC5 — An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.**
 
 The destination is to run the genuine Sony PS5 system software on compatible PC
 hardware. This page is the human-readable view of the milestone graph; the data

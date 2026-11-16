@@ -1,4 +1,4 @@
-# PC5 Architecture Specification v2 — one native PlayStation 5 platform
+# PC5 Architecture Specification v2 — one independent PlayStation 5 platform
 
 | | |
 |---|---|
@@ -18,7 +18,7 @@ what is measured is in `docs/TEST_RESULTS.md`; what is implemented is in
 
 ## 1. Product identity
 
-> **PC5 — a native PlayStation 5 operating system for PC hardware.**
+> **PC5 — An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.**
 >
 > PC5 is an independent engineering project whose destination is to run the
 > genuine Sony PlayStation 5 system software on compatible PC hardware, and to

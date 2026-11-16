@@ -2,12 +2,17 @@
 
 # PC5
 
-**A native PlayStation 5 operating system for PC hardware.**
+**An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.**
 
 PC5 is an independent engineering project whose destination is to run the
 **genuine Sony PlayStation 5 system software** on compatible PC hardware. It is not a Linux
 distribution with a PlayStation theme, not an imitation of the PS5 interface, and not
 a project in which PS5 compatibility is an optional side quest.
+
+**PC5 is not a Sony product and ships no Sony software.** The line above names the
+platform this project is building and the destination it is built toward — it is not a
+claim that Sony's operating system exists in this repository, and nothing here has
+executed it.
 
 The destination is defined as data — `product.identity` and `product.destination` in
 [`docs/architecture/roadmap.json`](docs/architecture/roadmap.json) — and the test
@@ -48,7 +53,8 @@ explains what running the system software would require.
 ## Status at a glance
 
 Every label below is generated from the milestone graph by `tools/presentation.py`
-and checked by `make presentation`; nothing in the table is typed by hand. A
+and checked by `make presentation-check`, which `make check` runs; nothing in the table
+is typed by hand. A
 `complete` milestone renders as **VERIFIED** because it carries evidence in the
 repository, and a physical claim needs a filed record under `docs/evidence/`.
 
@@ -109,7 +115,8 @@ workstream by state, as recorded in `roadmap.json`. A bar is not a measure of ef
 difficulty or time — it is a count of graph nodes. A milestone is `complete` only when
 its acceptance criteria have evidence, `blocked` only when a named dependency cannot
 be met, and a blocked milestone is not partial progress. Regenerate with
-`make presentation`; the checker fails if the figure and the data disagree.
+`make presentation`; `make presentation-check` fails if the figure and the data
+disagree.
 
 ## From commit to boot
 
@@ -148,7 +155,9 @@ make verify       # structure, boot entries, ESP, hybrid MBR, plus the image man
 make check        # host unit tests, kernel unit tests, platform contract, docs guards
 make roadmap      # validate the milestone graph, release isolation, destination path
 make boot-test    # boot the ISO in the emulator and assert the interface (119 checks)
+make docs-check   # every Markdown link, heading anchor and documented command resolves
 make presentation # regenerate the figures and the status table above
+make presentation-check  # read-only: are the generated files still current?
 ```
 
 | Command | What it actually proves |
@@ -158,7 +167,9 @@ make presentation # regenerate the figures and the status table above
 | `make check` | the host and kernel test suites pass; the documentation guards hold |
 | `make roadmap` | the graph is consistent and the destination is still reachable |
 | `make boot-test` | PC5's own code boots under the v86 emulator and prints the expected interface |
-| `make presentation` | the figures and the status table match `roadmap.json` |
+| `make docs-check` | no document links a missing file, a renamed heading or a removed target |
+| `make presentation` | rewrites the figures and the status table from `roadmap.json` |
+| `make presentation-check` | those generated files are current; part of `make check`, and it never writes |
 
 Two optional gates need extra dependencies:
 
@@ -249,7 +260,9 @@ which requirements are currently unsatisfiable, is classified in
 [`docs/TECHNICAL_DECISIONS.md`](docs/TECHNICAL_DECISIONS.md) ·
 [`docs/UPDATE_SYSTEM.md`](docs/UPDATE_SYSTEM.md)
 
-**Contributing and audit** — [`CONTRIBUTING.md`](CONTRIBUTING.md) ·
+**Contributing and audit** — [`CONTRIBUTING.md`](CONTRIBUTING.md), which also states
+which document is authoritative for what ·
+
 [`docs/PROJECT_AUDIT.md`](docs/PROJECT_AUDIT.md) ·
 [`ci/README.md`](ci/README.md) · [`LICENSE`](LICENSE)
 
@@ -259,7 +272,7 @@ which requirements are currently unsatisfiable, is classified in
 boot/     BIOS loader and UEFI BOOTX64.EFI
 kernel/   freestanding kernel: storage, filesystems, PCI, ACPI, console
 psm/      PS5 platform contract registry, claims and conformance doubles
-tools/    build, verification, manifest, roadmap, presentation, firmware checks
+tools/    build, verification, manifest, roadmap, presentation, docs checks
 tests/    host and kernel test suites, emulator harness, documentation guards
 docs/     architecture authority, roadmap, test results, evidence, procedure
 ci/       pipeline definition (stored here, not yet activated — see ci/README.md)
