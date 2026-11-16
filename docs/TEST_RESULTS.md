@@ -2586,3 +2586,60 @@ commit, and the commit changed. The image's structure and contents did not.
 * No CI activation: the workflow definition still cannot be installed with the token in
   use, so no badge is shown and `make check` remains what CI would run, not proof that CI
   ran it.
+
+---
+
+## 24. The README became a dashboard: generated statistics, committed evidence records
+
+The presentation layer from §22 could be polished but not trusted: it rendered milestone
+states, and everything else on the page — check counts, ISO sizes, the PUP's byte counts,
+"119 checks" in the quick start — was typed by hand. This section records what replaced
+that, and what enforces it.
+
+### 24.1 What was wrong with the old page
+
+| Problem | Evidence |
+|---|---|
+| Statistics typed into prose | `README.md` carried `119 checks`, `58 checks`, `40 checks`, `135 bytes`, `1.42 GB` in five places; none was generated |
+| No record of *when* a gate ran, or at which commit | nothing under `docs/evidence/` except an empty physical-boot template |
+| One generated block | `README.md` had exactly one marker pair (`pc5:status`); figures were generated, numbers were not |
+| A stale number was invisible | `make presentation-check` compared figures and that one block; a wrong count in a paragraph passed |
+
+### 24.2 What now exists
+
+| Piece | Purpose |
+|---|---|
+| `tools/validation.py` | runs a gate and writes `docs/evidence/validation/<gate>.json`: command, exit code, result, check counts, commit, date, dirty flag. A record can only exist because the command ran |
+| `docs/evidence/validation/*.json` | the committed records the page quotes — `check`, `verify`, `roadmap`, `docs-check`, `boot-test`, `stubtest`, `ovmf-test` |
+| five README blocks | `pc5:stats`, `pc5:status`, `pc5:evidence`, `pc5:blockers`, `pc5:pup` — each generated from exactly one source |
+| `docs/assets/pc5-dashboard.svg` | six stat cards and a footer with the latest recorded verification, test run, OVMF result and physical-boot count |
+| `docs/assets/pc5-evidence.svg` | the evidence ladder, one row per level, each with its own record |
+| stray-statistic scan | `make presentation-check` rejects `N checks`, `N milestones`, `N workstreams`, `N-byte`, `N.N GB` anywhere outside a generated block |
+
+### 24.3 Why the numbers cannot lie (much)
+
+* `passed` is only ever written when the command exited 0, and `verify-records` fails a
+  record whose verdict and exit code disagree.
+* A missing dependency becomes `not-tested` or `skipped` — `make ovmf-test` on this
+  machine produces exactly that, and the dashboard shows `not-tested`, not a pass.
+* Records are snapshots: each row prints the commit it ran at, and the block says in
+  words that an older run is not evidence for the current tree.
+* Physical boot has no record here, so its row says `NOT TESTED` and the dashboard's card
+  says `not tested` — the field cannot be filled by writing prose.
+* No compatibility percentage is generated or displayed: the counts are graph nodes, and
+  the text next to the progress figure says so.
+
+### 24.4 Tests
+
+`tests/test_presentation.py` grew from 37 to 59 tests. The new ones change the data and
+assert the page changes (a milestone, a workstream, the destination state, a record), that
+a missing record never renders as verified, that every generated number equals the data,
+that a typed statistic is rejected, and that records with impossible exit-code/verdict
+combinations are rejected. `tests/test_docs_check.py` continues to hold links and
+commands.
+
+### 24.5 What this does not establish
+
+Nothing about hardware, firmware or Sony software. It establishes that the page's numbers
+can be traced to a command that ran, at a named commit, on a named date — and that they
+will change when the underlying data changes rather than when somebody remembers.

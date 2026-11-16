@@ -38,6 +38,7 @@ interchangeable — an emulator pass is not a firmware boot, and neither is a PC
 - [ ] No placeholder driver, stub or double reports success without doing the work.
 - [ ] No Sony firmware, keys, dumps or derived bytes were added, extracted or shared.
 - [ ] No third-party source archive, asset or project identity was vendored (ADR-025).
-- [ ] Generated files (`docs/assets/`, the README status block) were regenerated with `make presentation`, and `make presentation-check` passes.
+- [ ] Generated files (the six figures and the five README blocks) were regenerated with `make presentation`, and `make presentation-check` passes.
+- [ ] If I ran a gate, the run is recorded with `python3 tools/validation.py run …`, and `make validation` passes — no hand-written or edited records.
 - [ ] `make docs-check` passes: links, anchors and documented commands resolve.
 - [ ] Claims in documentation are no stronger than the evidence above.

@@ -48,7 +48,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: ovmf-setup ovmf-check all iso uefi check docs-check presentation-check presentation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record
+.PHONY: ovmf-setup ovmf-check all iso uefi check docs-check presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record
 
 all: iso
 
@@ -212,6 +212,17 @@ presentation:
 
 presentation-check:
 	python3 tools/presentation.py check
+
+# What the gates actually reported, as committed records: command, exit code, commit,
+# date. `list` only reads; `record-validation` runs the gates and rewrites the records
+# (which is why it is never part of `make check`).
+validation:
+	python3 tools/validation.py list
+	python3 tools/validation.py verify-records
+
+record-validation:
+	python3 tools/validation.py run check verify roadmap docs-check presentation-check \
+	  boot-test stubtest ovmf-test
 
 # Every Markdown file: relative links, heading anchors and `make <target>` mentions.
 # The README is also covered by the architecture tests; this covers the rest of the

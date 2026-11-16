@@ -1,0 +1,20 @@
+{
+  "checks": {
+    "passed": 501,
+    "skipped": 0,
+    "total": 501
+  },
+  "command": "make check",
+  "commit": "004f8cc49ae7c71d4ccadbc001f1e572765e08c7",
+  "date": "2026-11-16",
+  "dirty": true,
+  "exit_code": 0,
+  "gate": "check",
+  "level": "host tests",
+  "notes": "unit tests, platform contract, docs and generated files",
+  "result": "passed",
+  "schema": "pc5.validation/1",
+  "source_date_epoch": 1763251200,
+  "summary": "Ran 501 tests in 51.187s",
+  "tool": "tools/validation.py"
+}

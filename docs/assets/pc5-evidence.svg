@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="572" viewBox="0 0 1000 572" role="img" aria-labelledby="t d">
+  <title id="t">PC5 evidence ladder</title>
+  <desc id="d">Six rows from host tests to genuine Sony system software. The first four have recorded passes, real OVMF is not tested here, physical boot has no record, and Sony software execution is blocked.</desc>
+  <rect width="1000" height="572" fill="#0b0f14"/>
+  <text x="48" y="44" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="20" fill="#e6edf3" font-weight="bold" text-anchor="start">WHAT HAS ACTUALLY BEEN DEMONSTRATED</text>
+  <text x="48" y="68" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">one row per evidence level; a stronger row is not implied by a weaker one below or above it</text>
+  <rect x="48" y="94" width="904" height="54" rx="10" fill="#131a23" stroke="#243040"/>
+  <text x="72" y="118" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="14" fill="#e6edf3" font-weight="bold" text-anchor="start">Host and kernel tests</text>
+  <text x="72" y="136" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">make check at 004f8cc on 2026-11-16 — 501/501 checks</text>
+  <rect x="770" y="110" width="188" height="22" rx="11" fill="#34d399" opacity="0.14" stroke="#34d399" stroke-opacity="0.55"/>
+  <text x="864.0" y="125" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#34d399" font-weight="bold" text-anchor="middle">passed 501/501 @ 004f8cc</text>
+  <rect x="48" y="158" width="904" height="54" rx="10" fill="#0f151d" stroke="#243040"/>
+  <text x="72" y="182" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="14" fill="#e6edf3" font-weight="bold" text-anchor="start">ISO structure and manifest</text>
+  <text x="72" y="200" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">make verify at 004f8cc on 2026-11-16</text>
+  <rect x="770" y="174" width="132" height="22" rx="11" fill="#34d399" opacity="0.14" stroke="#34d399" stroke-opacity="0.55"/>
+  <text x="836.0" y="189" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#34d399" font-weight="bold" text-anchor="middle">passed @ 004f8cc</text>
+  <rect x="48" y="222" width="904" height="54" rx="10" fill="#131a23" stroke="#243040"/>
+  <text x="72" y="246" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="14" fill="#e6edf3" font-weight="bold" text-anchor="start">Emulator execution (v86 + SeaBIOS)</text>
+  <text x="72" y="264" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">make boot-test at 004f8cc on 2026-11-16</text>
+  <rect x="770" y="238" width="132" height="22" rx="11" fill="#34d399" opacity="0.14" stroke="#34d399" stroke-opacity="0.55"/>
+  <text x="836.0" y="253" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#34d399" font-weight="bold" text-anchor="middle">passed @ 004f8cc</text>
+  <rect x="48" y="286" width="904" height="54" rx="10" fill="#0f151d" stroke="#243040"/>
+  <text x="72" y="310" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="14" fill="#e6edf3" font-weight="bold" text-anchor="start">Stub firmware (unicorn)</text>
+  <text x="72" y="328" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">make stubtest at 004f8cc on 2026-11-16 — 58/58 checks</text>
+  <rect x="770" y="302" width="174" height="22" rx="11" fill="#34d399" opacity="0.14" stroke="#34d399" stroke-opacity="0.55"/>
+  <text x="857.0" y="317" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#34d399" font-weight="bold" text-anchor="middle">passed 58/58 @ 004f8cc</text>
+  <rect x="48" y="350" width="904" height="54" rx="10" fill="#131a23" stroke="#fbbf24"/>
+  <text x="72" y="374" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="14" fill="#e6edf3" font-weight="bold" text-anchor="start">Real OVMF firmware</text>
+  <text x="72" y="392" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">make ovmf-test at 004f8cc on 2026-11-16</text>
+  <rect x="770" y="366" width="160" height="22" rx="11" fill="#fbbf24" opacity="0.14" stroke="#fbbf24" stroke-opacity="0.55"/>
+  <text x="850.0" y="381" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#fbbf24" font-weight="bold" text-anchor="middle">not-tested @ 004f8cc</text>
+  <rect x="48" y="414" width="904" height="54" rx="10" fill="#0f151d" stroke="#fbbf24"/>
+  <text x="72" y="438" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="14" fill="#e6edf3" font-weight="bold" text-anchor="start">Physical PC boot (BIOS or UEFI)</text>
+  <text x="72" y="456" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">no record filed — the procedure exists, the machine does not</text>
+  <rect x="770" y="430" width="90" height="22" rx="11" fill="#fbbf24" opacity="0.14" stroke="#fbbf24" stroke-opacity="0.55"/>
+  <text x="815.0" y="445" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#fbbf24" font-weight="bold" text-anchor="middle">not tested</text>
+  <rect x="48" y="478" width="904" height="54" rx="10" fill="#131a23" stroke="#f87171" stroke-dasharray="6 5"/>
+  <text x="72" y="502" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="14" fill="#f87171" font-weight="bold" text-anchor="start">Genuine Sony system software executing</text>
+  <text x="72" y="520" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">no lawful path exists; nothing has been loaded or executed</text>
+  <rect x="770" y="494" width="69" height="22" rx="11" fill="#f87171" opacity="0.14" stroke="#f87171" stroke-opacity="0.55"/>
+  <text x="804.5" y="509" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#f87171" font-weight="bold" text-anchor="middle">blocked</text>
+  <text x="48" y="552" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">records live in docs/evidence/validation/ and carry the command, exit code, commit and date of the run</text>
+</svg>

@@ -367,6 +367,160 @@ class LayoutGuardTest(unittest.TestCase):
             self.assertLessEqual(largest, 64, name)
 
 
+class DynamicDashboardTest(unittest.TestCase):
+    """A change in the data must change the page. That is the whole contract."""
+
+    def setUp(self):
+        self.data = roadmap()
+        self.records = P.load_records()
+        self.assertTrue(self.records, "no validation records committed: the dashboard would "
+                                      "have nothing to quote")
+
+    def test_changing_a_milestone_changes_the_statistics(self):
+        before = P.stats_markdown(self.data, self.records)
+        after = P.stats_markdown(with_state(self.data, "M1a", "blocked"), self.records)
+        self.assertNotEqual(before, after)
+        self.assertIn("| Blocked | 7 |", after)
+
+    def test_changing_a_workstream_changes_the_dashboard(self):
+        changed = copy.deepcopy(self.data)
+        changed["workstreams"].append({"id": "WS99", "name": "probe", "serves_level": "1",
+                                       "purpose": "test fixture"})
+        self.assertNotEqual(P.dashboard(self.data, self.records),
+                            P.dashboard(changed, self.records))
+
+    def test_changing_the_destination_state_changes_the_figures(self):
+        before = P.dashboard(self.data, self.records)
+        after = P.dashboard(with_state(self.data, "M19", "in_progress"), self.records)
+        self.assertNotEqual(before, after)
+        self.assertIn("in progress", after)
+
+    def test_a_changed_record_updates_the_evidence_block(self):
+        before = P.evidence_markdown(self.records)
+        changed = copy.deepcopy(self.records)
+        changed["boot-test"]["result"] = "not-tested"
+        after = P.evidence_markdown(changed)
+        self.assertNotEqual(before, after)
+        self.assertIn("**not-tested**", after)
+
+    def test_an_old_record_is_stamped_with_its_own_commit(self):
+        """It is a snapshot, never a statement about the current tree."""
+        block = P.evidence_markdown(self.records)
+        commit = self.records["check"]["commit"][:7]
+        self.assertIn(f"`{commit}`", block)
+        self.assertNotIn("current commit", block)
+        self.assertIn("not evidence for the current one", block)
+
+    def test_missing_evidence_never_becomes_verified(self):
+        block = P.evidence_markdown({})
+        self.assertIn("**no record**", block)
+        self.assertNotIn("passed", block)
+        self.assertIn("**NOT TESTED**", block)
+        self.assertIn("**BLOCKED**", block)
+
+    def test_the_physical_row_follows_the_filed_records(self):
+        # no physical record filed in this repository, so the row says so
+        self.assertIn("NOT TESTED", P.evidence_markdown(self.records))
+        original = P.physical_records
+        try:
+            P.physical_records = lambda: [("2026-11-20-example.json", {"outcome": "booted",
+                                                                       "date": "2026-11-20"})]
+            block = P.evidence_markdown(self.records)
+            self.assertIn("**booted**", block)
+        finally:
+            P.physical_records = original
+
+    def test_every_block_states_the_numbers_the_data_holds(self):
+        counts = P.distribution(self.data)
+        block = P.stats_markdown(self.data, self.records)
+        self.assertIn(f"| Complete | {counts['complete']} |", block)
+        self.assertIn(f"| Blocked | {counts['blocked']} |", block)
+        self.assertIn(f"| In progress | {counts['in_progress']} |", block)
+        self.assertIn(f"| Not started | {counts['not_started']} |", block)
+
+    def test_blocked_milestones_are_listed_with_their_blocker(self):
+        block = P.blockers_markdown(self.data)
+        for milestone in self.data["milestones"]:
+            if milestone["state"] == "blocked":
+                self.assertIn(f"`{milestone['id']}`", block)
+                self.assertIn("| `", block)
+
+    def test_the_pup_block_is_read_from_the_pointer(self):
+        facts = P.pup_facts()
+        block = P.pup_markdown()
+        self.assertTrue(facts["pointer"])
+        self.assertIn(f"{facts['bytes']} bytes", block)
+        self.assertIn(facts["sha256"][:12], block)
+        self.assertIn("UNVERIFIED", block)
+
+
+class StrayStatisticTest(unittest.TestCase):
+    """A number in the prose is a number that will be wrong in a month."""
+
+    def test_a_typed_check_count_is_caught(self):
+        found = P.stray_statistics("It passes 119 checks today.\n")
+        self.assertTrue(found)
+
+    def test_a_typed_milestone_count_is_caught(self):
+        self.assertTrue(P.stray_statistics("35 milestones in 14 workstreams.\n"))
+
+    def test_a_typed_byte_count_is_caught(self):
+        self.assertTrue(P.stray_statistics("a 135-byte pointer\n"))
+        self.assertTrue(P.stray_statistics("a 1.42 GB payload\n"))
+
+    def test_numbers_inside_a_generated_block_are_fine(self):
+        block = "<!-- pc5:stats:begin -->\n9 of 35 milestones\n<!-- pc5:stats:end -->"
+        self.assertEqual(P.stray_statistics(block), [])
+
+    def test_the_real_readme_has_no_stray_statistics(self):
+        self.assertEqual(P.stray_statistics((REPO / "README.md").read_text()), [])
+
+
+class ValidationRecordTest(unittest.TestCase):
+    def setUp(self):
+        sys.path.insert(0, str(REPO / "tools"))
+        import validation
+        self.validation = validation
+
+    def test_committed_records_are_internally_consistent(self):
+        self.assertEqual(self.validation.problems(), [])
+
+    def test_a_record_cannot_claim_passed_without_exit_zero(self):
+        bogus = [{"file": "x.json", "schema": "pc5.validation/1", "gate": "check",
+                  "result": "passed", "exit_code": 2, "commit": "0" * 40,
+                  "date": "2026-11-16"}]
+        self.assertTrue(self.validation.problems(bogus))
+
+    def test_a_failed_result_with_exit_zero_is_caught(self):
+        bogus = [{"file": "x.json", "schema": "pc5.validation/1", "gate": "check",
+                  "result": "failed", "exit_code": 0, "commit": "0" * 40,
+                  "date": "2026-11-16"}]
+        self.assertTrue(self.validation.problems(bogus))
+
+    def test_an_uncommitted_or_malformed_sha_is_caught(self):
+        bogus = [{"file": "x.json", "schema": "pc5.validation/1", "gate": "check",
+                  "result": "failed", "exit_code": 1, "commit": "abc", "date": "2026-11-16"}]
+        self.assertTrue(self.validation.problems(bogus))
+
+    def test_a_missing_dependency_is_not_a_pass(self):
+        self.assertEqual(self.validation.classify(
+            "ovmf-test", 2, "NOT TESTED: no QEMU"), "not-tested")
+        self.assertEqual(self.validation.classify("stubtest", 2, "install unicorn"), "skipped")
+        self.assertEqual(self.validation.classify("boot-test", 77, "SKIP: no node"), "skipped")
+        self.assertEqual(self.validation.classify("check", 1, "FAILED"), "failed")
+        self.assertEqual(self.validation.classify("check", 0, "OK"), "passed")
+
+    def test_test_counts_are_read_from_the_run_line(self):
+        output = ("registry OK\nPASSED: 165 checks, 0 failures\n"
+                  "Ran 501 tests in 51s\n\nOK (skipped=2)\n")
+        self.assertEqual(self.validation.counts(output),
+                         {"passed": 499, "total": 501, "skipped": 2})
+
+    def test_the_summary_prefers_the_test_verdict(self):
+        output = "registry OK\nPASSED: 165 checks, 0 failures\nRan 501 tests in 51s\n"
+        self.assertEqual(self.validation.summarise(output), "Ran 501 tests in 51s")
+
+
 class PresentationHygieneTest(unittest.TestCase):
     def test_no_screenshots_are_shipped_as_evidence(self):
         """There is no physical boot to photograph, so there are no photographs."""

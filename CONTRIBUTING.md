@@ -60,11 +60,23 @@ make presentation-check # figures and status block are current (make check runs 
 ```
 
 If you touch the milestone graph, run `python3 tools/roadmap.py sync` so the rendered
-document matches the data. If you touch the README or an architecture figure, run
-`make presentation` to regenerate the status table and figures from `roadmap.json`, then
-`make presentation-check` — the read-only check that `make check` also runs, and which
+document matches the data. If you touch the README or a figure, run
+`make presentation` to regenerate the six figures and five generated blocks from
+`roadmap.json` and the committed records, then `make presentation-check` — the read-only check that `make check` also runs, and which
 fails if a hand edit overstates progress. `make docs-check` does the same job for every
 document in the tree: links, heading anchors and documented commands.
+
+**If you run a gate, record it.** The dashboard quotes committed validation records, not
+somebody's memory of a green run:
+
+```sh
+python3 tools/validation.py run check verify          # or: make record-validation
+python3 tools/validation.py list                      # what is committed, and when it ran
+```
+
+A record carries the command, its exit code, the commit and the date, and `make
+validation` fails if one is internally inconsistent. Never hand-write a record, and never
+edit one to change a result: re-run the gate.
 
 If you have physical hardware, the most valuable contribution is
 [`docs/hardware/M1_PHYSICAL_BOOT_PROCEDURE.md`](docs/hardware/M1_PHYSICAL_BOOT_PROCEDURE.md):
