@@ -174,7 +174,6 @@ recovery entry still boots the machine that the new system just failed on.
 ```
 tools/firmware.py, docs research material -> playstation/firmware-analysis/, playstation/prospero-research/
 Track B runtime (new)                     -> playstation/compatibility/{elf,prx,syscalls,graphics}
-vendor/anyps5/README.md                   -> playstation/compatibility/anyps5/
 ```
 
 **Gate:** a Track A build with `playstation/` removed from the tree still builds
@@ -202,10 +201,11 @@ as isolated.
 * **Move `kernel/` because the target says `kernel/legacy-pc5/`.** The rename
   happens with the inventory split, when there is a second kernel to distinguish
   it from. Until then `kernel/` is the only kernel and the name is honest.
-* **Delete the 19 MB AnyPS5 archive as part of "cleanup".** Its provenance is
-  audit evidence. Recommendation: publish it as a release asset or record its
-  upstream commit and remove it, as a separate owner decision (phase 5 at the
-  earliest).
+* **Keep a third-party archive as if it were provenance.** The 19 MB archive
+  that arrived with the repository has since been removed by an explicit owner
+  decision (ADR-025), and a guard test now stops any tracked third-party archive
+  or project reference from returning. What was supplied, what it measured and
+  what it could not do remain recorded in `docs/PROJECT_AUDIT.md`.
 * **Rename build targets.** Documentation, CI and muscle memory depend on them.
 * **Split the repository** into Track A / Track B repos. A separate repository
   would make the Track A/B gate invisible; a dependency graph plus a build

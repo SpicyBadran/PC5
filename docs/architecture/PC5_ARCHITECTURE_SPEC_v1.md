@@ -203,7 +203,7 @@ Pipeline, with the state of each stage in this repository:
 |---|---|---|
 | intake: identify containers (`SLB2`, `FIH`, `CNT`, SELF, PKG, ELF) | host tool | identification implemented without decryption |
 | executable loading and relocation | runtime | not implemented |
-| import resolution by NID + independently implemented PRX shims | runtime | studied upstream (AnyPS5, GPL-2.0), not built here |
+| import resolution by NID + independently implemented PRX shims | runtime | public prior art only; not built, vendored or depended on here |
 | syscall / system-service surface | runtime | not implemented |
 | graphics translation (shader and command level) | runtime + platform GPU service | not implemented |
 | audio, input, storage, timing | platform services | not implemented |

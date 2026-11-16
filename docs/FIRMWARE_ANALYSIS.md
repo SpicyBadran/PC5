@@ -3,8 +3,9 @@
 ## 1. What firmware is, and is not, in this project
 
 * **Not supplied.** The repository was received with no Sony firmware image; the
-  only supplied material was the AnyPS5 source archive. Nothing has been
-  analysed yet.
+  only supplied material was a third-party source archive, which was not firmware
+  and has since been removed from the tree (ADR-025). Nothing has been analysed
+  yet.
 * **Not distributed.** PC5 will never commit, release or embed Sony firmware,
   keys or derived binaries. `.gitignore` excludes `firmware/`.
 * **A primary research input.** When the owner supplies an image, it is analysed
@@ -99,7 +100,8 @@ In order of dependency:
 Because step 1 has no public solution, PC5 does not plan around it. It invests
 instead in the path that can produce real results with legitimate inputs: the
 host platform, the driver work, and the PS5-binary execution route documented in
-`docs/GAMING_COMPATIBILITY.md` and studied with AnyPS5.
+`docs/GAMING_COMPATIBILITY.md`, which needs a static relinker that PC5 neither
+vendors nor depends on.
 
 ## 6. Integrity record
 

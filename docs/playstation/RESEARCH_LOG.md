@@ -34,10 +34,10 @@ The test runner now sets the order it was verified with (0x213); four cases —
 no disk, zero-filled disk, valid GPT, CRC-damaged GPT — all reach the CD. This
 is a property of the test harness, not of PC5.
 
-**Hygiene finding (verified here).** A 19 MB third-party archive,
-`AnyPS5-main (1).zip`, is committed at the repository root and is never built by
-any target. Removal is recommended but is an owner decision; it is recorded, not
-silently deleted.
+**Hygiene finding (verified here).** A 19 MB third-party source archive was
+committed at the repository root and was never built by any target. It has since
+been removed, with every reference to it, by an owner decision (ADR-025); a guard
+test keeps it and its LFS pointer out of the tree.
 
 ## 2026-11-12 — Project start
 
@@ -53,13 +53,15 @@ are not.
 Consequences: ISO writer, bootloader and kernel must be written in-tree; boot
 testing must use an emulator from npm (`v86-system`); UEFI cannot be executed.
 
-**AnyPS5 (reported by its own sources; metrics verified here).**
-Static relinker, GPL-2.0-only, "nothing is emulated" — converts PS5 ELF
-executables to native Linux/Windows programs and supplies independent PRX
-library implementations. Measured in the supplied archive: 478,791 C/C++ lines,
-411 PRX libraries, 5,167 `APS5_EXPORT` NID declarations, 1,686 files with bare
-`return 0;` stubs, 857 TODO/UNIMPLEMENTED markers. Cannot be built here (no
-CMake, submodules absent). Source: <https://github.com/boykopovar/AnyPS5>.
+**Third-party PS5 static relinker (reported by its own sources; metrics verified
+here).** A static relinker, GPL-2.0-only, "nothing is emulated" — it converts PS5
+ELF executables to native host programs and supplies independent PRX library
+implementations. Measured in the archive supplied at project start: 478,791 C/C++
+lines, 411 PRX libraries, 5,167 NID export declarations, 1,686 files with bare
+`return 0;` stubs, 857 TODO/UNIMPLEMENTED markers. It could not be built here (no
+CMake, submodules absent). The archive has since been removed (ADR-025) and its
+upstream URL is deliberately not recorded: PC5 does not present itself as derived
+from it.
 
 **PS5 hardware (public documentation).** Custom AMD Zen 2, 8 cores/16 threads up
 to 3.5 GHz; custom RDNA 2 GPU, 36 CUs, up to 2.23 GHz (~10.28 TFLOPS); 16 GB
