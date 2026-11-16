@@ -226,7 +226,8 @@ struct efi_boot_services {
     efi_status(EFIAPI *exit_boot_services)(efi_handle image, u64 map_key);
     void *get_next_monotonic_count;
     void *stall;
-    void *set_watchdog_timer;
+    efi_status(EFIAPI *set_watchdog_timer)(u64 timeout_seconds, u64 watchdog_code,
+                                            u64 data_size, void *data);  /* +256 */
     /* The rest are never called; they are named only to keep the structure
      * complete, so a future caller cannot silently read the wrong slot. */
     efi_status(EFIAPI *connect_controller)(efi_handle, void *, void *, u32);

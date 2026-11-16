@@ -319,6 +319,76 @@ def verify(efi_path, esp_path, kernel_path):
               not trace.problems and not trace6.problems and not trace7.problems,
               "; ".join(trace.problems + trace6.problems + trace7.problems))
 
+    # ------------------------------------------- boot-service discipline
+    # Every boot service is wrapped by the stub: anything called after a
+    # successful ExitBootServices is recorded, because on real firmware that
+    # memory no longer belongs to the loader.
+    rep.check("no boot service was called after ExitBootServices",
+              fw.boot_service_calls_after_exit == [] and
+              _fw6.boot_service_calls_after_exit == [],
+              fw.boot_service_calls_after_exit + _fw6.boot_service_calls_after_exit)
+    rep.check("the watchdog was disabled while boot services were still callable",
+              len(fw.watchdog_calls) == 1 and
+              fw.watchdog_calls[0]["timeout"] == 0 and
+              not fw.watchdog_calls[0]["after_exit"] and
+              trace.has_serial("PC5-UEFI: watchdog_disabled"),
+              fw.watchdog_calls)
+
+    _fww, tracew = run_once(efi_path, esp_path, kernel_path, watchdog_refused=True)
+    rep.data["watchdog_refused_serial"] = tracew.serial
+    rep.check("a firmware that refuses to disable its watchdog still boots, and says so",
+              tracew.kernel_jump is not None and
+              tracew.has_serial("PC5-UEFI: watchdog_disable_refused="))
+
+    # ------------------------------------------- memory-map correctness
+    _fwf, tracef = run_once(efi_path, esp_path, kernel_path, fragment_low_memory=8)
+    _rawf, bif = read_boot_info(_fwf)
+    e820_f = read_e820(_fwf, bif["e820_count"])
+    rep.data["fragmented_e820"] = e820_f
+    rep.check("a fragmented memory map is merged, not truncated",
+              _fwf.kernel_jump is not None and
+              bif["e820_count"] == bi["e820_count"] and
+              sum(e["length"] for e in e820_f if e["type"] == 1) ==
+              sum(e["length"] for e in e820 if e["type"] == 1),
+              f"{bif['e820_count']} entries vs {bi['e820_count']}")
+    rep.check("the handover window was checked against the map before ExitBootServices",
+              trace.has_serial("PC5-UEFI: handover_window_checked=1"))
+    rep.check("the kernel copy was read back before the handover",
+              trace.has_serial("PC5-UEFI: kernel_handoff_verified=1") and
+              trace.has_serial("PC5-UEFI: handoff_bytes=%d" % os.path.getsize(kernel_path)))
+
+    # A map that keeps moving must fail, not loop for ever, and must never
+    # report that boot services were exited.
+    _fwst, tracest = run_once(efi_path, esp_path, kernel_path,
+                              expect_handover=False, race_map_key_forever=True)
+    rep.data["stale_key_serial"] = tracest.serial
+    stale_all = [e for e in tracest.events if e["event"] == "exit_boot_services_stale_key"]
+    rep.check("a key that is always stale stops the boot with E13, never a false success",
+              "PC5-UEFI FAILURE E13" in tracest.serial and
+              tracest.kernel_jump is None and
+              not tracest.has_serial("PC5-UEFI: boot_services_exited") and
+              len(stale_all) == 8,
+              f"{len(stale_all)} stale keys")
+
+    _fwr2, tracer2 = run_once(efi_path, esp_path, kernel_path, race_map_key=2)
+    rep.data["retry_twice_serial"] = tracer2.serial
+    stale2 = [e for e in tracer2.events if e["event"] == "exit_boot_services_stale_key"]
+    rep.check("two stale keys are retried twice, then the handover proceeds",
+              tracer2.kernel_jump is not None and len(stale2) == 2 and
+              tracer2.has_serial("PC5-UEFI: ExitBootServices_retries=2"))
+
+    _fwrv, tracerv = run_once(efi_path, esp_path, kernel_path,
+                              expect_handover=False, reserve_handover=True)
+    rep.data["reserved_window_serial"] = tracerv.serial
+    rep.check("low memory that is not conventional stops the boot with E15",
+              "PC5-UEFI FAILURE E15" in tracerv.serial and tracerv.kernel_jump is None)
+
+    _fwov, traceov = run_once(efi_path, esp_path, kernel_path,
+                              expect_handover=False, overflow_memory_map=True)
+    rep.data["overflow_map_serial"] = traceov.serial
+    rep.check("a memory map too large for the E820 buffer stops the boot with E16",
+              "PC5-UEFI FAILURE E16" in traceov.serial and traceov.kernel_jump is None)
+
     # ------------------------------------------------------ negative runs
     bad_kernel = bytearray(open(kernel_path, "rb").read())
     bad_kernel[2:6] = b"XXXX"                     # break the PC5K signature

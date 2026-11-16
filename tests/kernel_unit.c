@@ -120,6 +120,33 @@ static void test_memory_map(void)
     check_int("top MiB", (long)info.top_address_mb, 127);
 }
 
+static void test_boot_contract(void)
+{
+    /* The kernel must refuse boot information it cannot trust, and must say
+       *which* part was wrong: a version mismatch and a corrupt block are
+       different bugs in different places.  This is the same predicate kmain
+       runs, compiled into the host binary. */
+    struct pc5_boot_info bi;
+    memset(&bi, 0, sizeof(bi));
+
+    bi.magic = PC5_BOOT_MAGIC;
+    bi.version = PC5_PROTOCOL_VERSION;
+    check_int("boot info accepted", pc5_boot_info_problem(&bi), 0);
+
+    bi.magic = 0xDEADBEEFu;
+    bi.version = PC5_PROTOCOL_VERSION;
+    check_int("bad magic rejected", pc5_boot_info_problem(&bi), 1);
+
+    bi.magic = PC5_BOOT_MAGIC;
+    bi.version = PC5_PROTOCOL_VERSION + 1;
+    check_int("version mismatch rejected", pc5_boot_info_problem(&bi), 2);
+
+    bi.magic = 0;
+    bi.version = 0;
+    check_int("empty block rejected", pc5_boot_info_problem(&bi), 1);
+    check_int("null block rejected", pc5_boot_info_problem(NULL), 1);
+}
+
 static void test_chain(void)
 {
     struct pc5_boot_info bi;
@@ -799,6 +826,7 @@ int main(void)
     test_numbers();
     test_strings();
     test_memory_map();
+    test_boot_contract();
     test_chain();
     printf("%s: %d checks, %d failures\n", failures ? "FAILED" : "PASSED", checks, failures);
     return failures ? 1 : 0;

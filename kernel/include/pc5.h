@@ -213,6 +213,9 @@ struct cpu_info {
 void cpu_detect(struct cpu_info *out);
 void cpu_report(const struct cpu_info *ci, char *out, u32 max);
 
+/* 0 = acceptable, 1 = bad magic, 2 = protocol version mismatch. */
+int pc5_boot_info_problem(const struct pc5_boot_info *bi);
+
 struct mem_info {
     u64 total_bytes;
     u64 usable_bytes;

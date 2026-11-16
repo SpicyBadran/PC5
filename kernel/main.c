@@ -165,9 +165,17 @@ void kmain(struct pc5_boot_info *bi)
     serial_puts("\r\nPC5 KERNEL " PC5_VERSION " (build " PC5_BUILD_ID ", " PC5_BUILD_DATE ")\r\n");
     serial_puts("PC5-LOG kernel_entry eip=0x10000\r\n");
 
-    if (bi->magic != PC5_BOOT_MAGIC) {
+    switch (pc5_boot_info_problem(bi)) {
+    case 1:
         serial_puts("pc5: FATAL: bad boot info magic\r\n");
         con_panic("bad boot information from loader");
+        break;
+    case 2:
+        serial_puts("pc5: FATAL: boot protocol version mismatch\r\n");
+        con_panic("loader speaks a different boot protocol");
+        break;
+    default:
+        break;
     }
 
     console_init(bi);

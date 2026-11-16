@@ -143,7 +143,9 @@ class StubFirmware:
     def __init__(self, image, esp_volume, kernel_bytes, trace=None,
                  iso_volume_has_kernel=True, fat_walker=None,
                  clamp_seek_past_end=True, race_map_key=False,
-                 support_get_info=True):
+                 support_get_info=True, race_map_key_forever=False,
+                 reserve_handover=False, fragment_low_memory=0,
+                 overflow_memory_map=False, watchdog_refused=False):
         if not HAVE_UNICORN:
             raise StubError("the 'unicorn' module is not installed "
                             "(pip install unicorn)")
@@ -167,9 +169,27 @@ class StubFirmware:
         #   race_map_key         firmware allocates between GetMemoryMap and
         #                        ExitBootServices, so the first key is stale
         #   support_get_info     Firmware<>GetInfo is available
+        #   race_map_key_forever firmware invalidates every map key, so no
+        #                        number of retries can succeed (E13, no handover)
+        #   reserve_handover     low memory below the stack is *not* conventional,
+        #                        so the kernel's load window is unavailable (E15)
+        #   fragment_low_memory  low memory arrives as N adjacent descriptors,
+        #                        which must be merged and not truncated (E16 when
+        #                        the total exceeds the buffer)
+        #   overflow_memory_map  so many descriptors that E820 cannot hold them
+        #   watchdog_refused     SetWatchdogTimer answers with an error
         self.clamp_seek_past_end = clamp_seek_past_end
-        self.race_map_key = race_map_key
+        # A bare bool means "race once", which is what OVMF does; an integer
+        # means "race this many times".
+        self.race_map_key = int(race_map_key or 0)
+        self.race_map_key_forever = race_map_key_forever
+        self.reserve_handover = reserve_handover
+        self.fragment_low_memory = int(fragment_low_memory or 0)
+        self.overflow_memory_map = overflow_memory_map
+        self.watchdog_refused = watchdog_refused
         self.support_get_info = support_get_info
+        self.boot_service_calls_after_exit = []
+        self.watchdog_calls = []
         self.map_generation = 1
         self.map_key_races = 0
         self.insn_at = (0, 1)
@@ -374,9 +394,17 @@ class StubFirmware:
             152: ("handle_protocol", self.svc_handle_protocol),
             176: ("locate_handle", self.svc_locate_handle),
             232: ("exit_boot_services", self.svc_exit_boot_services),
+            256: ("set_watchdog_timer", self.svc_set_watchdog_timer),
         }
         for offset, (name, function) in services.items():
-            self.write_u64(self.bs + offset, self.add_service(name, function))
+            # Every boot service is wrapped: after a successful
+            # ExitBootServices firmware memory is not the loader's to use, so a
+            # call through this table would be a real bug on real firmware.
+            def watched(*args, _name=name, _function=function):
+                if self.trace.exited:
+                    self.boot_service_calls_after_exit.append(_name)
+                return _function(*args)
+            self.write_u64(self.bs + offset, self.add_service(name, watched))
         self.write(self.bs, struct.pack("<QIIII", 0x56524553544D5453, 0x00020000,
                                        0x48, 0, 0))
 
@@ -625,16 +653,48 @@ class StubFirmware:
         self.map_generation += 1
         return EFI_SUCCESS
 
-    def svc_get_memory_map(self, size_ptr, map_ptr, key_ptr, desc_ptr, ver_ptr):
-        entry = 48
-        descriptors = [
-            (7, 0x0, 0x0, 0x9F),              # conventional, low
+    def memory_descriptors(self):
+        """The map this firmware reports, shaped by the fault switches.
+
+        A real machine reports memory in many adjacent pieces; the loader has to
+        merge them.  `fragment_low_memory` splits the low conventional region so
+        that behaviour is exercised rather than assumed, and `reserve_handover`
+        takes the loader's own window away, which must stop the boot with E15
+        instead of a kernel that crashes later.
+        """
+        low_pages = 0x9F                      # 0..0x9F000, conventional
+        descriptors = []
+        if self.reserve_handover:
+            descriptors.append((2, 0x0, 0x0, 0x20))          # 0..0x20000 reserved
+            descriptors.append((7, 0x20000, 0x0, low_pages - 0x20))
+        elif self.fragment_low_memory:
+            pieces = max(1, self.fragment_low_memory)
+            base = 0
+            for index in range(pieces):
+                pages = low_pages // pieces if index < pieces - 1 else low_pages - base
+                descriptors.append((7, base * 4096, 0x0, pages))
+                base += pages
+        else:
+            descriptors.append((7, 0x0, 0x0, low_pages))
+        if self.overflow_memory_map:
+            # 60 non-adjacent reserved descriptors, each followed by a
+            # conventional page, so merging cannot rescue them: strictly more
+            # than the 40-entry E820 buffer.
+            for index in range(60):
+                descriptors.append((2, 0x40000000 + index * 0x2000, 0x0, 1))
+                descriptors.append((7, 0x40000000 + index * 0x2000 + 0x1000, 0x0, 1))
+        descriptors.extend([
             (7, 0x100000, 0x0, 0x100),        # conventional
             (2, FB_BASE, 0x0, FB_SIZE // 4096),
             (2, POOL_BASE, 0x0, (POOL_END - POOL_BASE) // 4096),
             (2, IMAGE_LOAD, 0x0, IMAGE_WINDOW // 4096),
             (7, 0x100000000, 0x0, 0x100),     # above 4 GiB: must be truncated
-        ]
+        ])
+        return descriptors
+
+    def svc_get_memory_map(self, size_ptr, map_ptr, key_ptr, desc_ptr, ver_ptr):
+        entry = 48
+        descriptors = self.memory_descriptors()
         needed = entry * (len(descriptors) + 1)
         size = self.read_u64(size_ptr)
         # Firmware fills in the required size, the descriptor stride and the
@@ -655,9 +715,20 @@ class StubFirmware:
         # invalidates it as soon as anything allocates, and OVMF does that
         # without being asked; the race switch models exactly that.
         self.write_u64(key_ptr, self.map_generation)
-        if self.race_map_key and self.map_key_races < 1:
+        if self.race_map_key_forever:
             self.map_key_races += 1
             self.map_generation += 1
+        elif self.map_key_races < self.race_map_key:
+            self.map_key_races += 1
+            self.map_generation += 1
+        return EFI_SUCCESS
+
+    def svc_set_watchdog_timer(self, timeout_seconds, code, data_size, _data):
+        self.watchdog_calls.append(dict(timeout=timeout_seconds, code=code,
+                                        data_size=data_size,
+                                        after_exit=self.trace.exited))
+        if self.watchdog_refused:
+            return EFI_UNSUPPORTED
         return EFI_SUCCESS
 
     def svc_allocate_pool(self, pool_type, size, buffer_ptr):
