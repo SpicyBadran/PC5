@@ -46,10 +46,12 @@ Supporting artefacts:
   level 5 and not complete, the substrate is not the product, forbidden claims
   are confined to historical documents, and the PS5 package is a pointer whose
   payload is absent.
-* `docs/TECHNICAL_DECISIONS.md` — ADR-001 … ADR-022. The realignment issued
+* `docs/TECHNICAL_DECISIONS.md` — ADR-001 … ADR-025. The realignment issued
   ADR-019 (one platform), ADR-020 (Linux role), ADR-021 (release isolation) and
   ADR-022 (the PS5 package as a protected input), and superseded ADR-009 and
-  ADR-010.
+  ADR-010. ADR-023 (the loader validates what firmware hands it), ADR-024 (the
+  platform contract is a registry and UNKNOWN is a refusal) and ADR-025 (no
+  vendored third-party archive) came after it, on the 64-bit and contract work.
 
 ## Status, stated plainly
 

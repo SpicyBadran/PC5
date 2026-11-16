@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | **Experimental specification, revision r1 (2026-11-16).** Every `M10` acceptance item is met and evidenced; the milestone stays `in_progress` because a level-4 milestone may not be `complete` while only levels 1–2 have evidence. This document is not evidence that any Sony software has ever run on PC5. |
-| Milestone | `M10` (this document), consumed by `M11`–`M17` |
+| Milestone | `M10` (this document); `M11` and `M17` depend on it directly, and `M12`–`M16` and `M18`–`M21` inherit it transitively |
 | Implementation | `psm/` — the registry, the rule engine and the ten PC5-authored doubles |
 | Tests | `tests/test_psm_registry.py`, `tests/test_psm_conformance.py`, `tests/test_psm_mutations.py`, `tests/test_psm_document.py` |
 | Decisions | ADR-019 (destination), ADR-022 (protected input), ADR-024 (this contract is a registry, and UNKNOWN is a refusal) |
@@ -837,6 +837,11 @@ transcripts; the test asserts it rather than assuming it.
 | `M15` audio, USB | `PSM-AUD`, `PSM-USB`: streams, latency classes, HID, hot-plug | DSP interface; controller features beyond HID |
 | `M16` services | `PSM-IRQ`, `PSM-TMR`, `PSM-IPC`, `PSM-SVC`: delivery, clock, RTC, transport, registry | every console-side behaviour: all `UNKNOWN` |
 | `M17` security | the refusal boundary and `C-SEC-01`/`C-SEC-02` | everything; no interface exists by design |
+
+`M18`–`M21` do not appear above because they consume this contract only through
+the chain: `M18` depends on `M9`, `M13` and `M17`; `M19` on `M14`, `M15`, `M16`
+and `M18`; `M20` on `M19`; `M21` on `M17` and `M18`. Nothing in `M18`–`M21` reads
+a definition that is not already in the table.
 
 `M10` blocks nothing it should not: what it delivers is documentary and structural
 (contract written, unknowns marked, doubles present, suite green). It asserts nothing

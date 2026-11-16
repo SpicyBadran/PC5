@@ -42,9 +42,12 @@ is not a bug in the diagram.
 ## 3. The destination path
 
 `python3 tools/roadmap.py path` prints the longest dependency chain ending at the
-destination milestone. It is deliberately the longest chain in the graph: the
-product's critical path is the work that reaches the destination, not the work
-that produces a lookalike interface. The generated block below prints it.
+destination milestone. It is the trunk of the critical path — the whole critical
+path is one milestone longer, because `M20` (the genuine runtime) depends on the
+destination once it exists. What matters is the direction: the longest chain the
+graph has runs *through* the destination, not around it, so the work that reaches
+genuine system software is the product's critical path and not a side branch.
+The generated block below prints it.
 
 ## 4. States, honestly
 
@@ -167,7 +170,7 @@ WS13 - Product experience: shell, library, settings  (serves level 6)
   M4    not_started  L6 product-experience  PC5 console experience: shell, library, settings, accounts
         depends on  M2c, M2d, M3
 
-DESTINATION PATH (the critical path of the product):
+DESTINATION PATH (longest dependency chain that ends at the destination):
   M0 -> M1d -> M1e -> M1f -> M1g -> M1i -> M1 -> M2a -> M2 -> M2b -> M3 -> M11 -> M12 -> M13 -> M14 -> M19
 blocked milestones: M1b, M17, M18, M19, M20, M21
 totals: complete 9, in_progress 2, blocked 6, not_started 18  (35 milestones)

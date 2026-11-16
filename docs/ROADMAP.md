@@ -22,9 +22,9 @@ evidence path exists.
 | 1 | PC5 boots on qualified PC hardware | **emulated only** — SeaBIOS and real OVMF firmware; no physical machine yet (`M1`) |
 | 2 | PC5 controls the required hardware through its own architecture | partial: PCI/ACPI inventory, ATA PIO, PS/2, FAT32; no APIC, NVMe, USB (`M2`, `M2a`, `M2b`) |
 | 3 | Core platform services work | not started (`M3`, `M2c`, `M2d`, `M7`) |
-| 4 | PS5 execution and system-software interfaces exist and are validated | **partial** — the platform contract, evidence registry and ten PC5-authored interfaces exist and pass 261 conformance checks (`M10`, acceptance met); no console-side behaviour is modelled yet (`M11`–`M16`) |
+| 4 | PS5 execution and system-software interfaces exist and are experimentally validated | **partial** — the platform contract, evidence registry and ten PC5-authored interfaces exist and pass 261 conformance checks (`M10`, acceptance met); no console-side behaviour is modelled yet (`M11`–`M16`) |
 | 5 | Genuine system-software compatibility | **blocked** — the authenticity boundary (`M17`) and a lawful input (`M18`) |
-| 6 | Platform experience | not started (`M4`, `M5`, `M20`) |
+| 6 | Platform experience | not started (`M4`, `M5`); `M20` is blocked |
 
 Nothing above level 1 is claimed, and level 1 itself is claimed only for
 emulators. The evidence classes for each level are fixed in `roadmap.json`
@@ -32,7 +32,7 @@ emulators. The evidence classes for each level are fixed in `roadmap.json`
 
 ## 2. What is actually complete
 
-Eight milestones are complete, all of them infrastructure or storage work that
+Nine milestones are complete, all of them infrastructure or storage work that
 the destination needs:
 
 | Milestone | What it delivered | Evidence |
@@ -49,7 +49,7 @@ the destination needs:
 
 ## 3. The destination workstream (`WS10`)
 
-The twelve PS5 milestones, in the order they become possible. Everything before
+The thirteen PS5 milestones, in the order they become possible. Everything before
 `M17` is buildable without Sony bytes, which is why it is scheduled first.
 
 | Milestone | What | State |
@@ -75,11 +75,12 @@ missing.
 ## 4. The destination path
 
 ```
-M0 -> M1d -> M1e -> M1f -> M1g -> M1i -> M1 -> M2 -> M2a -> M2b -> M3
+M0 -> M1d -> M1e -> M1f -> M1g -> M1i -> M1 -> M2a -> M2 -> M2b -> M3
    -> M11 -> M12 -> M13 -> M14 -> M19
 ```
 
-This is the longest chain in the graph, and it ends at the destination. That is
+This is the longest chain in the graph that ends at the destination, and
+`python3 tools/roadmap.py path` prints it from the data. That is
 the architectural statement of ADR-019: the work that reaches genuine PS5 system
 software is the product's critical path, not a side branch. The previous roadmap
 had no PS5 milestone on its critical path and a test that would have failed if
@@ -95,7 +96,7 @@ one appeared there.
 | WS3 | Firmware and boot | `M1a`, `M1c`, `M1h` | 1 |
 | WS4 | Memory management | `M2b` | 2, 4 |
 | WS5 | Storage and filesystem | `M1d`–`M1i` | 2 |
-| WS6 | GPU and graphics | `M7`, `M14` | 3–4 |
+| WS6 | GPU and graphics | `M7` | 3, 4 |
 | WS7 | Audio | `M2c` | 3, 4 |
 | WS8 | USB and controllers | `M2d` | 3 |
 | WS9 | System services and OS interfaces | `M3` | 3 |

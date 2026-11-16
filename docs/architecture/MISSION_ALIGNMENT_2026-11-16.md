@@ -98,6 +98,40 @@ level 5). `docs/architecture/MIGRATION_PLAN.md` still names `desktop/{shell,…}
 is explicitly marked **Historical** and is exempted as such in
 `product.forbidden_claims`; it is not a current plan.
 
+### 3.1 Second pass — the remaining documents
+
+The first pass covered the entry-point documents. The second read every
+`docs/playstation/*` file, `docs/ROADMAP.md` and
+`docs/architecture/PS5_PLATFORM_CONTRACT.md` against `roadmap.json` proper. Seven
+more contradictions were found, each checked against the data rather than
+against another document.
+
+| # | File | Before | After | Ground truth |
+|---|---|---|---|---|
+| 5 | `docs/ROADMAP.md` §2 | "Eight milestones are complete" | "Nine" | `roadmap.json` has 9 `complete` |
+| 6 | `docs/ROADMAP.md` §4 | chain printed `M1 -> M2 -> M2a` | `M1 -> M2a -> M2` | `M2` depends on `M2a`; `tools/roadmap.py path` prints `M2a -> M2` |
+| 7 | `docs/ROADMAP.md` §3, §5 | "twelve PS5 milestones"; WS6 owns `M14` | "thirteen"; WS6 owns `M7` only | WS10 has 13 ids; `M14` is WS10 |
+| 8 | `docs/ROADMAP.md` §1; `PS5_COMPATIBILITY_STATUS.md` §1 | level 4 "…interfaces exist and are validated" | "…and are experimentally validated" | `product.levels[3].statement` |
+| 9 | `docs/ROADMAP.md` §1 | level 6 "not started (`M4`, `M5`, `M20`)" | "`M4`, `M5` not started; `M20` blocked" | `M20.state == "blocked"` |
+| 10 | `docs/RECOVERY.md` §5; `docs/UPDATE_SYSTEM.md` §1 | recovery environment is `M1b`, blocked on `M8` | belongs to `M8`; `M1b` is CI/release publication | `M1b` depends only on `M0` and is blocked on a token permission |
+| 11 | `PC5_ARCHITECTURE_SPEC_v2.md` §3, §6 | "thirteen workstreams"; `M10` "complete" | fourteen; `M10` acceptance met, `in_progress` | 14 workstreams; `M10.state == "in_progress"` |
+| 12 | `PC5_ARCHITECTURE_SPEC_v2.md`, `PC5_MILESTONE_GRAPH.md`, `ROADMAP.md`, `BOOT_FEASIBILITY.md` | destination path called "the longest chain in the graph" | "the longest chain that ends at the destination" | `critical_path()` is one longer — it continues to `M20` |
+| 13 | `docs/architecture/README.md` | "ADR-001 … ADR-022" | "ADR-001 … ADR-025" | `TECHNICAL_DECISIONS.md` has 25 ADRs |
+| 14 | `docs/PS5_COMPATIBILITY_STATUS.md` | "twelve project levels"; "16 commands"; "`M2` merged" | thirteen chain stages; 19 dispatchable commands; `M2` is `not_started` | `CHAIN_STAGE_COUNT 13`; 17 exact + 2 prefix handlers; `M2.state` |
+| 15 | `docs/PS5_COMPATIBILITY_ARCHITECTURE.md` §1 | a sentence with no subject between two full stops | rejoined | the dropped clause was "The two paths are reported side by side" |
+| 16 | `docs/architecture/PS5_PLATFORM_CONTRACT.md` §9 | "consumed by `M11`–`M17`" | 2 direct dependants named; the transitive chain stated | `M11` and `M17` depend on `M10` directly |
+
+Two of these (#12, #15) were introduced by the documents themselves rather than
+by the roadmap change, and one (#8) is a level statement that must be quoted
+verbatim from `product.levels` because `tests/test_product_identity.py` pins the
+level set. `tools/roadmap.py sync` regenerated the milestone graph after the
+renderer's own label changed, so the generated block and the prose agree.
+
+Nothing in this pass changed a milestone state, a dependency, a blocker or an
+acceptance criterion. The data was treated as authoritative and the prose was
+moved to it — never the reverse, which is the failure mode the governance
+documents exist to prevent.
+
 ## 4. PR #26 reassessed against the mission
 
 PR #26 is **infrastructure**, and its own text says so. It does not establish that

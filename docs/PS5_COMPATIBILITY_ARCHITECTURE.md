@@ -28,10 +28,10 @@ because they produce different evidence; they are not separate products. Both
 are members of the destination workstream (WS10/WS11) in
 [`architecture/roadmap.json`](architecture/roadmap.json). The dependency chain
 behind the firmware path, and the one precondition that blocks it, is assessed in
-`docs/playstation/BOOT_FEASIBILITY.md` and milestone `M17`.
-in the compatibility chain (stages 5–13 are the firmware path), in
-`docs/GAMING_COMPATIBILITY.md`, and in the UI. Neither is ever used as evidence
-for the other.
+`docs/playstation/BOOT_FEASIBILITY.md` and milestone `M17`. The two paths are
+reported side by side in the compatibility chain (stages 5–13 are the firmware
+path), in `docs/GAMING_COMPATIBILITY.md`, and in the UI. Neither is ever used as
+evidence for the other.
 
 ## 2. The eighteen subsystems
 

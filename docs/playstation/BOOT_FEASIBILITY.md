@@ -101,7 +101,9 @@ The platform workstream (`WS10`) and the rest of the platform, in one product:
 
 1. The **platform model** is built where it can be: contract, CPU and memory
    model, storage, graphics, audio, USB and service devices (`M10`–`M16`), each
-   with a conformance suite and PC5-authored test payloads.
+   with a conformance suite and PC5-authored test payloads. `M10` acceptance is
+   met and the milestone is still `in_progress`: the evidence-level rule keeps a
+   level-4 milestone from being called complete on level 1–2 evidence.
 2. The **security boundary** analysis (`M17`) is published whatever it finds;
    the load, boot, runtime and installation milestones (`M18`–`M21`) are
    `blocked` on it and on a lawful input, and say so in the graph.
@@ -114,7 +116,8 @@ The platform workstream (`WS10`) and the rest of the platform, in one product:
 ## 7. What this means for scheduling
 
 The genuine-execution milestone (`M19`) is the **end of the destination path** —
-the longest dependency chain in the graph — and it is `blocked`, not scheduled.
+the longest dependency chain the graph has that ends there — and it is `blocked`,
+not scheduled.
 That is a statement about the blocker, not a decision to leave the destination
 optional: the work that is *not* blocked (`M10`–`M16`) is on that path and is
 where the next engineering effort goes. The previous revision of this section
