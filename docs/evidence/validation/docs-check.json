@@ -1,7 +1,7 @@
 {
-  "code_revision": "687f1272ecb060554d6038fd985dd50c23d151d0",
+  "code_revision": "32f3a14a3eae3dd07248a775372ee3765e3334f9",
   "command": "make docs-check",
-  "commit": "687f1272ecb060554d6038fd985dd50c23d151d0",
+  "commit": "32f3a14a3eae3dd07248a775372ee3765e3334f9",
   "date": "2026-11-16",
   "dirty": false,
   "exit_code": 0,
