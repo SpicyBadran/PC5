@@ -38,6 +38,17 @@ def u32le(b, off):
     return struct.unpack_from("<I", b, off)[0]
 
 
+def u32be(b, off):
+    return struct.unpack_from(">I", b, off)[0]
+
+
+def read_both32(b, off):
+    """Read a 7.3.3 field and refuse it unless both copies agree."""
+    little = struct.unpack_from("<I", b, off)[0]
+    big = struct.unpack_from(">I", b, off + 4)[0]
+    return little if little == big else -1
+
+
 def u16le(b, off):
     return struct.unpack_from("<H", b, off)[0]
 
@@ -337,6 +348,30 @@ def verify(path, info_path=None):
     rep.check("logical block size is 2048", block_size == SECTOR, str(block_size))
     rep.check("volume size matches the file", volume_blocks * SECTOR == len(image),
               f"{volume_blocks} blocks")
+
+    # The path-table and identifier fields sit at fixed ECMA-119 8.4 offsets.  The
+    # writer used to shift everything after the block-size field by four bytes, so
+    # the path tables were unreachable and the publisher/application identifiers
+    # were at the wrong offsets; nothing PC5 ships reads them, and the image
+    # booted, so only an independent reader noticed.  These checks are why it
+    # cannot come back.
+    path_table_size = read_both32(pvd, 132)
+    l_path_lba = u32le(pvd, 140)
+    m_path_lba = u32be(pvd, 148)
+    rep.check("path table size is recorded (both-endian)",
+              path_table_size > 0 and path_table_size % SECTOR <= SECTOR,
+              f"{path_table_size} bytes")
+    rep.check("both path tables point inside the image",
+              0 < l_path_lba < len(image) // SECTOR and 0 < m_path_lba < len(image) // SECTOR,
+              f"L={l_path_lba} M={m_path_lba}")
+    publisher = pvd[318:446].rstrip(b" \x00").decode("ascii", "replace")
+    app_id = pvd[574:702].rstrip(b" \x00").decode("ascii", "replace")
+    rep.data["publisher"] = publisher
+    rep.data["application_id"] = app_id
+    rep.check("publisher identifier is at the ECMA-119 offset", bool(publisher), publisher)
+    rep.check("application identifier is at the ECMA-119 offset", bool(app_id), app_id)
+    rep.check("volume space size is a valid both-endian field",
+              read_both32(pvd, 80) == volume_blocks, f"{read_both32(pvd, 80)}")
 
     root_rec = pvd[156:190]
     root_lba = u32le(root_rec, 2)

@@ -408,26 +408,39 @@ class IsoBuilder:
         pvd[8:40] = pad("PC5", 32)
         pvd[40:72] = pad(self.volume_id, 32)
         pvd[80:88] = both32(iso_sectors)              # volume space size
-        pvd[120:124] = both16(1)                      # volume set size
-        pvd[124:128] = both16(1)                      # volume sequence number
-        pvd[128:136] = both16(SECTOR)                 # logical block size
-        pvd[136:144] = both32(len(l_path))            # path table size
-        pvd[144:148] = struct.pack("<I", l_path_lba)  # type L path table
-        pvd[152:156] = struct.pack(">I", m_path_lba)  # type M path table
+        # Offsets here are ECMA-119 section 8.4, exactly: every field is written
+        # with the width the standard gives it.  The previous version wrote the
+        # block-size field with an eight-byte slice for a four-byte 7.3.3 value,
+        # which shortened the descriptor by four bytes and shifted every field
+        # after it -- path tables, volume set identifier, publisher, preparer and
+        # application identifier all landed at the wrong offsets.  Nothing PC5
+        # ships reads those fields, so the image still booted and the defect
+        # survived two releases; an independent reader (tools/iso_manifest.py)
+        # found it on the first run.
+        pvd[120:124] = both16(1)                      # 8.4.10 volume set size
+        pvd[124:128] = both16(1)                      # 8.4.11 volume sequence number
+        pvd[128:132] = both16(SECTOR)                 # 8.4.12 logical block size
+        pvd[132:140] = both32(len(l_path))            # 8.4.13 path table size
+        pvd[140:144] = struct.pack("<I", l_path_lba)  # 8.4.14 type L path table
+        pvd[148:152] = struct.pack(">I", m_path_lba)  # 8.4.16 type M path table
         root_rec = dir_record(b"\x00", root_lba, SECTOR, True)
         pvd[156 : 156 + len(root_rec)] = root_rec
-        pvd[190:322] = pad("PC5", 128)                # volume set identifier
-        pvd[322:450] = pad(self.publisher, 128)
-        pvd[450:578] = pad("PC5 build system", 128)   # data preparer
-        pvd[578:706] = pad(self.app_id, 128)
-        pvd[706:743] = pad("", 37)                    # copyright file id
-        pvd[743:780] = pad("", 37)                    # abstract file id
-        pvd[780:817] = pad("", 37)                    # bibliographic file id
-        pvd[813:830] = stamp + b"\x00"
-        pvd[830:847] = stamp + b"\x00"
-        pvd[847:864] = pad("0" * 16, 16) + b"\x00"
-        pvd[864:881] = pad("0" * 16, 16) + b"\x00"
-        pvd[881] = 1                                  # file structure version
+        pvd[190:318] = pad("PC5", 128)                # 8.4.19 volume set identifier
+        pvd[318:446] = pad(self.publisher, 128)       # 8.4.20 publisher
+        pvd[446:574] = pad("PC5 build system", 128)   # 8.4.21 data preparer
+        pvd[574:702] = pad(self.app_id, 128)          # 8.4.22 application identifier
+        pvd[702:739] = pad("", 37)                    # 8.4.23 copyright file id
+        pvd[739:776] = pad("", 37)                    # 8.4.24 abstract file id
+        pvd[776:813] = pad("", 37)                    # 8.4.25 bibliographic file id
+        # 7.4.3: a volume descriptor date is always 17 bytes -- 16 digits then a
+        # time-zone byte.  A 14-digit stamp padded to 17 moved the "unused" tail
+        # of every remaining field, which is how this went unnoticed.
+        pvd[813:830] = stamp.ljust(16, b"0") + b"\x00"  # 8.4.26 creation date
+        pvd[830:847] = stamp.ljust(16, b"0") + b"\x00"  # 8.4.27 modification date
+        pvd[847:864] = pad("0" * 16, 16) + b"\x00"   # 8.4.28 expiration date
+        pvd[864:881] = pad("0" * 16, 16) + b"\x00"   # 8.4.29 effective date
+        pvd[881] = 1                                  # 8.4.31 file structure version
+        assert len(pvd) == SECTOR, f"the primary volume descriptor is {len(pvd)} bytes"
 
         # -- boot record volume descriptor -----------------------------
         brvd = bytearray(SECTOR)
