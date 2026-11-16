@@ -2551,8 +2551,31 @@ Ran 501 tests ... OK (skipped=2)
 ```
 
 The emulator, stub-firmware and firmware gates are not part of `make check` and were run
-separately; their results are in the pull request for this change and in §24 when they
-differ from §22.
+separately, on the same commit:
+
+```
+$ SOURCE_DATE_EPOCH=1763251200 make && make verify
+pc5: sha256 b1810431c15d04b98628aef678cacd15aca0e96d3c163e055a750d404c10fb7e
+VALID: build/pc5.iso  sha256=b1810431…
+MANIFEST VALID: build/pc5.iso matches build/pc5.iso.manifest.json   (80 verify checks)
+
+$ make boot-test
+PASSED: 119 checks against the emulator
+
+$ make stubtest
+PASSED: 58/58 checks against the stub firmware
+
+$ make ovmf-test
+NOT TESTED: genuine OVMF firmware and/or QEMU is not available on this machine.
+required matrix rows: 22, none executed here   (tool exit 3; make exits 2)
+
+$ make roadmap && make hw-record
+roadmap: OK — 35 milestones in 14 workstreams, destination M19 reachable, document in sync
+template: OK (rejected as expected)
+```
+
+The ISO's SHA-256 changed from `846ef41c…` because `build/build-info.json` records the
+commit, and the commit changed. The image's structure and contents did not.
 
 ### 23.4 What this audit did not do
 
