@@ -164,24 +164,81 @@ static void uefi_serial_puts(const char *s)
         uefi_serial_putc(*s++);
 }
 
+static void uefi_serial_put_dec(u64 value)
+{
+    char buf[21];
+    int i = 20;
+    buf[i] = 0;
+    do {
+        buf[--i] = (char)('0' + (u8)(value % 10));
+        value /= 10;
+    } while (value);
+    uefi_serial_puts(&buf[i]);
+}
+
+
 /* -------------------------------------------------------------- console */
 static struct efi_simple_text_output *conout;
 
+/* Set once ExitBootServices has succeeded: from that moment the console
+ * protocol is firmware memory the loader no longer owns and must not call. */
+static int console_closed;
+
+/* One write per sink per string.
+ *
+ * Firmware is free to build its console out of the same 16550 PC5 also writes
+ * to - OVMF's ConSplitter does exactly that on a QEMU serial port - so a
+ * character-at-a-time echo produced every character twice on the wire
+ * ("PPCC55--UUEEFFII").  Writing the whole string to each sink keeps the log
+ * readable: the line appears twice, in order, instead of interleaved. */
 static void uefi_puts(const char *s)
 {
-    while (*s) {
-        uefi_serial_putc(*s);
-        if (conout) {
-            u16 glyph[2];
-            glyph[0] = (u16)(u8)*s;
-            glyph[1] = 0;
+    uefi_serial_puts(s);
+    if (conout && !console_closed) {
+        u16 glyph[64];
+        while (*s) {
+            u32 n = 0;
+            while (*s && n < 63)
+                glyph[n++] = (u16)(u8)*s++;
+            glyph[n] = 0;
             conout->output_string(conout, glyph);
         }
-        s++;
     }
 }
 
-static void uefi_put_hex(u64 value, int digits)
+/* Trace lines are assembled in one buffer and emitted with a single write to
+ * each sink, so firmware that mirrors its console to the same 16550 PC5 logs to
+ * puts two complete, identical lines on the wire instead of two interleaved
+ * character streams.  A machine-readable log is worth the 192 bytes. */
+static char line_buf[192];
+static u32 line_len;
+
+static void line_reset(void)
+{
+    line_len = 0;
+    line_buf[0] = 0;
+}
+
+static void line_add(const char *s)
+{
+    while (*s && line_len + 1 < sizeof(line_buf))
+        line_buf[line_len++] = *s++;
+    line_buf[line_len] = 0;
+}
+
+static void line_add_dec(u64 value)
+{
+    char buf[21];
+    int i = 20;
+    buf[i] = 0;
+    do {
+        buf[--i] = (char)('0' + (u8)(value % 10));
+        value /= 10;
+    } while (value);
+    line_add(&buf[i]);
+}
+
+static void line_add_hex(u64 value, int digits)
 {
     static const char hex[] = "0123456789abcdef";
     char buf[17];
@@ -192,46 +249,45 @@ static void uefi_put_hex(u64 value, int digits)
         value >>= 4;
     }
     buf[digits] = 0;
-    uefi_puts(buf);
+    line_add(buf);
 }
 
-static void uefi_put_dec(u64 value)
+static void line_add_prefix(void)
 {
-    char buf[21];
-    int i = 20;
-    buf[i] = 0;
-    do {
-        buf[--i] = (char)('0' + (u8)(value % 10));
-        value /= 10;
-    } while (value);
-    uefi_puts(&buf[i]);
+    line_add("PC5-UEFI: ");
 }
 
 /* Every trace line is prefixed so it can be grepped in a screenshot and in
  * the serial log. */
 static void trace(const char *label)
 {
-    uefi_puts("PC5-UEFI: ");
-    uefi_puts(label);
-    uefi_puts("\r\n");
+    line_reset();
+    line_add_prefix();
+    line_add(label);
+    line_add("\r\n");
+    uefi_puts(line_buf);
 }
 
 static void trace_dec(const char *label, u64 value)
 {
-    uefi_puts("PC5-UEFI: ");
-    uefi_puts(label);
-    uefi_puts("=");
-    uefi_put_dec(value);
-    uefi_puts("\r\n");
+    line_reset();
+    line_add_prefix();
+    line_add(label);
+    line_add("=");
+    line_add_dec(value);
+    line_add("\r\n");
+    uefi_puts(line_buf);
 }
 
 static void trace_hex(const char *label, u64 value)
 {
-    uefi_puts("PC5-UEFI: ");
-    uefi_puts(label);
-    uefi_puts("=0x");
-    uefi_put_hex(value, 8);
-    uefi_puts("\r\n");
+    line_reset();
+    line_add_prefix();
+    line_add(label);
+    line_add("=0x");
+    line_add_hex(value, 8);
+    line_add("\r\n");
+    uefi_puts(line_buf);
 }
 
 /* Failure: a distinct code, a sentence a human can act on, then a halt. */
@@ -240,13 +296,15 @@ static void fail(const char *code, const char *reason, u64 status)
 
 static void fail(const char *code, const char *reason, u64 status)
 {
-    uefi_puts("\r\nPC5-UEFI FAILURE ");
-    uefi_puts(code);
-    uefi_puts(": ");
-    uefi_puts(reason);
-    uefi_puts(" (status=0x");
-    uefi_put_hex(status, 16);
-    uefi_puts(")\r\n");
+    line_reset();
+    line_add("\r\nPC5-UEFI FAILURE ");
+    line_add(code);
+    line_add(": ");
+    line_add(reason);
+    line_add(" (status=0x");
+    line_add_hex(status, 16);
+    line_add(")\r\n");
+    uefi_puts(line_buf);
     uefi_serial_puts("PC5-UEFI-FAILURE ");
     uefi_serial_puts(code);
     uefi_serial_puts("\r\n");
@@ -361,6 +419,40 @@ struct file_buffer {
     u64 size;
 };
 
+/* Learn a file's size from the firmware.  EFI_FILE_INFO is authoritative: a
+ * SetPosition past EOF is accepted and the position is reported back exactly as
+ * it was set, so "seek to the end to learn the size" returns the constant it
+ * asked for rather than the file size.  OVMF does exactly that, which is how
+ * this loader read a 65 KiB kernel as a 4 MiB file.  The seek trick survives
+ * only as a fallback for firmware that does not implement GetInfo. */
+static int file_size_of(struct efi_boot_services *bs, struct efi_file *file, u64 *size)
+{
+    u64 info_size = 0;
+    efi_status status = file->get_info(file, (struct efi_guid *)&EFI_FILE_INFO_GUID,
+                                       &info_size, 0);
+    if (status == EFI_BUFFER_TOO_SMALL && info_size >= sizeof(struct efi_file_info) &&
+        info_size <= 0x1000) {
+        struct efi_file_info *info = 0;
+        if (!EFI_ERROR(bs->allocate_pool(EFI_LOADER_DATA, info_size, (void **)&info)) && info) {
+            status = file->get_info(file, (struct efi_guid *)&EFI_FILE_INFO_GUID,
+                                    &info_size, info);
+            if (!EFI_ERROR(status) && !(info->attribute & EFI_FILE_DIRECTORY)) {
+                *size = info->file_size;
+                bs->free_pool(info);
+                return 0;
+            }
+            bs->free_pool(info);
+        }
+    }
+    u64 position = 0;
+    if (EFI_ERROR(file->set_position(file, MAX_FILE_BYTES)))
+        return 2;
+    if (EFI_ERROR(file->get_position(file, &position)))
+        return 3;
+    *size = position;
+    return 0;
+}
+
 /* Read a whole file from the volume the application was loaded from.  The
  * buffer is EFI_LOADER_DATA, so the memory map tells the kernel it is in use;
  * it is never freed, because the kernel runs with boot services gone. */
@@ -372,20 +464,13 @@ static int read_file(struct efi_system_table *st, struct efi_file *root,
     if (EFI_ERROR(status) || !file)
         return 1;
 
-    /* Learn the size by seeking to the end: SetPosition past EOF is allowed,
-     * the position it reports back is the file size. */
     u64 size = 0;
-    status = file->set_position(file, MAX_FILE_BYTES);
-    if (EFI_ERROR(status)) {
+    if (file_size_of(st->boot_services, file, &size) != 0) {
         root->close(file);
         return 2;
     }
-    status = file->get_position(file, &size);
-    if (EFI_ERROR(status)) {
-        root->close(file);
-        return 3;
-    }
     if (!size || size > MAX_FILE_BYTES) {
+        trace_hex("read_size", size);
         root->close(file);
         return 4;
     }
@@ -401,13 +486,22 @@ static int read_file(struct efi_system_table *st, struct efi_file *root,
         root->close(file);
         return 6;
     }
-    u64 got = size;
-    status = file->read(file, &got, buffer);
-    root->close(file);
-    if (EFI_ERROR(status) || got != size) {
-        st->boot_services->free_pool(buffer);
-        return 7;
+    /* Firmware may hand a file over in pieces; keep reading until the size
+     * GetInfo reported has arrived. */
+    u64 total = 0;
+    while (total < size) {
+        u64 chunk = size - total;
+        status = file->read(file, &chunk, (u8 *)buffer + total);
+        if (EFI_ERROR(status) || !chunk) {
+            trace_hex("read_refused_at", total);
+            trace_hex("read_status", status);
+            root->close(file);
+            st->boot_services->free_pool(buffer);
+            return 7;
+        }
+        total += chunk;
     }
+    root->close(file);
     out->data = (u8 *)buffer;
     out->size = size;
     return 0;
@@ -433,90 +527,118 @@ static const char *path_kind(const struct efi_device_path *node)
     return "other";
 }
 
+/* Does this device carry a file system whose root holds \KERNEL.BIN?  On yes
+ * the volume is reopened for the caller, so the caller never re-tests and never
+ * guesses: the volume returned is the one that satisfied the test. */
+static int volume_has_kernel(struct efi_boot_services *bs, efi_handle device,
+                             struct efi_file **kernel_root)
+{
+    struct efi_simple_file_system *fs = 0;
+    if (EFI_ERROR(bs->handle_protocol(device,
+            (struct efi_guid *)&EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID, (void **)&fs)) || !fs)
+        return 0;                   /* this handle has no file system */
+    struct efi_file *root = 0;
+    if (EFI_ERROR(fs->open_volume(fs, &root)) || !root)
+        return 0;                   /* a volume firmware will not let us read */
+    struct efi_file *file = 0;
+    efi_status status = root->open(root, &file, u"\\KERNEL.BIN", EFI_FILE_MODE_READ, 0);
+    root->close(root);              /* also closes a failed Open's handle set */
+    if (EFI_ERROR(status) || !file)
+        return 0;
+    file->close(file);
+    struct efi_file *chosen_root = 0;
+    if (EFI_ERROR(fs->open_volume(fs, &chosen_root)) || !chosen_root)
+        return 0;
+    *kernel_root = chosen_root;
+    return 1;
+}
+
 /* Find the volume that holds \KERNEL.BIN.
  *
- * On an El Torito UEFI boot the application does *not* come from the ISO9660
- * filesystem: firmware copies the FAT ESP out of the boot catalog and mounts
- * that as its own device.  The kernel image lives on the ISO9660 volume, which
- * is a different device with a different file system.  Listing every
- * EFI_SIMPLE_FILE_SYSTEM_PROTOCOL handle and trying to open the kernel in each
- * finds it without guessing and without hard-coding LBA arithmetic - the ESP is
- * small and its file list is short, so the wrong candidate fails fast.
+ * The volume the application was booted from is tried first, because that is
+ * where the kernel is meant to live: on a disk-style ESP boot it is the ESP
+ * itself, and on an El Torito UEFI boot it is the firmware's RAM-disk copy of
+ * the same ESP image.  Firmware offers no ISO9660 driver at all (OVMF has
+ * none), so the ISO9660 volume the BIOS path reads is *not* reachable through
+ * EFI_SIMPLE_FILE_SYSTEM_PROTOCOL - which is exactly why the ESP carries a
+ * copy of the kernel next to BOOTX64.EFI.
+ *
+ * Only when that volume has no kernel does the scan fall back to every file
+ * system on the machine, so a machine that keeps the kernel on another
+ * partition still boots without hard-coded LBA arithmetic.
  *
  * Returns the file system handle, or 0 when no volume could provide the file. */
 static efi_handle find_kernel_volume(struct efi_system_table *st, efi_handle image_handle,
                                      struct efi_file **kernel_root)
 {
     struct efi_boot_services *bs = st->boot_services;
+    efi_handle image_device = 0;
 
-    /* The device we were loaded from, for the trace. */
+    /* The device we were loaded from, for the trace and for the first try. */
     struct efi_loaded_image *loaded = 0;
     if (!EFI_ERROR(bs->handle_protocol(image_handle,
                                        (struct efi_guid *)&EFI_LOADED_IMAGE_PROTOCOL_GUID,
                                        (void **)&loaded)) && loaded) {
+        image_device = loaded->device_handle;
         struct efi_device_path *device_path = 0;
-        if (!EFI_ERROR(bs->handle_protocol(loaded->device_handle,
+        if (!EFI_ERROR(bs->handle_protocol(image_device,
                                            (struct efi_guid *)&EFI_DEVICE_PATH_PROTOCOL_GUID,
                                            (void **)&device_path)) && device_path) {
-            uefi_puts("PC5-UEFI: image_device=");
-            uefi_puts(path_kind(device_path));
-            uefi_puts("\r\n");
+            line_reset();
+            line_add_prefix();
+            line_add("image_device=");
+            line_add(path_kind(device_path));
+            line_add("\r\n");
+            uefi_puts(line_buf);
         }
+    }
+
+    if (image_device && volume_has_kernel(bs, image_device, kernel_root)) {
+        trace("kernel_volume=image");
+        return image_device;
     }
 
     /* Enumerate every handle with a file system on it. */
     u64 size = 0;
-    efi_status status = bs->locate_handle(&size, EFI_LOCATE_BY_DEVICE_PATH, 0, 0);
-    if (status != EFI_BUFFER_TOO_SMALL || !size)
-        return 0;
-    size += 4 * sizeof(efi_handle);       /* handles can appear between calls */
-    void *buffer = 0;
-    if (EFI_ERROR(bs->allocate_pool(EFI_LOADER_DATA, size, &buffer)) || !buffer)
-        return 0;
-    u64 count = size / sizeof(efi_handle);
-    status = bs->locate_handle(&size, EFI_LOCATE_BY_DEVICE_PATH, 0, (efi_handle *)buffer);
-    if (EFI_ERROR(status)) {
-        bs->free_pool(buffer);
+    efi_status status = bs->locate_handle(&size, EFI_LOCATE_BY_PROTOCOL, 0, 0);
+    if (status != EFI_BUFFER_TOO_SMALL || !size) {
+        trace("kernel_volume=none");
         return 0;
     }
-    count = size / sizeof(efi_handle);
+    size += 4 * sizeof(efi_handle);       /* handles can appear between calls */
+    void *buffer = 0;
+    if (EFI_ERROR(bs->allocate_pool(EFI_LOADER_DATA, size, &buffer)) || !buffer) {
+        trace("kernel_volume=none");
+        return 0;
+    }
+    status = bs->locate_handle(&size, EFI_LOCATE_BY_PROTOCOL, 0, (efi_handle *)buffer);
+    if (EFI_ERROR(status)) {
+        bs->free_pool(buffer);
+        trace("kernel_volume=none");
+        return 0;
+    }
+    u64 count = size / sizeof(efi_handle);
 
     efi_handle chosen = 0;
     u32 candidates = 0;
     for (u64 i = 0; i < count && !chosen; i++) {
         efi_handle device = ((efi_handle *)buffer)[i];
-        struct efi_simple_file_system *fs = 0;
+        struct efi_simple_file_system *probe = 0;
         if (EFI_ERROR(bs->handle_protocol(device,
-                (struct efi_guid *)&EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID, (void **)&fs)) || !fs)
-            continue;               /* this handle has no file system        */
+                (struct efi_guid *)&EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID, (void **)&probe)) || !probe)
+            continue;               /* this handle has no file system */
         candidates++;
-
-        struct efi_file *root = 0;
-        if (EFI_ERROR(fs->open_volume(fs, &root)) || !root)
-            continue;               /* a volume firmware will not let us read */
-
-        /* Is the kernel on this volume?  A volume without it closes cleanly
-         * and the search moves on; the ESP the application was booted from is
-         * exactly that case on a real El Torito UEFI boot. */
-        struct efi_file *file = 0;
-        efi_status status = root->open(root, &file, u"\\KERNEL.BIN",
-                                       EFI_FILE_MODE_READ, 0);
-        root->close(root);          /* also closes a failed Open's handle set  */
-        if (EFI_ERROR(status) || !file) {
-            continue;
-        }
-        file->close(file);
-
-        /* Reopen the chosen volume for the caller.  Nothing here is a
-         * guess: the volume that satisfied the test is the volume returned. */
-        struct efi_file *kernel_root_local = 0;
-        if (EFI_ERROR(fs->open_volume(fs, &kernel_root_local)) || !kernel_root_local)
-            continue;
-        chosen = device;
-        *kernel_root = kernel_root_local;
+        if (device == image_device)
+            continue;               /* already tried, and it had no kernel */
+        if (volume_has_kernel(bs, device, kernel_root))
+            chosen = device;
     }
     bs->free_pool(buffer);
     trace_dec("filesystem_volumes", candidates);
+    if (chosen)
+        trace("kernel_volume=scan");
+    else
+        trace("kernel_volume=none");
     return chosen;
 }
 
@@ -545,13 +667,17 @@ efi_status EFIAPI efi_main(efi_handle image_handle, struct efi_system_table *st)
     conout = st->con_out;
     uefi_puts("\r\nPC5 UEFI loader " LOADER_VERSION "\r\n");
     trace("firmware_started");
+    trace(serial_present ? "serial_probe=16550" : "serial_probe=absent");
 
     if (st->firmware_vendor && st->firmware_vendor[0]) {
         char vendor[32];
         utf16_to_ascii(st->firmware_vendor, vendor, sizeof(vendor));
-        uefi_puts("PC5-UEFI: firmware=");
-        uefi_puts(vendor);
-        uefi_puts("\r\n");
+        line_reset();
+        line_add_prefix();
+        line_add("firmware=");
+        line_add(vendor);
+        line_add("\r\n");
+        uefi_puts(line_buf);
     }
     trace_dec("firmware_revision", st->firmware_revision);
 
@@ -598,35 +724,84 @@ efi_status EFIAPI efi_main(efi_handle image_handle, struct efi_system_table *st)
     if (kernel.size > KERNEL_LIMIT - KERNEL_ADDR)
         fail("E6", "kernel image is larger than the load window", kernel.size);
 
-    /* 4. the memory map */
-    efi_status status = 0;
-    u64 map_size = 0, map_key = 0, desc_size = 0;
-    u32 desc_version = 0;
-    status = st->boot_services->get_memory_map(&map_size, 0, &map_key,
-                                              &desc_size, &desc_version);
-    if (status != EFI_BUFFER_TOO_SMALL || !map_size || !desc_size)
-        fail("E8", "firmware did not report a memory map size", status);
-    map_size += (u64)4 * desc_size;    /* the map can grow between calls */
+    /* 4 + 7. the memory map and leaving boot services belong together: the map
+     * key is only valid until the next firmware allocation, so anything that
+     * can allocate - printing to the console included - invalidates it.  The
+     * map is therefore re-read and ExitBootServices retried while firmware
+     * keeps moving it, and nothing runs between the keyed GetMemoryMap and the
+     * ExitBootServices call itself. */
+    struct efi_boot_services *bs = st->boot_services;
+    efi_status status = EFI_INVALID_PARAMETER;
+    u32 e820_count = 0;
     void *map = 0;
-    status = st->boot_services->allocate_pool(EFI_LOADER_DATA, map_size, &map);
-    if (EFI_ERROR(status) || !map)
-        fail("E9", "cannot allocate the memory map buffer", status);
-    status = st->boot_services->get_memory_map(
-        &map_size, (struct efi_memory_descriptor *)map, &map_key, &desc_size,
-        &desc_version);
-    if (EFI_ERROR(status))
-        fail("E10", "firmware memory map query failed", status);
-    if (desc_size < sizeof(struct efi_memory_descriptor) || desc_size > 0x1000)
-        fail("E11", "unexpected memory descriptor size", desc_size);
-    /* 64-bit division would drag in libgcc; both values are small here */
-    u64 count = map_size / desc_size;
-    u32 e820_count = build_e820(count, (u32)desc_size, (const u8 *)map);
-    if (!e820_count)
-        fail("E12", "the firmware memory map was empty", 0);
-    trace_dec("memory_map_entries", e820_count);
-    trace_dec("memory_conventional_mib", conventional_mib(e820_count));
+    u64 map_capacity = 0;
+    u32 retries = 0;
+    int exited = 0;
+    for (u32 attempt = 0; attempt < 8 && !exited; attempt++) {
+        u64 map_size = 0, map_key = 0, desc_size = 0;
+        u32 desc_version = 0;
+        efi_status probe = bs->get_memory_map(&map_size, 0, &map_key, &desc_size,
+                                             &desc_version);
+        if (probe != EFI_BUFFER_TOO_SMALL || !map_size || !desc_size)
+            fail("E8", "firmware did not report a memory map size", probe);
+        /* Slack: the descriptor count may grow between the size probe and the
+         * real query, and a grown map is not a reason to give up. */
+        u64 needed = map_size + (u64)4 * desc_size;
+        if (needed > map_capacity) {
+            if (map)
+                bs->free_pool(map);
+            map = 0;
+            efi_status alloc = bs->allocate_pool(EFI_LOADER_DATA, needed, &map);
+            if (EFI_ERROR(alloc) || !map)
+                fail("E9", "cannot allocate the memory map buffer", alloc);
+            map_capacity = needed;
+        }
+        map_size = map_capacity;
+        status = bs->get_memory_map(&map_size, (struct efi_memory_descriptor *)map,
+                                    &map_key, &desc_size, &desc_version);
+        if (status == EFI_BUFFER_TOO_SMALL) {
+            map_capacity = 0;          /* grew again: size it once more */
+            continue;
+        }
+        if (EFI_ERROR(status))
+            fail("E10", "firmware memory map query failed", status);
+        /* Descriptors are walked with the stride firmware reports, never with
+         * sizeof(struct efi_memory_descriptor). */
+        if (desc_size < sizeof(struct efi_memory_descriptor) || desc_size > 0x1000)
+            fail("E11", "unexpected memory descriptor size", desc_size);
+        u64 count = map_size / desc_size;
+        e820_count = build_e820(count, (u32)desc_size, (const u8 *)map);
+        if (!e820_count)
+            fail("E12", "the firmware memory map was empty", 0);
 
-    /* 5. the boot contract */
+        status = bs->exit_boot_services(image_handle, map_key);
+        if (!EFI_ERROR(status)) {
+            exited = 1;
+            break;
+        }
+        if (status != EFI_INVALID_PARAMETER)
+            fail("E13", "ExitBootServices was refused", status);
+        retries++;                     /* the map moved under us: read it again */
+    }
+    if (!exited)
+        fail("E13", "ExitBootServices was refused with a fresh map key", status);
+
+    /* Firmware is gone from here on: the console protocol must not be called
+     * again, only the port PC5 owns. */
+    console_closed = 1;
+    uefi_serial_puts("PC5-UEFI: boot_services_exited\r\n");
+    uefi_serial_puts("PC5-UEFI: memory_map_entries=");
+    uefi_serial_put_dec(e820_count);
+    uefi_serial_puts("\r\n");
+    uefi_serial_puts("PC5-UEFI: ExitBootServices_retries=");
+    uefi_serial_put_dec(retries);
+    uefi_serial_puts("\r\n");
+    uefi_serial_puts("PC5-UEFI: memory_conventional_mib=");
+    uefi_serial_put_dec(conventional_mib(e820_count));
+    uefi_serial_puts("\r\n");
+
+    /* 5. the boot contract.  Plain memory writes: no firmware call is needed
+     * to publish a table the kernel reads after boot services are gone. */
     struct pc5_boot_info *bi = BOOT_INFO;
     memset(bi, 0, sizeof(*bi));
     bi->magic = PC5_BOOT_MAGIC;
@@ -649,21 +824,14 @@ efi_status EFIAPI efi_main(efi_handle image_handle, struct efi_system_table *st)
     /* bit 0: booted by the UEFI loader.  Bits 1 and 2 say what could not be
      * reported, so the kernel can print an honest medium line. */
     bi->flags = 0x1u | 0x2u /* no ISO LBA */ | 0x4u /* no volume id */;
-    trace("boot_info_ready");
 
     /* 6. kernel image into the handover address */
     memcpy((void *)KERNEL_ADDR, kernel.data, kernel.size);
-    trace_hex("kernel_loaded_at", KERNEL_ADDR);
-
-    /* 7. leave boot services: after this the firmware is gone */
-    status = st->boot_services->exit_boot_services(image_handle, map_key);
-    if (EFI_ERROR(status))
-        fail("E13", "ExitBootServices was refused", status);
-    trace("boot_services_exited");
 
     /* 8. 32-bit protected mode, then the kernel never returns */
     if (KERNEL_ADDR != 0x10000u)
         fail("E14", "kernel entry address is not the protocol address", KERNEL_ADDR);
+    uefi_serial_puts("PC5-UEFI: kernel_loaded_at=0x00010000\r\n");
     uefi_serial_puts("PC5-UEFI: entering 32-bit kernel\r\n");
     pc5_uefi_bridge(KERNEL_ADDR, BOOT_INFO_ADDR);
 }

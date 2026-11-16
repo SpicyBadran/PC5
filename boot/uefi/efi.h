@@ -139,6 +139,21 @@ struct efi_file {
     efi_status(EFIAPI *flush)(struct efi_file *self);
 };
 
+/* EFI_FILE_INFO: the only way the file protocol reports a size.  Firmware
+ * accepts a SetPosition beyond EOF and reports that same position back, so the
+ * "seek to the end to learn the size" trick returns the constant it was given,
+ * not the file size - OVMF does exactly that. */
+struct efi_file_info {
+    u64 size;                 /* structure size, filled in by firmware */
+    u64 file_size;
+    u64 physical_size;
+    u64 create_time[2];
+    u64 last_access_time[2];
+    u64 modification_time[2];
+    u64 attribute;
+    u16 file_name[1];
+} __attribute__((packed));
+
 #define EFI_FILE_MODE_READ 0x0000000000000001ULL
 #define EFI_FILE_MODE_WRITE 0x0000000000000002ULL
 #define EFI_FILE_MODE_CREATE 0x8000000000000000ULL
@@ -299,6 +314,9 @@ struct efi_loaded_image {
 /* 9042a9de-23dc-4a38-96fb-7aded080516a */
 static const struct efi_guid EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID =
     GUID(9042a9de, 23dc, 4a38, 96, fb, 7a, de, d0, 80, 51, 6a);
+/* 09576e92-6d3f-11d2-8e39-00a0c969723b */
+static const struct efi_guid EFI_FILE_INFO_GUID =
+    GUID(09576e92, 6d3f, 11d2, 8e, 39, 00, a0, c9, 69, 72, 3b);
 /* 964e5b22-6459-11d2-8e39-00a0c969723b */
 static const struct efi_guid EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID =
     GUID(964e5b22, 6459, 11d2, 8e, 39, 00, a0, c9, 69, 72, 3b);
@@ -313,6 +331,9 @@ static const struct efi_guid EFI_DEVICE_PATH_PROTOCOL_GUID =
 #define EFI_OPEN_PROTOCOL_GET_PROTOCOL 0x00000002
 #define EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL 0x00000001
 
-#define EFI_LOCATE_BY_DEVICE_PATH 0x02
+/* Search types for LocateHandle.  0x02 is EFI_LOCATE_BY_PROTOCOL: "every handle
+ * that supports this protocol", and with a NULL protocol, every handle at all -
+ * which is what this loader wants (it filters by HandleProtocol itself). */
+#define EFI_LOCATE_BY_PROTOCOL 0x02
 
 #endif /* PC5_EFI_H */
