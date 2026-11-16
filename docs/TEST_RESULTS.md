@@ -2414,3 +2414,93 @@ which is how the fix was shown not to disturb the boot path.
 * No real UEFI firmware ran here; the OVMF gate reports `NOT TESTED`.
 * The manifest proves what is *inside* the image, not that the image is *good* on a
   machine — those are different claims and are recorded separately.
+
+---
+
+## 22. Repository presentation: a front page generated from the graph
+
+Requested as a separate presentation change, kept out of the kernel and hardware work.
+The README was accurate but was 186 lines of text and tables, with no images anywhere
+in the tree, and a hand-maintained capability table that duplicated state already in
+`docs/architecture/roadmap.json` and could drift from it silently.
+
+### 22.1 What was built
+
+| Asset | Purpose |
+|---|---|
+| `docs/assets/pc5-banner.svg` | wordmark, roadmap version, workstream count, completed-milestone count, destination state, and the "no Sony software" line |
+| `docs/assets/pc5-architecture.svg` | eight layers from PC hardware to genuine system software, each badged from the milestones it maps to |
+| `docs/assets/pc5-progress.svg` | one bar per workstream split by state, blocked counts, and the longest dependency chain to `M19` |
+| `docs/assets/pc5-boot-workflow.svg` | six steps from building the image to Sony software executing, labelled verified / not tested / testing required / blocked |
+| `tools/presentation.py` | renders the four figures from `roadmap.json`, writes the README status block, and checks all of it |
+| `docs/PRESENTATION.md` | the audit that preceded the change, the design system, and what the presentation refuses to claim |
+| `CONTRIBUTING.md` | the contributor entry point the new README links to |
+
+Every figure is geometry and text in an SVG with no external reference, no embedded
+font and no image: they render offline, on GitHub, and at any width. Generation is
+deterministic — same `roadmap.json`, byte-identical output — so a diff in the figures
+always means a change in the data.
+
+### 22.2 Why the status table is generated
+
+The capability table in the README now lives between `<!-- pc5:status:begin -->` and
+`<!-- pc5:status:end -->` and is produced by `tools/presentation.py`. Milestone rows
+take their label from milestone state; `M1` renders as **NOT TESTED** until a record is
+filed under `docs/evidence/` and becomes **VERIFIED** when one is. Gate rows declare a
+label but keep it only while the document they name still contains the evidence token,
+so a reworded test record cannot leave a VERIFIED chip behind. The architecture figure
+forces firmware to **NOT TESTED** rather than inheriting `M1h`'s completion: the hybrid
+MBR being verified says nothing about a real machine's firmware.
+
+### 22.3 The check, and what it refuses
+
+`make presentation` runs `tools/presentation.py check`, which fails on a stale figure,
+a hand-edited status block, a broken local link or image path, an image without alt
+text, a figure without `<title>`/`<desc>`, a figure no longer embedded in the README, a
+missing honesty token, or one of the banned claims: "runs PS5 games", "boots on any
+PC", "Secure Boot supported", "CI passing", "PS5 firmware included", "production
+ready". Each of those has a test in `tests/test_presentation.py` that expects the
+failure, alongside the pass case.
+
+### 22.4 What is deliberately absent
+
+* **No screenshots.** No physical boot has happened; an illustration of one would be a
+  fabricated result. `docs/assets` contains exactly the four generated figures, and a
+  test asserts that.
+* **No CI badge.** `ci/build.yml` is a pipeline definition stored in the tree and not
+  activated; the README says so instead of showing a passing badge.
+* **No compatibility percentage.** The only counting is milestones by state, and the
+  README says under the figure what that counts.
+* **No claim that the ISO boots Sony software.** The banner carries the opposite
+  sentence.
+
+### 22.5 Gates, actually executed on this change
+
+```
+$ make check
+Ran 474 tests ... OK (skipped=2)      (includes 25 new presentation tests)
+
+$ make presentation
+PRESENTATION OK: 4 figures current, 13 status rows match roadmap.json, links and alt text resolve
+
+$ SOURCE_DATE_EPOCH=1763251200 make verify
+VALID: build/pc5.iso  sha256=846ef41ca154f12674ac3ded6f0098270d1b9d3ca71f40004a0c84652e60d11e
+MANIFEST VALID: build/pc5.iso matches build/pc5.iso.manifest.json
+
+$ SOURCE_DATE_EPOCH=1763251200 make boot-test
+PASSED: 119 checks
+
+$ make stubtest
+PASSED: 58/58 checks against the stub firmware
+
+$ make ovmf-test
+exit 3 — NOT TESTED: no QEMU and no OVMF on this machine
+```
+
+The ISO itself is unchanged in content by this work: the same 782 sectors and the same
+SHA-256 as the build recorded in §21, rebuilt from scratch to confirm it.
+
+### 22.6 What this change does not establish
+
+Nothing about hardware or Sony software. It changes how the repository presents what it
+already knows, and every state it presents is one the repository can already prove.

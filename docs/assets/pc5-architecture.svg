@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="772" viewBox="0 0 1000 772" role="img" aria-labelledby="t d">
+  <title id="t">PC5 architecture, layer by layer</title>
+  <desc id="d">Eight layers from PC hardware up to genuine Sony PS5 system software, each marked with the state recorded in the roadmap. Only the bootloader, kernel and platform contract have evidence; firmware has never run on a real machine; the destination is blocked.</desc>
+  <rect width="1000" height="772" fill="#0b0f14"/>
+  <text x="48" y="46" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="20" fill="#e6edf3" font-weight="bold" text-anchor="start">PC5 ARCHITECTURE</text>
+  <text x="48" y="70" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">layers in dependency order, each labelled from the milestone graph</text>
+  <rect x="48" y="92" width="904" height="68" rx="10" fill="#131a23" stroke="#f87171" stroke-dasharray="6 5"/>
+  <text x="72" y="122" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="15" fill="#f87171" font-weight="bold" text-anchor="start">Genuine Sony PS5 system software</text>
+  <text x="72" y="144" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11.5" fill="#8b98a8" font-weight="normal" text-anchor="start">the destination — no lawful path yet</text>
+  <rect x="776" y="115" width="69" height="22" rx="11" fill="#f87171" opacity="0.14" stroke="#f87171" stroke-opacity="0.55"/>
+  <text x="810.5" y="130" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#f87171" font-weight="bold" text-anchor="middle">BLOCKED</text>
+  <rect x="48" y="172" width="904" height="68" rx="10" fill="#0f151d" stroke="#243040"/>
+  <text x="72" y="202" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="15" fill="#e6edf3" font-weight="bold" text-anchor="start">PS5 platform model</text>
+  <text x="72" y="224" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11.5" fill="#8b98a8" font-weight="normal" text-anchor="start">CPU, memory, storage, graphics, audio, USB, services</text>
+  <rect x="776" y="195" width="97" height="22" rx="11" fill="#8b98a8" opacity="0.14" stroke="#8b98a8" stroke-opacity="0.55"/>
+  <text x="824.5" y="210" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="middle">NOT STARTED</text>
+  <line x1="500" y1="172" x2="500" y2="167" stroke="#243040" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M 495 168 L 500 160 L 505 168" fill="none" stroke="#243040" stroke-width="1.5"/>
+  <rect x="48" y="252" width="904" height="68" rx="10" fill="#131a23" stroke="#243040"/>
+  <text x="72" y="282" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="15" fill="#e6edf3" font-weight="bold" text-anchor="start">PS5 platform contract</text>
+  <text x="72" y="304" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11.5" fill="#8b98a8" font-weight="normal" text-anchor="start">claims, interfaces, conformance doubles (r1)</text>
+  <rect x="776" y="275" width="97" height="22" rx="11" fill="#38bdf8" opacity="0.14" stroke="#38bdf8" stroke-opacity="0.55"/>
+  <text x="824.5" y="290" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#38bdf8" font-weight="bold" text-anchor="middle">IN PROGRESS</text>
+  <line x1="500" y1="252" x2="500" y2="247" stroke="#243040" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M 495 248 L 500 240 L 505 248" fill="none" stroke="#243040" stroke-width="1.5"/>
+  <rect x="48" y="332" width="904" height="68" rx="10" fill="#0f151d" stroke="#243040"/>
+  <text x="72" y="362" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="15" fill="#e6edf3" font-weight="bold" text-anchor="start">PC5 platform services</text>
+  <text x="72" y="384" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11.5" fill="#8b98a8" font-weight="normal" text-anchor="start">processes, protection, syscalls, devices</text>
+  <rect x="776" y="355" width="97" height="22" rx="11" fill="#8b98a8" opacity="0.14" stroke="#8b98a8" stroke-opacity="0.55"/>
+  <text x="824.5" y="370" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="middle">NOT STARTED</text>
+  <line x1="500" y1="332" x2="500" y2="327" stroke="#243040" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M 495 328 L 500 320 L 505 328" fill="none" stroke="#243040" stroke-width="1.5"/>
+  <rect x="48" y="412" width="904" height="68" rx="10" fill="#131a23" stroke="#243040"/>
+  <text x="72" y="442" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="15" fill="#e6edf3" font-weight="bold" text-anchor="start">PC5 kernel</text>
+  <text x="72" y="464" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11.5" fill="#8b98a8" font-weight="normal" text-anchor="start">ATAPI/ISO9660, FAT32 read/write, PCI, ACPI, SMBIOS, partitions</text>
+  <rect x="776" y="435" width="76" height="22" rx="11" fill="#34d399" opacity="0.14" stroke="#34d399" stroke-opacity="0.55"/>
+  <text x="814.0" y="450" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#34d399" font-weight="bold" text-anchor="middle">VERIFIED</text>
+  <line x1="500" y1="412" x2="500" y2="407" stroke="#243040" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M 495 408 L 500 400 L 505 408" fill="none" stroke="#243040" stroke-width="1.5"/>
+  <rect x="48" y="492" width="904" height="68" rx="10" fill="#0f151d" stroke="#243040"/>
+  <text x="72" y="522" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="15" fill="#e6edf3" font-weight="bold" text-anchor="start">PC5 bootloader</text>
+  <text x="72" y="544" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11.5" fill="#8b98a8" font-weight="normal" text-anchor="start">mbr.bin for BIOS, EFI/BOOT/BOOTX64.EFI for UEFI</text>
+  <rect x="776" y="515" width="76" height="22" rx="11" fill="#34d399" opacity="0.14" stroke="#34d399" stroke-opacity="0.55"/>
+  <text x="814.0" y="530" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#34d399" font-weight="bold" text-anchor="middle">VERIFIED</text>
+  <line x1="500" y1="492" x2="500" y2="487" stroke="#243040" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M 495 488 L 500 480 L 505 488" fill="none" stroke="#243040" stroke-width="1.5"/>
+  <rect x="48" y="572" width="904" height="68" rx="10" fill="#131a23" stroke="#243040"/>
+  <text x="72" y="602" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="15" fill="#e6edf3" font-weight="bold" text-anchor="start">Firmware</text>
+  <text x="72" y="624" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11.5" fill="#8b98a8" font-weight="normal" text-anchor="start">UEFI, and legacy BIOS/CSM where the machine offers it; executed in emulation and stub firmware only</text>
+  <rect x="776" y="595" width="90" height="22" rx="11" fill="#fbbf24" opacity="0.14" stroke="#fbbf24" stroke-opacity="0.55"/>
+  <text x="821.0" y="610" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#fbbf24" font-weight="bold" text-anchor="middle">NOT TESTED</text>
+  <line x1="500" y1="572" x2="500" y2="567" stroke="#243040" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M 495 568 L 500 560 L 505 568" fill="none" stroke="#243040" stroke-width="1.5"/>
+  <rect x="48" y="652" width="904" height="68" rx="10" fill="#0f151d" stroke="#243040"/>
+  <text x="72" y="682" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="15" fill="#e6edf3" font-weight="bold" text-anchor="start">PC hardware</text>
+  <text x="72" y="704" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11.5" fill="#8b98a8" font-weight="normal" text-anchor="start">x86-64 machines that would otherwise run Windows; inventory implemented, drivers not started</text>
+  <rect x="776" y="675" width="97" height="22" rx="11" fill="#8b98a8" opacity="0.14" stroke="#8b98a8" stroke-opacity="0.55"/>
+  <text x="824.5" y="690" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="middle">NOT STARTED</text>
+  <line x1="500" y1="652" x2="500" y2="647" stroke="#243040" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M 495 648 L 500 640 L 505 648" fill="none" stroke="#243040" stroke-width="1.5"/>
+  <text x="48" y="754" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">solid border: evidence in the repository   ·   dashed: blocked   ·   grey: not started   ·   amber: code exists, never run on the target</text>
+</svg>
