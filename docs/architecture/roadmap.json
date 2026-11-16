@@ -1,25 +1,255 @@
 {
-  "schema": "pc5.roadmap/1",
-  "version": "0.3.0-dev",
+  "schema": "pc5.roadmap/2",
+  "version": "0.4.0-dev",
   "updated": "2026-11-15",
-  "authority": "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
-  "tracks": {
-    "A": {
-      "name": "PC5 Native",
-      "objective": "An installable, PlayStation-inspired PC operating system on qualified mainstream x86-64 hardware.",
-      "may_depend_on": [
-        "A"
+  "authority": "docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md",
+  "product": {
+    "name": "PC5",
+    "identity": "A native PlayStation 5 operating system for PC hardware.",
+    "mission": "PC5 is an independent engineering project whose destination is to run the genuine Sony PlayStation 5 system software on compatible PC hardware, and to deliver the authentic PS5 platform and gaming experience there.",
+    "destination": {
+      "statement": "Genuine Sony PlayStation 5 system software executing on compatible PC hardware, through PC5's own platform.",
+      "milestone": "M19",
+      "level": 5,
+      "evidence_class": "execution evidence produced by the software itself (levels[4])",
+      "must_not_be_satisfied_by": [
+        "a PC5 kernel booting",
+        "a simulated or modelled environment running PC5 payloads",
+        "an imitation of the PS5 interface",
+        "an emulator menu PC5 drew",
+        "a screenshot without the software's own output"
       ]
     },
-    "B": {
-      "name": "Prospero",
-      "objective": "Evidence-backed research into PS5 executable compatibility and genuine PS5 system-software execution, isolated from Track A's release path.",
-      "may_depend_on": [
-        "A",
-        "B"
-      ]
-    }
+    "foundation": {
+      "role": "hardware-enablement",
+      "name": "Linux tier (optional host)",
+      "adr": "ADR-020",
+      "product_surface": "the PC5 platform: PC5 kernel and platform services",
+      "required_for_product": false,
+      "exit_milestone": "M8"
+    },
+    "non_goals": [
+      "a Linux distribution with a PlayStation theme",
+      "an imitation of the PS5 interface as an end in itself",
+      "distributing, decrypting or keying Sony firmware, or circumventing authentication",
+      "universal hardware support instead of a qualification list",
+      "claiming any success level without the evidence class defined for it"
+    ],
+    "forbidden_claims": [
+      {
+        "pattern": "PlayStation-inspired",
+        "why": "redefines the product as an imitation of the PS5 rather than a platform for running it",
+        "allowed_in": [
+          "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
+          "docs/architecture/ARCHITECTURE_DISCREPANCY_REPORT.md",
+          "docs/TECHNICAL_DECISIONS.md",
+          "docs/architecture/REPOSITORY_AUDIT_2026-11-15.md",
+          "docs/architecture/MIGRATION_PLAN.md"
+        ]
+      },
+      {
+        "pattern": "PlayStation-like",
+        "why": "same: the destination is the platform, not the resemblance",
+        "allowed_in": [
+          "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
+          "docs/architecture/ARCHITECTURE_DISCREPANCY_REPORT.md",
+          "docs/TECHNICAL_DECISIONS.md",
+          "docs/architecture/REPOSITORY_AUDIT_2026-11-15.md",
+          "docs/architecture/MIGRATION_PLAN.md"
+        ]
+      },
+      {
+        "pattern": "Linux is the planned hardware foundation",
+        "why": "declares the optional substrate to be the product",
+        "allowed_in": [
+          "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
+          "docs/architecture/ARCHITECTURE_DISCREPANCY_REPORT.md",
+          "docs/TECHNICAL_DECISIONS.md"
+        ]
+      },
+      {
+        "pattern": "must never gate Track A",
+        "why": "the old gate that forbade the mission from being a dependency of the product",
+        "allowed_in": [
+          "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
+          "docs/architecture/ARCHITECTURE_DISCREPANCY_REPORT.md",
+          "docs/TECHNICAL_DECISIONS.md"
+        ]
+      },
+      {
+        "pattern": "never gates Track A",
+        "why": "the same rule stated as a property of the architecture",
+        "allowed_in": [
+          "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
+          "docs/architecture/ARCHITECTURE_DISCREPANCY_REPORT.md",
+          "docs/TECHNICAL_DECISIONS.md"
+        ]
+      },
+      {
+        "pattern": "two independent tracks",
+        "why": "the split that made the destination optional",
+        "allowed_in": [
+          "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
+          "docs/architecture/ARCHITECTURE_DISCREPANCY_REPORT.md",
+          "docs/TECHNICAL_DECISIONS.md",
+          "docs/architecture/REPOSITORY_AUDIT_2026-11-15.md"
+        ]
+      },
+      {
+        "pattern": "dual-track",
+        "why": "the former architecture, which must not be presented as current",
+        "allowed_in": [
+          "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
+          "docs/architecture/ARCHITECTURE_DISCREPANCY_REPORT.md",
+          "docs/TECHNICAL_DECISIONS.md",
+          "docs/architecture/MIGRATION_PLAN.md",
+          "docs/architecture/REPOSITORY_AUDIT_2026-11-15.md"
+        ]
+      },
+      {
+        "pattern": "not on the critical path",
+        "why": "the scheduling decision that demoted the destination",
+        "allowed_in": [
+          "docs/architecture/ARCHITECTURE_DISCREPANCY_REPORT.md",
+          "docs/TECHNICAL_DECISIONS.md"
+        ]
+      }
+    ],
+    "required_milestones": [
+      "M9",
+      "M10",
+      "M11",
+      "M17",
+      "M18",
+      "M19",
+      "M20",
+      "M21"
+    ],
+    "levels": [
+      {
+        "level": 1,
+        "statement": "PC5 boots on qualified PC hardware",
+        "acceptance": "the image boots to the PC5 environment on at least one machine from the qualification list, with the machine named, its firmware recorded and the serial log committed, in a BIOS and in a UEFI configuration",
+        "evidence_class": "a boot log from physical hardware, committed with the machine identified"
+      },
+      {
+        "level": 2,
+        "statement": "PC5 controls the required hardware through its own architecture",
+        "acceptance": "PC5's own drivers initialise interrupts, timers, PCIe, one NVMe device and one input device and report them in the boot log",
+        "evidence_class": "boot log plus per-device qualification rows; firmware-provided services do not count"
+      },
+      {
+        "level": 3,
+        "statement": "Core platform services work",
+        "acceptance": "processes and threads with memory protection, a versioned syscall ABI, display with compositing, audio output, controller input and a writable storage stack, each with a test that fails when the service is broken",
+        "evidence_class": "a test suite that fails when the service is broken, plus a recorded demonstration"
+      },
+      {
+        "level": 4,
+        "statement": "PS5 execution and system-software interfaces exist and are experimentally validated",
+        "acceptance": "the platform model passes its conformance suite, every modelled device has a written contract and a test double, and a PS5 user-mode contract is served by PC5 with a recorded trace",
+        "evidence_class": "conformance results plus a trace of a PC5-served PS5 contract; a model running PC5's own payload is not level 5"
+      },
+      {
+        "level": 5,
+        "statement": "Genuine system-software compatibility",
+        "acceptance": "genuine Sony PS5 system software executes on a PC-hosted PC5 platform model; its own output identifies it; the configuration is recorded well enough for a third party to repeat the attempt",
+        "evidence_class": "execution evidence produced by the software itself. Never: a PC5 kernel booting, a simulated environment, a PlayStation-style interface, or a screenshot of a menu PC5 drew"
+      },
+      {
+        "level": 6,
+        "statement": "Platform experience",
+        "acceptance": "games execute and play at recorded frame rates on qualified hardware through the level-4/5 stack, and the console experience runs on top of that platform rather than instead of it",
+        "evidence_class": "per-title records with frame-time measurements, and a runtime log of the genuine system where the level-5 path is the one in use"
+      }
+    ]
   },
+  "workstreams": [
+    {
+      "id": "WS0",
+      "name": "Governance: architecture, evidence, release discipline",
+      "serves_level": "all",
+      "purpose": "Keep the destination, the evidence and the architecture from drifting apart; own the decisions and the gates."
+    },
+    {
+      "id": "WS1",
+      "name": "Hardware discovery and compatibility",
+      "serves_level": "1-2",
+      "purpose": "Tell one machine from another honestly: CPUID, firmware tables, buses, devices, and the qualification list that follows from them."
+    },
+    {
+      "id": "WS2",
+      "name": "CPU architecture and execution environment",
+      "serves_level": "2,4",
+      "purpose": "Execute code the way the target platform executes it: privilege levels, CPU features, interrupt model, timers, virtualisation extensions."
+    },
+    {
+      "id": "WS3",
+      "name": "Firmware and boot compatibility",
+      "serves_level": "1",
+      "purpose": "Boot the machine and hand control over: BIOS and UEFI paths, boot contract, verified payloads, recovery entry."
+    },
+    {
+      "id": "WS4",
+      "name": "Memory management",
+      "serves_level": "2,4",
+      "purpose": "Own the address space: physical map, paging, protection, DMA-visible and GPU-visible memory, allocation policies."
+    },
+    {
+      "id": "WS5",
+      "name": "Storage and filesystem",
+      "serves_level": "2",
+      "purpose": "Own the medium: sector I/O, partitions, filesystems, integrity, and the storage contract the platform model has to present."
+    },
+    {
+      "id": "WS6",
+      "name": "GPU architecture and graphics",
+      "serves_level": "3,4",
+      "purpose": "Present graphics: mode setting, framebuffer, command submission, and the GPU device model the destination needs."
+    },
+    {
+      "id": "WS7",
+      "name": "Audio architecture",
+      "serves_level": "3,4",
+      "purpose": "Present audio: output paths, routing, and the audio device model the destination needs."
+    },
+    {
+      "id": "WS8",
+      "name": "USB, Bluetooth and controllers",
+      "serves_level": "3",
+      "purpose": "Present input: xHCI, HID, DualSense, hot-plug, rumble and trigger output."
+    },
+    {
+      "id": "WS9",
+      "name": "System services and operating-system interfaces",
+      "serves_level": "3",
+      "purpose": "Give the platform an operating-system surface: processes, threads, memory protection, syscalls, device interfaces, IPC."
+    },
+    {
+      "id": "WS10",
+      "name": "PS5 platform compatibility (system software)",
+      "serves_level": "4-5",
+      "purpose": "Model the PlayStation 5 platform closely enough that the genuine Sony system software can execute on it."
+    },
+    {
+      "id": "WS11",
+      "name": "Game execution and runtime compatibility",
+      "serves_level": "6",
+      "purpose": "Execute PS5 application contracts through PC5 implementations: loading, relocation, NID/PRX shims, syscall surface, graphics translation."
+    },
+    {
+      "id": "WS12",
+      "name": "Installation, recovery and system updates",
+      "serves_level": "1,3",
+      "purpose": "Install, update and recover: verification, A/B slots, rollback, and the genuine package's installation path when it is lawful."
+    },
+    {
+      "id": "WS13",
+      "name": "Product experience: shell, library, settings",
+      "serves_level": "6",
+      "purpose": "Build PC5's own console experience on top of the platform: shell, library, accounts, settings. The surface, never the destination."
+    }
+  ],
   "roles": [
     "lead-architect",
     "kernel-engineer",
@@ -32,613 +262,981 @@
   "milestones": [
     {
       "id": "M0",
-      "track": "A",
-      "title": "Architecture freeze and repository audit",
+      "workstream": "WS0",
+      "kind": "governance",
+      "level": 1,
+      "title": "Architecture realignment: one platform, one destination",
       "state": "complete",
       "owner_role": "lead-architect",
       "depends_on": [],
-      "legacy": [
-        "repository M0"
-      ],
+      "advances": "replaces the two-track frame that made genuine PS5 system software an optional side project",
       "deliverables": [
-        "docs/architecture/REPOSITORY_AUDIT_2026-11-15.md",
-        "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
-        "docs/architecture/LINUX_VS_FREESTANDING.md",
-        "docs/architecture/HARDWARE_STRATEGY.md",
-        "docs/architecture/MIGRATION_PLAN.md",
-        "docs/architecture/M0_M8_DEPENDENCY_GRAPH.md",
-        "docs/architecture/RISK_REGISTER.md",
-        "docs/architecture/FIRST_THREE_TASKS.md",
-        "docs/TECHNICAL_DECISIONS.md (ADR-009 to ADR-012)"
+        "docs/architecture/ARCHITECTURE_DISCREPANCY_REPORT.md",
+        "docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md",
+        "docs/architecture/PC5_MILESTONE_GRAPH.md",
+        "docs/architecture/roadmap.json",
+        "docs/TECHNICAL_DECISIONS.md (ADR-019 to ADR-022)"
       ],
       "acceptance": [
-        "every tracked file is classified in the repository audit, with measured counts rather than estimates",
-        "the dual-track boundary is recorded as ADR-010 and enforced by tests/test_architecture.py",
-        "the Linux-foundation decision is recorded as ADR-009 with its exit condition and current blocker",
-        "documentation drift found by the audit is corrected or explicitly filed",
-        "the milestone graph in docs/architecture/roadmap.json validates with zero errors",
-        "make check passes with the architecture tests included"
+        "every contradiction between the product identity, the architecture and the implementation is listed with the file that carried it",
+        "the destination is data in roadmap.json and is reachable in the dependency graph",
+        "the Linux decision is recorded with alternatives, evidence, exit condition and reversal conditions (ADR-020)",
+        "the old two-track gate is replaced by release isolation, and a synthetic graph proves the rule rejects an experimental milestone gating a release",
+        "make check, make roadmap, make verify and make boot-test stay green, and no milestone that is complete today loses its state",
+        "no claim in any document exceeds the evidence recorded in docs/TEST_RESULTS.md"
       ],
       "evidence": [
-        "docs/architecture/REPOSITORY_AUDIT_2026-11-15.md",
-        "docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md",
-        "docs/architecture/M0_M8_DEPENDENCY_GRAPH.md",
+        "docs/architecture/ARCHITECTURE_DISCREPANCY_REPORT.md",
+        "docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md",
         "docs/architecture/roadmap.json",
-        "docs/TECHNICAL_DECISIONS.md",
-        "tests/test_architecture.py"
+        "docs/TECHNICAL_DECISIONS.md"
       ],
-      "next_action": "M1a is already proven; start M1c hardening (OVMF run) and M1 installer design in parallel."
+      "legacy": [
+        "repository M0",
+        "the v1 architecture freeze"
+      ],
+      "release_gating": true
     },
     {
       "id": "M1a",
-      "track": "A",
+      "workstream": "WS3",
+      "kind": "infrastructure",
+      "level": 1,
       "title": "Reproducible BIOS boot medium",
       "state": "complete",
       "owner_role": "release-engineer",
       "depends_on": [
         "M0"
       ],
-      "legacy": [
-        "repository M1",
-        "repository M1b (local half)"
-      ],
+      "advances": "the boot path every higher level stands on",
       "deliverables": [
-        "tools/mkiso.py (ISO9660 + El Torito writer)",
-        "tools/verify_iso.py (independent verifier)",
-        "boot/loader.S (real-mode loader)",
-        "kernel/ (32-bit diagnostic kernel)"
+        "boot/mbr.S",
+        "boot/loader.S",
+        "tools/mkiso.py",
+        "tools/verify_iso.py"
       ],
       "acceptance": [
-        "make iso produces build/pc5.iso reproducibly under SOURCE_DATE_EPOCH",
-        "make verify passes every structural check",
-        "make boot-test boots the image on the v86/SeaBIOS emulated PC and asserts the rendered interface",
-        "the kernel mounts its own medium through its ATAPI/ISO9660 driver"
+        "make iso produces build/pc5.iso and two builds with the same SOURCE_DATE_EPOCH are byte-identical",
+        "make verify accepts the image independently of the writer that produced it"
       ],
       "evidence": [
         "docs/TEST_RESULTS.md",
-        "docs/ARCHITECTURE.md"
-      ]
+        "tools/verify_iso.py"
+      ],
+      "legacy": [
+        "M1a"
+      ],
+      "release_gating": true
     },
     {
       "id": "M1b",
-      "track": "A",
+      "workstream": "WS12",
+      "kind": "infrastructure",
+      "level": 1,
       "title": "Automated CI and release publication",
       "state": "blocked",
       "owner_role": "release-engineer",
       "depends_on": [
-        "M1a"
+        "M0"
       ],
-      "legacy": [
-        "repository M1b, milestone B3"
-      ],
-      "blocker": "GitHub App installation lacks the Workflows permission, so ci/build.yml cannot be pushed to .github/workflows/; see ci/README.md.",
+      "advances": "a reproducible release other people can verify for themselves",
       "deliverables": [
         "ci/build.yml",
-        "tools/publish_release.sh",
-        "tests/test_release.py"
+        "ci/README.md"
       ],
       "acceptance": [
-        "the workflow file is registered under .github/workflows/ and appears in gh api repos/.../actions/workflows",
-        "a tag push builds twice, requires identical hashes, runs every suite and publishes exactly three assets",
-        "a failed test run publishes nothing"
+        "a tag triggers build, verify, test and publication of pc5.iso, pc5.iso.sha256 and build-info.json",
+        "the published artefact hash equals a local rebuild with the same SOURCE_DATE_EPOCH"
       ],
       "evidence": [
-        "ci/README.md",
-        "docs/TEST_RESULTS.md"
+        "ci/README.md"
+      ],
+      "blocker": "the GitHub token available to this environment lacks the workflows permission, so ci/build.yml cannot be activated (ci/README.md)",
+      "legacy": [
+        "M1b"
       ]
     },
     {
       "id": "M1c",
-      "track": "A",
+      "workstream": "WS3",
+      "kind": "infrastructure",
+      "level": 1,
       "title": "UEFI boot path under real firmware",
       "state": "complete",
       "owner_role": "kernel-engineer",
       "depends_on": [
-        "M0"
+        "M0",
+        "M1a"
       ],
-      "legacy": [
-        "repository M1c"
-      ],
+      "advances": "boot on a UEFI machine, which is the only configuration current PC hardware offers",
       "deliverables": [
-        "boot/uefi/ (PE32+ EFI application)",
-        "tools/mkefiimg.py (FAT ESP writer, now carrying KERNEL.BIN)",
-        "tools/eficheck.py (PE32+ validator)",
-        "tests/uefi_stub_firmware.py (Unicorn stub firmware harness)",
-        "tests/uefi_stubtest.py (loader executed against stub firmware, 48 checks)",
-        "tests/ovmf_boot.py (real OVMF boot harness and gate)"
+        "boot/uefi/",
+        "tools/mkefiimg.py",
+        "tests/ovmf_boot.py"
       ],
       "acceptance": [
-        "the loader's logic is executed end to end against the stub firmware (48 checks) — done",
-        "the same BOOTX64.EFI boots under genuine OVMF and the serial log is recorded — done (cold and warm variable store)",
-        "the kernel reaches its entry point and PC5-BOOT-OK under OVMF — done",
-        "six broken machines are attributed to firmware, bootloader or harness — done",
-        "one physical UEFI machine reaches the PC5 kernel with Secure Boot off and the log is committed — NOT done",
-        "GOP-only machines get a working framebuffer console and the text fallback is no longer required — done under OVMF (GOP 1280x800, 32 bpp); physical hardware NOT tested"
+        "the loader's logic is executed against stub firmware, 48 checks - done",
+        "the same BOOTX64.EFI is booted by genuine OVMF, cold and warm variable store - done (docs/TEST_RESULTS.md section 16)",
+        "the kernel reaches PC5-BOOT-OK under OVMF - done",
+        "one physical UEFI machine boots it with Secure Boot off - NOT done",
+        "the loader hands the ACPI RSDP over - NOT done (the kernel reports acpi=absent on this path)"
       ],
       "evidence": [
-        "boot/uefi/README.md",
         "docs/TEST_RESULTS.md",
-        "docs/TECHNICAL_DECISIONS.md"
+        "tests/ovmf_boot.py",
+        "boot/uefi/README.md"
       ],
-      "next_action": "Boot the same ISO on one physical UEFI machine (Secure Boot off) and commit that serial log; extend the loader to hand over the ACPI RSDP so the UEFI path stops reporting acpi=absent."
+      "legacy": [
+        "M1c"
+      ],
+      "release_gating": true
     },
     {
       "id": "M1d",
-      "track": "A",
-      "title": "ATA PIO storage write path (emulated HDD)",
+      "workstream": "WS5",
+      "kind": "native-platform",
+      "level": 2,
+      "title": "ATA PIO write path with verified read-back",
       "state": "complete",
       "owner_role": "kernel-engineer",
       "depends_on": [
         "M0"
       ],
-      "legacy": [
-        "docs/architecture/FIRST_THREE_TASKS.md Task 1"
-      ],
+      "advances": "PC5 writes a medium with its own driver, which every installer and platform model needs",
       "deliverables": [
-        "kernel/ata.c (device-indexed 512-byte sector read/write, LBA28, cache flush)",
-        "kernel/block.c (block-request rules, no port I/O)",
-        "kernel/storage_test.c (explicit write self-test on a reserved window)",
-        "kernel/sha256.c (write-verification digest)",
-        "tests/v86_runner.mjs (--hda-buffer / --hda-out for a disposable disk)",
-        "tests/boot_test.py (write, read-back, guard and host-side image checks)",
-        "tests/test_storage.py (scratch-window and explicitness contracts)"
+        "kernel/ata.c"
       ],
       "acceptance": [
-        "writes take an explicit device index; no call falls back to the selected boot device",
-        "ATAPI devices, zero counts, out-of-range or overflowing LBAs, invalid indices and NULL buffers are refused with distinct statuses",
-        "a 4 KiB deterministic pattern is written to a reserved 8-sector window, cache-flushed, read back and compared",
-        "the kernel's SHA-256 of the read-back equals the host's SHA-256 of the same bytes in the emulator's disk image",
-        "nothing outside the scratch window is written, and the CD-ROM path still boots and mounts ISO9660 with the disk attached",
-        "the write test never runs on an ordinary boot; it requires the explicit serial command",
-        "physical disk writing is NOT included and is not claimed"
+        "a 4 KiB pattern is written, flushed, read back and hashed",
+        "the host compares the image and the SHA-256, and the write is never automatic"
       ],
       "evidence": [
         "docs/TEST_RESULTS.md",
-        "tests/boot_test.py",
-        "tests/test_storage.py",
-        "kernel/storage_test.c"
-      ],
-      "next_action": "Repeat the write on the REF-AMD physical machine; then a partition-table parser and a writable filesystem behind the same sector interface."
-    },
-    {
-      "id": "M1",
-      "track": "A",
-      "title": "Physical boot and installation",
-      "state": "not_started",
-      "owner_role": "kernel-engineer",
-      "depends_on": [
-        "M0",
-        "M1a",
-        "M1c",
-        "M1d",
-        "M1e",
-        "M1f",
-        "M1i"
+        "kernel/ata.c"
       ],
       "legacy": [
-        "repository M2",
-        "repository M3 (partial)"
+        "M1d"
       ],
-      "deliverables": [
-        "bootable USB image (isohybrid MBR plus UEFI entry)",
-        "installer with explicit target confirmation",
-        "partition-table parser and writable filesystem",
-        "recovery entry point"
-      ],
-      "acceptance": [
-        "all three reference configurations boot from USB and each records a complete PC5-LOG and screen dump",
-        "the installer writes to NVMe on the AMD reference machine and to SATA on the Intel reference machine",
-        "the installed system boots with the installation medium removed",
-        "the recovery entry boots on the same machine and can reinstall",
-        "evidence for each machine is committed under docs/evidence/m1/<machine>/ with the firmware version and Secure Boot state"
-      ],
-      "evidence": [],
-      "next_action": "Sector write (M1d), partition discovery (M1e), read-only FAT32 (M1f), create (M1g), hybrid MBR (M1h) and overwrite/directories/paths (M1i) exist. Next: the installer and isohybrid USB medium on a writable directory tree; AHCI/NVMe follow behind the same sector interface."
+      "release_gating": true
     },
     {
       "id": "M1e",
-      "track": "A",
-      "title": "Read-only MBR and GPT partition discovery",
+      "workstream": "WS5",
+      "kind": "native-platform",
+      "level": 2,
+      "title": "MBR and GPT partition discovery (read-only)",
       "state": "complete",
       "owner_role": "kernel-engineer",
       "depends_on": [
         "M1d"
       ],
-      "legacy": [
-        "docs/architecture/FIRST_THREE_TASKS.md (next three, task 2)"
-      ],
+      "advances": "PC5 finds what is on a disk, which the installer and the platform model both require",
       "deliverables": [
-        "kernel/part.c (pure MBR/GPT parsers, CRC-32, explicit-device scan)",
-        "kernel/include/pc5.h (partition types, statuses, bounds)",
-        "kernel/main.c (boot-time scan, PC5-LOG evidence, never fatal)",
-        "kernel/ui.c (storage-page line and `part` serial command)",
-        "tests/disk_images.py (reproducible MBR/GPT fixtures, including a damaged table)",
-        "tests/boot_test.py (GPT disk, damaged-table refusal, blank-disk negative)",
-        "tests/test_partitions.py (read-only and explicitness contracts)"
-      ],
-      "acceptance": [
-        "a GPT disk is parsed read-only from its protective MBR, header and entry array; header and entry CRCs are verified",
-        "a table with a mismatched CRC is refused with status=crc and the boot continues",
-        "a blank disk is reported as scheme=none status=signature, not as an empty table",
-        "partitions that overlap or extend past the device are refused with a distinct status",
-        "the scan takes an explicit device index and refuses ATAPI before reading a sector",
-        "no write, format or mount call exists in the partition module",
-        "extended/logical MBR partitions are labelled as not walked rather than guessed"
-      ],
-      "evidence": [
-        "docs/TEST_RESULTS.md",
-        "tests/disk_images.py",
-        "tests/test_partitions.py",
         "kernel/part.c"
       ],
-      "next_action": "Writable filesystem on a discovered partition (task A in the next three), then the installer."
+      "acceptance": [
+        "a valid GPT is discovered with the expected partition count",
+        "a damaged table reports status=crc instead of a wrong answer"
+      ],
+      "evidence": [
+        "docs/TEST_RESULTS.md"
+      ],
+      "legacy": [
+        "M1e"
+      ],
+      "release_gating": true
     },
     {
       "id": "M1f",
-      "track": "A",
+      "workstream": "WS5",
+      "kind": "native-platform",
+      "level": 2,
       "title": "Read-only FAT32 filesystem",
       "state": "complete",
       "owner_role": "kernel-engineer",
       "depends_on": [
         "M1e"
       ],
-      "legacy": [
-        "docs/architecture/FIRST_THREE_TASKS.md (next three, task A)"
-      ],
+      "advances": "a filesystem PC5 owns instead of one borrowed from firmware",
       "deliverables": [
-        "kernel/fat32.c (BPB validation, FAT chains, root directory, 8.3 lookup, file read)",
-        "kernel/include/pc5.h (volume, entry and status types; injected sector reader)",
-        "kernel/main.c (mount on the discovered, explicitly indexed disk; PC5-LOG evidence)",
-        "kernel/ui.c (`ls` and `read` commands, storage-page filesystem line)",
-        "tests/fat32_images.py (deterministic FAT32 fixture and an independent reader)",
-        "tests/fat32_check.c (host driver: kernel module reads the fixture, prints digests)",
-        "tests/test_fat32.py (three-way SHA-256 comparison and refusal contracts)",
-        "tests/kernel_unit.c (BPB, chain, directory corruption cases)",
-        "tests/boot_test.py (emulated mount, list, read, digest and image-unchanged checks)"
-      ],
-      "acceptance": [
-        "a FAT32 partition is mounted read-only through the M1e partition table on an explicit disk index",
-        "BPB and geometry are validated before any traversal; FAT12/FAT16 volumes are refused structurally",
-        "free, bad, reserved, out-of-range and cyclic cluster chains are refused with distinct statuses",
-        "files are read through multi-cluster and fragmented chains, with partial final clusters and zero-length files",
-        "the kernel's SHA-256 for every fixture file equals both the generated bytes and an independent reader's digest",
-        "the disk image is byte-identical before and after reading",
-        "no write path exists in the filesystem module and ATAPI is never mounted",
-        "long file names are skipped by design, not parsed on a guess"
-      ],
-      "evidence": [
-        "docs/TEST_RESULTS.md",
-        "tests/test_fat32.py",
-        "tests/fat32_images.py",
         "kernel/fat32.c"
       ],
-      "next_action": "FAT32 write (M1g): create, flush, independent read-back."
+      "acceptance": [
+        "the kernel's SHA-256 of a fixture file equals an independent reader's",
+        "the image is byte-identical after a read-only mount"
+      ],
+      "evidence": [
+        "docs/TEST_RESULTS.md"
+      ],
+      "legacy": [
+        "M1f"
+      ],
+      "release_gating": true
     },
     {
       "id": "M1g",
-      "track": "A",
-      "title": "Safe FAT32 write: create, flush, independent read-back",
+      "workstream": "WS5",
+      "kind": "native-platform",
+      "level": 2,
+      "title": "FAT32 create with independent read-back",
       "state": "complete",
       "owner_role": "kernel-engineer",
       "depends_on": [
         "M1f"
       ],
-      "legacy": [
-        "docs/architecture/FIRST_THREE_TASKS.md (next three, task B)"
-      ],
+      "advances": "PC5 leaves a persistent artefact on a medium",
       "deliverables": [
-        "kernel/fat32.c (fat32_create_file: allocation, FAT copies, FSInfo, directory entry, bounded write order, read-back)",
-        "kernel/include/pc5.h (write/flush callbacks, write report, stage enum, new refusal statuses)",
-        "kernel/ata.c (ata_flush: explicit FLUSH CACHE on an explicit device, ATAPI refused)",
-        "kernel/ui.c (`put NAME.EXT text` command and storage-page write line)",
-        "tests/fat32_write_check.c (host driver with deterministic payload and write/flush fault injection)",
-        "tests/test_fat32_write.py (36 tests: creation matrix, refusals, FSInfo, flush, fault injection, harness safety)",
-        "tests/fat32_images.py (independent reader plus structural checks: FAT copies, chains, orphans, FSInfo, changed sectors)",
-        "tests/boot_test.py (create in the emulator, dumped image read back by the independent reader)"
-      ],
-      "acceptance": [
-        "an explicitly mounted FAT32 volume on an explicitly indexed ATA disk gains one new 8.3 root file",
-        "clusters are chosen from free FAT entries only, with the allocator refusing instead of overwriting",
-        "every FAT copy is written and then re-read, and a divergent mirror is reported rather than assumed",
-        "the FSInfo block is validated before use; an implausible block is neither trusted nor rewritten",
-        "the file's bytes, FAT chain, directory entry and FSInfo counters are all confirmed by an independent FAT32 reader",
-        "every pre-existing file still reads back byte for byte, and both FAT copies remain identical",
-        "changed sectors are confined to the allocated data, the FATs, the FSInfo blocks and the root directory",
-        "existing names, full volumes, full root directories, invalid names, read-only sources and oversize files are refused without writing",
-        "write, flush and corruption failures leave a documented state (intact, leaked chain or reported inconsistency), never a silent success",
-        "reads remain unchanged and the boot path never attaches a write callback"
-      ],
-      "evidence": [
-        "docs/TEST_RESULTS.md",
-        "tests/test_fat32_write.py",
-        "tests/fat32_write_check.c",
         "kernel/fat32.c"
       ],
-      "next_action": "Overwrite, directory creation and path handling (M1i); then the installer (M2)."
+      "acceptance": [
+        "a created file is read back byte-identically by an independent reader",
+        "both FAT copies agree and no cluster is orphaned"
+      ],
+      "evidence": [
+        "docs/TEST_RESULTS.md"
+      ],
+      "legacy": [
+        "M1g"
+      ],
+      "release_gating": true
     },
     {
       "id": "M1h",
-      "track": "A",
-      "title": "Hybrid MBR: the same ISO boots as a hard disk",
+      "workstream": "WS3",
+      "kind": "infrastructure",
+      "level": 1,
+      "title": "Hybrid MBR: the same image boots as a hard disk",
       "state": "complete",
-      "owner_role": "platform-engineer",
+      "owner_role": "release-engineer",
       "depends_on": [
-        "M1g"
+        "M1a"
       ],
-      "legacy": [
-        "docs/architecture/FIRST_THREE_TASKS.md (next three, task C)"
-      ],
+      "advances": "one medium for optical and disk boot, which a PC5 install target needs",
       "deliverables": [
-        "boot/mbr.S (440-byte MBR bootstrap: relay at 0x0500, INT 13h extended read, hand-off at 0000:7C00 with DL preserved)",
-        "tools/mkiso.py (hybrid MBR composition from the real layout: patch words, disk signature, one whole-image partition, CHS, 55AA)",
-        "tools/verify_iso.py (independent MBR verification: signature, one entry, type/flag/extent, CHS, patch words, no overlap, nothing past EOF)",
-        "tests/test_hybrid.py (37 tests: assembled bootstrap bytes, layout, determinism, and a rejection test per corruption)",
-        "tests/mbr_fixture.py (synthetic and really-assembled bootstrap fixtures)",
-        "tests/boot_test.py (boots the ISO with no CD attached, plus a blanked-sector-0 control)",
-        "Makefile (build/mbr.bin pinned to 440 bytes, passed as --mbr-code)"
+        "tools/mkiso.py",
+        "boot/mbr.S"
       ],
       "acceptance": [
-        "the image carries a valid MBR in the ISO9660 system area: 55AA at 510, a disk signature, one partition entry with the boot flag set and type 0x17",
-        "the partition describes the actual image: start LBA 0, length = every 512-byte sector of the file, nothing past the end, no overlap, CHS consistent with the LBA fields",
-        "the MBR bootstrap loads the same boot image El Torito names, using values patched in from the layout rather than a template",
-        "the El Torito entries, the ISO9660 layout, the 4096-byte stage-1 loader and the FAT ESP are unchanged",
-        "the verifier rejects every inconsistency it can express, and a test per corruption proves it",
-        "the image boots with the CD detached and the disk attached, reaching the same kernel build as the CD path",
-        "a copy with sector 0 blanked does not boot at all, so the evidence is not an artefact of the firmware falling back",
-        "two clean builds remain byte-identical, and the MBR path adds no firmware binary and no kernel change"
+        "the image boots from its MBR with the CD detached",
+        "a control image with sector 0 blanked does not boot"
       ],
       "evidence": [
-        "docs/TEST_RESULTS.md",
-        "boot/mbr.S",
-        "tests/test_hybrid.py",
-        "tools/verify_iso.py"
+        "docs/TEST_RESULTS.md"
       ],
-      "next_action": "Physical boot on a real machine with a USB stick (M2); then overwrite/rename and directory creation for the installer."
+      "legacy": [
+        "M1h"
+      ],
+      "release_gating": true
     },
     {
       "id": "M1i",
-      "track": "A",
-      "title": "FAT32 write expansion: overwrite, directories, paths",
+      "workstream": "WS5",
+      "kind": "native-platform",
+      "level": 2,
+      "title": "FAT32 overwrite, directories and 8.3 paths",
       "state": "complete",
       "owner_role": "kernel-engineer",
       "depends_on": [
         "M1g"
       ],
-      "legacy": [
-        "docs/architecture/FIRST_THREE_TASKS.md (M1g follow-on)"
-      ],
+      "advances": "PC5 updates its own storage tree, which installation and updates require",
       "deliverables": [
-        "kernel/fat32.c (fat32_overwrite_file, fat32_create_dir, dir_grow, chain_free, path-aware parent resolution, mounted write callbacks)",
-        "kernel/include/pc5.h (path grammar constants, new stages, report fields, path/overwrite/mkdir prototypes)",
-        "kernel/ui.c (`write PATH text`, `mkdir PATH`, `ls [PATH]`, `read PATH`)",
-        "tests/fat32_write_check.c (PATH argument, --overwrite, --mkdir, --read, region-targeted fault injection)",
-        "tests/fat32_images.py (directory-aware independent reader: resolve_dir, list_path, read_path, check_directory, chains, double_allocated, all_files)",
-        "tests/test_fat32_expand.py (50 tests: overwrite, directories, paths, invariants, fault-injection sweeps, harness safety)",
-        "tests/test_fat32_write.py (full-root tests replaced by the grown-directory pair)",
-        "tests/boot_test.py (console create/replace/mkdir/ls/read on a disposable image, then a second boot that reads them back)"
-      ],
-      "acceptance": [
-        "an existing regular file is replaced in place: same name, same directory slot, new size and first cluster, no duplicate entry",
-        "the replacement is built in unreferenced clusters and the old chain is freed only after the switch and its flush, so no name ever refers to unwritten data",
-        "a shorter, longer, identical-length and empty replacement all produce a valid volume, including a fragmented chain reclaimed in full",
-        "directories are created with a zeroed cluster, valid '.' and '..', a consistent chain in every FAT copy, and are readable immediately",
-        "a full parent directory is grown by one cluster, preserving every existing entry, and is refused without writing when the volume cannot afford it",
-        "paths are 8.3, case-insensitive, up to 8 components; missing parents, file-as-directory, trailing separators, '.'/'..' and over-long paths are refused by status, never truncated",
-        "the root directory's own cluster, bad and reserved clusters are never allocated, and a divergent FAT mirror or an inconsistent entry is refused before any destructive write",
-        "distinct statuses are reported for ok, exists, no-file, directory, not-dir, full, name, too-big, read-only, corrupt, io, verify and flush",
-        "every write of every operation is failed in turn: the original stays readable before the switch, the new state is complete after it, and any leak is counted and quantified",
-        "the console reaches the new operations only through explicit commands, and files written by one boot are read back by a second boot of the same image",
-        "all gates stay green, two pinned builds are byte-identical, and no test is deleted or weakened"
-      ],
-      "evidence": [
-        "docs/TEST_RESULTS.md",
-        "tests/test_fat32_expand.py",
-        "tests/fat32_write_check.c",
         "kernel/fat32.c"
       ],
-      "next_action": "Boot path and installer work (M2), which needs the directory tree this milestone can now create."
+      "acceptance": [
+        "an overwrite replaces in place and frees the old chain only after the switch",
+        "a file written into a new directory reads back after a reboot",
+        "a per-write failure sweep leaves no corrupt state"
+      ],
+      "evidence": [
+        "docs/TEST_RESULTS.md"
+      ],
+      "legacy": [
+        "M1i"
+      ],
+      "release_gating": true
+    },
+    {
+      "id": "M1",
+      "workstream": "WS1",
+      "kind": "hardware-validation",
+      "level": 1,
+      "title": "Physical boot and installation on qualified PC hardware",
+      "state": "not_started",
+      "owner_role": "qa-engineer",
+      "depends_on": [
+        "M1a",
+        "M1c",
+        "M1h",
+        "M1i"
+      ],
+      "advances": "level 1 of the success hierarchy: PC5 has to run on a real machine before it can run anything else",
+      "deliverables": [
+        "docs/evidence/",
+        "docs/HARDWARE_COMPATIBILITY.md"
+      ],
+      "acceptance": [
+        "one machine from the qualification list boots the image from USB and reaches the PC5 environment",
+        "the serial log is committed with the machine named and the firmware version recorded",
+        "a BIOS and a UEFI configuration are both recorded",
+        "an installation writes a bootable target and reboots into it"
+      ],
+      "evidence": [
+        "docs/HARDWARE_COMPATIBILITY.md"
+      ],
+      "legacy": [
+        "M1"
+      ],
+      "release_gating": true
     },
     {
       "id": "M2",
-      "track": "A",
-      "title": "Hardware abstraction and drivers",
+      "workstream": "WS1",
+      "kind": "native-platform",
+      "level": 2,
+      "title": "Hardware abstraction and drivers for the qualified list",
       "state": "not_started",
       "owner_role": "kernel-engineer",
       "depends_on": [
-        "M1g",
+        "M0",
         "M1"
       ],
-      "legacy": [
-        "repository M3",
-        "repository M6 (input/network part)"
-      ],
+      "advances": "level 2: PC5 drives the machine through its own architecture, not through firmware or a hosted OS",
       "deliverables": [
-        "Linux-kernel-based hardware support for the qualified device set",
-        "PC5 hardware abstraction layer over display, input, storage, audio and network",
-        "xHCI + HID + DualSense input path",
-        "audio routing and volume control",
-        "Ethernet and Wi-Fi enablement per qualified device"
+        "kernel/pci.c",
+        "kernel/irq.c",
+        "kernel/timer.c",
+        "kernel/nvme.c",
+        "kernel/xhci.c"
       ],
       "acceptance": [
-        "every reference configuration has a compatibility-matrix row with boot, GPU acceleration, storage, USB, audio and network results measured separately",
-        "the DualSense is enumerated and its input reports are dumped and committed (buttons, sticks, touchpad, motion, adaptive triggers)",
-        "GPU acceleration is demonstrated by a recorded renderer string and a rendered frame on each GPU vendor",
-        "no device is described as supported without a row that names the measurement"
+        "PCIe enumeration with BAR assignment and MSI/MSI-X, plus interrupt handling with an APIC",
+        "a high-resolution timer and a real-time clock usable by services",
+        "one NVMe device initialises, completes a read and a write, and reports its health",
+        "every device class is recorded as a row in the qualification list"
       ],
-      "evidence": [],
-      "next_action": "Produce the qualification-matrix template as machine-readable rows before writing driver code, so results cannot be invented later."
+      "evidence": [
+        "docs/HARDWARE_COMPATIBILITY.md"
+      ],
+      "legacy": [
+        "M2"
+      ],
+      "release_gating": true
     },
     {
-      "id": "M3",
-      "track": "A",
-      "title": "PC5 operating system",
+      "id": "M2a",
+      "workstream": "WS2",
+      "kind": "native-platform",
+      "level": 2,
+      "title": "CPU execution environment: long mode, APIC, SMP and timers",
       "state": "not_started",
-      "owner_role": "platform-engineer",
+      "owner_role": "kernel-engineer",
       "depends_on": [
         "M2"
       ],
-      "legacy": [
-        "repository M3",
-        "repository M8 (partial)"
-      ],
+      "advances": "level 2 and the execution environment the platform model needs: the CPU contract is the PS5 contract's first row",
       "deliverables": [
-        "PC5 system image (immutable base plus update slots)",
-        "console session and desktop session",
-        "device, controller and application management",
-        "offline update verification and recovery",
-        "reproducible image build"
+        "kernel/cpu.c",
+        "kernel/apic.c",
+        "kernel/smp.c"
       ],
       "acceptance": [
-        "a clean install reaches the PC5 home screen on every reference configuration without a keyboard",
-        "an application can be installed, launched, suspended and removed from the PC5 interface",
-        "an interrupted update leaves a bootable system in the previous slot",
-        "the image build is reproducible from a recorded commit and SOURCE_DATE_EPOCH"
+        "the kernel runs in 64-bit long mode with paging enabled, verified by a boot log line and a self-test",
+        "APIC initialisation, MSI delivery to a CPU vector and a high-resolution timer are measured",
+        "a second CPU is brought up through the same path, or the absence of one is reported",
+        "CPU feature detection records SVM/VMX availability per machine in the qualification list"
       ],
       "evidence": [],
-      "next_action": "Define the system-image composition and the session boundary before choosing shell technology."
+      "release_gating": true
     },
     {
-      "id": "M4",
-      "track": "A",
-      "title": "PlayStation experience",
+      "id": "M2b",
+      "workstream": "WS4",
+      "kind": "native-platform",
+      "level": 2,
+      "title": "Memory management: paging, protection and DMA-visible memory",
+      "state": "not_started",
+      "owner_role": "kernel-engineer",
+      "depends_on": [
+        "M2",
+        "M2a"
+      ],
+      "advances": "level 2 and the host side of the unified-memory model: the destination's memory contract sits here",
+      "deliverables": [
+        "kernel/mm.c"
+      ],
+      "acceptance": [
+        "a per-process address space with page-level protection, and a test that a write to a read-only page faults",
+        "a physical allocator with fragmentation accounting reported in the boot log",
+        "DMA-visible buffers with an explicit ownership protocol, tested by a device driver round trip"
+      ],
+      "evidence": [],
+      "release_gating": true
+    },
+    {
+      "id": "M2c",
+      "workstream": "WS7",
+      "kind": "native-platform",
+      "level": 3,
+      "title": "Audio output path",
       "state": "not_started",
       "owner_role": "platform-engineer",
       "depends_on": [
         "M3"
       ],
-      "legacy": [
-        "repository M3/M6 interface work"
-      ],
+      "advances": "level 3 audio, and the host side of the audio device model the destination needs",
       "deliverables": [
-        "controller-first home screen",
-        "game library and launch manager",
-        "DualSense feature integration (light bar, haptics, adaptive triggers)",
-        "system settings and account-free profile handling"
+        "kernel/audio/"
       ],
       "acceptance": [
-        "every shell surface is reachable and operable with a DualSense alone; the keyboard is optional",
-        "DualSense features are individually exercised and the report/effect evidence is committed",
-        "the library launches a registered title and returns to the shell with state preserved",
-        "input-to-photon latency is measured on each reference configuration and recorded"
+        "PCM output through one codec at a measured latency, with a loopback that proves the samples",
+        "per-application streams with routing and volume, tested",
+        "the host side satisfies the PC5-PSM audio conformance suite"
       ],
       "evidence": [],
-      "next_action": "Prototype the shell against the M3 session API on one machine before generalising."
+      "release_gating": true
+    },
+    {
+      "id": "M2d",
+      "workstream": "WS8",
+      "kind": "native-platform",
+      "level": 3,
+      "title": "USB, HID and DualSense input path",
+      "state": "not_started",
+      "owner_role": "platform-engineer",
+      "depends_on": [
+        "M3"
+      ],
+      "advances": "level 3 input: the controller path the console experience and the destination both need",
+      "deliverables": [
+        "kernel/usb/"
+      ],
+      "acceptance": [
+        "xHCI enumeration with a hot-plug event, tested",
+        "HID reports are delivered to the input service, tested",
+        "a DualSense is identified and its report descriptor parsed, with rumble and trigger output driven from a test"
+      ],
+      "evidence": [],
+      "release_gating": true
+    },
+    {
+      "id": "M3",
+      "workstream": "WS9",
+      "kind": "native-platform",
+      "level": 3,
+      "title": "PC5 platform services and operating-system interfaces",
+      "state": "not_started",
+      "owner_role": "platform-engineer",
+      "depends_on": [
+        "M2",
+        "M2a",
+        "M2b"
+      ],
+      "advances": "level 3: the surface the platform model and every session sit on (PC5-PLAT v0)",
+      "deliverables": [
+        "kernel/",
+        "docs/ARCHITECTURE.md"
+      ],
+      "acceptance": [
+        "processes and threads with preemptive scheduling and memory protection",
+        "a syscall interface with a versioned ABI and a test that fails when a call is broken",
+        "device interfaces for storage, display, input, audio, network and power",
+        "PC5-PLAT v0 is frozen in a header with offset assertions, as PC5-BOOT is"
+      ],
+      "evidence": [
+        "docs/ARCHITECTURE.md"
+      ],
+      "legacy": [
+        "M3"
+      ],
+      "release_gating": true
+    },
+    {
+      "id": "M4",
+      "workstream": "WS13",
+      "kind": "product-experience",
+      "level": 6,
+      "title": "PC5 console experience: shell, library, settings, accounts",
+      "state": "not_started",
+      "owner_role": "platform-engineer",
+      "depends_on": [
+        "M3",
+        "M2c",
+        "M2d"
+      ],
+      "advances": "the surface the user touches; explicitly not the destination and never a substitute for level 5",
+      "deliverables": [
+        "session shell, library, settings, accounts"
+      ],
+      "acceptance": [
+        "the shell runs on PC5-PLAT rather than on a foreign userspace",
+        "a game library lists installed titles and launches them through the platform launcher",
+        "accounts, settings and update UI are local to PC5 and nothing implies PlayStation Network access"
+      ],
+      "evidence": [],
+      "legacy": [
+        "M4"
+      ]
     },
     {
       "id": "M5",
-      "track": "B",
-      "title": "PS5 executable compatibility (research and runtime)",
+      "workstream": "WS11",
+      "kind": "ps5-compatibility",
+      "level": 6,
+      "title": "PS5 executable compatibility runtime (intermediate)",
       "state": "not_started",
       "owner_role": "compatibility-engineer",
       "depends_on": [
-        "M0"
+        "M3"
       ],
-      "legacy": [
-        "repository M7 (execution path)"
-      ],
+      "advances": "proves an independently implemented runtime can serve PS5 application contracts on PC hardware",
       "deliverables": [
-        "PS5 ELF/SELF intake analysis with documented, lawful input requirements",
-        "loader and relocation support for user-space executables",
-        "PRX/NID import resolution with independently implemented shims",
-        "graphics and audio translation boundary for relinked titles",
-        "per-title records in docs/PS5_GAME_TEST_RESULTS.md"
+        "playstation/compatibility/"
       ],
       "acceptance": [
-        "at least one lawfully obtained PS5 user-space executable reaches a recorded, reproducible execution milestone (entry, syscall loop or presented frame) on PC5 Native",
-        "the record names the milestone reached and never describes it as PS5 system software or firmware execution",
-        "each attempted title has a row with the blocking subsystem, or the milestone is recorded as not reached",
-        "no Sony firmware, key or proprietary library is required, redistributed or derived"
+        "containers (SLB2, FIH, CNT, SELF, PKG, ELF) are identified without decryption",
+        "a lawfully obtained executable is loaded, relocated and executed with independently implemented import shims",
+        "a per-title record exists in docs/PS5_GAME_TEST_RESULTS.md with a trace",
+        "nothing in this milestone is described as system-software or firmware execution"
       ],
-      "evidence": [],
-      "next_action": "Host-side feasibility spike on a machine that can build the relinker, recorded as a negative or positive result."
+      "evidence": [
+        "docs/GAMING_COMPATIBILITY.md",
+        "docs/PS5_GAME_TEST_RESULTS.md"
+      ],
+      "legacy": [
+        "M5 (PS5 executable compatibility)"
+      ],
+      "experimental": true
     },
     {
       "id": "M6",
-      "track": "B",
-      "title": "Genuine Prospero research",
+      "workstream": "WS10",
+      "kind": "research",
+      "level": 4,
+      "title": "PS5 platform research programme (split into M9-M21)",
       "state": "not_started",
       "owner_role": "compatibility-engineer",
       "depends_on": [
         "M0"
       ],
-      "legacy": [
-        "repository M4",
-        "repository M5"
-      ],
+      "advances": "the destination workstream; this umbrella milestone tracks the split instead of being a separate objective",
       "deliverables": [
-        "firmware structure research on lawfully obtained images (never distributed)",
-        "public boot-chain and hardware-dependency documentation",
-        "security-architecture analysis",
-        "full-system emulation feasibility assessment",
-        "legal interoperability assessment"
+        "docs/playstation/",
+        "docs/PS5_SYSTEM_SOFTWARE_TARGET.md"
       ],
       "acceptance": [
-        "a feasibility report cites public evidence for every claim and states what remains unproven",
-        "the hardware dependency map names each SoC block a PC would have to emulate",
-        "the legal assessment is written by or reviewed against counsel-grade sources before any experiment",
-        "the report ends in an explicit go / no-go recommendation; no stage of the PC5 compatibility chain is advanced by research alone"
+        "every one of M9-M21 exists, is owned, and is not complete without evidence",
+        "research records cite a measurement or a public source, never a guess"
       ],
       "evidence": [
-        "docs/FIRMWARE_ANALYSIS.md",
-        "docs/SECURITY.md"
+        "docs/playstation/BOOT_FEASIBILITY.md",
+        "docs/playstation/RESEARCH_LOG.md"
       ],
-      "next_action": "Legal assessment first; the technical feasibility question is not worth funding before it is answered."
+      "legacy": [
+        "M6 (genuine Prospero research)"
+      ],
+      "superseded_by": [
+        "M9",
+        "M10",
+        "M11",
+        "M12",
+        "M13",
+        "M14",
+        "M15",
+        "M16",
+        "M17",
+        "M18",
+        "M19",
+        "M20",
+        "M21"
+      ],
+      "experimental": true
     },
     {
       "id": "M7",
-      "track": "A",
-      "title": "Performance and compatibility expansion",
+      "workstream": "WS6",
+      "kind": "native-platform",
+      "level": 3,
+      "title": "Graphics stack: mode setting, compositing, command submission",
       "state": "not_started",
-      "owner_role": "qa-engineer",
+      "owner_role": "graphics-engineer",
       "depends_on": [
-        "M4"
+        "M3"
       ],
-      "legacy": [
-        "repository M8"
-      ],
+      "advances": "level 3 graphics, and the host side of the GPU device model the destination needs",
       "deliverables": [
-        "reproducible benchmark suite",
-        "multi-vendor compatibility database",
-        "crash reporting and triage workflow",
-        "GPU, storage and controller latency measurements"
+        "kernel/gpu/"
       ],
       "acceptance": [
-        "the benchmark suite runs unattended on every reference configuration and produces comparable records",
-        "a compatibility database row exists for every tested machine and title, generated from measurements",
-        "crash reports are attributable to a component and reproduce from the recorded configuration",
-        "no performance number is published without the machine, build and command that produced it"
+        "mode setting and a compositor with a tear-free frame path",
+        "a command submission path with fences and a recorded frame-time measurement",
+        "the host side satisfies the PC5-PSM graphics conformance suite"
       ],
       "evidence": [],
-      "next_action": "Define the benchmark manifest and evidence format in M2 so early runs already produce reusable data."
+      "legacy": [
+        "M7 (performance and compatibility expansion)"
+      ],
+      "release_gating": true
     },
     {
       "id": "M8",
-      "track": "A",
-      "title": "Release-quality PC5",
+      "workstream": "WS12",
+      "kind": "native-platform",
+      "level": 3,
+      "title": "Release-quality PC5: installer, updates, rollback, Linux-tier exit",
       "state": "not_started",
       "owner_role": "release-engineer",
       "depends_on": [
-        "M7",
-        "M1b"
+        "M1",
+        "M4",
+        "M7"
       ],
-      "legacy": [
-        "repository M9"
-      ],
+      "advances": "a system someone can install, update and recover, and the point where the optional Linux tier is removed if it is no longer needed",
       "deliverables": [
-        "installer and recovery media",
-        "signed update manifest with rollback",
-        "hardware qualification list",
-        "reproducible release pipeline and published assets",
-        "user and developer documentation"
+        "installer",
+        "update slots",
+        "docs/UPDATE_SYSTEM.md",
+        "docs/RECOVERY.md"
       ],
       "acceptance": [
-        "a tagged commit builds twice to identical artifacts and publishes exactly the documented asset set",
-        "the update signature is verified before apply and a corrupted update is refused",
-        "a power cut during an update leaves a bootable, recoverable system",
-        "every machine on the qualification list has a committed evidence record from the release build"
+        "install, verify, boot, update, verify and roll back, each step with a test",
+        "recovery is reachable from the boot menu of every installed system",
+        "the build and every gate pass with the optional Linux tier absent (ADR-020 exit condition)"
+      ],
+      "evidence": [
+        "docs/UPDATE_SYSTEM.md",
+        "docs/RECOVERY.md"
+      ],
+      "legacy": [
+        "M8"
+      ],
+      "release_gating": true
+    },
+    {
+      "id": "M9",
+      "workstream": "WS10",
+      "kind": "research",
+      "level": 4,
+      "title": "System-software baseline and provenance record",
+      "state": "in_progress",
+      "owner_role": "compatibility-engineer",
+      "depends_on": [
+        "M0"
+      ],
+      "advances": "establishes what the protected input actually is before anything is built around it",
+      "deliverables": [
+        "docs/PS5_SYSTEM_SOFTWARE_TARGET.md",
+        "the repository-root package as a Git LFS pointer only"
+      ],
+      "acceptance": [
+        "the pointer's object id and declared size are recorded and asserted by a test",
+        "the payload's absence from any checkout is asserted: no Sony bytes are in the tree",
+        "whether the package is the full reinstallation image or an incremental update is recorded as NOT VERIFIED until the bytes are lawfully available",
+        "an analysis runbook exists that produces hashes and structure only and runs outside the repository",
+        "no extraction, decryption or key handling is implemented or planned in this milestone"
+      ],
+      "evidence": [
+        "docs/PS5_SYSTEM_SOFTWARE_TARGET.md",
+        "PS5UPDATE.PUP"
+      ],
+      "experimental": true
+    },
+    {
+      "id": "M10",
+      "workstream": "WS10",
+      "kind": "research",
+      "level": 4,
+      "title": "PS5 platform contract specification",
+      "state": "not_started",
+      "owner_role": "lead-architect",
+      "depends_on": [
+        "M0"
+      ],
+      "advances": "the destination needs a written platform contract before a single device model can be built",
+      "deliverables": [
+        "docs/architecture/PS5_PLATFORM_CONTRACT.md"
+      ],
+      "acceptance": [
+        "every device class the system software touches has a written contract with its unknowns marked UNKNOWN",
+        "each contract names its source (public documentation, observable behaviour, or unknown) and none is invented",
+        "the security-state device is specified only as far as public documentation allows, and no bypass is specified",
+        "the CPU, memory, interrupt, storage, graphics, audio, USB and service-device contracts each have a test-double interface"
+      ],
+      "evidence": [
+        "docs/architecture/PS5_PLATFORM_CONTRACT.md"
+      ],
+      "experimental": true
+    },
+    {
+      "id": "M11",
+      "workstream": "WS10",
+      "kind": "ps5-compatibility",
+      "level": 4,
+      "title": "Virtual platform core: CPU and privileged execution model",
+      "state": "not_started",
+      "owner_role": "kernel-engineer",
+      "depends_on": [
+        "M2",
+        "M3",
+        "M10"
+      ],
+      "advances": "level 4: the execution environment the destination runs inside",
+      "deliverables": [
+        "platform model core",
+        "PC5-PSM conformance suite"
+      ],
+      "acceptance": [
+        "the model executes a PC5-authored conformance payload to a recorded completion",
+        "privilege levels, control registers and CPUID features are modelled and tested against the contract",
+        "hardware-assisted virtualisation (SVM) is evaluated on qualified hardware and the result recorded whichever way it goes"
       ],
       "evidence": [],
-      "next_action": "Blocked behind M7 and the Workflows permission that M1b needs; do not schedule a release before qualification exists."
+      "experimental": true
+    },
+    {
+      "id": "M12",
+      "workstream": "WS10",
+      "kind": "ps5-compatibility",
+      "level": 4,
+      "title": "Memory architecture model: unified memory and GPU-visible mappings",
+      "state": "not_started",
+      "owner_role": "kernel-engineer",
+      "depends_on": [
+        "M11"
+      ],
+      "advances": "the PS5 memory model is unlike a PC's, and the destination will fault here first",
+      "deliverables": [
+        "platform model memory manager"
+      ],
+      "acceptance": [
+        "a unified address space with GPU-visible mappings is modelled and passes its conformance test",
+        "DMA coherency and protection domains match the contract, with a test that fails when a domain leaks",
+        "the mapping of the model onto PC memory topology is documented with measured costs"
+      ],
+      "evidence": [],
+      "experimental": true
+    },
+    {
+      "id": "M13",
+      "workstream": "WS10",
+      "kind": "ps5-compatibility",
+      "level": 4,
+      "title": "Storage and I/O device model",
+      "state": "not_started",
+      "owner_role": "kernel-engineer",
+      "depends_on": [
+        "M12"
+      ],
+      "advances": "installation and boot of the destination both depend on this device model",
+      "deliverables": [
+        "platform model storage device"
+      ],
+      "acceptance": [
+        "queue submission, DMA and completion semantics pass the conformance suite",
+        "the model can host a filesystem the guest mounts, verified with an independent reader",
+        "performance is measured and reported rather than assumed"
+      ],
+      "evidence": [],
+      "experimental": true
+    },
+    {
+      "id": "M14",
+      "workstream": "WS10",
+      "kind": "ps5-compatibility",
+      "level": 4,
+      "title": "Graphics device model",
+      "state": "not_started",
+      "owner_role": "graphics-engineer",
+      "depends_on": [
+        "M13",
+        "M7"
+      ],
+      "advances": "a console without its graphics contract is not a console",
+      "deliverables": [
+        "platform model GPU"
+      ],
+      "acceptance": [
+        "command submission, fences and memory objects pass the conformance suite",
+        "the host submits work through the PC5 graphics stack and the result is read back and compared",
+        "shader and command-level translation is specified with its unknowns marked"
+      ],
+      "evidence": [],
+      "experimental": true
+    },
+    {
+      "id": "M15",
+      "workstream": "WS10",
+      "kind": "ps5-compatibility",
+      "level": 4,
+      "title": "Audio and USB device model",
+      "state": "not_started",
+      "owner_role": "compatibility-engineer",
+      "depends_on": [
+        "M13"
+      ],
+      "advances": "the destination's audio and controller paths, which are device contracts before they are features",
+      "deliverables": [
+        "platform model audio and USB devices"
+      ],
+      "acceptance": [
+        "audio output is presented with a measured latency and a test tone the host reads back",
+        "USB device enumeration and a controller report path pass the conformance suite"
+      ],
+      "evidence": [],
+      "experimental": true
+    },
+    {
+      "id": "M16",
+      "workstream": "WS10",
+      "kind": "ps5-compatibility",
+      "level": 4,
+      "title": "System-services device model: timers, event queues, IPC mailboxes, RTC",
+      "state": "not_started",
+      "owner_role": "platform-engineer",
+      "depends_on": [
+        "M12",
+        "M3"
+      ],
+      "advances": "system services are consumers of these devices, so modelling them is what makes service bring-up possible",
+      "deliverables": [
+        "platform model service devices"
+      ],
+      "acceptance": [
+        "timer, event queue, IPC mailbox and RTC contracts are implemented and pass the conformance suite",
+        "a PC5-authored service payload runs against them and the run is recorded"
+      ],
+      "evidence": [],
+      "experimental": true
+    },
+    {
+      "id": "M17",
+      "workstream": "WS10",
+      "kind": "research",
+      "level": 5,
+      "title": "Security and authenticity boundary",
+      "state": "blocked",
+      "owner_role": "compatibility-engineer",
+      "depends_on": [
+        "M10"
+      ],
+      "advances": "the one precondition that may not be solvable by engineering, studied first rather than last",
+      "deliverables": [
+        "docs/playstation/SECURITY_BOUNDARY.md"
+      ],
+      "acceptance": [
+        "every authentication step in the console boot chain is listed with what it depends on and whether a PC can lawfully provide it",
+        "what would have to be true for a lawful path is recorded, with falsifiers",
+        "no key handling, decryption, patching or bypass is implemented at any point",
+        "the analysis names which steps a platform model could satisfy and which it cannot"
+      ],
+      "evidence": [
+        "docs/playstation/BOOT_FEASIBILITY.md"
+      ],
+      "blocker": "no lawful trust path is known: the console's boot chain is anchored in Sony-specific silicon and fuses, and PC5 implements no circumvention (ADR-007, ADR-022). Until a lawful path exists this milestone can proceed only as analysis",
+      "experimental": true
+    },
+    {
+      "id": "M18",
+      "workstream": "WS10",
+      "kind": "ps5-compatibility",
+      "level": 5,
+      "title": "Genuine system-software load",
+      "state": "blocked",
+      "owner_role": "compatibility-engineer",
+      "depends_on": [
+        "M9",
+        "M13",
+        "M17"
+      ],
+      "advances": "level 5 begins here: the protected input is loaded by PC5's own mechanisms, not by a console",
+      "deliverables": [
+        "platform model loader"
+      ],
+      "acceptance": [
+        "a lawfully obtained payload is accepted by the loader and its integrity record matches the recorded hash",
+        "the loader refuses a tampered payload and says why",
+        "the load path is exercised against a synthetic package PC5 builds itself, so the mechanism is testable without Sony bytes"
+      ],
+      "evidence": [],
+      "blocker": "requires a lawful, authenticated input (the M9 payload is absent from the tree) and the trust analysis of M17; PC5 will not decrypt or circumvent",
+      "experimental": true
+    },
+    {
+      "id": "M19",
+      "workstream": "WS10",
+      "kind": "ps5-compatibility",
+      "level": 5,
+      "title": "Genuine system software boots on PC5 (DESTINATION)",
+      "state": "blocked",
+      "owner_role": "compatibility-engineer",
+      "depends_on": [
+        "M14",
+        "M15",
+        "M16",
+        "M18"
+      ],
+      "advances": "THE DESTINATION: the genuine Sony PS5 system software initialising on qualified PC hardware through the PC5 platform model",
+      "deliverables": [
+        "docs/evidence/ps5-system-software-boot.md"
+      ],
+      "acceptance": [
+        "the software's own boot output is recorded from the software itself and identifies a build or version it reports",
+        "the platform model is named, its configuration recorded, and a third party can repeat the attempt from the procedure",
+        "the evidence is not a PC5 screen, not a model test payload and not an emulator menu PC5 drew",
+        "a falsification attempt is recorded: the same procedure on hardware the model does not support fails as predicted"
+      ],
+      "evidence": [],
+      "blocker": "blocked on M17 (authenticity boundary) and M18 (lawful input); no evidence of any kind exists yet",
+      "experimental": true
+    },
+    {
+      "id": "M20",
+      "workstream": "WS10",
+      "kind": "ps5-compatibility",
+      "level": 6,
+      "title": "Genuine system-software runtime: services, shell and platform experience",
+      "state": "blocked",
+      "owner_role": "compatibility-engineer",
+      "depends_on": [
+        "M19"
+      ],
+      "advances": "level 6 through the genuine system: the destination's experience, running on the destination's software",
+      "deliverables": [
+        "docs/evidence/ps5-system-software-runtime.md"
+      ],
+      "acceptance": [
+        "the genuine home interface is operated with the software's own services and recorded",
+        "input, audio and storage behave through the model with measured behaviour",
+        "no PC5 component substitutes for the guest's services in the demonstration"
+      ],
+      "evidence": [],
+      "blocker": "blocked on M19",
+      "experimental": true
+    },
+    {
+      "id": "M21",
+      "workstream": "WS12",
+      "kind": "ps5-compatibility",
+      "level": 5,
+      "title": "Genuine installation and reinstallation of the system software via PC5",
+      "state": "blocked",
+      "owner_role": "release-engineer",
+      "depends_on": [
+        "M17",
+        "M18"
+      ],
+      "advances": "the clean-installation objective: PC5 prepares storage and platform, Sony's installer does the rest",
+      "deliverables": [
+        "docs/PS5_INSTALLATION_COMPATIBILITY.md"
+      ],
+      "acceptance": [
+        "the genuine installation flow runs against PC5-prepared storage and completes, with the storage image hash recorded before and after",
+        "the installed system boots through M19's path with no manual repair",
+        "the original package is never modified and the record shows the same hash before and after"
+      ],
+      "evidence": [],
+      "blocker": "blocked on M17 and M18; the installation process has not been observed on PC5 and is not claimed",
+      "experimental": true
     }
   ]
 }

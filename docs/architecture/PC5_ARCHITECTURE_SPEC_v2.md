@@ -163,15 +163,17 @@ nothing below is claimed today.
 
 Rule: **a level is claimed only by its evidence**, and each level's evidence
 class is fixed here so it cannot drift. Level 5 in particular can never be
-satisfied by: a custom kernel booting, a simulated environment, a PlayStation-like
-interface, a model running PC5-authored payloads, or an emulator screenshot of a
-menu PC5 drew itself.
+satisfied by: a custom kernel booting, a simulated environment, an interface that
+merely resembles the console's, a model running PC5-authored payloads, or an
+emulator screenshot of a menu PC5 drew itself.
 
 ---
 
 ## 6. The PS5 platform compatibility layer (PSCL)
 
-The destination workstream in engineering terms. Nothing below exists yet.
+The destination workstream in engineering terms; the device contracts themselves
+are written out in [`PS5_PLATFORM_CONTRACT.md`](PS5_PLATFORM_CONTRACT.md).
+Nothing below exists yet.
 
 ```
 genuine PS5 system software (guest)            ← level 5 input, protected (ADR-022)
@@ -231,6 +233,12 @@ thing either host provides, and both must satisfy its conformance suite.
 | verified | a recorded result in `docs/TEST_RESULTS.md` or `docs/evidence/` |
 | executed | the system's own code ran, on real or explicitly labelled emulated hardware |
 | playable | sustained gameplay with recorded measurements, per title |
+
+Two sentences are said plainly, in this document and in every report:
+**nothing here is called firmware execution unless the software's own code ran**,
+and **this architecture does not claim that genuine PS5 system software has been
+executed** — no milestone below level 5 may use the words "executing" or
+"running" about Sony's software.
 
 Two sentences are forbidden in this repository and are checked as data
 (`product.forbidden_claims` in `roadmap.json`):
@@ -318,7 +326,7 @@ result.
 | 2 | Correct product identity | §1 here, `product` block in `roadmap.json`, `README.md` |
 | 3 | Two-track decision | §3, ADR-019, ADR-021 |
 | 4 | Linux decision with evidence | ADR-020, §4 |
-| 5 | Technical feasibility and gap analysis | `PS5_SYSTEM_SOFTWARE_TARGET.md` §4, ADR-019 "Technical risks" |
+| 5 | Technical feasibility and gap analysis | `PS5_SYSTEM_SOFTWARE_TARGET.md` §4, `PS5_PLATFORM_CONTRACT.md`, ADR-019 "Technical risks" |
 | 6 | Reassessment of existing implementation | `ARCHITECTURE_DISCREPANCY_REPORT.md` §3 |
 | 7 | Roadmap rebuilt around the mission | `roadmap.json`, `PC5_MILESTONE_GRAPH.md`, `docs/ROADMAP.md` |
 | 8 | Objective success criteria | §5 (levels 1–6, measurable) |
