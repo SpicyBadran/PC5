@@ -492,8 +492,16 @@ class StubFirmwareContractTests(unittest.TestCase):
         # The harness reads ms_abi registers directly (RCX, RDX, R8, R9).  If it
         # were changed to read the SysV ones it would silently pass a loader
         # that used the wrong convention.
-        self.assertIn("MSABI_ARGS", self.stub_source)
-        self.assertIn("UC_X86_REG_RCX", self.stub_source)
+        self.assertIn("MSABI_REG_ARGS", self.stub_source)
+        for register in ("UC_X86_REG_RCX", "UC_X86_REG_RDX",
+                         "UC_X86_REG_R8", "UC_X86_REG_R9"):
+            self.assertIn(register, self.stub_source)
+        # Arguments five and six live on the stack above the 32-byte shadow
+        # space.  Reading them out of a register worked only until the previous
+        # service returned a status into that register, which is how a real
+        # ExitBootServices retry crashed the harness.
+        self.assertIn("self.read_u64(rsp + 0x28", self.stub_source)
+        self.assertIn("SERVICE_ARGS", self.stub_source)
 
 
 class LoaderRegressionTests(unittest.TestCase):

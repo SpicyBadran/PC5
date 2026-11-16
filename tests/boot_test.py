@@ -137,6 +137,46 @@ def screen_dump(serial_text):
     return blocks
 
 
+def esp_kernel_copies(iso_path, esp_path=None):
+    """Return (ESP copy, ISO9660 copy) of KERNEL.BIN, either possibly None.
+
+    Both copies are read back by the repository's own independent readers - the
+    FAT12 walker in tools/mkefiimg.py and the directory-record reader in
+    tools/verify_iso.py - not by trusting the tools that wrote them.
+    """
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    try:
+        from mkefiimg import FatVolume
+        from verify_iso import read_dir_records
+    except ImportError:                      # pragma: no cover - broken checkout
+        return None, None
+    esp_path = esp_path or os.path.join(ROOT, "build", "efi.img")
+
+    esp_kernel = None
+    if os.path.isfile(esp_path):
+        with open(esp_path, "rb") as handle:
+            volume = FatVolume(handle.read())
+        for path, meta in volume.walk().items():
+            if path.upper().endswith("KERNEL.BIN"):
+                esp_kernel = meta["data"]
+                break
+
+    iso_kernel = None
+    with open(iso_path, "rb") as handle:
+        image = handle.read()
+    pvd = image[16 * 2048: 17 * 2048]
+    if pvd[1:6] == b"CD001":
+        root_lba = int.from_bytes(pvd[158:162], "little")
+        root_size = int.from_bytes(pvd[166:170], "little")
+        for record in read_dir_records(image, root_lba, root_size):
+            name = record["name"].decode("latin-1").split(";")[0].upper()
+            if name == "KERNEL.BIN":
+                start = record["lba"] * 2048
+                iso_kernel = image[start:start + record["size"]]
+                break
+    return esp_kernel, iso_kernel
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="PC5 emulated boot test")
     ap.add_argument("--iso", default=os.path.join(ROOT, "build", "pc5.iso"))
@@ -180,6 +220,29 @@ def main(argv=None):
               "signature=ok" in serial)
     res.check("chain reports a blocked stage with evidence",
               "chain_blocked_at=" in serial and "chain_blocked_evidence=" in serial)
+
+    # --- M2: the two copies of the kernel, and the display evidence line -----
+    # The ESP has to carry KERNEL.BIN because firmware has no ISO9660 driver, so
+    # an El Torito UEFI boot can only read the ESP.  The BIOS path reads the
+    # ISO9660 copy.  Two copies of one build are only safe if they are the same
+    # bytes, so that is checked here rather than assumed.
+    esp_kernel, iso_kernel = esp_kernel_copies(args.iso)
+    res.check("the ESP carries a copy of KERNEL.BIN for the UEFI path",
+              esp_kernel is not None, "no KERNEL.BIN in the ESP")
+    res.check("the ESP and ISO9660 copies of KERNEL.BIN are byte-identical",
+              esp_kernel is not None and iso_kernel is not None and
+              esp_kernel == iso_kernel,
+              "esp %s iso %s" % (len(esp_kernel or b""), len(iso_kernel or b"")))
+    # The line used to pass the font name where the pitch belonged, printing the
+    # pitch twice and a pointer as the font: "pitch=122409 font=(null)".  One
+    # pitch field and one known font name is what a correct line looks like, in
+    # text mode (80x25 pitch=160) and in framebuffer mode alike.
+    display = [line for line in serial.splitlines() if "PC5-LOG display=" in line]
+    line = display[0] if display else ""
+    res.check("the display evidence line reports one pitch and one font",
+              line.count("pitch=") == 1 and line.count("font=") == 1 and
+              ("font=firmware-8x16" in line or "font=none" in line),
+              line or "no display line")
 
     # ---- the hybrid MBR: this same image booted as a hard disk ----
     # Firmware that finds no El Torito entry (a USB stick presented as a hard
