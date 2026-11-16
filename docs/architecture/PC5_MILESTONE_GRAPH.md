@@ -128,7 +128,7 @@ WS10 - PS5 platform compatibility (system software)  (serves level 4-5)
         depends on  M0
   M9    in_progress  L4 research            System-software baseline and provenance record  [experimental]
         depends on  M0
-  M10   not_started  L4 research            PS5 platform contract specification  [experimental]
+  M10   in_progress  L4 research            PS5 platform contract specification  [experimental]
         depends on  M0
   M11   not_started  L4 ps5-compatibility   Virtual platform core: CPU and privileged execution model  [experimental]
         depends on  M2, M3, M10
@@ -170,6 +170,6 @@ WS13 - Product experience: shell, library, settings  (serves level 6)
 DESTINATION PATH (the critical path of the product):
   M0 -> M1d -> M1e -> M1f -> M1g -> M1i -> M1 -> M2 -> M2a -> M2b -> M3 -> M11 -> M12 -> M13 -> M14 -> M19
 blocked milestones: M1b, M17, M18, M19, M20, M21
-totals: complete 9, in_progress 1, blocked 6, not_started 19  (35 milestones)
+totals: complete 9, in_progress 2, blocked 6, not_started 18  (35 milestones)
 ```
 <!-- roadmap:end -->

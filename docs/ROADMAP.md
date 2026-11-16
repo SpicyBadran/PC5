@@ -22,7 +22,7 @@ evidence path exists.
 | 1 | PC5 boots on qualified PC hardware | **emulated only** — SeaBIOS and real OVMF firmware; no physical machine yet (`M1`) |
 | 2 | PC5 controls the required hardware through its own architecture | partial: PCI/ACPI inventory, ATA PIO, PS/2, FAT32; no APIC, NVMe, USB (`M2`, `M2a`, `M2b`) |
 | 3 | Core platform services work | not started (`M3`, `M2c`, `M2d`, `M7`) |
-| 4 | PS5 execution and system-software interfaces exist and are validated | not started (`M10`–`M16`) |
+| 4 | PS5 execution and system-software interfaces exist and are validated | **partial** — the platform contract, evidence registry and ten PC5-authored interfaces exist and pass 261 conformance checks (`M10`, acceptance met); no console-side behaviour is modelled yet (`M11`–`M16`) |
 | 5 | Genuine system-software compatibility | **blocked** — the authenticity boundary (`M17`) and a lawful input (`M18`) |
 | 6 | Platform experience | not started (`M4`, `M5`, `M20`) |
 
@@ -55,7 +55,7 @@ The twelve PS5 milestones, in the order they become possible. Everything before
 | Milestone | What | State |
 |---|---|---|
 | `M9` | system-software baseline and provenance record (the package is a protected input) | **in progress** — pointer recorded, payload absent |
-| `M10` | PS5 platform contract, device by device, unknowns marked | not started |
+| `M10` | PS5 platform contract, device by device, unknowns marked | **in progress** — acceptance met: 38 claims over 4 sources, 10 interfaces, 261 conformance checks, 16 caught mutations. Held from `complete` by the evidence-level rule (level 4 with level 1–2 evidence); no Sony software executed |
 | `M11` | virtual platform core: CPU and privileged execution | not started |
 | `M12` | memory architecture model: unified memory, GPU-visible mappings | not started |
 | `M13` | storage and I/O device model | not started |
@@ -109,8 +109,13 @@ one appeared there.
 1. **`M1` — physical boot.** One machine from the qualification list, BIOS and
    UEFI, serial logs committed. Everything above level 1 is emulated until this
    exists.
-2. **`M10` — platform contract.** Written from public documentation, with every
-   unknown marked. It gates all device modelling and needs no Sony bytes.
+2. **`M10` — platform contract.** Acceptance met: `docs/architecture/PS5_PLATFORM_CONTRACT.md`
+   revision r1, backed by `psm/` (registry, rule engine, linkage audit, ten
+   test doubles) and its conformance and mutation suites. It gates all device
+   modelling and needed no Sony bytes. It is recorded as `in_progress` rather than
+   `complete` because a level-4 milestone may not be complete while only levels 1–2
+   have evidence; the work itself is documentary and says nothing about the
+   console's behaviour, and every `UNKNOWN` row is a refusal.
 3. **`M2a`/`M2b` — CPU and memory.** Long mode, APIC, SMP, paging, protection:
    the host side of the model, and level 2 evidence.
 4. **`M11` — virtual platform core.** The first milestone that runs something

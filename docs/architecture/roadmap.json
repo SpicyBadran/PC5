@@ -955,14 +955,15 @@
       "kind": "research",
       "level": 4,
       "title": "PS5 platform contract specification",
-      "state": "not_started",
+      "state": "in_progress",
       "owner_role": "lead-architect",
       "depends_on": [
         "M0"
       ],
       "advances": "the destination needs a written platform contract before a single device model can be built",
       "deliverables": [
-        "docs/architecture/PS5_PLATFORM_CONTRACT.md"
+        "docs/architecture/PS5_PLATFORM_CONTRACT.md",
+        "psm/ \u2014 evidence registry, rule engine, linkage audit and ten interfaces"
       ],
       "acceptance": [
         "every device class the system software touches has a written contract with its unknowns marked UNKNOWN",
@@ -971,9 +972,18 @@
         "the CPU, memory, interrupt, storage, graphics, audio, USB and service-device contracts each have a test-double interface"
       ],
       "evidence": [
-        "docs/architecture/PS5_PLATFORM_CONTRACT.md"
+        "docs/architecture/PS5_PLATFORM_CONTRACT.md",
+        "psm/registry.py",
+        "psm/audit.py",
+        "psm/conformance.py",
+        "psm/render.py",
+        "tests/test_psm_registry.py",
+        "tests/test_psm_conformance.py",
+        "tests/test_psm_mutations.py",
+        "tests/test_psm_document.py"
       ],
-      "experimental": true
+      "experimental": true,
+      "notes": "Every acceptance item is met and evidenced: the contract, a 38-claim evidence registry over four sources, a linkage audit and ten PC5-authored interfaces with 261 conformance checks and 16 caught mutations (make psm, make check). It is held at in_progress, not complete, because tests/test_product_identity.py forbids a level-4 milestone from being complete while only levels 1-2 have evidence - the same rule that keeps M1 honest. Nothing here is evidence about Sony's system software, which has never been executed."
     },
     {
       "id": "M11",

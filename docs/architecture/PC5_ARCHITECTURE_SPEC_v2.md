@@ -172,8 +172,10 @@ emulator screenshot of a menu PC5 drew itself.
 ## 6. The PS5 platform compatibility layer (PSCL)
 
 The destination workstream in engineering terms; the device contracts themselves
-are written out in [`PS5_PLATFORM_CONTRACT.md`](PS5_PLATFORM_CONTRACT.md).
-Nothing below exists yet.
+are written out in [`PS5_PLATFORM_CONTRACT.md`](PS5_PLATFORM_CONTRACT.md), with
+their PC5-authored test doubles in `psm/` (`M10`, complete: 38 claims over four
+sources, ten interfaces, 261 conformance checks). No device model exists yet:
+`M11`–`M16` are unstarted, and the doubles are Python objects, not a PS5.
 
 ```
 genuine PS5 system software (guest)            ← level 5 input, protected (ADR-022)

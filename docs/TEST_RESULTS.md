@@ -2056,3 +2056,150 @@ OVMF. What this branch adds for that machine:
   reports `acpi=absent` there. Fixing that changes `struct pc5_boot_info`, which
   is a protocol bump under invariant I4 and is not attempted here.
 * Secure Boot is not supported and is not claimed: PC5 ships no signature.
+
+---
+
+## 19. Platform contract and conformance interfaces (`M10`)
+
+Requested as "M10: PS5 platform contract, evidence registry, conformance
+interfaces". This section records what was executed, on which machine, and what
+the result does and does not establish. The headline is unchanged from §18:
+**no Sony software has ever been executed here**, and nothing below is evidence
+about it.
+
+### 19.1 Inputs
+
+| Item | Value |
+|---|---|
+| Base commit | `a0019657c33ad0cc3f6e4d972ba2d781bb371e97` (`main`, PR #19 merged) |
+| Working tree | `arena/a6a41f42-pc5`, this branch's commits |
+| New code | `psm/` — 15 modules: registry, rule engine, linkage audit, renderer, conformance runner, ten interfaces |
+| Document | `docs/architecture/PS5_PLATFORM_CONTRACT.md` revision r1 (generated tables) |
+| Environment | Linux x86-64, gcc/ld/objcopy, python3.11, node v22.22.3 + `v86-system`, `unicorn` 2.1.4 in a virtualenv |
+| Not present | QEMU, OVMF, KVM, physical PS5 hardware, any Sony artifact other than the untouched LFS pointer |
+
+### 19.2 The registry and its rules (BUILD-VERIFIED)
+
+```
+$ python3 -m psm.contract
+PS5 platform contract registry, revision r1 (2026-11-16)
+  sources: 4   claims: 38
+  public     6
+  inferred   9
+  unknown   21
+  restricted 2
+registry: OK
+
+$ python3 -m psm.audit
+PSM audit: 38 claims, 64 operations, 10 interfaces
+audit: OK
+```
+
+The rule engine rejects, and the tests prove it rejects, a `PUBLIC` claim without
+a usable source, a `PUBLIC` claim without a value, an `INFERRED` claim that does
+not state its assumption, an `UNKNOWN`/`RESTRICTED` claim carrying a value, an
+`UNKNOWN` claim that does not say why nothing public supports it, a claim citing a
+non-existent source, duplicate claim ids, a verified source with no location, and
+a registry with no revision. The linkage audit rejects an operation citing a
+missing claim, a foreign subsystem's claim, or a `RESTRICTED` claim while being
+implemented, an interface that is neither required nor declared extra, and a
+required group with no interface.
+
+### 19.3 The conformance suite (`CONFORMANCE-TESTED`, against PC5's own doubles)
+
+```
+$ python3 -m psm.conformance
+PSM conformance: 261/261 checks passed
+```
+
+| Interface | Checks |
+|---|---|
+| `PSM-CPU` | 30 |
+| `PSM-MEM` | 32 |
+| `PSM-STOR` | 33 |
+| `PSM-GFX` | 29 |
+| `PSM-AUD` | 26 |
+| `PSM-USB` | 29 |
+| `PSM-SVC` | 26 |
+| `PSM-IRQ` | 21 |
+| `PSM-TMR` | 13 |
+| `PSM-IPC` | 22 |
+| **total** | **261** |
+
+The categories exercised are the ten the contract requires: valid paths, invalid
+parameters, boundaries, missing devices, unsupported operations, resource
+exhaustion, invalid transitions, ownership violations, timeout/error propagation
+and deterministic replay. Every check is run twice with fresh doubles to assert
+identical results and identical call transcripts.
+
+**This label means:** PC5's doubles satisfy PC5's contract. It does not mean Sony
+conforms to anything, and it is not `EMULATOR-EXECUTED`.
+
+### 19.4 Mutation tests: the suite can fail
+
+```
+$ python3 -m unittest tests.test_psm_mutations -v
+test_a_mutation_is_reported_with_its_check_name ... ok
+test_every_mutation_is_caught ... ok
+test_the_baseline_is_green_so_failures_mean_something ... ok
+```
+
+Sixteen deliberately broken doubles, one per row below, each required to make at
+least one check fail:
+
+| # | Mutation | Caught by |
+|---|---|---|
+| 1 | allocator hands out the same address twice | non-overlap check |
+| 2 | release succeeds twice | double-release `OWNERSHIP` |
+| 3 | a security-state MSR returns zero instead of `DENIED` | `DENIED` path |
+| 4 | reset keeps its epoch and its state | epoch increment |
+| 5 | a timed-out receive returns a fabricated message | timeout carries no value |
+| 6 | queue delivers last-in-first-out | ordering |
+| 7 | a foreign owner completes a storage tag | completion ownership |
+| 8 | flush reports zero durable sectors | durability report |
+| 9 | presentation sequence numbers freeze | monotonic presentation |
+| 10 | an `UNKNOWN` submission reports success | `UNSUPPORTED` with no value |
+| 11 | an oversized audio write is accepted | `OVERFLOW` |
+| 12 | an oversized HID report is truncated | report length validation |
+| 13 | the log silently drops records when full | log `OVERFLOW` |
+| 14 | released vectors forget their deliveries | dropped-delivery count |
+| 15 | the clock can run backwards | negative-advance refusal |
+| 16 | panic reports success but leaves the interface running | call-after-panic `BAD_STATE` |
+
+### 19.5 Document synchronisation (BUILD-VERIFIED)
+
+```
+$ python3 -m psm.render --check
+document blocks: OK
+```
+
+36 generated blocks (sources, classification totals, nine claim tables, ten
+interface tables, ten invariant tables, the decision register, the case counts and
+the status vocabulary) are compared byte-for-byte with their renderers. A claim
+edited in the registry without regenerating the document fails `make check`.
+
+### 19.6 Whole-repository gates, actually executed
+
+| Command | Result | Notes |
+|---|---|---|
+| `make check` | **408 tests, OK, 2 skipped** (`skipped=2` are the pre-existing environment-dependent ones) | includes the four new `test_psm_*` modules and the new `psm` target |
+| `make psm` | contract `OK`, audit `OK`, conformance `261/261`, document `OK` | new target, also run as part of `make check` |
+| `make roadmap` | `OK — 35 milestones in 14 workstreams, destination M19 reachable, document in sync` | `M10` `in_progress` with nine evidence paths; acceptance met, completion withheld by the evidence-level rule |
+| `make verify` | `VALID: build/pc5.iso sha256=44f6ec7b…` | `SOURCE_DATE_EPOCH=1763251200` |
+| `make boot-test` | **PASSED**, 119 checks, `build/test/boot-evidence.json` | v86 executed the BIOS image |
+| `make stubtest` | **PASSED**, 58/58 checks | `unicorn` 2.1.4 in a virtualenv |
+| `make ovmf-test` | **exit 3 — NOT TESTED** | no QEMU and no OVMF on this machine; 22 required matrix rows, none executed here. Not a pass and not recorded as one. |
+
+### 19.7 What this section does not establish
+
+* No genuine PS5 system software has been loaded, executed, inspected or made
+  compatible. Nothing in `psm/` reads `PS5UPDATE.PUP`; the pointer is untouched.
+* The doubles are PC5-authored Python objects. They are not Sony interfaces, and
+  the conformance suite says nothing about whether Sony's software would accept
+  them.
+* No register layout, firmware interface, command encoding, allocation policy,
+  file-system layout or authentication behaviour is specified for anything the
+  sources do not cover; those rows are `UNKNOWN` and their operations refuse.
+* `M1` (physical boot) remains `not_started`; no physical machine was touched.
+* The OVMF gate was not executed, so `OVMF-EXECUTED` is not claimed for this
+  section. The prior execution recorded in §16/§18 stands as it was.

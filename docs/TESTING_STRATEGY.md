@@ -92,6 +92,37 @@ These run in milliseconds and catch the class of bug that otherwise only shows
 up on screen — the formatter bugs found this way are recorded in
 `docs/TEST_RESULTS.md`.
 
+### 2.1b Platform contract and conformance interfaces — `make psm`
+
+`make psm` (also run by `make check`) gates the `M10` contract. It has four steps,
+each of which fails the build on its own terms:
+
+* `python3 -m psm.contract` — the evidence registry's rules: every claim names a
+  source, a confidence, a remaining uncertainty, the engineering decision that
+  depends on it and the conformance case that exercises PC5's side; a `PUBLIC`
+  claim without a verified or located source is an error; an `UNKNOWN` or
+  `RESTRICTED` claim carrying a value is an error.
+* `python3 -m psm.audit` — the linkage between registry and code: every operation
+  cites a claim from its own subsystem or a PC5 decision, an operation marked
+  `UNSUPPORTED` must cite an `UNKNOWN`/`RESTRICTED` claim, an implemented
+  operation may not cite a `RESTRICTED` one, and the eight required interface
+  groups must all exist.
+* `python3 -m psm.conformance` — 261 checks against the ten PC5-authored doubles:
+  valid paths, invalid parameters, boundaries, missing devices, unsupported
+  operations, exhaustion, invalid transitions, ownership, timeouts, determinism.
+* `python3 -m psm.render --check` — the contract document's 36 generated tables
+  compared byte-for-byte with their renderers.
+
+`tests/test_psm_mutations.py` exists because a suite that has only seen working
+code proves nothing about itself: it replaces one double at a time with a broken
+variant (overlapping allocations, double release, a fabricated success for an
+`UNKNOWN` operation, a timeout that returns a message, a log that drops records)
+and requires a failing check for each. A surviving mutation fails the build.
+
+None of this is evidence about Sony's system software. It is `CONFORMANCE-TESTED`
+against PC5's own contract and nothing more; see
+`docs/architecture/PS5_PLATFORM_CONTRACT.md` §7.
+
 ### 2.2 Architecture and milestone graph — `make roadmap`
 
 `tools/roadmap.py` validates `docs/architecture/roadmap.json`: unique ids, known

@@ -17,7 +17,7 @@ Evidence: [`TEST_RESULTS.md`](TEST_RESULTS.md) §16 and §17.
 | 1 | PC5 boots on qualified PC hardware | **NO for physical hardware** — emulated only (SeaBIOS + real OVMF) | `TEST_RESULTS.md` §16 |
 | 2 | PC5 controls the required hardware through its own architecture | **PARTIAL** — firmware tables, PCI/ACPI, ATA PIO, PS/2, FAT32; no APIC, NVMe, USB | `make boot-test` 119/119 (emulated) |
 | 3 | Core platform services work | **NO** | `M3`, `M2c`, `M2d`, `M7` not started |
-| 4 | PS5 execution interfaces exist and are validated | **NO** — one contract document, no model | `PS5_PLATFORM_CONTRACT.md`, `M10` |
+| 4 | PS5 execution interfaces exist and are validated | **PARTIAL** — the contract, its evidence registry and ten PC5-authored interfaces exist and pass 261 conformance checks; no console-side behaviour is modelled and no Sony software has run | `PS5_PLATFORM_CONTRACT.md`, `psm/`, `M10` |
 | 5 | Genuine system-software compatibility | **NO — BLOCKED** | `M17`–`M21` in `roadmap.json` |
 | 6 | Platform experience | **NO** | `M4`, `M5`, `M20` |
 
@@ -26,7 +26,7 @@ Evidence: [`TEST_RESULTS.md`](TEST_RESULTS.md) §16 and §17.
 | Milestone | State | What it would take |
 |---|---|---|
 | `M9` baseline and provenance | **in progress** | the package is a 135-byte LFS pointer; the 1.33 GiB payload is not in any checkout and was never analysed here |
-| `M10` platform contract | not started | write the device contracts, classify every row PUBLIC/INFERRED/UNKNOWN |
+| `M10` platform contract | **in progress — acceptance met** | 38 claims classified PUBLIC/INFERRED/UNKNOWN/RESTRICTED over four sources, ten interfaces with refusal semantics, 261 conformance checks and 16 caught mutations. Held from `complete` by the evidence-level rule (level 4, evidence at levels 1–2). It establishes nothing about the console's behaviour; that is `M11`–`M16` |
 | `M11` CPU and privileged execution model | not started | virtual-platform core plus conformance payload |
 | `M12` memory architecture model | not started | unified address space, GPU-visible mappings, protection domains |
 | `M13` storage and I/O model | not started | queue/DMA/completion semantics; host a filesystem the guest mounts |
@@ -87,7 +87,7 @@ been attempted, so nothing above stage 4 is claimed.
 | Firmware analysis tool (identification only, no decryption) | COMPLETE AND VERIFIED on synthetic containers; ran on the pointer | `tools/firmware.py` |
 | APIC / SMP / long mode, NVMe, USB, audio, network | **NOT STARTED** | `M2a`, `M2b`, `M2c`, `M2d` |
 | Installer, update slots, recovery entry | **NOT STARTED** | `M8` |
-| PS5 platform model | **NOT STARTED** (contract only) | `M10`–`M16` |
+| PS5 platform model | **NOT STARTED** — contract and test doubles only (`M10` acceptance met) | `M11`–`M16` |
 | Genuine PS5 system software | **NOT EXECUTED, BLOCKED** | `M17`–`M21` |
 
 ## 5. Honest summary
