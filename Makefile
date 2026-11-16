@@ -48,7 +48,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: ovmf-setup ovmf-check all iso uefi check test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record presentation
+.PHONY: ovmf-setup ovmf-check all iso uefi check docs-check presentation-check presentation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record
 
 all: iso
 
@@ -200,17 +200,24 @@ psm:
 psm-render:
 	python3 -m psm.render --write
 
-check: unit psm presentation
+check: unit psm docs-check presentation-check
 	python3 -m unittest discover -s tests -p 'test_*.py' -v
 
-# The README's figures and status table are generated from the milestone graph, and
-# checked here: a hand edit that overstates progress fails the build rather than
-# shipping.  `make presentation` rewrites them; `check` only reads.
+# The README's figures and status table are generated from the milestone graph.
+# `presentation` writes; `presentation-check` reads and is what `make check` runs, so a
+# normal test run never rewrites tracked documentation.  A hand edit that overstates
+# progress fails `presentation-check` rather than shipping.
 presentation:
+	python3 tools/presentation.py sync
+
+presentation-check:
 	python3 tools/presentation.py check
 
-presentation-sync:
-	python3 tools/presentation.py sync
+# Every Markdown file: relative links, heading anchors and `make <target>` mentions.
+# The README is also covered by the architecture tests; this covers the rest of the
+# tree, where a renamed heading or a removed target would otherwise go unnoticed.
+docs-check:
+	python3 tools/docs_check.py
 
 # The build manifest is the second, independent reader of the image: what files
 # it contains, their sizes and hashes, and which boot entries firmware would

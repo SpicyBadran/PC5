@@ -245,8 +245,9 @@ def banner(data) -> str:
                  f'stroke="{colour}" stroke-width="6" stroke-linecap="round" '
                  f'stroke-linejoin="round"/>\n')
     body += text(140, 118, "PC5", size=64, weight="bold", spacing="4")
-    body += text(146, 152, "an independent platform for PS5 system software on PC hardware",
-                 size=15, fill=MUTED)
+    body += text(146, 152,
+                 "an independent operating-system project, built toward genuine "
+                 "PS5 system software", size=15, fill=MUTED)
     chips = (
         ("ROADMAP " + data["version"].upper(), CYAN),
         (f"{streams} WORKSTREAMS", VIOLET),
@@ -376,7 +377,7 @@ def progress(data) -> str:
         if index % 2 == 0:
             body += panel(36, y, 928, step - 6, fill=PANEL_2, stroke="none", radius=6)
         body += text(52, y + 21, sid, size=12, fill=CYAN, weight="bold")
-        body += text(96, y + 21, clip(name, 38), size=12, fill=INK)
+        body += text(96, y + 21, clip(name, 34), size=12, fill=INK)
         body += (f'  <rect x="{bar_x}" y="{y + 8}" width="{bar_w}" height="14" '
                  f'rx="7" fill="{LINE}"/>\n')
         offset = bar_x
@@ -488,6 +489,37 @@ def workflow(data) -> str:
                "PC are not tested; the destination is blocked.")
 
 
+TEXT_ELEMENT = re.compile(
+    r'<text x="([\d.]+)" y="[\d.]+"[^>]*font-size="([\d.]+)"[^>]*'
+    r'text-anchor="(\w+)"[^>]*>(.*?)</text>', re.S)
+
+
+def overflow(body: str, width: int, margin: int = 12) -> list:
+    """Estimate rendered text width and report anything that would leave the canvas.
+
+    Monospace makes this arithmetic rather than guesswork: 0.62 em per character is a
+    deliberate over-estimate, so a figure that passes here has room to spare when the
+    reader's font is narrower than the estimate.
+    """
+    problems = []
+    height = int(re.search(r'height="(\d+)"', body).group(1))
+    for x, size, anchor, content in TEXT_ELEMENT.findall(body):
+        label = re.sub(r"<[^>]+>", "", content)
+        if not label:
+            continue
+        estimate = len(label) * float(size) * 0.62
+        left, right = float(x), float(x) + estimate
+        if anchor == "middle":
+            left, right = float(x) - estimate / 2, float(x) + estimate / 2
+        elif anchor == "end":
+            left, right = float(x) - estimate, float(x)
+        if right > width - margin or left < margin:
+            problems.append(f"text runs outside the figure: {label[:48]!r} "
+                            f"(x={x}, ~{int(estimate)}px wide)")
+    del height
+    return problems
+
+
 FIGURES = {
     "pc5-banner.svg": banner,
     "pc5-architecture.svg": architecture,
@@ -568,6 +600,10 @@ def check(data) -> list:
             problems.append(f"docs/assets/{name}: stale — regenerate with `make presentation`")
         if "<title" not in actual or "<desc" not in actual:
             problems.append(f"docs/assets/{name}: no accessible title/description")
+        measured = re.search(r'width="(\d+)"', actual)
+        if measured:  # an unreadable figure is already reported as stale above
+            problems += [f"docs/assets/{name}: {problem}"
+                         for problem in overflow(actual, int(measured.group(1)))]
 
     readme = README.read_text(encoding="utf-8")
     try:
@@ -605,7 +641,7 @@ def write(data) -> list:
         path = ASSETS / name
         if not path.exists() or path.read_text(encoding="utf-8") != body:
             path.write_text(body, encoding="utf-8")
-            written.append(str(path.relative_to(ROOT)))
+            written.append(_label(path))
     readme = README.read_text(encoding="utf-8")
     updated = readme_with_status(readme, status_markdown(data))
     if updated != readme:
