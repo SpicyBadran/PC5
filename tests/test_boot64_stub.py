@@ -298,3 +298,132 @@ class StubFirmware64Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AllocateMaxAddressTests(unittest.TestCase):
+    """EFI_ALLOCATE_MAX_ADDRESS: the bound the loader passes, and what it accepts.
+
+    The defect this class exists for: alloc_below_4g() passed 0 as the *input*
+    maximum address.  UEFI 2.9A 7.2.1 defines that input as "the address pointed to
+    by Memory on input" such that the allocated range's uppermost address is <= it,
+    so 0 describes a range that ends at or below zero and no allocation can satisfy
+    it.  The old stub ignored the allocation type entirely and always returned a low
+    pool address, which is why the whole 64-bit suite passed over a request no real
+    firmware can honour.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import boot64_stub
+        import boot64_stubtest
+        cls.module = boot64_stub
+        cls.runner = boot64_stubtest
+        cls.image, cls.kernel = artifacts()
+
+    def machine(self, **options):
+        return self.module.StubFirmware64(
+            image=self.image,
+            esp_volume={"\\EFI\\BOOT\\BOOTX64.EFI": self.image,
+                        "\\KERNEL64.BIN": self.kernel},
+            kernel_bytes=self.kernel, **options)
+
+    # ------------------------------------------- what the loader asks for ----
+    def test_the_loader_passes_a_maximum_that_can_actually_be_satisfied(self):
+        machine = self.machine()
+        trace = machine.run()
+        self.assertIn(MARKER, trace.serial)
+        # Every MaxAddress request the loader made must have carried a usable bound.
+        max_requests = [a for a in machine.allocations
+                        if a[0] == self.module.EFI_ALLOCATE_MAX_ADDRESS]
+        self.assertGreaterEqual(len(max_requests), 3,
+                                "expected boot info, page tables and stack")
+        for alloc_type, pages, base in max_requests:
+            self.assertNotEqual(base, 0)
+            self.assertLess(base + pages * 4096, 1 << 32,
+                            "allocation must end below the 4 GiB identity limit")
+
+    def test_a_zero_maximum_verifies_as_unsatisfiable(self):
+        """The contract the old code violated, asserted directly on the stub."""
+        import ctypes
+        machine = self.machine()
+        # Ask the stub itself, with a zero bound, and require refusal.
+        status = machine.svc_allocate_pages(
+            self.module.EFI_ALLOCATE_MAX_ADDRESS, 2, 1, machine.alloc(8))
+        self.assertEqual(status, self.module.EFI_OUT_OF_RESOURCES,
+                         "a zero AllocateMaxAddress bound must not allocate")
+
+    def test_a_maximum_below_the_page_count_cannot_succeed(self):
+        machine = self.machine()
+        slot = machine.alloc(8)
+        machine.write_u64(slot, 0x2000)          # 8 KiB bound, 3 pages requested
+        status = machine.svc_allocate_pages(
+            self.module.EFI_ALLOCATE_MAX_ADDRESS, 2, 3, slot)
+        self.assertNotEqual(status, 0,
+                            "a 3-page request cannot fit below a 8 KiB bound")
+
+    # ------------------------- the loader must reject a lying firmware ----
+    def test_firmware_that_ignores_the_bound_is_rejected(self):
+        """A range whose last byte crosses 4 GiB must stop the boot.
+
+        `ignore_max_address` models firmware that allocates without honouring the
+        input bound, and `allocation_limit` tells it to hand out pages from the very
+        top of the 4 GiB space.  The loader must check what it was given instead of
+        trusting the status code: the boot info, page tables or stack landing at the
+        boundary would leave a structure straddling the identity limit.
+        """
+        machine = self.machine(ignore_max_address=True, allocations_at_limit=True)
+        trace = machine.run()
+        self.assertNotIn(MARKER, trace.serial,
+                         "a range crossing the identity limit must fail the boot")
+        self.assertIn("PC5-64-LOADER-FAIL=", trace.serial)
+
+    def test_a_failed_allocation_stops_the_boot_before_the_handover(self):
+        machine = self.machine(allocate_return=self.module.EFI_OUT_OF_RESOURCES)
+        trace = machine.run()
+        self.assertNotIn(MARKER, trace.serial)
+        self.assertNotIn("PC5-64BIT-KERNEL-ENTRY", trace.serial,
+                         "the kernel must never be entered")
+        self.assertIn("PC5-64-LOADER-FAIL=", trace.serial)
+
+    def test_allocation_failure_happens_before_exit_boot_services(self):
+        """Every allocation precedes ExitBootServices, so failure is reportable."""
+        machine = self.machine()
+        trace = machine.run()
+        self.assertIn(MARKER, trace.serial)
+        # The serial log orders the two: allocations print, then exit-boot-services.
+        serial = trace.serial
+        self.assertLess(serial.index("PC5-64-LOADER pagetables="),
+                        serial.index("exit-boot-services=ok"))
+
+    # --------------------------------- A/B: the audit's experiment in code ----
+    def test_conforming_firmware_can_satisfy_the_loader(self):
+        """A, part 1: with a real MaxAddress bound, a correct loader succeeds."""
+        machine = self.machine()
+        trace = machine.run()
+        self.assertIn(MARKER, trace.serial)
+        self.assertIn("PC5-64-DONE", trace.serial)
+
+    def test_conforming_firmware_with_no_memory_in_range_fails_safely(self):
+        """A, part 2: an honest bound with no memory under it is refused.
+
+        Exercised at the service boundary rather than by booting: the loader's first
+        allocation is the boot info, so a firmware with nothing below the bound fails
+        that call, and the loader's own failure path is covered by
+        test_a_failed_allocation_stops_the_boot_before_the_handover.
+        """
+        machine = self.machine(allocation_limit=0x2000)
+        slot = machine.alloc(8)
+        machine.write_u64(slot, (1 << 32) - 1)   # an honest, generous bound
+        status = machine.svc_allocate_pages(
+            self.module.EFI_ALLOCATE_MAX_ADDRESS, 2, 4, slot)
+        self.assertNotEqual(status, 0,
+                            "no memory below the bound must be refused, not granted")
+
+    def test_the_high_allocation_window_is_inside_the_bound(self):
+        """Firmware may place the handover regions anywhere up to the bound."""
+        machine = self.machine(high_allocations=True)
+        trace = machine.run()
+        self.assertIn(MARKER, trace.serial,
+                      "allocations just below the caller's bound must be accepted")
+        used = [a for a in machine.allocations if a[2] >= 0x0FF00000]
+        self.assertTrue(used, "the high window should have been used")

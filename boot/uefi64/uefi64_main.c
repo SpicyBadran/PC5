@@ -229,14 +229,42 @@ static void validate_loader_placement(efi_handle image, struct pc5_boot64 *boot_
     serial_write(" below-span=1\n");
 }
 
-/* --------------------------------------------------------------- helpers */
+/* Allocate `pages` pages that are entirely usable by the identity map this loader
+ * builds.  The map covers [0, PC5_IDENTITY_LIMIT), so the request has to be the
+ * highest address a mapped byte can occupy.
+ *
+ * UEFI 2.9A 7.2.1: for AllocateMaxAddress the EFI_PHYSICAL_ADDRESS pointed to by
+ * Memory is an *in* parameter - "allocate any available range of pages whose
+ * uppermost address is less than or equal to the address pointed to by Memory on
+ * input".  Passing 0 therefore describes a range that ends at or below zero, which
+ * no page allocation can satisfy; edk2's CoreInternalAllocatePages does exactly
+ * `Start = *Memory` and then searches below it.  So the bound is written before the
+ * call, and the value is the last *mapaeable byte*, not the span length.
+ *
+ * The contract is checked again on the way out rather than trusted: firmware (or a
+ * stub) that returns a range crossing the limit, wrapping, or not honouring the
+ * bound must stop the boot, not hand the kernel a pointer it cannot dereference.
+ * `pages` is validated first, because `pages * 4096` is itself a wrap site. */
 static void *alloc_below_4g(u64 pages, u64 *physical)
 {
-    u64 address = 0;
+    if (pages == 0 || pages > (PC5_IDENTITY_LIMIT / 4096ull))
+        return 0;
+
+    u64 address = PC5_IDENTITY_LIMIT - 1ull;      /* input: uppermost allowed byte */
     efi_status status = g_bs->allocate_pages(EFI_ALLOCATE_MAX_ADDRESS,
                                             EFI_LOADER_DATA, pages, &address);
-    if (EFI_ERROR(status) || address == 0 || address > LOAD_LIMIT)
+    if (EFI_ERROR(status) || address == 0)
         return 0;
+
+    /* The bound is inclusive off the end of the range, so the last byte is
+     * address + pages*4096 - 1 and must stay strictly below the limit.  Comparing
+     * in page units keeps the arithmetic free of any multiply that could wrap. */
+    u64 last_page = address / 4096ull + pages - 1ull;
+    if ((address & 0xFFFull) != 0 || last_page >= PC5_IDENTITY_LIMIT / 4096ull)
+        return 0;
+    if (address > LOAD_LIMIT)
+        return 0;
+
     if (physical)
         *physical = address;
     return (void *)(unsigned long)address;

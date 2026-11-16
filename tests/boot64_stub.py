@@ -54,9 +54,11 @@ StubError = fw.StubError
 
 # EFI_ALLOCATE_TYPE / status values the loader's own header pins as well.
 EFI_ALLOCATE_ANY_PAGES = 0
+EFI_ALLOCATE_MAX_ADDRESS = 1
 EFI_ALLOCATE_ADDRESS = 2
 EFI_SUCCESS = 0
 EFI_INVALID_PARAMETER = 0x8000000000000002
+EFI_OUT_OF_RESOURCES = 0x8000000000000009
 
 # 8868e871-e4f1-11d3-bc22-0080c73c8881 in EFI byte order.
 ACPI2_GUID = bytes.fromhex("71e86888f1e4d311bc220080c73c8881")
@@ -79,14 +81,27 @@ class StubFirmware64(fw.StubFirmware):
     # window, so the machine gets that RAM as well.
     KERNEL64_WINDOW = (0x00100000, 0x00200000)
     # Where firmware places page allocations when a test asks it to allocate "just
-    # below 4 GiB".  The window ends exactly at the top of PC5's identity span, so
-    # the handoff regions sit at the boundary the map must not get wrong.
+    # below 4 GiB".  This window is 0x0FF00000..0x10000000 - the top of the first
+    # 256 MiB, *not* the top of PC5's 4 GiB identity span.  It used to be described
+    # as ending "exactly at the top of the identity span", which is 16x further up;
+    # the comment was wrong, and the test that relied on it ("...just below the span
+    # limit") therefore never approached the boundary it was named for.  The window
+    # is still useful - it proves the loader copes with allocations near the top of
+    # the low region - but the name and comment now say what it is.
     HIGH_WINDOW = (0x0FF00000, 0x00100000)
 
-    def __init__(self, *args, high_allocations=False, **options):
+    # The last page of the 4 GiB identity span and the first page above it, so a
+    # test can ask firmware to hand out memory that straddles the limit.
+    LIMIT_WINDOW = (0x0FFFFFF000, 0x2000)
+
+    def __init__(self, *args, high_allocations=False, allocations_at_limit=False,
+                 **options):
         # Set before the base constructor maps memory and loads the image.
         self.high_allocations = high_allocations
         self.high_next = self.HIGH_WINDOW[0]
+        # When set, MaxAddress requests are served from the top of the span and the
+        # pool starts there, so a multi-page request necessarily crosses 4 GiB.
+        self.allocations_at_limit = allocations_at_limit
         super().__init__(*args, **options)
 
     def _map(self):
@@ -96,18 +111,45 @@ class StubFirmware64(fw.StubFirmware):
         if self.high_allocations:
             high, high_size = self.HIGH_WINDOW
             self.uc.mem_map(high, high_size)
+        if self.allocations_at_limit:
+            limit, limit_size = self.LIMIT_WINDOW
+            self.uc.mem_map(limit, limit_size)
 
     def svc_allocate_pages(self, alloc_type, memory_type, pages, memory_ptr, *_rest):
-        """Honour EFI_ALLOCATE_ADDRESS, which the 64-bit loader relies on."""
-        if self.high_allocations and alloc_type != EFI_ALLOCATE_ADDRESS:
-            # Firmware is free to satisfy a "below 4 GiB" request at the top of the
-            # range, and this loader must cope with it: the boot info, page tables
-            # and stack then live in the last megabyte the identity map covers.
+        """Honour every allocation mode, including the MaxAddress input bound."""
+        if self.allocate_return is not None:
+            return self.allocate_return
+        if (self.allocations_at_limit
+                and alloc_type == EFI_ALLOCATE_MAX_ADDRESS):
+            # Firmware hands out pages from the last mapped page of the span.  Any
+            # request of more than one page therefore crosses the 4 GiB limit, which
+            # is exactly the lie the loader must detect for itself.
+            size = pages * 4096
+            address = self.LIMIT_WINDOW[0]
+            if size > self.LIMIT_WINDOW[1]:
+                return fw.EFI_OUT_OF_RESOURCES
+            if address + size > self.LIMIT_WINDOW[0] + self.LIMIT_WINDOW[1]:
+                return fw.EFI_OUT_OF_RESOURCES
+            self.uc.mem_write(address, bytes(size))
+            self.allocations.append((alloc_type, pages, address))
+            self.write_u64(memory_ptr, address)
+            self.map_generation += 1
+            return EFI_SUCCESS
+        if (self.high_allocations and alloc_type == EFI_ALLOCATE_MAX_ADDRESS
+                and not self.ignore_max_address):
+            # Firmware may satisfy a "below 4 GiB" request anywhere inside the
+            # caller's bound, including the far end of it.  Honour the bound: a
+            # request whose maximum is below this window cannot be served from it.
+            bound = self.read_u64(memory_ptr)
+            size = pages * 4096
             address = self.high_next
-            if address + pages * 4096 > self.HIGH_WINDOW[0] + self.HIGH_WINDOW[1]:
-                return EFI_INVALID_PARAMETER
-            self.high_next = address + pages * 4096
-            self.uc.mem_write(address, bytes(pages * 4096))
+            if address + size - 1 > bound:
+                return fw.EFI_OUT_OF_RESOURCES
+            if address + size > self.HIGH_WINDOW[0] + self.HIGH_WINDOW[1]:
+                return fw.EFI_OUT_OF_RESOURCES
+            self.high_next = address + size
+            self.uc.mem_write(address, bytes(size))
+            self.allocations.append((alloc_type, pages, address))
             self.write_u64(memory_ptr, address)
             self.map_generation += 1
             return EFI_SUCCESS
@@ -121,6 +163,12 @@ class StubFirmware64(fw.StubFirmware):
             return EFI_SUCCESS
         return super().svc_allocate_pages(alloc_type, memory_type, pages,
                                           memory_ptr, *_rest)
+
+    def pool_ceiling(self):
+        """The high window is outside the base pool, so it needs its own ceiling."""
+        if self.allocation_limit is not None:
+            return self.allocation_limit
+        return fw.POOL_END
 
     def memory_descriptors(self):
         """Firmware's map, widened to describe the memory this machine hands out.

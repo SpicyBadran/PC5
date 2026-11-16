@@ -93,6 +93,14 @@ EFI_UNSUPPORTED = 0x8000000000000003
 EFI_BUFFER_TOO_SMALL = 0x8000000000000005
 EFI_NOT_FOUND = 0x800000000000000E
 EFI_ABORTED = 0x8000000000000015
+EFI_OUT_OF_RESOURCES = 0x8000000000000009
+
+# EFI_ALLOCATE_TYPE (UEFI 2.9A 7.2.1).  The stub models the three real modes,
+# because a harness that ignores the type cannot exercise the contract the loader
+# depends on - that is how a zero AllocateMaxAddress bound stayed invisible.
+EFI_ALLOCATE_ANY_PAGES = 0
+EFI_ALLOCATE_MAX_ADDRESS = 1
+EFI_ALLOCATE_ADDRESS = 2
 
 SYSV_SLOTS = (UC_X86_REG_RDI, UC_X86_REG_RSI, UC_X86_REG_RDX,
               UC_X86_REG_RCX, UC_X86_REG_R8, UC_X86_REG_R9)
@@ -146,7 +154,9 @@ class StubFirmware:
                  support_get_info=True, race_map_key_forever=False,
                  reserve_handover=False, fragment_low_memory=0,
                  overflow_memory_map=False, watchdog_refused=False,
-                 image_load=None, gop=None):
+                 image_load=None, gop=None,
+                 ignore_max_address=False, allocate_return=None,
+                 allocation_limit=None):
         if not HAVE_UNICORN:
             raise StubError("the 'unicorn' module is not installed "
                             "(pip install unicorn)")
@@ -156,6 +166,16 @@ class StubFirmware:
         # the region PC5's map covers - and a harness that can only place it at one
         # address cannot exercise that.
         self.image_load = IMAGE_LOAD if image_load is None else image_load
+        #   ignore_max_address   firmware ignores the AllocateMaxAddress input bound
+        #                        and allocates anywhere it likes - the behaviour the
+        #                        loader must survive, and the behaviour this stub
+        #                        itself had before it modelled the contract
+        #   allocate_return      force a specific EFI_STATUS from allocate_pages
+        #   allocation_limit     highest address this firmware will hand out
+        self.ignore_max_address = ignore_max_address
+        self.allocate_return = allocate_return
+        self.allocation_limit = allocation_limit
+        self.allocations = []                # (type, pages, base) for the harness
         self.esp_files = esp_volume          # {"\\EFI\\BOOT\\BOOTX64.EFI": data}
         self.kernel = kernel_bytes
         self.iso_has_kernel = iso_volume_has_kernel
@@ -254,9 +274,10 @@ class StubFirmware:
         """First free byte of the stub pool after every allocation so far."""
         return self.pool_next
 
-    def alloc(self, size, align=16):
+    def alloc(self, size, align=16, ceiling=None):
+        limit = POOL_END if ceiling is None else ceiling
         address = (self.pool_next + align - 1) & ~(align - 1)
-        if address + size > POOL_END:
+        if size < 0 or address + size > limit:
             raise StubError("stub pool exhausted")
         self.pool_next = address + size
         self.write(address, bytes(size))
@@ -698,9 +719,54 @@ class StubFirmware:
         return EFI_SUCCESS
 
     def svc_allocate_pages(self, alloc_type, memory_type, pages, memory_ptr, *_):
-        self.write_u64(memory_ptr, self.alloc(pages * 4096, align=4096))
+        """AllocatePages, honouring the UEFI 2.9A 7.2.1 contract for all three modes.
+
+        *Memory is an in/out EFI_PHYSICAL_ADDRESS:
+          AllocateAnyPages     input ignored
+          AllocateMaxAddress   the range's uppermost address must be <= the input
+          AllocateAddress      the exact base, or EFI_NOT_FOUND
+
+        The loader's correctness depends on the MaxAddress branch: a caller that
+        supplies 0 is asking for memory ending at or below zero, and a faithful
+        firmware returns EFI_OUT_OF_RESOURCES.  This stub did not implement the
+        branch at all, so it accepted a request no real firmware can satisfy.
+        """
+        if self.allocate_return is not None:
+            return self.allocate_return
+        if alloc_type not in (EFI_ALLOCATE_ANY_PAGES, EFI_ALLOCATE_MAX_ADDRESS,
+                              EFI_ALLOCATE_ADDRESS):
+            return EFI_INVALID_PARAMETER
+        if pages == 0 or pages > (1 << 32):
+            return EFI_INVALID_PARAMETER
+
+        requested = self.read_u64(memory_ptr)
+        size = pages * 4096
+
+        if alloc_type == EFI_ALLOCATE_ADDRESS:
+            if requested % 4096 or requested + size > self.pool_ceiling():
+                return EFI_NOT_FOUND
+            base = requested
+            self.uc.mem_write(base, bytes(size))
+        elif alloc_type == EFI_ALLOCATE_MAX_ADDRESS and not self.ignore_max_address:
+            if requested == 0:
+                return EFI_OUT_OF_RESOURCES        # nothing can end at or below 0
+            ceiling = min(requested + 1, self.pool_ceiling())
+            if size > ceiling:
+                return EFI_OUT_OF_RESOURCES
+            base = self.alloc(size, align=4096, ceiling=ceiling)
+        else:
+            base = self.alloc(size, align=4096)
+
+        self.allocations.append((alloc_type, pages, base))
+        self.write_u64(memory_ptr, base)
         self.map_generation += 1
         return EFI_SUCCESS
+
+    def pool_ceiling(self):
+        """Highest address (exclusive) this firmware will hand out."""
+        if self.allocation_limit is not None:
+            return self.allocation_limit
+        return POOL_END
 
     def svc_free_pages(self, *_):
         self.map_generation += 1
