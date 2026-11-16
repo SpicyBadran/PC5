@@ -10,7 +10,7 @@ used across this repository.
 | 1 | Code compiles | `make` | PROVEN |
 | 2 | Build succeeds | `make iso` writes `build/pc5.iso` + `build-info.json` | PROVEN |
 | 3 | ISO is generated | file exists with recorded SHA-256 | PROVEN |
-| 4 | ISO integrity verified | `make verify` (independent parser, 53 checks) | PROVEN |
+| 4 | ISO integrity verified | `make verify` — every check in `build/verify-report.json` passes, and the image's manifest is reproduced by a second reader | PROVEN |
 | 5 | ISO boots in a virtual machine | `make boot-test` (v86 + SeaBIOS) | PROVEN |
 | 6 | Installer works | installer does not exist | NOT APPLICABLE YET |
 | 7 | Installation succeeds | depends on 6 | NOT APPLICABLE YET |
@@ -26,6 +26,29 @@ used across this repository.
 
 Levels 1–5 are machine-checked in this repository. Levels 6–16 are not claimed
 anywhere, in any document, on any screen.
+
+## 1b. Gate inventory: what each command proves, and what it does not
+
+Every gate below is a separate claim. A gate that cannot run says so and exits non-zero;
+none of them is folded into a single "pass".
+
+| Command | Proves | Cannot prove | Result semantics |
+|---|---|---|---|
+| `make` / `make iso` | the image builds reproducibly at this commit | that it is valid or bootable | exit 0, SHA-256 printed |
+| `make verify` | ISO9660 + El Torito structure, ESP, hybrid MBR, payload hashes, and that `tools/iso_manifest.py` reproduces the image's manifest | that any firmware will boot it | `VALID` / `INVALID`, exit 1 on failure |
+| `make check` | host and kernel unit tests, platform contract, documentation guards, generated files current | anything about hardware | exit 1 on any failure; `presentation-check` and `docs-check` never write |
+| `make presentation-check` | the four figures and the README status block match `roadmap.json` | that the labels are flattering — they are derived, that is the point | exit 1 if stale or if a claim is banned |
+| `make docs-check` | every Markdown link, heading anchor and documented `make` target resolves | that the prose is *true* | exit 1 on any unresolved reference |
+| `make roadmap` | the graph is consistent, release isolation holds, the destination is reachable | that milestones are correct | exit 1 on any inconsistency |
+| `make psm` | the platform contract's own rules, linkage audit and conformance suite | anything about Sony's implementation | exit 1 on any failure |
+| `make hw-record` | every filed physical-boot record is complete; the template is not | that a boot happened | exit 1 on an incomplete record |
+| `make boot-test` | PC5's own boot path runs under the v86 emulator and prints the expected interface | firmware, or hardware | exit 77 and a SKIP message without node/v86 |
+| `make stubtest` | the real `BOOTX64.EFI` runs against a stub firmware | real UEFI firmware | exit 2 without unicorn, 0/1 otherwise |
+| `make ovmf-test` | a boot under genuine TianoCore OVMF | physical hardware, or Sony software | 0 verified, 1 failed, **3 NOT TESTED** |
+
+`make check` deliberately does not include the emulator, stub, OVMF or hardware gates:
+they need dependencies an ordinary developer machine does not have. Each is invoked
+explicitly and reports its own state.
 
 ## 2. Test layers
 

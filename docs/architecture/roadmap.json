@@ -1,11 +1,11 @@
 {
   "schema": "pc5.roadmap/2",
   "version": "0.4.0-dev",
-  "updated": "2026-11-15",
+  "updated": "2026-11-16",
   "authority": "docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md",
   "product": {
     "name": "PC5",
-    "identity": "A native PlayStation 5 operating system for PC hardware.",
+    "identity": "An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.",
     "mission": "PC5 is an independent engineering project whose destination is to run the genuine Sony PlayStation 5 system software on compatible PC hardware, and to deliver the authentic PS5 platform and gaming experience there.",
     "destination": {
       "statement": "Genuine Sony PlayStation 5 system software executing on compatible PC hardware, through PC5's own platform.",
@@ -162,7 +162,8 @@
         "acceptance": "games execute and play at recorded frame rates on qualified hardware through the level-4/5 stack, and the console experience runs on top of that platform rather than instead of it",
         "evidence_class": "per-title records with frame-time measurements, and a runtime log of the genuine system where the level-5 path is the one in use"
       }
-    ]
+    ],
+    "identity_note": "PC5 is not a Sony product and contains no Sony software: the identity states the project's own platform and the destination it is built toward, not an achieved capability."
   },
   "workstreams": [
     {

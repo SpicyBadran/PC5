@@ -1,0 +1,79 @@
+name: Bug report
+description: Something in PC5 does not do what the documentation says it does.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. PC5's hard rule is that evidence is labelled precisely:
+        an emulator run is not a firmware boot, and a firmware boot is not a physical
+        boot. Please say which one you actually did.
+
+        **Not** for Sony firmware, keys, or anything that would require circumvention:
+        see [`docs/SECURITY.md`](../../docs/SECURITY.md) and use a private security
+        advisory for anything sensitive.
+  - type: input
+    id: commit
+    attributes:
+      label: Commit or ISO SHA-256
+      description: The commit you built from, or the SHA-256 `make verify` printed.
+      placeholder: 7505a39 / 846ef41c…
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where did it fail?
+      options:
+        - Host tooling (make, tools/, tests/)
+        - Emulator boot (make boot-test, v86)
+        - Stub firmware (make stubtest, unicorn)
+        - Real OVMF firmware (make ovmf-test)
+        - Physical PC via UEFI
+        - Physical PC via BIOS/CSM
+        - Documentation only
+    validations:
+      required: true
+  - type: input
+    id: environment_detail
+    attributes:
+      label: Machine or toolchain
+      description: For hardware, the machine and firmware version. For host tooling, OS, gcc and Python versions.
+      placeholder: ASUS X570-Pro, firmware 1.2.3, UEFI, Secure Boot disabled / Ubuntu 24.04, gcc 13.2, Python 3.11
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: The exact commands, in order, starting from a clean checkout.
+      placeholder: |
+        git clone …
+        make
+        make verify
+        make boot-test
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour and the log
+      description: Paste the output verbatim. For a boot problem, the COM1 log (115200 8N1) rather than a description of the screen.
+      render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: honesty
+    attributes:
+      label: Before submitting
+      options:
+        - label: I did not include Sony firmware, keys, dumps of proprietary code, or any output derived from them.
+          required: true
+        - label: I checked the failure is not already recorded in docs/KNOWN_LIMITATIONS.md.
+          required: true

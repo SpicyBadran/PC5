@@ -67,9 +67,13 @@ reworded test record cannot leave a VERIFIED chip behind.
 ## 4. Generation and checking
 
 ```sh
-make presentation            # rewrite the four SVGs and the README status block
-python3 tools/presentation.py check
+make presentation           # write: the four SVGs and the README status block
+make presentation-check     # read: are they current?  also run by `make check`
+make docs-check             # read: every link, anchor and documented command in the tree
 ```
+
+`make check` runs `presentation-check` and `docs-check`, never `presentation`, so a test
+run cannot rewrite tracked documentation. Writing is always an explicit act.
 
 `check` fails on: a stale figure (bytes differ from a fresh render), a hand-edited
 status block, a broken local link or image path in `README.md` or this document, an

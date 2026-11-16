@@ -1,6 +1,6 @@
 # PC5 architecture
 
-**PC5 — a native PlayStation 5 operating system for PC hardware.** The
+**PC5 — An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.** The
 destination is to run the genuine Sony PS5 system software on compatible PC
 hardware; every workstream below serves that, and the graph is checked by `make
 roadmap` and `make check`.

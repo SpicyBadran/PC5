@@ -1,0 +1,61 @@
+name: Feature or milestone proposal
+description: Propose work that moves PC5 toward its destination.
+labels: ["proposal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        PC5 has one destination: genuine Sony PlayStation 5 system software executing on
+        qualified x86-64 PC hardware through PC5's own boot path and platform model.
+        A proposal has to connect to that, either directly or as infrastructure with a
+        named consumer. Read [`docs/ROADMAP.md`](../../docs/ROADMAP.md) and
+        [`docs/architecture/PC5_MILESTONE_GRAPH.md`](../../docs/architecture/PC5_MILESTONE_GRAPH.md)
+        before opening one.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is missing, and who needs it
+      description: The gap, and the milestone or workstream that is blocked without it.
+    validations:
+      required: true
+  - type: input
+    id: milestone
+    attributes:
+      label: Milestone or workstream
+      description: An existing id from roadmap.json, or "new milestone" with a rationale.
+      placeholder: M2a / WS2 / new milestone
+    validations:
+      required: true
+  - type: textarea
+    id: destination
+    attributes:
+      label: How this serves the destination
+      description: Which later milestone depends on it. "It would be nice" is not a dependency.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: How it would be verified
+      description: The test, gate or record that would prove it works, and at which evidence level.
+    validations:
+      required: true
+  - type: dropdown
+    id: authority
+    attributes:
+      label: Does this require Sony material?
+      options:
+        - No — PC5 code or documentation only
+        - It needs a published specification I can cite
+        - It would need Sony firmware, keys or authentication (a blocker, not a task)
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This does not propose redefining PC5 as a Linux distribution, an interface clone, an emulator or a generic PC OS.
+          required: true
+        - label: This does not propose signature bypass, key extraction, decryption or authentication circumvention.
+          required: true

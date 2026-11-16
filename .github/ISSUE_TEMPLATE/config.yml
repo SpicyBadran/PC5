@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: How PC5 is built and verified
+    url: https://github.com/SpicyBadran/pc5/blob/main/docs/BUILDING.md
+    about: Toolchain, targets, reproducibility and the gates each command runs.
+  - name: What does not work yet
+    url: https://github.com/SpicyBadran/pc5/blob/main/docs/KNOWN_LIMITATIONS.md
+    about: Read this before reporting a limitation — it may already be recorded and scoped.
+  - name: Security and firmware boundaries
+    url: https://github.com/SpicyBadran/pc5/blob/main/docs/SECURITY.md
+    about: Threat model, what PC5 refuses to do, and how to report an issue privately.
