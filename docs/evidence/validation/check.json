@@ -1,13 +1,13 @@
 {
   "checks": {
-    "passed": 523,
+    "passed": 571,
     "skipped": 0,
-    "total": 523
+    "total": 571
   },
   "command": "make check",
-  "commit": "6d8ed5b6e769502fcf18b4516a0d2946b226899d",
+  "commit": "e69d2a6d4d88ae21f478735939c38bae4e32484b",
   "date": "2026-11-16",
-  "dirty": false,
+  "dirty": true,
   "exit_code": 0,
   "gate": "check",
   "level": "host tests",
@@ -15,6 +15,6 @@
   "result": "passed",
   "schema": "pc5.validation/1",
   "source_date_epoch": 1763251200,
-  "summary": "Ran 523 tests in 53.315s",
+  "summary": "Ran 571 tests in 56.363s",
   "tool": "tools/validation.py"
 }

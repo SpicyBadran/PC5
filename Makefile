@@ -302,9 +302,17 @@ validation:
 	python3 tools/validation.py list
 	python3 tools/validation.py verify-records
 
+# presentation-check runs last: writing a record for `check` changes the README
+# block it validates, so the block is regenerated before the check is recorded.
+# `check` includes `presentation-check`, so the generated block is brought up to
+# date before the gates run and again before the check that reads it is recorded;
+# otherwise `check` fails on a block it is about to rewrite.
 record-validation:
-	python3 tools/validation.py run check verify roadmap docs-check presentation-check \
-	  boot-test stubtest ovmf-test
+	@$(MAKE) -s presentation
+	python3 tools/validation.py run check verify roadmap docs-check \
+	  boot-test stubtest kernel64 uefi64 stubtest64 ovmf-test
+	@$(MAKE) -s presentation
+	python3 tools/validation.py run presentation-check
 
 # Every Markdown file: relative links, heading anchors and `make <target>` mentions.
 # The README is also covered by the architecture tests; this covers the rest of the

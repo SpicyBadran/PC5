@@ -1,6 +1,6 @@
 {
   "command": "make docs-check",
-  "commit": "6d8ed5b6e769502fcf18b4516a0d2946b226899d",
+  "commit": "e69d2a6d4d88ae21f478735939c38bae4e32484b",
   "date": "2026-11-16",
   "dirty": true,
   "exit_code": 0,
@@ -10,6 +10,6 @@
   "result": "passed",
   "schema": "pc5.validation/1",
   "source_date_epoch": 1763251200,
-  "summary": "DOCS OK: 42 Markdown files, 27 make targets, links, anchors and commands resolve",
+  "summary": "DOCS OK: 44 Markdown files, 30 make targets, links, anchors and commands resolve",
   "tool": "tools/validation.py"
 }

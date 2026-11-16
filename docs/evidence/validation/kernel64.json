@@ -1,0 +1,15 @@
+{
+  "command": "make kernel64",
+  "commit": "e69d2a6d4d88ae21f478735939c38bae4e32484b",
+  "date": "2026-11-16",
+  "dirty": true,
+  "exit_code": 0,
+  "gate": "kernel64",
+  "level": "host build of the 64-bit kernel",
+  "notes": "the flat long-mode kernel image",
+  "result": "passed",
+  "schema": "pc5.validation/1",
+  "source_date_epoch": 1763251200,
+  "summary": "",
+  "tool": "tools/validation.py"
+}

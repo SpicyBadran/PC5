@@ -61,8 +61,8 @@ explains what running the system software would require.
 | Not started | 18 |
 | Destination | `M19` — Genuine system software boots on PC5 (DESTINATION) |
 | Destination state | **BLOCKED** |
-| Last recorded ISO verification | passed @ 6d8ed5b |
-| Last recorded test run | passed 523/523 @ 6d8ed5b |
+| Last recorded ISO verification | passed @ e69d2a6 |
+| Last recorded test run | passed 571/571 @ e69d2a6 |
 | Physical boot evidence | **none filed** |
 | Genuine Sony software execution | **BLOCKED — nothing executed** |
 
@@ -161,11 +161,11 @@ a screenshot. See also [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
 <!-- pc5:evidence:begin -->
 | Evidence | Gate | Result | Recorded at | Date |
 |---|---|---|---|---|
-| Host and kernel tests | `make check` | **passed**, 523/523 | `6d8ed5b` | 2026-11-16 |
-| ISO structure and manifest | `make verify` | **passed** | `6d8ed5b` | 2026-11-16 |
-| Emulator execution (v86) | `make boot-test` | **passed** | `6d8ed5b` | 2026-11-16 |
-| Stub firmware (unicorn) | `make stubtest` | **passed**, 58/58 | `6d8ed5b` | 2026-11-16 |
-| Real OVMF firmware | `make ovmf-test` | **not-tested** | `6d8ed5b` | 2026-11-16 |
+| Host and kernel tests | `make check` | **passed**, 571/571 | `e69d2a6` | 2026-11-16 |
+| ISO structure and manifest | `make verify` | **passed** | `e69d2a6` | 2026-11-16 |
+| Emulator execution (v86) | `make boot-test` | **passed** | `e69d2a6` | 2026-11-16 |
+| Stub firmware (unicorn) | `make stubtest` | **passed**, 58/58 | `e69d2a6` | 2026-11-16 |
+| Real OVMF firmware | `make ovmf-test` | **not-tested** | `e69d2a6` | 2026-11-16 |
 | Physical PC boot (UEFI/BIOS) | `tools/hw_record.py` | **NOT TESTED** — no record filed | — | — |
 | Genuine Sony system software | — | **BLOCKED** — not present, not executed | — | — |
 
