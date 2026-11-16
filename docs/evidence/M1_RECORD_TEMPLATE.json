@@ -1,0 +1,45 @@
+{
+  "_comment": "Copy to docs/evidence/<date>-<vendor>-<model>.json, fill every TBD, validate with: python3 tools/hw_record.py <file>. See docs/hardware/M1_PHYSICAL_BOOT_PROCEDURE.md.",
+  "date": "TBD",
+  "operator": "TBD",
+  "level": "physical-uefi",
+  "outcome": "partial",
+  "machine": {
+    "vendor": "TBD",
+    "model": "TBD",
+    "cpu": "TBD",
+    "ram_gb": 0,
+    "board": "TBD",
+    "chipset": "TBD",
+    "gpu": "TBD",
+    "display": "TBD",
+    "storage": "TBD"
+  },
+  "firmware": {
+    "vendor": "TBD",
+    "version": "TBD",
+    "date": "TBD",
+    "secure_boot": "disabled",
+    "boot_mode": "uefi",
+    "csm": "unknown"
+  },
+  "medium": {
+    "kind": "usb",
+    "capacity_gb": 0
+  },
+  "image": {
+    "commit": "TBD",
+    "source_date_epoch": 0,
+    "sha256": "TBD",
+    "manifest_sha256": "TBD",
+    "medium_sha256": "TBD"
+  },
+  "serial": {
+    "capture": "none",
+    "log": "",
+    "baud": 115200,
+    "final_line": ""
+  },
+  "observations": [],
+  "blockers": []
+}

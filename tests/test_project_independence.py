@@ -35,6 +35,11 @@ REMOVED_LFS_OID = "eb4fd557e1611e95c0b73f93043b0708d5e4c7e796e29016e54fbccc5c874
 #: treated as binary and its *path* is still checked.
 TEXT_SNIFF = 8192
 
+#: This file has to contain the removed archive's object id in order to forbid it,
+#: so it is the one file the content scan skips -- by name, not by pattern, and the
+#: skip is asserted below rather than assumed.
+SELF = Path("tests/test_project_independence.py")
+
 
 def tracked_files() -> list[Path]:
     """Every file git tracks, as repository-relative paths."""
@@ -63,7 +68,7 @@ class NoThirdPartyProjectReferenceTest(unittest.TestCase):
         offenders = []
         for path in tracked_files():
             full = REPO / path
-            if looks_binary(full):
+            if path == SELF or looks_binary(full):
                 continue
             text = full.read_text(errors="ignore").lower()
             if FORBIDDEN_TOKEN in text:
@@ -84,13 +89,19 @@ class NoThirdPartyProjectReferenceTest(unittest.TestCase):
         offenders = []
         for path in tracked_files():
             full = REPO / path
-            if looks_binary(full):
+            if path == SELF or looks_binary(full):
                 continue
             if REMOVED_LFS_OID in full.read_text(errors="ignore"):
                 offenders.append(str(path))
         self.assertEqual(offenders, [],
                          "the removed archive's LFS object id is referenced by: "
                          f"{offenders}")
+
+    def test_only_the_guard_itself_carries_the_removed_object_id(self):
+        holders = [str(p) for p in tracked_files()
+                   if p != SELF and not looks_binary(REPO / p)
+                   and REMOVED_LFS_OID in (REPO / p).read_text(errors="ignore")]
+        self.assertEqual(holders, [], f"the removed object id is referenced by: {holders}")
 
     def test_the_vendor_directory_is_gone(self):
         vendored = [str(p) for p in tracked_files() if str(p).startswith("vendor/")]
