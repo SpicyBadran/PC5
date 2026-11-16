@@ -29,8 +29,10 @@ decryption code and refuses to describe encrypted payloads as parsed.
 | host tools | user's account | `pc5ctl usb` re-verifies the checksum and refuses `/` |
 | ISO contents | read-only medium | verified structurally by `make verify` |
 
-There is no network stack, no user mode and no persistent storage yet, so the
-attack surface is the firmware handoff, the serial console and the build tools.
+There is no network stack, no user mode and no storage driver in any boot path
+yet (the ATA write path from `M1d`/`M1g`/`M1i` runs only on explicit operator
+commands against emulated disks), so the attack surface is the firmware handoff,
+the serial console and the build tools.
 
 ## 3. Boot integrity
 
@@ -43,7 +45,7 @@ These detect corruption and mistakes. They are **not** a signature chain: there
 is no signing key and no Secure Boot integration yet, and the CRC32 is not a
 security primitive.
 
-## 4. Firmware handling policy
+## 4. Firmware and system-software handling policy
 
 1. Firmware is never committed (`.gitignore` excludes `firmware/`).
 2. A user's image is analysed locally; only a short summary string is compiled
@@ -51,6 +53,14 @@ security primitive.
 3. Logs never contain firmware bytes, only hashes and container identifiers.
 4. The public repository and its releases contain no restricted material, so
    the ISO is redistributable.
+5. The PS5 system-software package follows the same rule and stricter (ADR-022):
+   the repository holds a 135-byte git-lfs **pointer** and a hash-and-size
+   record, never the 1.33 GiB payload. There is no decryption, no key handling
+   and no signature bypass anywhere in the tree — `tools/firmware.py` identifies
+   containers and computes hashes, and refuses to go further.
+6. ADR-022 is enforced twice: by review, and by
+   `tests/test_product_identity.py`, which asserts that the pointer's declared
+   object id and size are what the documents say and that no payload is present.
 
 ## 5. USB writing safety
 

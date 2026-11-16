@@ -95,13 +95,25 @@ up on screen — the formatter bugs found this way are recorded in
 ### 2.2 Architecture and milestone graph — `make roadmap`
 
 `tools/roadmap.py` validates `docs/architecture/roadmap.json`: unique ids, known
-tracks and roles, no cycles, acceptance criteria on every milestone, evidence
-paths that exist, and — the architectural gate — no Track A milestone depending
-directly or transitively on a Track B milestone. `tests/test_architecture.py`
-runs the same validation inside `make check`, including negative fixtures that
-prove the gate can fail, and checks that the generated graph in
-`M0_M8_DEPENDENCY_GRAPH.md` matches the data and that the architecture
-documents' relative links resolve.
+workstreams, kinds, levels and roles, no cycles, acceptance criteria on every
+milestone, evidence paths that exist, and three architectural rules:
+
+* the **destination** milestone exists, is level 5, is reachable from the roots,
+  and is not `complete` — and every milestone the destination depends on
+  (`product.required_milestones`) must exist, so it cannot be deleted quietly;
+* **release isolation**: an `experimental` milestone may not appear in the
+  dependency closure of a `release_gating` one (ADR-021). The former rule was the
+  opposite — the PS5 work could not gate the product — which made the destination
+  optional;
+* every workstream owns at least one milestone, so a workstream cannot exist as a
+  heading with no work behind it.
+
+`tests/test_architecture.py` runs the same validation inside `make check` with
+negative fixtures that prove each rule can fail, checks that the generated graph
+in `PC5_MILESTONE_GRAPH.md` matches the data, and checks that the architecture
+documents' relative links resolve. `tests/test_product_identity.py` checks the
+identity itself: the destination is level 5 and not complete, the substrate is
+not the product, and the forbidden claims stay in the historical documents.
 
 ### 2.3 Structural image test — `make verify`
 

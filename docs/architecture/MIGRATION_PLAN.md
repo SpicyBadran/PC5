@@ -1,4 +1,11 @@
-# Migration plan — current tree to the dual-track structure
+# Migration plan — current tree to the target structure
+
+> **Historical (2026-11-15).** This plan was written for the two-track
+> architecture, and its phase 6 ("Track B extraction") assumed the split that
+> ADR-019 and ADR-021 withdrew. The *tree moves* it describes are still accurate
+> and useful; the *objective* it served is not. Kept because the moves, the gates
+> and the rollback notes are real work, and because deleting a plan that shaped
+> the current tree would make the tree harder to explain.
 
 The directive is explicit: do not reorganise the repository before mapping it.
 The mapping is in `REPOSITORY_AUDIT_2026-11-15.md`; this is the move plan.

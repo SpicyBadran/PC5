@@ -99,7 +99,7 @@ for each row is not a route.
 | Prerequisite | boot chain + authorisation (`docs/playstation/BOOT_FEASIBILITY.md`) | decrypted executables and libraries | full SoC model incl. security processor | all of B's work, plus a host OS |
 | Public examples | none | AnyPS5 (relinking, partial) | none in full | none |
 | Legal exposure | high (Sony binaries) | medium (user's own dumps only) | high | medium |
-| PC5 stance | research, blocked, honestly reported | the only route that can produce results now | out of scope | long-term Track A goal |
+| PC5 stance | research, blocked, honestly reported | the only route that can produce results now | out of scope | the destination (WS10/WS11) |
 
 None of these is "PS5 compatibility" until a titled game is measured. A boots and
 runs the operating environment; B can only ever run individual titles whose

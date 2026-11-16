@@ -25,7 +25,7 @@ make             # build/pc5.iso, build/pc5.iso.sha256, build/build-info.json
 make unit        # host-side kernel unit tests (160 checks)
 make check       # unit tests + python test suite
 make verify      # independent ISO verification (+ build/verify-report.json)
-make roadmap     # validate the milestone graph and the Track A/B gate
+make roadmap     # validate the milestone graph, release isolation and the destination path
 make uefi        # just the UEFI application and the FAT ESP (build/efi.img)
 make boot-test   # boot the ISO in the emulator; 119 assertions (incl. FAT32 write)
 make stubtest    # execute the UEFI loader against a stub firmware (48 checks)

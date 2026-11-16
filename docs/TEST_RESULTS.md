@@ -16,9 +16,11 @@ session, on this source tree.
 
 Sections 9–16 are later milestones (M1d, M1e, M1f, M1g, M1h, M1i, and M2 in
 §16 — the first section recorded against *real firmware* rather than an
-emulator). Each section starts with its own build inputs, sizes and hashes;
-the artifact numbers in §1 describe base `5ab7c48` and are kept as history, not
-as the current image. The current image is the one in §16.
+emulator). §17 records the M0 architecture realignment, which changes documents,
+the roadmap graph and the gate vocabulary rather than the boot path. Each
+section starts with its own build inputs, sizes and hashes; the artifact numbers
+in §1 describe base `5ab7c48` and are kept as history, not as the current image.
+The current image is the one in §17.2 (and, for the firmware measurement, §16).
 
 ## 1. Artifact
 
@@ -1820,3 +1822,80 @@ success marker in the report — the one outcome that must never look like a pas
   regression.
 * **Other firmware.** Only EDK II/OVMF was exercised. AMI, Insyde, Phoenix and
   Apple firmware are untested; the loader's behaviour there is unknown.
+
+---
+
+## 17. M0 — architecture realignment, 2026-11-15
+
+This milestone changes what the project *says it is*, the machine-checked graph
+that says how it gets there, and the vocabulary the gates enforce. It does not
+touch the boot path, the kernel or the loader: every artefact below is the same
+code that §15 and §16 measured, rebuilt to confirm the documentation change
+broke nothing.
+
+### 17.1 Inputs
+
+| | |
+|---|---|
+| Branch | `arena/5b7f7e7a-pc5`, based on `main` `95a7002` |
+| Commit under test | `2a99c51` plus the M0 documentation and gate change |
+| Host | Debian 12 x86-64, gcc 12.2.0, python 3.11.2 |
+| Emulator | none available in this environment (see 17.4) |
+
+### 17.2 Artifact
+
+`make` → `build/pc5.iso`, 1,601,536 bytes (782 sectors of 2048),
+sha256 `5cde77865a7b43e1115541ce4281a778c6d1f0c4f09f97d807456d10ac175f99`,
+kernel `KERNEL.BIN;1` 66,836 bytes
+sha256 `a1b492c96fe66690e9d54e7952ad5bcaf22e1d8922eefe93e42f4962854cd0cc`.
+
+The size is identical to §16.2 because the ISO layout is unchanged; the hash is
+not comparable to the pinned `BUILD_ID=af726d2` build in §16.2, which pins
+`SOURCE_DATE_EPOCH` and the build identifier to reproduce a specific historical
+image. A different `SOURCE_DATE_EPOCH` produces a different hash by design
+(invariant I8 is about *same inputs, same bytes*, not about one frozen hash).
+
+### 17.3 Gates
+
+| Gate | Result | Detail |
+|---|---|---|
+| `make check` | **PASS** | 338 tests, 0 failures, 2 skipped (`unittest discover` over `tests/test_*.py`) |
+| `make roadmap` | **PASS** | 35 milestones, 14 workstreams, destination `M19` reachable, generated document in sync |
+| `make verify` | **VALID** | structural verification of the ISO; per-file hashes match `build-info.json` |
+| `make unit` | **PASS** | kernel host-side assertions (the C unit binary; no new failures) |
+| `tests/test_architecture.py` | **PASS** | 53 tests: graph shape, evidence paths, destination reachability, release isolation, document links |
+| `tests/test_product_identity.py` | **PASS** | 18 tests: identity and destination are data, the six levels are fixed, forbidden claims are absent from current documents, the package pointer's oid/size are recorded and its payload's absence is asserted |
+| `make boot-test` | **NOT TESTED** | node or the v86 assets are absent here; the harness exits 77 rather than pretending to pass. Last passing run: §15 (119/119) |
+| `make stubtest` | **NOT TESTED** | the `unicorn` module is absent; the harness exits 2. Last passing run: §7 interface checks, 48/48 |
+| `make ovmf-test` | **NOT TESTED** | no QEMU and no OVMF build in this environment; exit 3 (NOT TESTED). Last passing run: §16, 40 pass / 1 NOT APPLICABLE |
+
+### 17.4 What this environment could not run
+
+An honest record, because these are the gates that measure execution:
+
+* no `node` / `v86-system`, so no emulated boot and no screen or input capture;
+* no `unicorn`, so the real `BOOTX64.EFI` was not executed against the stub firmware;
+* no `qemu-system-x86_64` and no OVMF firmware, so nothing ran under real firmware;
+* no physical machine, so every hardware claim stays UNTESTED.
+
+What *was* run is everything that does not need an emulator: the whole Python
+test corpus (338 tests), the ISO writer and verifier, the roadmap validator, and
+the kernel's host-side unit binary. The M0 change is documentation, graph data
+and gate vocabulary, which is exactly the part those gates cover.
+
+### 17.5 What M0 changed, and what it proves
+
+| Change | Checked by |
+|---|---|
+| one destination, `M19` (level 5), on the critical path rather than a side branch | `tools/roadmap.py` reachability, `tests/test_architecture.py` |
+| product identity, non-goals, foundation role and the six levels are data in `roadmap.json` | `tests/test_product_identity.py` |
+| the two-track vocabulary and its gate are gone; a milestone that serves level 4–5 exists in WS10 | `tests/test_architecture.py`, forbidden-claim scan |
+| release isolation, not track isolation, protects a release (ADR-021) | validator rule + synthetic-graph test |
+| the protected PS5 package is recorded by hash and size, payload absent | `tests/test_product_identity.py` |
+
+### 17.6 Not claimed
+
+* Nothing here is evidence that PC5 is closer to running PS5 system software.
+  M0 is a governance milestone; `M17`–`M21` remain blocked with named blockers.
+* No gate in this section executed guest code. §16 remains the only section
+  recorded under real firmware, and it measured the PC5 loader, not Sony code.

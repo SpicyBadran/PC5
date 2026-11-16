@@ -88,14 +88,10 @@ The serial console accepts: `status`, `chain`, `hw`, `fw`, `diag`, `log`,
 | `pc5: fatal: kernel load failed` followed by numbers | disk read error (`LBA sectors AH dest first-dword`) | the medium is unreadable at the kernel extent; re-flash |
 | `pc5: VBE unavailable, using text mode` | no linear-framebuffer mode was offered | not fatal: the VGA text UI is used |
 | Screen blank but serial log complete | framebuffer address wrong on this firmware | report with the `PC5-LOG display=` line |
-| Nothing at all | machine booted UEFI only | legacy/CSM is required today |
+| Nothing at all | machine offered no legacy/CSM boot path | the image has a UEFI boot path too (`M1c`, verified under OVMF only) — try a UEFI boot, but no physical UEFI machine has been tested |
+| `PC5-OVMF-BOOT-OK` appears instead of `PC5-BOOT-OK` | the UEFI loader ran | expected on the UEFI path; see `docs/TEST_RESULTS.md` §16 |
 
-## 6. Removing PC5
-
-There is no installer yet: PC5 runs entirely from the medium and writes nothing
-to the host. Remove the USB stick, or restore the firmware boot order.
-
-## 5. Image targets
+## 6. Image targets
 
 PC5 intends four distinct images. Only the first three may ever be distributed;
 the fourth exists in the plan so that the boundary is explicit.
@@ -107,10 +103,13 @@ the fourth exists in the plan so that the boundary is explicit.
 | **PC5 diagnostic/research ISO** | same as above | kernel, inventory, serial console, analysis tools | yes |
 | **Experimental Prospero compatibility image** | would depend on authorised material | never Sony firmware, keys or derived binaries | only if feasibility is demonstrated *and* distribution is authorised — today: does not exist |
 
-The `.PUP` an owner may supply is an input to analysis, never to an image. See
-`docs/FIRMWARE_ANALYSIS.md` §7.
+The `.PUP` an owner may supply is an input to analysis, never to an image: it is
+never committed, extracted into the tree, redistributed or modified (ADR-022).
+See `docs/PS5_SYSTEM_SOFTWARE_TARGET.md` and `docs/FIRMWARE_ANALYSIS.md` §7.
+Installing genuine PS5 system software is `M21` — blocked on `M17` and `M18`,
+and nothing in this document should be read as a procedure that exists.
 
-## 6. Installer architecture (not implemented)
+## 7. Installer architecture (not implemented)
 
 The installer needs four primitives, and two of them now exist:
 
@@ -120,7 +119,8 @@ The installer needs four primitives, and two of them now exist:
 | read MBR/GPT tables without modifying them | done (M1e), read-only |
 | read a filesystem on a partition | done (M1f): FAT32 mount, list, find, read |
 | create a file on a partition | done (M1g): create one 8.3 root file, allocate, flush, verify |
-| overwrite, delete, resize, create directories, write a boot entry | **missing** — rest of task B |
+| overwrite an existing file, create directories, 8.3 paths | done (M1i), emulated disk + host tests |
+| delete, resize, install a boot entry, drive a real disk | **missing** — `M3`, `M8` |
 
 What the installer will *not* do: guess a target disk, format without an explicit
 confirmation that names the device and its size, or report success without
@@ -130,7 +130,7 @@ is only "verified" when the installed system boots with the medium removed and
 the serial log is committed — which requires physical hardware, so it stays
 unproven here.
 
-## 7. USB boot today
+## 8. USB boot today
 
 The image is hybrid: the same file boots through El Torito (CD/DVD, USB presented
 as CD-ROM) and through the MBR in the ISO9660 system area (USB presented as hard
@@ -144,3 +144,10 @@ remains unproven is the stick on real hardware: the emulator proves the MBR and
 the boot path, not that a particular BIOS likes them. `docs/KNOWN_LIMITATIONS.md`
 item 2 states the boundary, and `docs/HARDWARE_COMPATIBILITY.md` §6 lists the
 firmware behaviours that could still refuse the medium.
+
+## 9. Removing PC5
+
+There is no installer yet: PC5 runs entirely from the medium and does not write
+to the host. Remove the USB stick, or restore the firmware boot order. The
+kernel's own write path (`M1d`, `M1g`, `M1i`) is driven by explicit commands and
+is not exercised by a boot; it has only ever run against emulated disks.
