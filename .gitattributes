@@ -47,4 +47,5 @@
 *.lxo filter=lfs diff=lfs merge=lfs -text
 *.bc filter=lfs diff=lfs merge=lfs -text
 *.pup filter=lfs diff=lfs merge=lfs -text
+.PUP filter=lfs diff=lfs merge=lfs -text
 PS5UPDATE.PUP filter=lfs diff=lfs merge=lfs -text
