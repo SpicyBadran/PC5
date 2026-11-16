@@ -2813,11 +2813,14 @@ hardware run, and no OVMF run, is claimed anywhere in this section.
 | records | `make validation` | passed | 0 | `records: OK` |
 | real firmware | `make ovmf-test` | **not tested** | 2 | TianoCore and `qemu-system-x86_64` not installed |
 
-New tests added by this work: `tests/test_pagetables64.py` (19), 42 kernel-contract
-and policy tests in `tests/test_kernel64.py` (25 → 49 in the classes it covers),
-3 placement runs in `tests/test_boot64_stub.py` (5 → 8), and 6 further checks in
-`tests/boot64_stubtest.py` (16 → 22). The suite as a whole went from 571 to 612
-tests.
+Test counts, exactly: 46 tests added and 5 removed, so the suite went from 571 to
+612. The 46 are 19 in the new `tests/test_pagetables64.py`, 24 in
+`tests/test_kernel64.py` (25 → 49: version-2 contract cases plus the
+`PlacementPolicyTests` class) and 3 placement runs in `tests/test_boot64_stub.py`
+(5 → 8). The 5 removed were the duplicated `PageTableTests` class in
+`tests/test_kernel64.py`; the same properties are covered in the new file, which
+adds canary pages either side of the page-table block. `tests/boot64_stubtest.py`
+also grew from 16 to 22 checks without changing the test count.
 
 ### 26.4 What the placement runs actually show
 
