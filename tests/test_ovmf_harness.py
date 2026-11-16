@@ -236,5 +236,127 @@ class IsolationTests(unittest.TestCase):
         self.assertIn("test: check boot-test stubtest", makefile)
 
 
+GOOD_SERIAL = """\r\nPC5 UEFI LOADER uefi-0.2.0\r\n
+PC5-UEFI: firmware_started\r\n
+PC5-UEFI: kernel_bytes_read=66836\r\n
+PC5-UEFI: watchdog_disabled\r\n
+PC5-UEFI: boot_services_exited\r\n
+PC5-UEFI: memory_map_entries=6\r\n
+PC5-UEFI: ExitBootServices_retries=1\r\n
+PC5-UEFI: handover_window_checked=1\r\n
+PC5-UEFI: memory_conventional_mib=127\r\n
+PC5-UEFI: kernel_handoff_verified=1\r\n
+PC5-UEFI: handoff_bytes=66836\r\n
+PC5-LOG kernel_entry eip=0x10000\r\n
+PC5-LOG protocol=1 magic=ok\r\n
+PC5-LOG memory_mib=127 entries=6 top_mib=1024\r\n
+PC5-BOOT-OK\r\n"""
+
+
+class BootContractMarkerTests(unittest.TestCase):
+    """The harness must read what the loader and the kernel actually printed.
+
+    Every one of these markers is a claim about a boot transition, so each is
+    parsed from the serial log and none of them is inferred from another.
+    """
+
+    def setUp(self):
+        self.seen = ovmf.classify({"serial": GOOD_SERIAL})
+
+    def test_handoff_evidence_is_read(self):
+        self.assertTrue(self.seen["handoff_verified"])
+        self.assertEqual(self.seen["handoff_bytes"], 66836)
+        self.assertEqual(self.seen["kernel_bytes_read"], 66836)
+
+    def test_memory_map_evidence_is_read(self):
+        self.assertEqual(self.seen["memory_map_entries"], 6)
+        self.assertEqual(self.seen["conventional_mib"], 127)
+        self.assertEqual(self.seen["handover_window_checked"], 1)
+
+    def test_exit_boot_services_evidence_is_read(self):
+        self.assertTrue(self.seen["boot_services_exited"])
+        self.assertEqual(self.seen["exit_retries"], 1)
+
+    def test_watchdog_evidence_is_read(self):
+        self.assertEqual(self.seen["watchdog"], "disabled")
+        refused = ovmf.classify({"serial": "PC5-UEFI: watchdog_disable_refused=0x8000000000000003"})
+        self.assertEqual(refused["watchdog"], "refused")
+        self.assertIsNone(ovmf.classify({"serial": "nothing here"})["watchdog"])
+
+    def test_the_kernels_own_memory_view_is_read_separately(self):
+        self.assertEqual(self.seen["kernel_memory_entries"], 6)
+        self.assertEqual(self.seen["kernel_memory_mib"], 127)
+
+    def test_a_missing_marker_is_none_not_zero(self):
+        seen = ovmf.classify({"serial": "PC5-BOOT-OK"})
+        self.assertIsNone(seen["memory_map_entries"])
+        self.assertIsNone(seen["handoff_bytes"])
+        self.assertFalse(seen["handoff_verified"])
+
+
+class SecureBootTests(unittest.TestCase):
+    """Secure Boot is judged by the refusal, because PC5 signs nothing."""
+
+    def test_a_boot_with_the_policy_on_is_a_failure(self):
+        ok, detail = ovmf.secure_boot_verdict({"boot_ok": True})
+        self.assertFalse(ok)
+        self.assertIn("not in force", detail)
+
+    def test_a_refused_image_is_the_expected_result(self):
+        ok, _ = ovmf.secure_boot_verdict({"boot_ok": False, "firmware_refused": True})
+        self.assertTrue(ok)
+
+
+class MatrixTests(unittest.TestCase):
+    """The required matrix must never claim a row that no run produced."""
+
+    def make_report(self):
+        report = ovmf.Report()
+        return report
+
+    def test_without_runs_every_executed_row_is_not_tested(self):
+        report = self.make_report()
+        rows = ovmf.build_matrix(report)
+        states = {row["state"] for row in rows}
+        self.assertIn("not-tested", states)
+        for row in rows:
+            self.assertIn(row["state"], ("not-tested", "external", "verified", "failed"))
+        executed = [r for r in rows if r["state"] == "verified"]
+        self.assertEqual(executed, [])
+
+    def test_external_rows_name_another_gate_and_never_say_verified(self):
+        rows = ovmf.build_matrix(self.make_report())
+        external = [r for r in rows if r["state"] == "external"]
+        self.assertTrue(external)
+        for row in external:
+            self.assertNotEqual(row["source"], "OVMF cold boot")
+            self.assertIn("(", row["source"])
+
+    def test_a_good_cold_boot_marks_the_boot_rows_verified(self):
+        report = self.make_report()
+        report.data["cold"] = {"markers": ovmf.classify({"serial": GOOD_SERIAL})}
+        rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
+        self.assertEqual(rows["the PC5 EFI loader executes"]["state"], "verified")
+        self.assertEqual(rows["the kernel handoff succeeds"]["state"], "verified")
+
+    def test_a_failed_cold_boot_marks_them_not_tested(self):
+        report = self.make_report()
+        report.data["cold"] = {"markers": ovmf.classify(
+            {"serial": "PC5-UEFI FAILURE E15: window\r\nPC5-UEFI-FAILURE E15\r\n"})}
+        rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
+        self.assertEqual(rows["the kernel handoff succeeds"]["state"], "not-tested")
+
+    def test_a_negative_run_that_booted_is_a_failure_row(self):
+        report = self.make_report()
+        report.data["negative"] = {"no-kernel": {"markers": ovmf.classify(
+            {"serial": "PC5 UEFI loader\r\nPC5-BOOT-OK\r\n"})}}
+        rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
+        self.assertEqual(rows["a missing kernel is an explicit failure"]["state"], "failed")
+
+    def test_the_low_memory_row_exists(self):
+        rows = {r["requirement"] for r in ovmf.build_matrix(self.make_report())}
+        self.assertIn("insufficient memory fails safely", rows)
+
+
 if __name__ == "__main__":
     unittest.main()

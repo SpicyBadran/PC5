@@ -40,6 +40,18 @@ after `build` succeeded, and delegates the publishing to
 `--clobber`, final asset assertion). That script is unit-tested against a stub
 `gh` in `tests/test_release.py`.
 
+## Jobs
+
+| Job | What it proves | Gate that can fail it |
+|---|---|---|
+| `build` | the image builds twice identically, verifies, passes unit/host/boot tests and the roadmap validator | any gate returning non-zero |
+| `ovmf` | the same image boots under genuine TianoCore OVMF, cold and warm, with the Secure Boot policy and the negative matrix | `tests/ovmf_boot.py` exit 3 (NOT TESTED) **fails** the job, so a runner without firmware is a red build, not a green one |
+| `release` | assets published for a tag, after `build` succeeded | `tools/publish_release.sh` verdict and checksum gates |
+
+`ovmf` provisions its own firmware with `tools/ovmf_setup.sh` and uploads
+`build/ovmf-report.json`, `build/ovmf-matrix.json` and every serial log, so a
+reviewer can read what firmware said rather than what the harness concluded.
+
 ## Configuration
 
 The pipeline asserts no capability level; it asserts that the repository is
