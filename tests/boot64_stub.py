@@ -14,11 +14,22 @@ what is genuinely different:
   * the run stops as soon as the kernel prints its verdict, instead of watching
     for a far jump that this path does not perform.
 
-What this harness does *not* do: it does not walk the page tables.  Unicorn in
-64-bit mode ignores CR3 unless a caller implements TLB hooks, so a page fault
-here would not prove anything about the map.  The map is therefore verified by
-`tests/test_pagetables64.py` against real entry values, and the run here proves
-the *code path* installs PC5's CR3 and reaches the kernel in long mode.
+What this harness genuinely exercises, and what it does not:
+
+  * it *does* exercise the map switch.  Unicorn in 64-bit mode translates every
+    fetch and data access through CR3 whenever CR0.PG is set, and this harness
+    sets it, so once the loader installs PC5's PML4 an address that PC5's tables
+    do not map faults the emulation.  Instructions executed after the switch are
+    therefore covered by PC5's own entries, not by anything the harness arranged;
+  * it does *not* prove the map is correct for memory nothing touches during the
+    run, and it does not model TLB invalidation, caching or permission faults in
+    the way hardware does (Unicorn checks present/writable/user bits, not, for
+    example, the PAT bit or the effect of CR0.WP);
+  * it is not firmware.  It emulates the services the loader calls; `make
+    ovmf-test` is the only gate that can speak about real firmware.
+
+The map's *bounds* are checked structurally by `tests/test_pagetables64.py`, which
+builds the real `pagetables.c` and inspects every entry it writes.
 """
 from __future__ import annotations
 
@@ -67,14 +78,39 @@ class StubFirmware64(fw.StubFirmware):
     # The kernel is linked at 0x100000, outside the 32-bit harness's low-memory
     # window, so the machine gets that RAM as well.
     KERNEL64_WINDOW = (0x00100000, 0x00200000)
+    # Where firmware places page allocations when a test asks it to allocate "just
+    # below 4 GiB".  The window ends exactly at the top of PC5's identity span, so
+    # the handoff regions sit at the boundary the map must not get wrong.
+    HIGH_WINDOW = (0x0FF00000, 0x00100000)
+
+    def __init__(self, *args, high_allocations=False, **options):
+        # Set before the base constructor maps memory and loads the image.
+        self.high_allocations = high_allocations
+        self.high_next = self.HIGH_WINDOW[0]
+        super().__init__(*args, **options)
 
     def _map(self):
         super()._map()
         base, size = self.KERNEL64_WINDOW
         self.uc.mem_map(base, size)
+        if self.high_allocations:
+            high, high_size = self.HIGH_WINDOW
+            self.uc.mem_map(high, high_size)
 
     def svc_allocate_pages(self, alloc_type, memory_type, pages, memory_ptr, *_rest):
         """Honour EFI_ALLOCATE_ADDRESS, which the 64-bit loader relies on."""
+        if self.high_allocations and alloc_type != EFI_ALLOCATE_ADDRESS:
+            # Firmware is free to satisfy a "below 4 GiB" request at the top of the
+            # range, and this loader must cope with it: the boot info, page tables
+            # and stack then live in the last megabyte the identity map covers.
+            address = self.high_next
+            if address + pages * 4096 > self.HIGH_WINDOW[0] + self.HIGH_WINDOW[1]:
+                return EFI_INVALID_PARAMETER
+            self.high_next = address + pages * 4096
+            self.uc.mem_write(address, bytes(pages * 4096))
+            self.write_u64(memory_ptr, address)
+            self.map_generation += 1
+            return EFI_SUCCESS
         if alloc_type == EFI_ALLOCATE_ADDRESS:
             requested = self.read_u64(memory_ptr)
             if requested % 4096 or requested < self.KERNEL64_WINDOW[0] \
@@ -85,6 +121,30 @@ class StubFirmware64(fw.StubFirmware):
             return EFI_SUCCESS
         return super().svc_allocate_pages(alloc_type, memory_type, pages,
                                           memory_ptr, *_rest)
+
+    def memory_descriptors(self):
+        """Firmware's map, widened to describe the memory this machine hands out.
+
+        The 32-bit harness reports 1 MiB of conventional memory at 0x100000; the
+        64-bit kernel is linked there *and* the loader allocates its boot info,
+        page tables and stack from the same window, so the map must describe the
+        whole window or the kernel would be right to reject a stack it cannot see.
+        Widening the descriptor is what real firmware does - the map describes
+        memory that exists, not memory the loader happens to ask for.
+        """
+        descriptors = super().memory_descriptors()
+        window = [entry for entry in descriptors if entry[1] == self.KERNEL64_WINDOW[0]
+                  and entry[0] == 7]
+        assert len(window) == 1, window
+        descriptors[descriptors.index(window[0])] = (
+            7, self.KERNEL64_WINDOW[0], 0x0, self.KERNEL64_WINDOW[1] // 4096)
+        if self.high_allocations:
+            # Firmware retypes what it hands out; these pages are LoaderData, and
+            # the kernel must accept them as loader-owned rather than demanding
+            # conventional memory it no longer is.
+            descriptors.append((2, self.HIGH_WINDOW[0], 0x0,
+                                self.HIGH_WINDOW[1] // 4096))
+        return descriptors
 
     def _build_tables(self):
         super()._build_tables()
@@ -131,29 +191,55 @@ class StubFirmware64(fw.StubFirmware):
         return self.trace
 
     # --------------------------------------------------------- paging model
-    def _install_firmware_paging(self):
-        """Give the machine a real identity map and return its PML4 address.
+    def _firmware_regions(self):
+        """(base, page_count) pairs firmware's own map must cover.
 
-        Unicorn walks the guest page tables whenever CR0.PG is set, which is
-        exactly how a real machine behaves - and it is why this harness cannot
-        simply invent a CR3.  The *firmware's* map is built here, in memory
-        Unicorn has mapped, covering the first 4 GiB with 2 MiB pages: the
-        image, the pool, the framebuffer and the low-memory handover window are
-        all inside it.  When the loader installs PC5's own PML4, every later
-        fetch and data access is translated through *that* table instead, so a
-        wrong entry in PC5's map faults the run rather than passing silently.
+        Firmware maps what it uses: the first 4 GiB (where the image, pool,
+        framebuffer, low memory and kernel window live) plus, when the test placed
+        the application higher, the 2 MiB window containing it.  Firmware has no
+        reason to map more than that, and neither does this harness.
+        """
+        regions = [("low", 0, 2048)]
+        image = self.image_load
+        if image + fw.IMAGE_WINDOW > 4 << 30:
+            regions.append(("image", image & ~0x1FFFFF, 1))
+        return regions
+
+    def _install_firmware_paging(self):
+        """Give the emulated machine firmware's own identity map; return its PML4.
+
+        Unicorn walks the guest page tables whenever CR0.PG is set, exactly as a
+        machine does, which is why this harness cannot invent a CR3.  The map
+        built here is firmware's, covering only the windows listed above with
+        2 MiB pages.  When the loader installs PC5's PML4, translation switches to
+        that table: an address PC5 did not map faults, and that fault is evidence
+        about PC5's map rather than about this harness.
         """
         base = self.alloc(6 * 4096, align=4096)
-        pml4, pdpt, pd = base, base + 0x1000, base + 0x2000
-        self.write_u64(pml4, pdpt | 0x3)                 # present, writable
-        self.write_u64(pdpt, pd | 0x3)
-        entries = [((index << 21) | 0x83) for index in range(2048)]
-        assert len(entries) == 2048, len(entries)
-        for page in range(4):
-            chunk = entries[page * 512:page * 512 + 512]
-            assert len(chunk) == 512, (page, len(chunk), len(entries))
-            self.write(pd + page * 0x1000, struct.pack("<512Q", *chunk))
+        pml4 = base        # one PDPT (pre-allocated) plus a PD per 1 GiB chunk
+        pdpts = {}
+        tables = 0
+        for name, region_base, pages in self._firmware_regions():
+            remaining = pages
+            cursor = region_base
+            while remaining:
+                chunk = min(remaining, 512)
+                pml4_index = (cursor >> 39) & 0x1FF
+                pdpt_index = (cursor >> 30) & 0x1FF
+                if pml4_index not in pdpts:
+                    pdpts[pml4_index] = self.alloc(4096, align=4096)
+                    self.write_u64(pml4 + pml4_index * 8, pdpts[pml4_index] | 0x3)
+                pd = self.alloc(4096, align=4096)
+                self.write_u64(pdpts[pml4_index] + pdpt_index * 8, pd | 0x3)
+                entries = [((cursor + index * 0x200000) | 0x83) for index in range(chunk)]
+                self.write(pd, struct.pack("<%dQ" % chunk, *entries))
+                tables += 1
+                cursor += chunk * 0x200000
+                remaining -= chunk
         self.firmware_pml4 = pml4
+        self.trace.note("firmware_paging", pml4=hex(pml4), tables=tables,
+                        regions=[(name, hex(base_), pages)
+                                 for name, base_, pages in self._firmware_regions()])
         return pml4
 
     def _hook_out(self, uc, port, size, value, userdata):

@@ -65,8 +65,8 @@ class StubFirmware64Tests(unittest.TestCase):
         # EFER.LMA is what "long mode executing" means at the architectural
         # level; the kernel prints the value it read.
         self.assertIn("efer=0x500", trace.serial)
-        self.assertEqual(machine.handover64["protocol"], 1)
-        self.assertEqual(machine.handover64["boot_info_size"], 112)
+        self.assertEqual(machine.handover64["protocol"], 2)
+        self.assertEqual(machine.handover64["boot_info_size"], 160)
         self.assertEqual(machine.handover64["identity_span"], 4 << 30)
 
     def test_no_boot_service_is_used_after_exit_boot_services(self):
@@ -84,6 +84,51 @@ class StubFirmware64Tests(unittest.TestCase):
         machine, trace = self.run_once(race_map_key_forever=True)
         self.assertIn("PC5-64-LOADER-FAIL=exit-boot-services", trace.serial)
         self.assertNotIn(MARKER, trace.serial)
+
+    # ------------------------------------------------------- placement ----
+    # Firmware chooses where the application goes.  These runs move it near the top
+    # of the identity map, and move the handoff regions there too, because the
+    # loader must not assume either is low.  Unicorn translates through CR3 after
+    # the switch, so a region the map does not cover faults the run rather than
+    # quietly succeeding.
+
+    def assert_full_boot(self, trace):
+        checks = self.runner.checks_for(trace)
+        failed = [entry["name"] for entry in checks if not entry["passed"]]
+        self.assertEqual(failed, [], trace.serial)
+        self.assertIn(MARKER, trace.serial)
+
+    def test_an_application_loaded_at_the_top_of_the_map_still_hands_over(self):
+        machine, trace = self.run_once(image_load=0x0FE00000)
+        self.assertEqual(machine.image_base, 0x0FE00000)
+        self.assertIn("PC5-64-LOADER image=0xfe00000-0xfe03000 below-span=1",
+                      trace.serial)
+        self.assertIn("PC5-64-LOADER image=0xfe00000 size=0x3000 range=ok",
+                      trace.serial)
+        self.assert_full_boot(trace)
+
+    def test_handoff_regions_placed_just_below_the_span_limit(self):
+        machine, trace = self.run_once(high_allocations=True)
+        # The boot info, page tables and stack all landed in the last megabyte.
+        self.assertIn("bootinfo=0xff00000", trace.serial)
+        self.assertIn("PC5-64-LOADER pagetables=0xff01000", trace.serial)
+        self.assertIn("PC5-64-LOADER stack=0xff07000-0xff0b000", trace.serial)
+        self.assertIn("PC5-64-STACK rsp=0xff0", trace.serial)
+        self.assert_full_boot(trace)
+        # Every mandatory range was accepted because firmware retyped these pages as
+        # LoaderData - the kernel must not demand Conventional memory for ranges the
+        # loader owns.
+        self.assertIn("range=ok", trace.serial)
+
+    def test_the_loader_replaces_cr3_only_after_validating_its_own_placement(self):
+        machine, trace = self.run_once(image_load=0x0FE00000)
+        serial = trace.serial
+        self.assertLess(serial.index("PC5-64-LOADER image="),
+                        serial.index("PC5-64-LOADER cr3-plan="))
+        self.assertLess(serial.index("PC5-64-LOADER cr3-plan="),
+                        serial.index("PC5-64-LOADER-JUMP"))
+        self.assertLess(serial.index("PC5-64-LOADER-JUMP"),
+                        serial.index("PC5-64-PAGING enabled=1"))
 
 
 if __name__ == "__main__":

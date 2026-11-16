@@ -36,6 +36,18 @@ def run_once(image, kernel, race_map_key=0, seed=None):
     return trace
 
 
+def fields(serial, marker, key):
+    """Value of key=... on the line beginning with marker, or None."""
+    for line in serial.splitlines():
+        text = line.strip()
+        if not text.startswith(marker):
+            continue
+        for token in text.split():
+            if token.startswith(key + "="):
+                return token[len(key) + 1:]
+    return None
+
+
 def checks_for(trace, expect_success=True):
     serial = trace.serial
     checks = []
@@ -49,19 +61,43 @@ def checks_for(trace, expect_success=True):
           "PC5-64-LOADER kernel at=" in serial)
     check("PC5 page tables were built and counted",
           "mapped_2mib=2048" in serial, "2048 x 2 MiB = 4 GiB")
+
+    # The loader no longer reads CR3 back itself: after installing the root it
+    # never runs loader code again.  The read-back now comes from the kernel, which
+    # is executing on the new map - a stronger statement than the loader checking
+    # its own write.  report_environment in kernel64/main.c fails the boot outright
+    # if CR3 differs from the page-table address in the boot info.
+    planned = fields(serial, "PC5-64-LOADER cr3-plan=", "cr3-plan")
+    observed = fields(serial, "PC5-64-ENV", "cr3")
+    check("CR3 was switched to PC5's own PML4 and read back",
+          planned is not None and planned == observed,
+          f"loader planned {planned}, kernel on the new map read {observed}")
+
     check("ExitBootServices succeeded with a live map key",
           "exit-boot-services=ok" in serial)
-    check("CR3 was switched to PC5's own PML4 and read back",
-          "PC5-64-LOADER cr3=" in serial and "long-mode=1" in serial)
     check("the loader jumped to the kernel",
           "PC5-64-LOADER-JUMP entry=" in serial)
+    check("the loader checked where firmware placed it",
+          "PC5-64-LOADER image=" in serial and "below-span=1" in serial)
     check("the kernel reported its own entry", "PC5-64BIT-KERNEL-ENTRY" in serial)
-    check("the kernel validated the boot info", "PC5-64-BOOTINFO magic=ok" in serial)
+    check("the kernel parsed the memory map", "PC5-64-MAP entries=" in serial)
+    check("the kernel validated the boot info",
+          "PC5-64-BOOTINFO magic=ok version=2 size=160 memdesc=32" in serial)
+    check("the kernel validated the kernel image range",
+          fields(serial, "PC5-64-IMAGE", "range") == "ok")
+    check("the kernel validated the loader's own placement",
+          fields(serial, "PC5-64-LOADER", "range") == "ok")
     check("the kernel observed paging enabled", "PC5-64-PAGING enabled=1" in serial)
     check("the kernel observed a 16-byte aligned stack",
-          "aligned=16" in serial)
-    check("the kernel proved 64-bit operand size", "wide-operands=ok" in serial)
+          fields(serial, "PC5-64-STACK", "aligned") == "16"
+          and fields(serial, "PC5-64-STACK", "range") == "ok")
+    check("the kernel proved 64-bit operand size",
+          "wide-operands=ok" in serial and "arithmetic=ok" in serial)
     check("the CPU feature report was collected", "PC5-64-CPU vendor=" in serial)
+    check("the kernel classified the framebuffer",
+          fields(serial, "PC5-64-FB", "usability") in ("ok", "unsupported", "absent"))
+    check("the kernel classified the RSDP",
+          fields(serial, "PC5-64-RSDP", "usability") in ("ok", "unsupported", "absent"))
     check("the kernel ran to its verdict", "PC5-64-DONE" in serial)
 
     if expect_success:
