@@ -27,7 +27,7 @@ package is the **target input of the mission**, not a curiosity.
 | pointer SHA-256 | `6e8f5a459551316397f1946cce4d540a56c0b790854c2c0d94c442ca86e73b42` | `sha256sum` |
 | declared object id | `42ea0e5aad1361e098837d40157863c4c519f0bbc66eb03c04dbaaf339b063fb` | pointer content |
 | declared size | **1,423,697,408 bytes** (≈ 1.33 GiB) | pointer content |
-| object present in LFS storage | **yes** — the batch API answers with a `download` action for that oid and size | `POST /SpicyBadran/pc5.git/info/lfs/objects/batch` |
+| object present in LFS storage | **yes, as measured on 2026-11-16**: HTTP 200 with a `download` action for that oid and size, without credentials | `POST /SpicyBadran/pc5.git/info/lfs/objects/batch` (read-only metadata query; no payload fetched) |
 | payload present in this checkout | **no** | `tools/firmware.py analyze` → `size 135 bytes`, `kind unidentified`, entropy 4.924 |
 | consumed by any tool in the tree | **no** | no reference outside documentation |
 

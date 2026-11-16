@@ -2643,3 +2643,97 @@ commands.
 Nothing about hardware, firmware or Sony software. It establishes that the page's numbers
 can be traced to a command that ran, at a named commit, on a named date — and that they
 will change when the underlying data changes rather than when somebody remembers.
+
+## 25. The 64-bit foundation: long mode, PC5-owned paging, and a marker that means what it says
+
+Section 24 closed the dashboard. This section is the first work in the repository
+that runs **64-bit kernel code** — and the first that has to be careful about what
+"64-bit" is allowed to mean.
+
+### 25.1 What was wrong before
+
+Verified from the tree, not from a summary: `boot/uefi/bootx64.S` leaves long mode
+with a far return into a 32-bit compatibility segment, clears `CR0.PG`, and enters
+a flat 32-bit kernel with `EBX` pointing at `struct pc5_boot_info`. The existing
+"64-bit" part of the boot path is firmware's, not PC5's: once the loader hands
+over, nothing is in long mode. A `-m64` flag on that kernel would produce an image
+that cannot run, which is why this phase added a path instead of flipping flags.
+
+### 25.2 What was built
+
+| Piece | File | Purpose |
+|---|---|---|
+| 64-bit EFI loader | `boot/uefi64/bootx64.S`, `boot/uefi64/uefi64_main.c` | stays in long mode, reads `KERNEL64.BIN` from the ESP, builds PC5 page tables, `ExitBootServices` with retry, jumps to the kernel |
+| page tables | `boot/uefi64/pagetables.c/.h` | identity map below 4 GiB, 2 MiB pages, 6 pages total, uncached framebuffer marking, lookup helper |
+| boot protocol | `kernel64/include/pc5_boot64.h` | `struct pc5_boot64`, version 1, 112 bytes, magic + size + flags, physical pointers below 4 GiB |
+| 64-bit kernel | `kernel64/start.S`, `kernel64/main.c`, `serial64.c`, `cpu64.c`, `kernel64.ld` | proves its own execution environment, reports CPU features, prints the marker last |
+| handover record | `boot/uefi64/handover64.h` | `PC5HND02`: protocol version, boot-info size, page-table pages, identity span |
+| tests | `tests/test_kernel64.py`, `tests/test_boot64_stub.py`, `tests/test_roadmap_dependencies.py`, `tests/kernel64_machine.py`, `tests/boot64_stub.py`, `tests/boot64_stubtest.py` | build, ABI, page tables, kernel contract, stub-firmware run, roadmap order and version discipline |
+
+The kernel prints `PC5-64BIT-LONG-MODE-OK` **only** after it has checked: a valid
+boot-info structure, `CR0.PG`, `CR4.PAE`, a page-aligned non-zero `CR3`, 64-bit
+operand size (a value that cannot survive 32-bit truncation), a 16-byte aligned
+stack that came from the boot info, and a CPUID long-mode report. The loader never
+prints the marker; the kernel never trusts the loader's word for any of it.
+
+### 25.3 Measured results (2026-11-16, this branch)
+
+| Gate | Command | Result | Level |
+|---|---|---|---|
+| 64-bit kernel build | `make kernel64` | **PASS** — `KERNEL64 OK: 40960 bytes at 0x100000`, ELF64 `ET_EXEC`, no unresolved symbols | BUILD VERIFIED |
+| 64-bit loader build | `make uefi64` | **PASS** — `UEFI64 OK: 1474560 bytes sha256=9913b7ea…`; `tools/eficheck.py` 22/22 checks | BUILD VERIFIED |
+| page tables | `make check` (`tests/test_kernel64.py::PageTableTests`) | **PASS** — 2048 × 2 MiB entries, present/writable/PS, uncached marking touches only the framebuffer page, bad arguments refused | UNIT TESTED |
+| boot-info ABI | `make check` (`BootInfoAbiTests`) | **PASS** — host build of the same header: size 112, offsets 16/40/64/72/88/96/104 | UNIT TESTED |
+| kernel contract | `make check` (`KernelContractTests`) | **PASS** — valid handover boots; 12 invalid handovers each print their reason and **no** marker | UNIT TESTED |
+| stub firmware, end to end | `make stubtest64` | **PASS — 16/16 checks**; serial order: loader banner → kernel read → page tables → `ExitBootServices` → CR3 → jump → kernel checks → marker → `PC5-64-DONE` | STUB FIRMWARE TESTED |
+| stale map key | `make check` (`test_a_stale_memory_map_key_is_retried_not_fatal`) | **PASS** — `stale-key retry=1` then `ok attempts=2` | STUB FIRMWARE TESTED |
+| permanently stale key | `make check` (`test_a_permanently_stale_key_stops_the_boot_without_the_marker`) | **PASS** — eight retries, then `PC5-64-LOADER-FAIL=exit-boot-services`, no marker | STUB FIRMWARE TESTED |
+| whole host suite | `make check` | **PASS — 571 tests, OK (2 skipped)**; 523 before this phase, 48 added | UNIT TESTED |
+| real firmware | `make ovmf-test` | **NOT TESTED** — exit 3: no TianoCore OVMF and no `qemu-system-x86_64` on this machine | NOT TESTED |
+| physical hardware | — | **NOT TESTED** — no machine booted this image | NOT TESTED |
+
+The exact serial output of the stub run starts with the loader and ends with the
+kernel's own verdict:
+
+```
+PC5-64-LOADER-BANNER 64-bit UEFI path (experimental)
+PC5-64-LOADER kernel at=0x100000 bytes=40960
+PC5-64-LOADER pagetables=0x2009000 pages=6 mapped_2mib=2048 span=0x100000000
+PC5-64-LOADER exit-boot-services=ok attempts=1 descriptors=6
+PC5-64-LOADER cr3=0x2009000 cr0=0x80000011 cr4=0x50220 long-mode=1
+PC5-64-LOADER-JUMP entry=0x100000 bootinfo=0x2007000
+PC5-64BIT-KERNEL-ENTRY
+PC5-64-PAGING enabled=1 root=0x2009000 kernel=0x100000-0x10a000 loaded=0x100000
+PC5-64-REGS wide-operands=ok arithmetic=ok
+PC5-64-STACK rsp=0x2012f70 top=0x2013000 aligned=16
+PC5-64-BOOTINFO magic=ok version=1 size=112 memdesc=32 entries=6 flags=0xf
+PC5-64-CPU vendor=GenuineIntel
+PC5-64BIT-LONG-MODE-OK
+PC5-64-DONE
+```
+
+### 25.4 What this does not establish
+
+- It is not an OVMF run and not a hardware run. The emulator's firmware is
+  `tests/boot64_stub.py`, a Python model: it enforces `ExitBootServices` map keys
+  and walks PC5's page tables, but it is not firmware.
+- It is not process protection. There is one address space, no user mode, no
+  guard pages and no NX use; `M2b`'s acceptance criteria are untouched.
+- It is not a hypervisor. CPUID's SVM bit is reported as *advertised*, nothing more;
+  the SVM ladder is at level 1 of 6 and `M2a` remains `not_started`.
+- It is not a change to the release artifact. `make iso`, the release ESP, the
+  32-bit kernel and the 32-bit UEFI loader are untouched, and
+  `ReleaseIsolationTests` fails if `make -n all` starts to build 64-bit work.
+
+### 25.5 Two defects the tests found while being written
+
+1. **The kernel was being loaded at a firmware-chosen address.** A flat,
+   non-relocatable image linked at `0x100000` must be loaded there; the first
+   version let `AllocatePages` pick an address and the kernel faulted on its first
+   string literal (`0x101010` was a link-time address, not a runtime one). The
+   loader now requires exactly the link address, and both sides assert
+   `PC5_KERNEL64_LINK_BASE`.
+2. **The spare memory descriptor was reaching the kernel.** Firmware sizes the map
+   with one extra zeroed descriptor; the loader copied it, and the kernel refused
+   the handover with `bootinfo-memmap-empty` exactly as designed. The loader drops
+   zero-length descriptors now, and the kernel's strictness stays.

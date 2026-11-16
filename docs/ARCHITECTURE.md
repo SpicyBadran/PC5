@@ -218,3 +218,114 @@ execution, not direction. The bring-up kernel is therefore the whole
 runtime, and it establishes the hardware-inventory and reporting layer that a
 future Linux image would reuse. See `docs/KNOWN_LIMITATIONS.md` and
 `docs/ROADMAP.md`.
+
+## 7. The 64-bit foundation (experimental)
+
+Everything in sections 1–5 boots a **32-bit** kernel. That is not an accident of
+history that a compiler flag can fix: `boot/uefi/bootx64.S` leaves long mode with
+a far return into a 32-bit compatibility segment, disables paging and enters a
+flat 32-bit protected-mode kernel. Nothing in that sequence is a 64-bit kernel,
+and turning `-m32` into `-m64` on it would produce an image that cannot run.
+
+`boot/uefi64/` and `kernel64/` are a second, separate path built to answer that
+honestly. It is **experimental**: it is not part of `make iso`, the release ESP
+does not carry it, and `make -n all` shows no 64-bit work.
+
+### 7.1 Boot sequence
+
+1. Firmware loads `\EFI\BOOT\BOOTX64.EFI` (PE32+, `boot/uefi64/bootx64.S`) and
+   calls it in long mode, ms_abi, with `RCX` = ImageHandle and `RDX` =
+   SystemTable. The entry stub zeroes `.bss` (NOLOAD, so firmware does not) and
+   calls `efi_main64`.
+2. The loader opens COM1 directly and prints `PC5-64-LOADER-BANNER`. No console
+   protocol is involved: the evidence has to survive ExitBootServices.
+3. It reads `\KERNEL64.BIN` from the ESP through SimpleFileSystem, taking the
+   size from `EFI_FILE_INFO`, and allocates **exactly** the kernel's link
+   address (`0x100000`) with `EFI_ALLOCATE_ADDRESS`. A loader and kernel built
+   from different trees fail here instead of jumping into nonsense.
+4. GOP and the ACPI RSDP are recorded; the memory map is copied into
+   `struct pc5_memdesc64[]`, dropping the spare zeroed descriptor firmware adds.
+5. PC5 builds its own page tables and calls `ExitBootServices` with the map key,
+   retrying up to eight times when firmware invalidates the key. Only after a
+   successful exit does it install `CR3`.
+6. `pc5_enter_kernel64` loads `RSP` from `boot_info->stack_top`, aligns it, and
+   jumps to the kernel — **in long mode, with no mode switch anywhere**.
+
+### 7.2 Page tables
+
+`boot/uefi64/pagetables.c` builds an identity map below 4 GiB from 2 MiB pages:
+one PML4, one PDPT and four PDs, six pages in all. 2 MiB pages are used because
+every x86-64 CPU that can enter long mode supports them; 1 GiB pages are only
+reported by CPUID, not required. The framebuffer's pages are marked PWT|PCD so
+they are uncached. Firmware's tables are abandoned with firmware's stack.
+
+`PC5-64-PAGING enabled=1 root=0x…` is printed by the *kernel*, from its own
+`CR3`, and the loader separately reads `CR3` back and compares it with the
+address it built. Both are needed: the first proves the kernel runs on the map,
+the second proves the map it runs on is the one PC5 built.
+
+### 7.3 Boot protocol, version 1
+
+`struct pc5_boot64` (`kernel64/include/pc5_boot64.h`) is 112 bytes, packed, with
+`magic` "PC5B", `version` = 1, `size` = 112, `flags`, a descriptor array
+(`memmap_addr`, `memmap_bytes`, `memmap_desc_size`, `memmap_desc_version`), the
+framebuffer, the RSDP, the kernel base and size, the stack top, an
+`exit_boot_services` flag and a timestamp. Offsets are pinned by `_Static_assert`
+in `kernel64/main.c` and checked from the Python side by
+`tests/test_kernel64.py`, which compiles the same header on the host.
+
+Rules both sides keep:
+
+- every pointer is physical, identity-mapped, and allocated below 4 GiB;
+- the loader owns a buffer only until the kernel has copied what it needs;
+- the kernel refuses a structure whose magic, version, size, descriptor stride,
+  alignment or stack it does not recognise, and prints
+  `PC5-64BIT-FAIL=<reason>` instead of guessing;
+- `kernel_base` must equal `PC5_KERNEL64_LINK_BASE`, because the image is flat
+  and not relocatable; the kernel checks this against its own linker symbol.
+
+### 7.4 What the kernel proves before it says anything good
+
+`kernel64/main.c` prints `PC5-64BIT-LONG-MODE-OK` only after all of:
+
+| Check | Evidence line |
+|---|---|
+| entered in 64-bit code | `PC5-64BIT-KERNEL-ENTRY` (from the kernel's own entry stub) |
+| boot info valid and consistent | `PC5-64-BOOTINFO magic=ok version=1 size=112 …` |
+| paging enabled, PAE on, CR3 page-aligned | `PC5-64-PAGING enabled=1 root=0x…` |
+| 64-bit operand size really active | `PC5-64-REGS wide-operands=ok arithmetic=ok` |
+| stack provided by the loader, 16-byte aligned | `PC5-64-STACK rsp=0x… top=0x… aligned=16` |
+| CPU feature report collected | `PC5-64-CPU vendor=…`, `phys_bits`, `nx`, `svm_advertised`, … |
+
+`EFER.LMA` is printed when the environment reports it; when an emulator returns
+zero for the MSR the kernel says so (`efer.lma unavailable`) and relies on the
+architectural checks instead. A string printed by a 32-bit component never
+counts, and the marker is never printed by the loader.
+
+### 7.5 Memory foundation: what exists and what does not
+
+Exists: a page-table builder with unit tests, the L4/L3/L2 split, uncached
+framebuffer marking, an ownership protocol, a validated boot-info structure, and
+a physical memory map the kernel can use as the input to an allocator.
+
+Does not exist: a physical allocator, per-process address spaces, page-level
+protection, guard pages, NX use (reported by CPUID, not yet set in EFER), any
+mapping above 4 GiB, or any DMA protocol. No process-level protection is
+claimed, because none has been implemented.
+
+### 7.6 CPU features and the SVM ladder
+
+`kernel64/cpu64.c` reports vendor, family/model/stepping, physical and virtual
+address widths, long mode, NX, 1 GiB pages, APIC, x2APIC, maximum APIC IDs and
+the SVM bits (advertised, nested paging, ASIDs) plus whether the CPU is already
+a guest. Reporting SVM is not a hypervisor claim. The six evidence levels are:
+advertised (CPUID), firmware-enabled, permitted, PC5-initialised, guest executed,
+VM-exit tested. This work reaches **level 1 only**, and only in emulation.
+
+### 7.7 Release isolation
+
+`iso`, `uefi`, `boot-test`, `verify` and every release asset are unchanged and
+still 32-bit. The 64-bit path has its own targets — `make kernel64`,
+`make uefi64`, `make stubtest64` — and its own ESP image
+(`build/efi64.img`). `tests/test_kernel64.py::ReleaseIsolationTests` fails if
+`make -n all` starts to depend on any of it.

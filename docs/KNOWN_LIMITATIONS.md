@@ -148,6 +148,28 @@ Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
 21. **No game compatibility claims.** `docs/PS5_GAME_TEST_RESULTS.md` is empty
     because no title has been executed.
 
+22a. **The 64-bit path has never run on firmware or hardware.** `boot/uefi64/`
+    and `kernel64/` are exercised by unit tests, a kernel-contract harness and a
+    long-mode stub firmware (`make kernel64`, `make uefi64`, `make stubtest64`).
+    No OVMF run (no TianoCore image, no `qemu-system-x86_64` in this
+    environment) and no physical machine has executed them. The success marker
+    `PC5-64BIT-LONG-MODE-OK` is therefore evidence of the code path, not of
+    firmware compliance.
+22b. **The 64-bit kernel is minimal on purpose.** It has no interrupt handling,
+    no APIC programming, no timer, no SMP bring-up, no scheduler, no syscalls and
+    no process separation. Its identity map stops at 4 GiB, it does not use NX
+    (CPUID reports it; EFER.NXE is not set), there are no guard pages, and there
+    is no physical-memory allocator. Nothing in it is a protection mechanism yet.
+22c. **The 64-bit path is not part of the release image.** It is built by its own
+    targets and carried in a separate ESP image; `make iso` is unchanged and the
+    release artifact is still 32-bit. This is deliberate isolation, not an
+    oversight, and `tests/test_kernel64.py` fails if that changes by accident.
+22d. **Stub firmware is emulation, and Unicorn is not a CPU.** The stub harness
+    emits a memory map, answers the file protocol and enforces the
+    `ExitBootServices` map key, but it is a model written in Python. Its paging
+    model walks PC5's tables, which catches a wrong entry; it cannot prove cache
+    attributes, memory types or real firmware behaviour.
+
 ## Engineering process
 
 22. **Physical hardware is untested.** Nothing in this repository has run on the

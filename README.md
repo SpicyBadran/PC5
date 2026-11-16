@@ -52,7 +52,8 @@ explains what running the system software would require.
 <!-- pc5:stats:begin -->
 | | |
 |---|---|
-| Roadmap | `0.4.0-dev`, updated 2026-11-16 |
+| Product version | `0.2.0` (single source: `Makefile VERSION`) |
+| Roadmap document | `0.4.0-dev`, updated 2026-11-16 |
 | Milestones | 35 in 14 workstreams |
 | Complete | 9 |
 | In progress | 2 |

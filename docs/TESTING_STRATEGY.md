@@ -46,6 +46,9 @@ none of them is folded into a single "pass".
 | `make stubtest` | the real `BOOTX64.EFI` runs against a stub firmware | real UEFI firmware | exit 2 without unicorn, 0/1 otherwise |
 | `make validation` | the committed records are coherent: schema, exit code against verdict, commit and date present | that any gate was run just now | exit 1 on an inconsistent record |
 | `make record-validation` | *writes* one record per gate, by running it — never part of `make check` | anything it does not run | exit 1 only if a gate reports `failed`/`error` |
+| `make kernel64` | the flat 64-bit kernel links at `0x100000` with no unresolved symbols | that it runs anywhere |
+| `make uefi64` | the experimental 64-bit loader is a valid PE32+, and the ESP image that carries `KERNEL64.BIN` is built | that firmware boots it |
+| `make stubtest64` | the 64-bit path runs end to end in long-mode emulation: page tables installed, `ExitBootServices` done, kernel validates the handover, marker printed last | real firmware, or that the MMU would accept the map on hardware | exit 3 without unicorn, 0/1 otherwise |
 | `make ovmf-test` | a boot under genuine TianoCore OVMF | physical hardware, or Sony software | 0 verified, 1 failed, **NOT TESTED when the tool exits 3** (make then exits 2 and prints the reason) |
 
 `make check` deliberately does not include the emulator, stub, OVMF or hardware gates:
@@ -274,6 +277,24 @@ Firmware stays external: nothing is committed, nothing is embedded in the ISO,
 nothing is linked into the kernel, and the harness refuses a "firmware" whose
 bytes are the PC5 loader or that lacks a `_FVH` volume header.
 
+### 2.5b The 64-bit foundation — `make kernel64`, `make uefi64`, `make stubtest64`
+
+The 64-bit path is tested at three levels, and none of them is called a firmware
+test:
+
+| Level | Command | What actually executes |
+|---|---|---|
+| unit | `make check` (`tests/test_kernel64.py`) | nothing: the ELF/PE images are inspected, `struct pc5_boot64` is compiled on the host and compared with the kernel's assertions, and `pagetables.c` is built as a host library so its entries can be read back |
+| kernel contract | `make check` (`kernel64_machine.py`) | the kernel binary alone, at its link address, with deliberately broken boot-info structures: each failure must print its reason and must **not** print the marker |
+| stub firmware | `make stubtest64` | the loader's PE image and the kernel's binary, under Unicorn in long mode with a modelled firmware: memory map, file protocol, `ExitBootServices` key checks, paging walked through PC5's own tables |
+
+What is *not* proven at any of these levels: that real firmware accepts the
+image, that a real MMU honours the map (Unicorn walks the tables, but it is not a
+CPU), or that any physical machine reaches the marker. `make ovmf-test` remains
+the only gate that can claim real firmware, and it needs TianoCore plus
+`qemu-system-x86_64`; on this machine both are absent, so the honest result is
+**NOT TESTED** and the reason is stated with the result.
+
 ### 2.6 Provisioning the firmware
 
 `make ovmf-setup` (`tools/ovmf_setup.sh`) installs QEMU and OVMF from the
@@ -291,6 +312,11 @@ chipset/PCI topology, real disk controllers, USB, audio, network, timing or
 thermal behaviour. No claim of physical compatibility is made from it.
 
 ## 3. Physical hardware plan (not yet executed)
+
+The gates that decide what physical evidence buys are scoped in
+[`GATES.md`](GATES.md): Gate A opens hardware evidence, Gate C the 64-bit
+foundation, Gate D SVM feasibility, Gate E device support. None of them is an
+authorisation to claim more than its own acceptance criteria.
 
 For the reference Dell Inspiron 15 7577 and any other machine:
 
