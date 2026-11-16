@@ -48,7 +48,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: ovmf-setup ovmf-check all iso uefi check docs-check presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record
+.PHONY: ovmf-setup ovmf-check all iso uefi kernel64 uefi64 stubtest64 check docs-check presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record
 
 all: iso
 
@@ -102,6 +102,88 @@ $(BUILD)/mbr.bin: $(OBJ)/mbr.o
 	$(LD) -m elf_i386 -Ttext 0x7c00 --oformat binary -e _start -o $@ $<
 	@size=$$(stat -c %s $@); echo "pc5: MBR bootstrap $$size bytes"; \
 	 if [ $$size -ne 440 ]; then echo "pc5: MBR bootstrap must be exactly 440 bytes (partition table starts at 0x1B8)"; exit 1; fi
+
+# ------------------------------------------------------- 64-bit path ----
+# The experimental 64-bit foundation lives beside the 32-bit one and is *not*
+# part of `all`, `iso` or the release artifact: `make uefi64` builds the
+# experimental long-mode image, `make kernel64` the flat 64-bit kernel, and
+# `make stubtest64` runs both under the long-mode stub firmware.  Nothing in
+# the release path depends on any of it, which is what keeps the 32-bit image
+# the thing that ships while the 64-bit path is still being proven.
+KERNEL64_CFLAGS := -m64 -std=gnu11 -O2 -Wall -Wextra -Werror -ffreestanding \
+                   -fno-pic -fno-pie -fno-builtin -fno-stack-protector \
+                   -mno-red-zone -fno-asynchronous-unwind-tables \
+                   -fno-unwind-tables -fno-tree-loop-distribute-patterns \
+                   -Ikernel64/include
+KERNEL64_SRC := kernel64/start.S kernel64/main.c kernel64/serial64.c \
+                kernel64/cpu64.c
+KERNEL64_HDR := kernel64/include/pc5_boot64.h kernel64/include/pc5_io.h \
+                kernel64/serial64.h kernel64/cpu64.h kernel64/kernel64.ld
+LOADER64_SRC := boot/uefi64/uefi64_main.c boot/uefi64/pagetables.c \
+                boot/uefi64/bootx64.S
+LOADER64_HDR := boot/uefi64/pagetables.h boot/uefi64/handover64.h \
+                boot/uefi64/../uefi/efi.h kernel64/include/pc5_boot64.h \
+                boot/uefi/bootx64.ld
+
+$(BUILD)/kernel64/start.o: kernel64/start.S | $(BUILD)/kernel64
+	$(CC) -m64 -c $< -o $@
+
+$(BUILD)/kernel64/%.o: kernel64/%.c $(KERNEL64_HDR) | $(BUILD)/kernel64
+	$(CC) $(KERNEL64_CFLAGS) -c $< -o $@
+
+$(BUILD)/kernel64:
+	@mkdir -p $@
+
+# The image is flat and linked at 0x100000: it is loaded unchanged, so there is
+# no relocation step and no PIE.
+$(BUILD)/kernel64/pc5-64.elf: $(BUILD)/kernel64/start.o $(BUILD)/kernel64/main.o \
+                              $(BUILD)/kernel64/serial64.o $(BUILD)/kernel64/cpu64.o \
+                              kernel64/kernel64.ld
+	$(LD) -m elf_x86_64 -T kernel64/kernel64.ld -nostdlib -o $@ $^
+
+# .bss carries the kernel stack, so it has to travel with the image: a binary
+# that stops before .bss would put the stack outside the loaded window.
+$(BUILD)/kernel64/KERNEL64.BIN: $(BUILD)/kernel64/pc5-64.elf
+	objcopy -O binary --set-section-flags .bss=alloc,load,contents $< $@
+	@size=$$(stat -c %s $@); echo "KERNEL64 OK: $$size bytes at 0x100000"
+
+kernel64: $(BUILD)/kernel64/KERNEL64.BIN
+
+$(BUILD)/kernel64/pagetables.o: boot/uefi64/pagetables.c boot/uefi64/pagetables.h | $(BUILD)/kernel64
+	$(CC) $(KERNEL64_CFLAGS) -c $< -o $@
+
+$(BUILD)/kernel64/uefi64_main.o: boot/uefi64/uefi64_main.c $(LOADER64_HDR) | $(BUILD)/kernel64
+	$(CC) $(UEFI_CFLAGS) -Werror -Ikernel64/include -c $< -o $@
+
+$(BUILD)/kernel64/bootx64-64.o: boot/uefi64/bootx64.S | $(BUILD)/kernel64
+	$(CC) -m64 -c $< -o $@
+
+$(BUILD)/uefi64/BOOTX64.EFI: $(BUILD)/kernel64/uefi64_main.o \
+                             $(BUILD)/kernel64/pagetables.o \
+                             $(BUILD)/kernel64/bootx64-64.o boot/uefi/bootx64.ld
+	@mkdir -p $(BUILD)/uefi64
+	$(LD) $(UEFI_LDFLAGS) -e _start $(BUILD)/kernel64/bootx64-64.o \
+	  $(BUILD)/kernel64/uefi64_main.o $(BUILD)/kernel64/pagetables.o -o $@
+	@python3 tools/eficheck.py $@ --require-relocs --max-bytes 196608
+
+# A separate ESP image: the release ESP never carries KERNEL64.BIN.
+$(BUILD)/efi64.img: $(BUILD)/uefi64/BOOTX64.EFI $(BUILD)/kernel64/KERNEL64.BIN \
+                    tools/mkefiimg.py
+	python3 tools/mkefiimg.py --size-kb 1440 \
+	  --file $(BUILD)/uefi64/BOOTX64.EFI=EFI/BOOT/BOOTX64.EFI \
+	  --file $(BUILD)/kernel64/KERNEL64.BIN=KERNEL64.BIN \
+	  --output $@ --info $(BUILD)/efi64-info.json
+	@sha=$$(sha256sum $@ | cut -d" " -f1); echo "UEFI64 OK: $$(stat -c %s $@) bytes sha256=$$sha"
+
+uefi64: $(BUILD)/efi64.img
+
+# Stub firmware, not OVMF: the loader's and kernel's own code runs under a
+# long-mode emulator.  `make ovmf-test` remains the only gate that can claim
+# real firmware, and it is still not available here (see TEST_RESULTS.md).
+stubtest64: $(BUILD)/efi64.img $(BUILD)/kernel64/KERNEL64.BIN
+	python3 tests/boot64_stubtest.py --image $(BUILD)/uefi64/BOOTX64.EFI \
+	  --kernel $(BUILD)/kernel64/KERNEL64.BIN \
+	  --json-out $(BUILD)/stubtest64-report.json
 
 # ---------------------------------------------------------------- UEFI ----
 # The UEFI boot application is an ordinary PE32+ EFI image built with the
