@@ -1,8 +1,8 @@
 {
   "command": "make verify",
-  "commit": "004f8cc49ae7c71d4ccadbc001f1e572765e08c7",
+  "commit": "6d8ed5b6e769502fcf18b4516a0d2946b226899d",
   "date": "2026-11-16",
-  "dirty": true,
+  "dirty": false,
   "exit_code": 0,
   "gate": "verify",
   "level": "ISO structure",
@@ -10,6 +10,6 @@
   "result": "passed",
   "schema": "pc5.validation/1",
   "source_date_epoch": 1763251200,
-  "summary": "VALID: build/pc5.iso  sha256=253ad80973a4a838846db0efa6a9a968bcb3d3af4ef7609a8842437300283c08",
+  "summary": "MANIFEST VALID: build/pc5.iso matches build/pc5.iso.manifest.json",
   "tool": "tools/validation.py"
 }
