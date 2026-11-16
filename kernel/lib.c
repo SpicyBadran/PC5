@@ -286,3 +286,21 @@ int pc5_snprintf(char *buf, u32 max, const char *fmt, ...)
     va_end(ap);
     return n;
 }
+
+/* ------------------------------------------------------- boot contract */
+/* One predicate for the two things the kernel has to believe about the boot
+ * information before it touches anything else.  It lives here, next to the
+ * string helpers, so the host unit test can execute the same code the kernel
+ * runs - a magic check that is only ever read in main.c is a check nobody has
+ * ever tested.
+ *
+ * Returns 0 when the block is acceptable, 1 when the magic is wrong and 2 when
+ * the protocol version is not the one this kernel was built for. */
+int pc5_boot_info_problem(const struct pc5_boot_info *bi)
+{
+    if (!bi || bi->magic != PC5_BOOT_MAGIC)
+        return 1;
+    if (bi->version != PC5_PROTOCOL_VERSION)
+        return 2;
+    return 0;
+}

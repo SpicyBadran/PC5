@@ -368,22 +368,30 @@
         "M0",
         "M1a"
       ],
-      "advances": "boot on a UEFI machine, which is the only configuration current PC hardware offers",
+      "advances": "boot on a UEFI machine, which is the only configuration current PC hardware offers, with a handover that is validated rather than assumed",
       "deliverables": [
         "boot/uefi/",
         "tools/mkefiimg.py",
-        "tests/ovmf_boot.py"
+        "tools/ovmf_setup.sh",
+        "tests/ovmf_boot.py",
+        "tests/uefi_stubtest.py"
       ],
       "acceptance": [
-        "the loader's logic is executed against stub firmware, 48 checks - done",
-        "the same BOOTX64.EFI is booted by genuine OVMF, cold and warm variable store - done (docs/TEST_RESULTS.md section 16)",
+        "the loader's logic is executed against stub firmware, 58 checks - done",
+        "the same BOOTX64.EFI is booted by genuine OVMF, cold and warm variable store - done (docs/TEST_RESULTS.md section 16); NOT re-run under OVMF on every machine, see section 18.6",
         "the kernel reaches PC5-BOOT-OK under OVMF - done",
+        "the handover window is validated against the firmware memory map before ExitBootServices (E15) - done, executed against stub firmware (section 18.4)",
+        "a memory map that does not fit fails instead of truncating (E16) - done",
+        "the kernel copy is read back before the jump (E17) - done",
+        "the firmware watchdog is disarmed before handover - done",
         "one physical UEFI machine boots it with Secure Boot off - NOT done",
-        "the loader hands the ACPI RSDP over - NOT done (the kernel reports acpi=absent on this path)"
+        "the loader hands the ACPI RSDP over - NOT done (the kernel reports acpi=absent on this path)",
+        "Secure Boot support - NOT CLAIMED: no signing key, no shim; the harness asserts the refusal"
       ],
       "evidence": [
         "docs/TEST_RESULTS.md",
         "tests/ovmf_boot.py",
+        "tests/uefi_stubtest.py",
         "boot/uefi/README.md"
       ],
       "legacy": [

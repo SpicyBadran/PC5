@@ -48,7 +48,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: all iso uefi check test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets
+.PHONY: ovmf-setup ovmf-check all iso uefi check test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets
 
 all: iso
 
@@ -217,7 +217,17 @@ stubtest: $(ISO)
 ovmf-test: $(ISO) $(BUILD)/efi.img
 	python3 tests/ovmf_boot.py --iso $(ISO) --efi-image $(BUILD)/efi.img \
 	  --kernel $(BUILD)/kernel.bin --json-out $(BUILD)/ovmf-report.json \
-	  $(OVMF_ARGS)
+	  --matrix-out $(BUILD)/ovmf-matrix.json $(OVMF_ARGS)
+
+# Provision the external dependencies of the gate above (QEMU and a real
+# TianoCore OVMF build) with the distribution's package manager, then print the
+# firmware paths and hashes the report has to record.  Nothing is downloaded
+# into the tree: firmware stays where the distribution put it.
+ovmf-setup:
+	sh tools/ovmf_setup.sh
+
+ovmf-check:
+	sh tools/ovmf_setup.sh --check
 
 test: check boot-test stubtest
 

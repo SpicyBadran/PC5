@@ -799,3 +799,55 @@ that every claim about how far it has got is machine-checked.**
   measured analyser output, LFS metadata), `tests/test_product_identity.py`
   (the pointer's oid/size are asserted and the payload's absence is asserted),
   `docs/PS5_SYSTEM_SOFTWARE_TARGET.md` (what is known and what is not).
+
+---
+
+## ADR-023 — The loader validates what firmware hands it, and firmware is an external dependency of the gate
+
+* **Context**: the UEFI loader copied the kernel to a fixed address, trusted the
+  memory map it was given and reported a handover it had never verified. All
+  three are invisible when the machine is well behaved, which the emulator is;
+  the first reserved low page on a real board turns each into a crash a long way
+  from its cause. At the same time, the only way to execute real firmware is to
+  depend on a package the repository does not contain, which repeatedly produced
+  the failure mode this project exists to avoid: a gate that silently degrades
+  into "skipped" and is read as green.
+* **Decision**:
+  1. **Validate, then cross.** Before `ExitBootServices`, the loader checks that
+     its whole handover window `[0x2000, 0x9F000)` — E820 buffer, VBE block, PVD
+     buffer, boot info, kernel, stack — is covered by conventional memory in the
+     map it is about to hand over (`E15`); the kernel copy is read back before
+     the jump (`E17`); descriptors are merged rather than silently truncated and
+     an over-large map is `E16`.
+  2. **The map key is a loop, not a formality.** `GetMemoryMap` and
+     `ExitBootServices` stay one retry loop: nothing that can allocate runs
+     between the keyed query and the call, `EFI_INVALID_PARAMETER` means "read
+     it again", and exhausting the retries is a failure with a code (`E13`), not
+     a jump.
+  3. **Firmware is external and versioned, and the gate says when it is absent.**
+     No firmware is committed, embedded or downloaded into the tree;
+     `tools/ovmf_setup.sh` provisions it from the distribution, the report
+     records its paths and SHA-256, and a missing dependency is exit code 3
+     (NOT TESTED) — which fails CI rather than passing quietly.
+  4. **Secure Boot is judged by the refusal.** PC5 signs nothing, so an image
+     that boots with a policy enabled is evidence the policy was not in force,
+     not evidence of compatibility.
+  5. **A row in the required matrix is never inherited.** `--matrix-out` marks a
+     row `verified` only when an executed run produced it, `external` when its
+     evidence is a named different gate, `not-tested` otherwise.
+* **Alternatives considered**: allocating the kernel with `AllocateAddress` and
+  letting firmware choose the address (rejected: the boot contract fixes
+  `0x10000`, and moving it is a protocol bump); keeping the silent truncation at
+  `E820_MAX` (rejected: an under-reported map is worse than a stopped boot);
+  vendoring an OVMF blob so the gate always runs (rejected: unversioned
+  proprietary-adjacent binary in a repository whose whole legal position is that
+  it ships no firmware).
+* **Consequences**: the loader now fails early and loudly where it used to
+  succeed by luck, which is the point; the OVMF gate has a provisioning step
+  someone has to run; and a machine without OVMF reports NOT TESTED rather than
+  a green tick.
+* **Evidence**: `docs/TEST_RESULTS.md` §18 (58/58 stub checks, 119/119 BIOS
+  checks, 165 unit checks, OVMF not tested there), `boot/uefi/uefi_main.c`
+  (`E15`–`E17`, watchdog, retry loop), `tests/uefi_stubtest.py`,
+  `tests/ovmf_boot.py` (`--secure-boot`, `--matrix-out`),
+  `tools/ovmf_setup.sh`.

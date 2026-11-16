@@ -31,7 +31,7 @@ What *does* work today, verified in this repository:
 | Reproducible ISO build (`build/pc5.iso`) | COMPLETE AND VERIFIED | `make iso`, [`docs/TEST_RESULTS.md`](docs/TEST_RESULTS.md) |
 | ISO structure (ISO9660 + El Torito BIOS and UEFI sections + boot descriptor + hybrid MBR) | COMPLETE AND VERIFIED | `make verify` → VALID |
 | Boots on an emulated x86 PC (SeaBIOS, CD-ROM and, with the CD detached, its hybrid MBR) | COMPLETE AND VERIFIED | `make boot-test` → 119/119 checks |
-| UEFI boot path (PE32+ `\EFI\BOOT\BOOTX64.EFI`, GOP, FAT ESP) | BOOTED BY REAL OVMF FIRMWARE | `make ovmf-test` → 40 checks, 1 NOT APPLICABLE, `PC5-OVMF-BOOT-OK`; stub-firmware run 48/48. Physical hardware, Secure Boot and disk-style UEFI boot are NOT tested — [`docs/TEST_RESULTS.md`](docs/TEST_RESULTS.md) §16 |
+| UEFI boot path (PE32+ `\EFI\BOOT\BOOTX64.EFI`, GOP, FAT ESP) | BOOTED BY REAL OVMF FIRMWARE (prior run); chain hardened and executed against stub firmware, 58/58 | `make ovmf-test` → 40 checks, 1 NOT APPLICABLE, `PC5-OVMF-BOOT-OK` on the machine that had OVMF (§16); memory-map validation, retry policy, watchdog and read-back handoff executed under the stub firmware (§18). **Not re-run under OVMF here**; physical hardware, Secure Boot (unsupported — no signing key) and disk-style UEFI boot are NOT tested |
 | ATA PIO write, cache flush and verified read-back (explicit test only) | COMPLETE AND VERIFIED (emulated IDE disk) | `wtest` over the serial console; `make boot-test` compares the image and SHA-256 |
 | Kernel reads its own medium (ATAPI + ISO9660, no firmware calls) | COMPLETE AND VERIFIED (emulated) | `storage_mounted volume=PC5` in the boot log |
 | MBR/GPT partition discovery, read-only | COMPLETE AND VERIFIED (emulated disk + unit tests) | `partitions device=0 scheme=gpt count=2 status=ok`; a damaged table reports `status=crc` |
@@ -117,7 +117,7 @@ firmware, not OVMF — install the one optional dependency:
 
 ```sh
 pip install "unicorn==2.1.4"
-make stubtest   # 48 checks; exits 2 and says so if unicorn is absent
+make stubtest   # 58 checks; exits 2 and says so if unicorn is absent
 make ovmf-test  # real OVMF boot; 0 = verified, 1 = failed, 3 = NOT TESTED
 ```
 

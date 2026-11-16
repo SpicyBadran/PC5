@@ -17,7 +17,10 @@ session, on this source tree.
 Sections 9–16 are later milestones (M1d, M1e, M1f, M1g, M1h, M1i, and M2 in
 §16 — the first section recorded against *real firmware* rather than an
 emulator). §17 records the M0 architecture realignment, which changes documents,
-the roadmap graph and the gate vocabulary rather than the boot path. Each
+the roadmap graph and the gate vocabulary rather than the boot path. §18 records
+the UEFI boot-chain hardening and the four-tier result that follows from it:
+the loader is executed under the stub firmware, the BIOS path is executed under
+v86, and genuine OVMF was **not** available on the machine that ran these. Each
 section starts with its own build inputs, sizes and hashes; the artifact numbers
 in §1 describe base `5ab7c48` and are kept as history, not as the current image.
 The current image is the one in §17.2 (and, for the firmware measurement, §16).
@@ -1899,3 +1902,157 @@ and gate vocabulary, which is exactly the part those gates cover.
   M0 is a governance milestone; `M17`–`M21` remain blocked with named blockers.
 * No gate in this section executed guest code. §16 remains the only section
   recorded under real firmware, and it measured the PC5 loader, not Sony code.
+
+---
+
+## 18. UEFI boot chain: validated handover, and what could not be executed
+
+Requested as "M2: real UEFI firmware boot, OVMF validation", which in this
+roadmap is `M1c` (UEFI boot path under real firmware, **complete**, `§16`) plus
+the hardening that `M1c`'s acceptance list did not yet demand. `M2` proper —
+hardware abstraction and drivers — is untouched by this section.
+
+### 18.1 Inputs
+
+| | |
+|---|---|
+| Branch | `arena/804a7d39-pc5`, based on `main` `bc8b41d` (PR #18 merged) |
+| Commit under test | the four commits of this branch (loader, harness, tests, docs) |
+| Host | Debian 12 x86-64, gcc 12.2.0, python 3.11.2, node 22.22.3 |
+| Harnesses available | `unicorn` 2.1.4 (installed into a venv, `pip install unicorn`), `v86-system` 0.5.0 (`npm install v86-system`) |
+| Harnesses **not** available | `qemu-system-x86_64` (not installed, no package access), TianoCore OVMF (not present) |
+
+### 18.2 Artifact under test
+
+`make iso` with `SOURCE_DATE_EPOCH=1763251200` → `build/pc5.iso`, 1,601,536
+bytes, sha256 `29dcc23179b98821b64f61878c37287d1ec8cf142be97add1455657c6b8e70ea`;
+`KERNEL.BIN;1` 67,028 bytes (the kernel gained the boot-contract predicate);
+loader `uefi-0.2.0` with the checks listed in 18.3. A second clean build from the
+same inputs produced the same sha256 — the number below is reproducible, not a
+timestamp. (With no `SOURCE_DATE_EPOCH` the build stamps the wall clock, so two
+builds minutes apart legitimately differ; that is invariant I8, not a
+regression.)
+
+### 18.3 What changed in the loader
+
+| Change | Why it was wrong before | Failure code if it now triggers |
+|---|---|---|
+| the handover window `[0x2000, 0x9F000)` is checked against the firmware memory map before `ExitBootServices` | the kernel was copied to a fixed address with no check that the range was conventional memory; on a machine with reserved low memory the copy would land in firmware memory and the crash would appear inside the kernel | `E15` |
+| the memory map is merged and an over-large map is a failure instead of a silent truncation | `build_e820` stopped at 40 entries, so a firmware that reports memory in many pieces lost entries — under-reporting usable memory and possibly hiding a reserved region | `E16` |
+| the kernel copy is read back with `memcmp` before the jump | a short or misplaced copy produced a jump to bytes that were not the file | `E17` |
+| `SetWatchdogTimer(0,…)` before `ExitBootServices` | firmware may arm a watchdog; a reset mid-handover looks like a hardware fault | trace line `watchdog_disabled` / `watchdog_disable_refused=` |
+| boot-service pointer table gains `set_watchdog_timer` at its specified offset (+256), pinned by a `_Static_assert` | the slot existed only as `void *`; a wrong offset would corrupt the table | compile time |
+| the kernel's boot-information validation is one predicate (`pc5_boot_info_problem`) used by `kmain` and by the host unit test | the check existed only inline in `kmain`, where nothing could test it | `pc5: FATAL: bad boot info magic` / `boot protocol version mismatch` |
+
+The `ExitBootServices` sequence itself was already correct and is unchanged: a
+size probe, a buffer sized with slack, a keyed `GetMemoryMap`, **no** firmware
+call between the keyed query and `ExitBootServices`, `EFI_INVALID_PARAMETER`
+treated as "the map moved" (re-read, up to 8 attempts), any other error fatal,
+and after success no console protocol call at all (`console_closed`).
+
+### 18.4 Executed: the loader under the stub firmware (`make stubtest`)
+
+`tests/uefi_stubtest.py` executes the real `build/uefi/BOOTX64.EFI` (PE32+,
+relocated, Unicorn x86-64) against a stub that implements EFI tables at the
+specification's byte offsets.
+
+**58/58 checks passed**, up from 48. The ten new checks:
+
+| Check | Result |
+|---|---|
+| no boot service was called after `ExitBootServices` (every slot wrapped) | PASS — `[]` |
+| the watchdog was disabled while boot services were still callable | PASS — `timeout=0`, before exit |
+| a firmware that refuses to disable its watchdog still boots, and says so | PASS |
+| a fragmented memory map is merged, not truncated | PASS — 6 entries both ways, same usable total |
+| the handover window was checked against the map | PASS — `handover_window_checked=1` |
+| the kernel copy was read back before the handover | PASS — `kernel_handoff_verified=1`, `handoff_bytes=67028` |
+| a key that is always stale stops the boot with `E13`, never a false success | PASS — 8 attempts, no `boot_services_exited` line |
+| two stale keys are retried twice, then the handover proceeds | PASS — `ExitBootServices_retries=2` |
+| low memory that is not conventional stops the boot with `E15` | PASS |
+| a memory map too large for the E820 buffer stops the boot with `E16` | PASS |
+
+Serial excerpt from the clean run (as executed):
+
+```
+PC5-UEFI: watchdog_disabled
+PC5-UEFI: boot_services_exited
+PC5-UEFI: memory_map_entries=6
+PC5-UEFI: ExitBootServices_retries=0
+PC5-UEFI: handover_window_checked=1
+PC5-UEFI: memory_conventional_mib=2
+PC5-UEFI: kernel_handoff_verified=1
+PC5-UEFI: handoff_bytes=67028
+```
+
+These are *loader-logic* results. The firmware is a stub: it models the
+interfaces and the misbehaviours, not the machine.
+
+### 18.5 Executed: the BIOS path (regression)
+
+`make boot-test` (v86, SeaBIOS): **119/119 checks**, including the El Torito
+boot, the MBR-as-hard-disk boot, FAT32 create/overwrite on a disposable disk,
+GPT parsing and every UI page. The UEFI change did not regress the BIOS path,
+and the two `KERNEL.BIN` copies in the image are still byte-identical.
+
+`make verify`: **VALID**, per-file hashes match `build-info.json`.
+
+`make unit`: **165 checks, 0 failures** — the five new ones are the boot-contract
+predicate: good block accepted, bad magic rejected (1), version mismatch rejected
+(2), empty block rejected, null pointer rejected.
+
+### 18.6 NOT EXECUTED: genuine OVMF
+
+The machine that produced this section has no QEMU and no OVMF, and no package
+access to install them. `tests/ovmf_boot.py` therefore exits **3 (NOT TESTED)**
+and prints the required matrix with no row executed:
+
+```
+[FAIL] no qemu-system-x86_64 (set PC5_QEMU)  (external dependency missing)
+[FAIL] no OVMF CODE image found (set PC5_OVMF_CODE)  (external dependency missing)
+NOT TESTED: genuine OVMF firmware and/or QEMU is not available on this machine.
+Required matrix rows: 22, none executed here.
+```
+
+This is not a pass and is not counted as one. The last real-firmware run remains
+§16 (40 checks, 1 NOT APPLICABLE, `PC5-OVMF-BOOT-OK`) on the machine that had
+OVMF. What this branch adds for that machine:
+
+* six more checks per boot: the handover window, the watchdog, the retry count,
+  the read-back handoff, the on-medium kernel size, and the kernel's own memory
+  report cross-checked against the loader's count (two independent witnesses to
+  the same handover);
+* a Secure Boot mode (`--secure-boot`, SMM + secure flash) that asserts the
+  *refusal* an unsigned image must get, because PC5 has no key and no shim;
+* a low-memory negative run (24 MiB) that must fail safely;
+* a required matrix (`build/ovmf-matrix.json`, 22 rows) in which a row is
+  `verified` only if an executed run produced it, `external` if its evidence is
+  another gate (named), and `not-tested` otherwise;
+* `make ovmf-setup`, which provisions QEMU and OVMF from the distribution's
+  packages and prints the firmware paths and hashes the report must record.
+
+### 18.7 The matrix, as it stands
+
+| Requirement | Evidence | State |
+|---|---|---|
+| firmware recognises the medium; EFI entry found; loader executes | `§16` OVMF run (other machine) | OVMF-EXECUTED, not re-run here |
+| required files located and loaded | `§18.4` stub (executed), `§16` | EXECUTED (stub) |
+| memory map read, merged, window validated | `§18.4` | EXECUTED (stub) |
+| `ExitBootServices` with a current key, retries, no false success | `§18.4` | EXECUTED (stub) |
+| kernel handoff, entry point, boot info accepted | `§18.4` + `§18.5` unit | EXECUTED (stub) + BUILD-VERIFIED |
+| kernel reaches `PC5-BOOT-OK` | `§16` (OVMF), `§18.5` (BIOS/v86) | OVMF-EXECUTED (prior), BIOS EXECUTED |
+| missing kernel / invalid EFI image / truncated medium | `§16` negative runs (OVMF), `§18.4` E2/E4 (stub) | OVMF-EXECUTED (prior) |
+| invalid boot information rejected | `§18.5` host unit test | BUILD-VERIFIED |
+| insufficient memory fails safely | implemented in the harness | NOT TESTED |
+| Secure Boot policy enforced on an unsigned image | implemented in the harness | NOT TESTED |
+| repeatable reboot | `§16` cold + warm | OVMF-EXECUTED (prior) |
+| BIOS regression | `§18.5` | EXECUTED |
+
+### 18.8 What this section does not establish
+
+* Nothing here proves the loader boots on real firmware *today*. The only
+  real-firmware evidence in this repository is §16, from a machine with OVMF.
+* No physical machine was booted, so `M1` (level 1) stays `not_started`.
+* ACPI is still not handed over: the UEFI path passes no RSDP, and the kernel
+  reports `acpi=absent` there. Fixing that changes `struct pc5_boot_info`, which
+  is a protocol bump under invariant I4 and is not attempted here.
+* Secure Boot is not supported and is not claimed: PC5 ships no signature.

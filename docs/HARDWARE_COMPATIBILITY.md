@@ -47,6 +47,31 @@ record; nothing else is accepted.
 | Display | `VBE` mode list | framebuffer address, geometry, pitch, bpp |
 | Input | 8042 controller | presence/initialisation status |
 
+### 3.1 What the UEFI path obtains from firmware, and what it still needs
+
+The UEFI boot path is the only path on which PC5 talks to firmware through a
+defined interface instead of through a BIOS interrupt table. What it takes from
+that interface today, and what the platform model will need later, are different
+lists; conflating them is how "we boot on UEFI" turns into "we are ready for the
+PS5 platform".
+
+| Information | UEFI source | Obtained today | Needed by | Needed for |
+|---|---|---|---|---|
+| memory map and ownership | `GetMemoryMap` (+ key) | yes — merged into E820, validated for the load window | `M2b`, `M12` | the guest's physical address space |
+| CPU capabilities | `CPUID` from the kernel after handover | yes | `M2a`, `M11` | the execution environment the contract assumes |
+| ACPI tables (RSDP) | configuration table | **no** — not handed over; kernel reports `acpi=absent` | `M2`, `M16` | timers, interrupt controllers, power |
+| PCIe topology | kernel scan (config mechanism #1) | yes, after handover | `M2`, `M13` | device model backing |
+| framebuffer geometry | GOP | yes — synthesised as a VBE block | `M7`, `M14` | graphics device model |
+| block devices | firmware block I/O, **not used**; ESP via file protocol | file protocol only | `M13` | storage model |
+| firmware interfaces | Boot Services, then none | yes — exited once, never called after | `M17` | the trust boundary is *outside* this |
+| timer interrupts | 8254/PIT and APIC | PIT only | `M2a`, `M16` | service timing |
+
+The last row of that table is the architectural point: what firmware offers is a
+*host* platform, and the PS5 contract (`architecture/PS5_PLATFORM_CONTRACT.md`)
+is a different one. Booting under OVMF proves PC5 can drive a standard UEFI
+machine; it says nothing about the console's platform, and no row above is
+counted as progress on `M10`–`M16`.
+
 ## 4. Qualification matrix — the honest version
 
 Nothing below has been run on physical hardware by this project. The matrix is

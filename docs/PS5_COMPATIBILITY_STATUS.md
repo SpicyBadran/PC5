@@ -73,7 +73,8 @@ been attempted, so nothing above stage 4 is claimed.
 | Capability | Status | Evidence |
 |---|---|---|
 | Bootable ISO (BIOS El Torito + UEFI section + hybrid MBR) | COMPLETE AND VERIFIED | `make verify` VALID, `TEST_RESULTS.md` |
-| UEFI boot under genuine OVMF firmware | COMPLETE AND VERIFIED (emulator) | `make ovmf-test` 40 pass / 1 N/A, §16 |
+| UEFI boot under genuine OVMF firmware | COMPLETE AND VERIFIED (emulator, prior machine) | `make ovmf-test` 40 pass / 1 N/A, §16 |
+| UEFI boot chain executed against stub firmware, including the memory-map and handoff checks | COMPLETE AND VERIFIED (stub) | `make stubtest` 58/58, §18 |
 | Loader (A20, E820, VBE, font, ISO probe, kernel load, PM handoff) | COMPLETE AND VERIFIED (emulated) | serial log |
 | Framebuffer console, text fallback, read-back self-test | COMPLETE AND VERIFIED (emulated) | diagnostics page |
 | CPUID / E820 / PCI / ACPI / SMBIOS inventory | IMPLEMENTED — TESTING REQUIRED | hardware page; no physical run |

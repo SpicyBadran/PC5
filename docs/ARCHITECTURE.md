@@ -186,16 +186,25 @@ The handover is also *executed*: `tests/uefi_stub_firmware.py` runs the real
 `BOOTX64.EFI` on the Unicorn CPU emulator, with firmware replaced by a stub that
 answers Simple Text Output, GOP, Boot Services, Loaded Image, Device Path and a
 two-volume Simple File System at the slots the specification assigns, and
-`tests/uefi_stubtest.py` (48 checks, `make stubtest`) asserts the trace, the
-boot-info block, the VBE block, the E820 conversion, `ExitBootServices`, the GDT
-and the far jump. Because that stub is not firmware — no ACPI, no PCI, no
+`tests/uefi_stubtest.py` (58 checks, `make stubtest`) asserts the trace, the
+boot-info block, the VBE block, the E820 conversion and merging, the handover
+window against the map, `ExitBootServices` and its retry policy, the watchdog,
+the read-back of the kernel copy, the GDT and the far jump. Because that stub is not firmware — no ACPI, no PCI, no
 interrupts, and `lgdt`/segment loads/`lretq` emulated by the harness — a stub run
 proves the loader's logic and the handover contract, not UEFI compatibility.
 
 The firmware side is proved separately by `make ovmf-test`, which boots the ISO
 under genuine TianoCore OVMF in QEMU, cold and warm, and prints
-`PC5-OVMF-BOOT-OK` from the harness after 40 checks (1 NOT APPLICABLE). Physical
-UEFI hardware is still untested; see `docs/TEST_RESULTS.md` §16.
+`PC5-OVMF-BOOT-OK` from the harness after 40 checks (1 NOT APPLICABLE) — see
+`docs/TEST_RESULTS.md` §16. That gate now also cross-checks the kernel's own
+memory report against the loader's count, asserts the Secure Boot policy refuses
+an unsigned image, runs a low-memory negative case and emits a 22-row required
+matrix (`§18`). Physical UEFI hardware is still untested.
+
+Memory ownership at the handover is a checked property, not an assumption: the
+loader validates its whole `[0x2000, 0x9F000)` window against the map before it
+calls `ExitBootServices` (`E15`), merges descriptors instead of truncating them
+(`E16`), and reads the kernel copy back before jumping (`E17`).
 
 ## 6. Why a Linux foundation is not in this build
 

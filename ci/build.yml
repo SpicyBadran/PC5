@@ -185,6 +185,53 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # The UEFI integration gate.  It is a separate job on purpose: it needs real
+  # firmware and a real emulator, and a run in which either is missing must fail
+  # here rather than be quietly folded into the boot job.  Exit code 3 from the
+  # harness (NOT TESTED) fails this job, by design - a green pipeline that never
+  # executed firmware would be the whole problem this gate exists to prevent.
+  ovmf:
+    name: UEFI boot under genuine OVMF
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - name: Provision QEMU and TianoCore OVMF
+        run: |
+          set -eu
+          ./tools/ovmf_setup.sh
+          # Record exactly which firmware this run used.
+          ./tools/ovmf_setup.sh --check | tee build/ovmf-setup.log || true
+
+      - name: Build the image under test
+        run: |
+          set -eu
+          mkdir -p build
+          make iso
+          make uefi
+
+      - name: Boot it under OVMF, including the Secure Boot policy check
+        run: |
+          set -eu
+          make ovmf-test OVMF_ARGS="--secure-boot"
+          # any exit code other than 0 fails the step; 3 (NOT TESTED) included.
+
+      - name: Keep the firmware report, serial logs and the matrix
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pc5-ovmf-${{ github.sha }}
+          path: |
+            build/ovmf-report.json
+            build/ovmf-matrix.json
+            build/ovmf/
+            build/ovmf-setup.log
+          if-no-files-found: warn
+          retention-days: 30
+
   release:
     name: publish release assets
     needs: build

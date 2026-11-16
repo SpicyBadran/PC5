@@ -64,6 +64,26 @@ CODE_CANDIDATES = [
     "/usr/share/OVMF/OVMF_CODE.secboot.fd",
     "/usr/share/edk2-ovmf/x64/OVMF_CODE.fd",
 ]
+SECBOOT_CODE_CANDIDATES = [
+    os.environ.get("PC5_OVMF_SECBOOT_CODE", ""),
+    "/usr/share/OVMF/OVMF_CODE_4M.secboot.fd",
+    "/usr/share/OVMF/OVMF_CODE.secboot.fd",
+    "/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd",
+    "/usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd",
+    "/usr/share/ovmf/OVMF_CODE.secboot.fd",
+    "/usr/share/edk2-ovmf/x64/OVMF_CODE.secboot.fd",
+    "/usr/share/qemu/OVMF_CODE.secboot.fd",
+]
+SECBOOT_VARS_CANDIDATES = [
+    os.environ.get("PC5_OVMF_SECBOOT_VARS", ""),
+    "/usr/share/OVMF/OVMF_VARS_4M.ms.fd",
+    "/usr/share/OVMF/OVMF_VARS.secboot.fd",
+    "/usr/share/edk2/ovmf/OVMF_VARS.secboot.fd",
+    "/usr/share/edk2/x64/OVMF_VARS.secboot.4m.fd",
+    "/usr/share/ovmf/OVMF_VARS.secboot.fd",
+    "/usr/share/edk2-ovmf/x64/OVMF_VARS.secboot.fd",
+    "/usr/share/qemu/OVMF_VARS.secboot.fd",
+]
 VARS_CANDIDATES = [
     os.environ.get("PC5_OVMF_VARS", ""),
     "/usr/share/OVMF/OVMF_VARS_4M.fd",
@@ -187,7 +207,8 @@ def qemu_version(qemu):
 
 # ---------------------------------------------------------------- QEMU run
 def run_qemu(qemu, data_dir, iso, vars_path, serial_path, timeout, memory_mb=256,
-             stop_markers=("PC5-BOOT-OK", "PC5-UEFI-FAILURE"), extra_wait=None):
+             stop_markers=("PC5-BOOT-OK", "PC5-UEFI-FAILURE"), extra_wait=None,
+             secure=False):
     """Boot the ISO once and stop the machine as soon as the log settles.
 
     Serial goes to stdout rather than to a file because QEMU buffers a file
@@ -196,9 +217,12 @@ def run_qemu(qemu, data_dir, iso, vars_path, serial_path, timeout, memory_mb=256
     evidence is also what "clean shutdown" means here - the machine is powered
     off on purpose, and the log is written out either way.
     """
+    # Secure Boot needs SMM and a "secure" flash, otherwise the firmware
+    # silently runs with its policy disabled and a refusal becomes meaningless.
+    machine = "q35,smm=on" if secure else "q35"
     command = [
         qemu,
-        "-machine", "q35",
+        "-machine", machine,
         "-m", str(memory_mb),
         "-smp", "1",
         "-no-reboot",
@@ -211,6 +235,8 @@ def run_qemu(qemu, data_dir, iso, vars_path, serial_path, timeout, memory_mb=256
         "-cdrom", iso["iso"],
         "-serial", "stdio",
     ]
+    if secure:
+        command += ["-global", "driver=cfi.pflash01,property=secure,value=on"]
     if data_dir:
         command += ["-L", data_dir]
 
@@ -282,6 +308,18 @@ def classify(run):
         "boot_services_exited": "PC5-UEFI: boot_services_exited" in text,
         "exit_retries": _number(text, r"PC5-UEFI: ExitBootServices_retries=(\d+)"),
         "memory_map_entries": _number(text, r"PC5-UEFI: memory_map_entries=(\d+)"),
+        "handover_window_checked": _number(text, r"PC5-UEFI: handover_window_checked=(\d+)"),
+        "handoff_verified": "PC5-UEFI: kernel_handoff_verified=1" in text,
+        "handoff_bytes": _number(text, r"PC5-UEFI: handoff_bytes=(\d+)"),
+        "kernel_bytes_read": _number(text, r"PC5-UEFI: kernel_bytes_read=(\d+)"),
+        "conventional_mib": _number(text, r"PC5-UEFI: memory_conventional_mib=(\d+)"),
+        "watchdog": ("disabled" if "PC5-UEFI: watchdog_disabled" in text else
+                     "refused" if "PC5-UEFI: watchdog_disable_refused=" in text else None),
+        # the kernel's own report of what it was handed: independent of the
+        # loader's claims, because it is produced after the handover by code
+        # the loader never runs.
+        "kernel_memory_entries": _number(text, r"PC5-LOG memory_mib=\d+ entries=(\d+)"),
+        "kernel_memory_mib": _number(text, r"PC5-LOG memory_mib=(\d+)"),
         "kernel_entry": "PC5-LOG kernel_entry eip=0x10000" in text,
         "kernel_protocol": "PC5-LOG protocol=1 magic=ok" in text,
         "boot_ok": "PC5-BOOT-OK" in text,
@@ -328,7 +366,7 @@ class Report:
                 "not_applicable": self.skip_count()}
 
 
-def check_boot(report, run, stage):
+def check_boot(report, run, stage, expected_kernel_bytes=None):
     """Judge one boot: firmware ran, our loader ran, the kernel ran."""
     seen = classify(run)
     report.data[stage] = {"markers": seen, "seconds": run["seconds"],
@@ -356,6 +394,26 @@ def check_boot(report, run, stage):
                  seen["boot_services_exited"])
     report.check(f"[{stage}] a memory map was handed over",
                  (seen["memory_map_entries"] or 0) > 0, seen["memory_map_entries"])
+    report.check(f"[{stage}] the load window was checked against that map (E15 guard)",
+                 seen["handover_window_checked"] == 1, seen["handover_window_checked"])
+    report.check(f"[{stage}] firmware watchdog was disabled while services were callable",
+                 seen["watchdog"] in ("disabled", "refused"), seen["watchdog"])
+    report.check(f"[{stage}] ExitBootServices reported its retry count",
+                 seen["exit_retries"] is not None, seen["exit_retries"])
+    report.check(f"[{stage}] the kernel copy was read back at the handover address",
+                 seen["handoff_verified"])
+    if expected_kernel_bytes:
+        report.check(f"[{stage}] the handover carried exactly the kernel file",
+                     seen["handoff_bytes"] == expected_kernel_bytes,
+                     f"{seen['handoff_bytes']} vs {expected_kernel_bytes}")
+        report.check(f"[{stage}] the loader read the kernel file at its real size",
+                     seen["kernel_bytes_read"] == expected_kernel_bytes,
+                     f"{seen['kernel_bytes_read']} vs {expected_kernel_bytes}")
+    report.check(f"[{stage}] the kernel's own map agrees with the loader's count",
+                 seen["kernel_memory_entries"] is not None and
+                 seen["kernel_memory_entries"] == seen["memory_map_entries"],
+                 f"kernel {seen['kernel_memory_entries']} vs loader "
+                 f"{seen['memory_map_entries']}")
     report.check(f"[{stage}] the kernel reached its entry point",
                  seen["kernel_entry"])
     report.check(f"[{stage}] the kernel accepted the boot contract",
@@ -470,9 +528,15 @@ def main(argv=None):
     parser.add_argument("--skip-negative", action="store_true",
                         help="only boot the good ISO (no mutant machines)")
     parser.add_argument("--list-firmware", action="store_true")
+    parser.add_argument("--secure-boot", action="store_true",
+                        help="also boot with Secure Boot enabled, and assert that an "
+                             "unsigned PC5 image is refused rather than accepted")
+    parser.add_argument("--matrix-out", help="write the required test matrix here as JSON")
     args = parser.parse_args(argv)
 
     found = discover(args)
+    found["secure_code"] = find_first(SECBOOT_CODE_CANDIDATES)
+    found["secure_vars"] = find_first(SECBOOT_VARS_CANDIDATES)
     if args.list_firmware:
         print("qemu:", found["qemu"] or "not found")
         print("OVMF CODE candidates:")
@@ -481,6 +545,10 @@ def main(argv=None):
                 print("  %-52s %s" % (path, "present" if os.path.isfile(path) else "-"))
         print("OVMF VARS candidates:")
         for path in VARS_CANDIDATES:
+            if path:
+                print("  %-52s %s" % (path, "present" if os.path.isfile(path) else "-"))
+        print("OVMF Secure Boot CODE candidates:")
+        for path in SECBOOT_CODE_CANDIDATES:
             if path:
                 print("  %-52s %s" % (path, "present" if os.path.isfile(path) else "-"))
         return 0
@@ -524,6 +592,11 @@ def main(argv=None):
         report.data["blockers"] = blockers
         for blocker in blockers:
             report.check(blocker, False, "external dependency missing")
+        build_matrix(report)
+        if args.matrix_out:
+            with open(args.matrix_out, "w") as handle:
+                json.dump(report.data["matrix"], handle, indent=2)
+                handle.write("\n")
         _emit(report, args, exit_code=3)
         return 3
 
@@ -540,7 +613,9 @@ def main(argv=None):
                     args.timeout, args.memory_mb)
     report.data["cold_command"] = cold["command"]
     report.data["cold_stderr"] = cold["stderr"]
-    check_boot(report, cold, "cold")
+    expected_kernel = (os.path.getsize(args.kernel)
+                       if os.path.isfile(args.kernel) else None)
+    check_boot(report, cold, "cold", expected_kernel)
     report.check("[cold] a fresh variable store was used and written by firmware",
                  os.path.getsize(cold_vars) == os.path.getsize(found["vars"]),
                  os.path.getsize(cold_vars))
@@ -552,7 +627,7 @@ def main(argv=None):
     warm = run_qemu(found["qemu"], data_dir, iso, cold_vars, warm_serial,
                     args.timeout, args.memory_mb)
     report.data["warm_command"] = warm["command"]
-    check_boot(report, warm, "warm")
+    check_boot(report, warm, "warm", expected_kernel)
     report.check("the second boot reused the variable store firmware had written",
                  os.path.getsize(cold_vars) == os.path.getsize(found["vars"]))
 
@@ -573,10 +648,150 @@ def main(argv=None):
     # ----------------------------------------------------------- isolation
     check_isolation(report, args.iso, code_info, efi_image=args.efi_image)
 
+    # ------------------------------------------------------- Secure Boot
+    if args.secure_boot:
+        if found["secure_code"] and found["secure_vars"]:
+            secure_boot_run(report, args, found["qemu"], data_dir, work, args.iso,
+                            found["secure_code"], found["secure_vars"])
+        else:
+            report.check("Secure Boot: firmware enforced its trust policy on the "
+                         "unsigned image", False,
+                         "no Secure Boot OVMF build found (set "
+                         "PC5_OVMF_SECBOOT_CODE / PC5_OVMF_SECBOOT_VARS)", applicable=False)
+
+    build_matrix(report)
+    if args.matrix_out:
+        with open(args.matrix_out, "w") as handle:
+            json.dump(report.data["matrix"], handle, indent=2)
+            handle.write("\n")
+
     report.data["status"] = "passed" if report.fail_count() == 0 else "failed"
     code = 0 if report.fail_count() == 0 else 1
     _emit(report, args, exit_code=code)
     return code
+
+
+REQUIRED_MATRIX = [
+    ("firmware recognises the PC5 boot medium", "cold"),
+    ("the EFI boot entry is discovered", "cold"),
+    ("the PC5 EFI loader executes", "cold"),
+    ("required files are located and loaded", "cold"),
+    ("memory allocation and ownership are correct", "cold"),
+    ("the firmware watchdog is disarmed before handover", "cold"),
+    ("ExitBootServices succeeds with a current map key", "cold"),
+    ("the kernel handoff succeeds", "cold"),
+    ("the kernel reaches its expected initialisation point", "cold"),
+    ("serial output proves the execution path", "cold"),
+    ("rebooting the same machine boots identically", "warm"),
+    ("a missing kernel is an explicit failure", "negative:no-kernel"),
+    ("an invalid EFI image is rejected", "negative:bad-pe"),
+    ("an ESP without BOOTX64.EFI is refused by firmware", "negative:no-boot-app"),
+    ("a truncated medium does not boot", "negative:truncated-iso"),
+    ("insufficient memory fails safely", "negative:low-memory"),
+    ("a boot that outlives its deadline is a timeout, not a pass", "negative:deadline"),
+]
+
+
+def build_matrix(report):
+    """The required matrix, and for each row where its evidence came from.
+
+    A row is VERIFIED only when a check backed by an executed run exists.  Rows
+    whose evidence is a different gate (the stub firmware, the host unit test,
+    the BIOS regression test) are marked EXTERNAL and name that gate: this
+    harness has not run them and does not vouch for them.
+    """
+    data = report.data
+    looked = {}
+    for stage in ("cold", "warm"):
+        looked[stage] = data.get(stage, {}).get("markers", {})
+    negatives = data.get("negative", {})
+
+    def m(stage):
+        return looked.get(stage, {})
+
+    rows = []
+    for name, source in REQUIRED_MATRIX:
+        if source in ("cold", "warm"):
+            seen = m(source)
+            ok = (seen.get("boot_ok") and seen.get("loader_banner") and
+                  seen.get("kernel_entry") and not seen.get("failure_codes"))
+            rows.append({"requirement": name, "source": f"OVMF {source} boot",
+                         "state": "verified" if ok else "not-tested"})
+        else:
+            entry = negatives.get(source.split(":", 1)[1], {})
+            markers = entry.get("markers") or {}
+            ran = bool(entry)
+            refused = bool(markers.get("failure_codes")) or markers.get("firmware_refused")
+            good = ran and refused and not markers.get("boot_ok")
+            rows.append({"requirement": name, "source": f"OVMF negative run ({source})",
+                         "state": "verified" if good else
+                                  ("not-tested" if not ran else "failed")})
+
+    # Rows whose honest evidence lives in another gate.  They are listed so the
+    # matrix is complete, and they never inherit this run's result.
+    rows.extend([
+        {"requirement": "a stale memory map key is retried, not fatal",
+         "source": "tests/uefi_stubtest.py (executed against the real loader image)",
+         "state": "external"},
+        {"requirement": "a firmware that never accepts the key fails without a false success",
+         "source": "tests/uefi_stubtest.py (executed)",
+         "state": "external"},
+        {"requirement": "invalid boot information is rejected by the kernel",
+         "source": "make unit (host unit test of the same predicate kmain runs)",
+         "state": "external"},
+        {"requirement": "the loader never calls a boot service after ExitBootServices",
+         "source": "tests/uefi_stubtest.py (executed)",
+         "state": "external"},
+        {"requirement": "the BIOS boot path still boots and passes its own test",
+         "source": "make boot-test (v86, BIOS/SeaBIOS)",
+         "state": "external"},
+    ])
+    data["matrix"] = rows
+    return rows
+
+
+def secure_boot_verdict(seen):
+    """Did the firmware refuse an unsigned image, as its policy requires?
+
+    True means the policy was in force.  PC5 has no signing key and no shim, so
+    "the image booted with Secure Boot enabled" is not a feature: it is evidence
+    that Secure Boot was not actually enabled.
+    """
+    if seen.get("boot_ok"):
+        return False, "the unsigned PC5 image booted; the policy was not in force"
+    return True, ""
+
+
+def secure_boot_run(report, args, qemu, data_dir, work, iso_path, code_path,
+                    vars_template):
+    """Boot with Secure Boot enabled and see what the firmware's policy does.
+
+    PC5 ships no signing key and no shim, so the honest expectation is that the
+    firmware refuses this image.  The check therefore asserts the *refusal*: a
+    run that produced PC5-BOOT-OK under a policy that should have stopped it
+    means the policy was not actually in force, and the harness must not report
+    that as compatibility.
+    """
+    secure_vars = os.path.join(work, "vars-secure.fd")
+    shutil.copyfile(vars_template, secure_vars)
+    serial = os.path.join(work, "serial-secure.log")
+    run = run_qemu(qemu, data_dir, {"code": code_path, "iso": iso_path},
+                   secure_vars, serial, min(args.timeout, 240), args.memory_mb,
+                   secure=True)
+    seen = classify(run)
+    report.data["secure_boot"] = {
+        "command": run["command"], "markers": seen,
+        "seconds": run["seconds"], "stopped_on": run["stopped_on"],
+        "firmware": describe_firmware(code_path),
+    }
+    refused, detail = secure_boot_verdict(seen)
+    report.check("Secure Boot: firmware enforced its trust policy on the unsigned image",
+                 refused, detail)
+    report.check("Secure Boot: the run is attributed (firmware refusal or loader stop)",
+                 seen["firmware_refused"] or bool(seen["failure_codes"]) or
+                 not seen["kernel_entry"],
+                 seen["failure_codes"])
+    return seen
 
 
 def negative_runs(report, args, found, data_dir, work):
@@ -689,6 +904,23 @@ def negative_runs(report, args, found, data_dir, work):
     report.check("a boot that outlives its deadline is reported as a timeout, "
                  "not as a pass", run["killed"] and run["stopped_on"] == "timeout")
 
+    # 7. A machine with too little memory for the loader's window: the boot must
+    #    stop with a diagnostic, never pretend it handed over.
+    vars_path = os.path.join(work, "vars-lowmem.fd")
+    shutil.copyfile(found["vars"], vars_path)
+    serial = os.path.join(work, "serial-low-memory.log")
+    run = run_qemu(found["qemu"], data_dir, iso, vars_path, serial,
+                   min(args.timeout, 180), 24)
+    seen = classify(run)
+    report.data["negative"]["low-memory"] = {
+        "memory_mb": 24, "markers": seen, "seconds": run["seconds"],
+        "serial_tail": run["serial"][-400:],
+    }
+    report.check("insufficient memory fails safely, with no handover",
+                 not seen["boot_ok"] and not seen["kernel_entry"] and
+                 (bool(seen["failure_codes"]) or seen["firmware_refused"]),
+                 seen["failure_codes"] or run["serial"][-200:])
+
 
 def _emit(report, args, exit_code):
     payload = report.as_dict()
@@ -705,6 +937,8 @@ def _emit(report, args, exit_code):
     if exit_code == 3:
         print("\nNOT TESTED: genuine OVMF firmware and/or QEMU is not available "
               "on this machine.")
+        print("Required matrix rows: %d, none executed here."
+              % len(report.data.get("matrix", [])))
         print("The UEFI integration gate is NOT passed.  Install OVMF "
               "(edk2-ovmf / ovmf) and QEMU, or set PC5_OVMF_CODE, PC5_OVMF_VARS "
               "and PC5_QEMU.")

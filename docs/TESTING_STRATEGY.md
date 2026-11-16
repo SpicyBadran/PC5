@@ -177,12 +177,23 @@ machine without OVMF must be able to say "not tested" out loud.
 
 It does, in this order: copy the pristine VARS image (firmware writes it, so it
 must never be the package's file), boot cold, boot again with the variable store
-the first boot wrote, then boot five deliberately broken machines built with the
+the first boot wrote, then boot deliberately broken machines built with the
 repository's own tools (no `BOOTX64.EFI`, corrupted PE32+ header, no kernel, bad
-`PC5K` signature, truncated ISO), and finally a one-second deadline to prove a
-hang is reported as a timeout. Each result is attributed: firmware refused to
-start something, the loader stopped with its own code, or the harness ran out of
-time.
+`PC5K` signature, truncated ISO, a 24 MiB machine that cannot hold the load
+window), and finally a one-second deadline to prove a hang is reported as a
+timeout. With `--secure-boot` it additionally boots with SMM and a secure flash
+and asserts that the firmware **refuses** the unsigned image — a boot there would
+mean the policy was not in force.
+
+Each judged boot now also cross-checks the boot chain's own claims: the handover
+window against the memory map (`E15`), the merged entry count against the
+kernel's independent `memory_mib` report, the read-back kernel copy against the
+file size on the medium, the watchdog call, and the `ExitBootServices` retry
+count. `--matrix-out` writes the 22-row required matrix, in which a row is
+`verified` only if an executed run produced it, `external` if its evidence is a
+named different gate, and `not-tested` otherwise. Each result is attributed:
+firmware refused to start something, the loader stopped with its own code, or the
+harness ran out of time.
 
 Three outcomes, never two: `0` verified (and `PC5-OVMF-BOOT-OK` printed by the
 harness, never by the guest), `1` verified failure, `3` **NOT TESTED** — no
@@ -195,7 +206,16 @@ Firmware stays external: nothing is committed, nothing is embedded in the ISO,
 nothing is linked into the kernel, and the harness refuses a "firmware" whose
 bytes are the PC5 loader or that lacks a `_FVH` volume header.
 
-### 2.6 What the emulators cannot prove
+### 2.6 Provisioning the firmware
+
+`make ovmf-setup` (`tools/ovmf_setup.sh`) installs QEMU and OVMF from the
+distribution's packages and prints the paths and SHA-256 of the exact CODE and
+VARS images the run will use, which then belong in the report. `make ovmf-check`
+does the discovery half only. The `ovmf` job in `ci/build.yml` runs the same
+script on a hosted runner and treats exit code 3 from the harness as a failure,
+so a pipeline that never executed firmware cannot pass quietly.
+
+### 2.7 What the emulators cannot prove
 
 v86 is an x86 PC emulator, not a PC. It proves the boot chain and the interface
 logic. It does **not** prove: real firmware behaviour (VBE vs GOP quirks), real

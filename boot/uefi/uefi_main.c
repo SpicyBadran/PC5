@@ -47,6 +47,12 @@
 #define E820_MAX 40
 #define VBE_MODE_ADDR 0x2800u
 #define PVD_BUF_ADDR 0x3A00u
+/* Everything the loader writes after firmware is gone lives in this window:
+ * E820 at 0x2000, VBE, the PVD buffer, boot info at 0x4000, the kernel from
+ * 0x10000, and the handover stack growing down from 0x9F000. */
+#define HANDOVER_BASE 0x2000u
+#define HANDOVER_LIMIT 0x9F000u
+
 #define MAX_FILE_BYTES (4u * 1024u * 1024u)
 #define LOADER_VERSION "uefi-0.2.0"
 
@@ -75,6 +81,7 @@ _Static_assert(__builtin_offsetof(struct efi_boot_services, handle_protocol) == 
 _Static_assert(__builtin_offsetof(struct efi_boot_services, locate_handle) == 176, "boot services abi");
 _Static_assert(__builtin_offsetof(struct efi_boot_services, locate_device_path) == 184, "boot services abi");
 _Static_assert(__builtin_offsetof(struct efi_boot_services, exit_boot_services) == 232, "boot services abi");
+_Static_assert(__builtin_offsetof(struct efi_boot_services, set_watchdog_timer) == 256, "boot services abi");
 _Static_assert(__builtin_offsetof(struct efi_system_table, con_out) == 64, "system table abi");
 _Static_assert(__builtin_offsetof(struct efi_system_table, boot_services) == 96, "system table abi");
 _Static_assert(__builtin_offsetof(struct efi_file, open) == 8, "file protocol abi");
@@ -388,20 +395,77 @@ static int gop_init(struct efi_system_table *st)
 
 /* ---------------------------------------------------------------- memory */
 /* Firmware memory map -> E820 entries.  The mapping is stated in one place so
- * that the kernel, the tests and the docs can be checked against it. */
-static u32 build_e820(u64 count, u32 desc_size, const u8 *map)
+ * that the kernel, the tests and the docs can be checked against it.
+ *
+ * Two properties matter and both used to be silent:
+ *
+ *  - descriptors are merged when they are adjacent and of the same class, so a
+ *    firmware that reports memory in many small pieces still yields the memory
+ *    it actually has;
+ *  - a map that does not fit is a failure, not a truncation.  Dropping entries
+ *    would under-report usable memory and could hide a reserved region the
+ *    kernel is about to write into.
+ */
+static u32 build_e820(u64 count, u32 desc_size, const u8 *map, int *overflow)
 {
     u32 entries = 0;
-    for (u64 i = 0; i < count && entries < E820_MAX; i++) {
+    *overflow = 0;
+    for (u64 i = 0; i < count; i++) {
         const struct efi_memory_descriptor *d =
             (const struct efi_memory_descriptor *)(map + i * desc_size);
+        u64 length = d->number_of_pages * 4096u;
+        if (!length)
+            continue;
+        u32 type = (d->type == EFI_CONVENTIONAL_MEMORY) ? 1u : 2u;
+        if (entries && type == E820[entries - 1].type &&
+            E820[entries - 1].base + E820[entries - 1].length == d->physical_start) {
+            E820[entries - 1].length += length;
+            continue;
+        }
+        if (entries == E820_MAX) {
+            *overflow = 1;
+            return entries;
+        }
         E820[entries].base = d->physical_start;
-        E820[entries].length = d->number_of_pages * 4096u;
-        E820[entries].type = (d->type == EFI_CONVENTIONAL_MEMORY) ? 1u : 2u;
+        E820[entries].length = length;
+        E820[entries].type = type;
         E820[entries].acpi_ext = 0;
         entries++;
     }
     return entries;
+}
+
+/* Is [base, base + length) entirely inside conventional memory?
+ *
+ * The loader hands the kernel a fixed load address, a fixed boot-info address
+ * and a fixed stack, all in the first megabyte, and it copies the kernel there
+ * *after* firmware has been given up.  Nothing checked that range against the
+ * map firmware reported, so on a machine whose low memory is partly reserved
+ * the copy would land in firmware memory and the fault would appear as a kernel
+ * crash a long way from its cause.  Descriptors are not required to be sorted,
+ * so the walk advances to the furthest covering descriptor each time. */
+static int window_is_conventional(u64 count, u32 desc_size, const u8 *map,
+                                  u64 base, u64 length)
+{
+    u64 end = base + length;
+    u64 cursor = base;
+    while (cursor < end) {
+        u64 best = cursor;
+        for (u64 i = 0; i < count; i++) {
+            const struct efi_memory_descriptor *d =
+                (const struct efi_memory_descriptor *)(map + i * desc_size);
+            if (d->type != EFI_CONVENTIONAL_MEMORY)
+                continue;
+            u64 start = d->physical_start;
+            u64 stop = start + d->number_of_pages * 4096u;
+            if (start <= cursor && stop > cursor && stop > best)
+                best = stop;
+        }
+        if (best == cursor)
+            return 0;
+        cursor = best;
+    }
+    return 1;
 }
 
 static u64 conventional_mib(u32 entries)
@@ -724,6 +788,18 @@ efi_status EFIAPI efi_main(efi_handle image_handle, struct efi_system_table *st)
     if (kernel.size > KERNEL_LIMIT - KERNEL_ADDR)
         fail("E6", "kernel image is larger than the load window", kernel.size);
 
+    /* Firmware may have armed a watchdog timer, and the load plus the map walk
+     * can outlast it on a slow machine; a reset in the middle of a handover
+     * looks exactly like a hardware fault.  Disable it while boot services are
+     * still callable, and say whether firmware agreed. */
+    {
+        efi_status wd = st->boot_services->set_watchdog_timer(0, 0, 0, 0);
+        if (EFI_ERROR(wd))
+            trace_dec("watchdog_disable_refused", wd);
+        else
+            trace("watchdog_disabled");
+    }
+
     /* 4 + 7. the memory map and leaving boot services belong together: the map
      * key is only valid until the next firmware allocation, so anything that
      * can allocate - printing to the console included - invalidates it.  The
@@ -737,6 +813,7 @@ efi_status EFIAPI efi_main(efi_handle image_handle, struct efi_system_table *st)
     u64 map_capacity = 0;
     u32 retries = 0;
     int exited = 0;
+    int handover_checked = 0;
     for (u32 attempt = 0; attempt < 8 && !exited; attempt++) {
         u64 map_size = 0, map_key = 0, desc_size = 0;
         u32 desc_version = 0;
@@ -770,9 +847,19 @@ efi_status EFIAPI efi_main(efi_handle image_handle, struct efi_system_table *st)
         if (desc_size < sizeof(struct efi_memory_descriptor) || desc_size > 0x1000)
             fail("E11", "unexpected memory descriptor size", desc_size);
         u64 count = map_size / desc_size;
-        e820_count = build_e820(count, (u32)desc_size, (const u8 *)map);
+        int overflow = 0;
+        e820_count = build_e820(count, (u32)desc_size, (const u8 *)map, &overflow);
         if (!e820_count)
             fail("E12", "the firmware memory map was empty", 0);
+        if (overflow)
+            fail("E16", "the memory map does not fit in the E820 buffer", count);
+
+        /* The load window has to be memory the kernel may own. */
+        if (!window_is_conventional(count, (u32)desc_size, (const u8 *)map,
+                                    HANDOVER_BASE, HANDOVER_LIMIT - HANDOVER_BASE))
+            fail("E15", "the kernel handover window is not conventional memory",
+                 HANDOVER_BASE);
+        handover_checked = 1;
 
         status = bs->exit_boot_services(image_handle, map_key);
         if (!EFI_ERROR(status)) {
@@ -795,6 +882,9 @@ efi_status EFIAPI efi_main(efi_handle image_handle, struct efi_system_table *st)
     uefi_serial_puts("\r\n");
     uefi_serial_puts("PC5-UEFI: ExitBootServices_retries=");
     uefi_serial_put_dec(retries);
+    uefi_serial_puts("\r\n");
+    uefi_serial_puts("PC5-UEFI: handover_window_checked=");
+    uefi_serial_put_dec(handover_checked);
     uefi_serial_puts("\r\n");
     uefi_serial_puts("PC5-UEFI: memory_conventional_mib=");
     uefi_serial_put_dec(conventional_mib(e820_count));
@@ -825,8 +915,16 @@ efi_status EFIAPI efi_main(efi_handle image_handle, struct efi_system_table *st)
      * reported, so the kernel can print an honest medium line. */
     bi->flags = 0x1u | 0x2u /* no ISO LBA */ | 0x4u /* no volume id */;
 
-    /* 6. kernel image into the handover address */
+    /* 6. kernel image into the handover address.  The copy is read back: a
+     * handover that jumps to bytes which are not the file would fail inside the
+     * kernel, where the cause is invisible. */
     memcpy((void *)KERNEL_ADDR, kernel.data, kernel.size);
+    if (memcmp((const void *)KERNEL_ADDR, kernel.data, kernel.size) != 0)
+        fail("E17", "the kernel copy at the handover address does not match the file", 0);
+    uefi_serial_puts("PC5-UEFI: kernel_handoff_verified=1\r\n");
+    uefi_serial_puts("PC5-UEFI: handoff_bytes=");
+    uefi_serial_put_dec(kernel.size);
+    uefi_serial_puts("\r\n");
 
     /* 8. 32-bit protected mode, then the kernel never returns */
     if (KERNEL_ADDR != 0x10000u)
