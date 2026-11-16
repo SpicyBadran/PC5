@@ -6,8 +6,7 @@ Four things are checked here, and they are deliberately independent:
     the loader is a valid PE32+ EFI application;
   * the protocol: `struct pc5_boot64` has the size and offsets both sides were
     compiled against, checked against a host build of the same header;
-  * the page tables: `pc5_pt_build_identity` is compiled for the host and its
-    entries are inspected, so the map is verified instead of assumed;
+  * (page-table construction and bounds live in tests/test_pagetables64.py)
   * the kernel's own contract: valid boot info boots, and every kind of invalid
     boot info stops the kernel *without* the success marker.
 
@@ -32,6 +31,7 @@ KERNEL_BIN = BUILD / "kernel64" / "KERNEL64.BIN"
 LOADER_EFI = BUILD / "uefi64" / "BOOTX64.EFI"
 
 MARKER = "PC5-64BIT-LONG-MODE-OK"
+MASK64 = (1 << 64) - 1
 
 _CACHE = {}
 
@@ -86,7 +86,7 @@ class KernelImageTests(unittest.TestCase):
                                str(KERNEL_ELF), "/dev/stdout"],
                               capture_output=True).stdout
         self.assertTrue(binary.startswith(text[:4096]))
-        self.assertEqual(len(binary), 0xA000,
+        self.assertEqual(len(binary), 0xC000,
                          "text+rodata plus the 32 KiB .bss window (stack)")
 
     def test_link_address_is_the_protocol_address(self):
@@ -104,15 +104,18 @@ class BootInfoAbiTests(unittest.TestCase):
             '#include "pc5_boot64.h"\n'
             "#include <stdio.h>\n"
             "#include <stddef.h>\n"
-            "int main(void){printf(\"%zu %zu %zu %zu %zu %zu %zu %zu %zu\\n\",\n"
+            "int main(void){printf(\"%zu %zu %zu %zu %zu %zu %zu %zu %zu %zu %zu %zu\\n\",\n"
             " sizeof(struct pc5_boot64), sizeof(struct pc5_memdesc64),\n"
             " offsetof(struct pc5_boot64, memmap_addr),\n"
             " offsetof(struct pc5_boot64, framebuffer_addr),\n"
             " offsetof(struct pc5_boot64, acpi_rsdp),\n"
             " offsetof(struct pc5_boot64, kernel_base),\n"
             " offsetof(struct pc5_boot64, stack_top),\n"
-            " offsetof(struct pc5_boot64, exit_boot_services),\n"
-            " offsetof(struct pc5_boot64, time_stamp));\n"
+            " offsetof(struct pc5_boot64, stack_size),\n"
+            " offsetof(struct pc5_boot64, pagetable_addr),\n"
+            " offsetof(struct pc5_boot64, identity_span),\n"
+            " offsetof(struct pc5_boot64, loader_image_addr),\n"
+            " offsetof(struct pc5_boot64, exit_boot_services));\n"
             " return 0;}\n")
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "probe.c"
@@ -124,96 +127,14 @@ class BootInfoAbiTests(unittest.TestCase):
             self.assertEqual(compile_result.returncode, 0, compile_result.stderr)
             output = subprocess.run([str(binary)], capture_output=True, text=True).stdout
         values = [int(x) for x in output.split()]
-        self.assertEqual(values, [112, 32, 16, 40, 64, 72, 88, 96, 104])
+        self.assertEqual(values, [160, 32, 16, 40, 64, 72, 88, 96, 104, 120, 128, 144])
 
     def test_python_packer_agrees_with_the_header(self):
         sys.path.insert(0, str(ROOT / "tests"))
         import kernel64_machine as machine
-        self.assertEqual(len(machine.pack_boot_info()), 112)
-        self.assertEqual(len(machine.pack_memmap(machine.DEFAULT_MEMMAP)), 96)
-
-
-class PageTableTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        build()
-        cls.library = ctypes.CDLL(str(_CACHE.setdefault("pt_lib", _compile_pagetables())))
-        cls.library.pc5_pt_build_identity.restype = ctypes.c_ulong
-        cls.library.pc5_pt_build_identity.argtypes = [ctypes.c_ulonglong, ctypes.c_ulonglong]
-        cls.library.pc5_pt_mark_uncached.restype = ctypes.c_ulong
-        cls.library.pc5_pt_mark_uncached.argtypes = [ctypes.c_ulonglong] * 3
-        cls.library.pc5_pt_lookup.restype = ctypes.c_int
-        cls.library.pc5_pt_lookup.argtypes = [ctypes.c_ulonglong, ctypes.c_ulonglong,
-                                              ctypes.POINTER(ctypes.c_ulonglong)]
-
-    def setUp(self):
-        # Keep the buffer alive: ctypes gives no ownership back, and a freed
-        # buffer would make every entry read look like a missing page.
-        self.buffer = ctypes.create_string_buffer(6 * 4096 + 4096)
-        raw = ctypes.addressof(self.buffer)
-        self.base = (raw + 4095) & ~4095       # the builder refuses unaligned input
-
-    def entry_at(self, index):
-        return ctypes.c_ulonglong.from_address(self.base + 0x2000 + index * 8).value
-
-    def test_identity_map_covers_four_gib_with_2m_pages(self):
-        mapped = self.library.pc5_pt_build_identity(self.base, 4 << 30)
-        self.assertEqual(mapped, 2048)
-        pml4 = ctypes.c_ulonglong.from_address(self.base).value
-        pdpt = ctypes.c_ulonglong.from_address(self.base + 0x1000).value
-        self.assertEqual(pml4 & 0xFFF, 0x3)
-        self.assertEqual(pdpt & 0xFFF, 0x3)
-        self.assertEqual(self.entry_at(0), 0x83)
-        self.assertEqual(self.entry_at(511), (511 << 21) | 0x83)
-        self.assertEqual(self.entry_at(2047), (2047 << 21) | 0x83)
-
-    def test_every_mapped_page_is_present_writable_and_2mib(self):
-        self.library.pc5_pt_build_identity(self.base, 4 << 30)
-        for index in (0, 1, 300, 1024, 2047):
-            entry = self.entry_at(index)
-            self.assertTrue(entry & 1, f"page {index} not present")
-            self.assertTrue(entry & 2, f"page {index} not writable")
-            self.assertTrue(entry & (1 << 7), f"page {index} is not a 2 MiB leaf")
-            self.assertEqual(entry & ((1 << 21) - 1) & ~0x1FF, 0,
-                             f"page {index} has a non-zero reserved field")
-
-    def test_lookup_finds_the_leaf_and_rejects_unmapped_space(self):
-        self.library.pc5_pt_build_identity(self.base, 4 << 30)
-        entry = ctypes.c_ulonglong(0)
-        self.assertEqual(self.library.pc5_pt_lookup(self.base, 0x100000,
-                                                    ctypes.byref(entry)), 1)
-        self.assertEqual(entry.value, 0x83)
-        self.assertEqual(self.library.pc5_pt_lookup(self.base, 4 << 30,
-                                                    ctypes.byref(entry)), 0)
-
-    def test_uncached_marking_touches_only_the_framebuffer_pages(self):
-        self.library.pc5_pt_build_identity(self.base, 4 << 30)
-        changed = self.library.pc5_pt_mark_uncached(self.base, 0x04000000,
-                                                    0x04000000 + 0x200000)
-        self.assertEqual(changed, 1)
-        self.assertEqual(self.entry_at(32) & 0x18, 0x18)   # PWT|PCD
-        self.assertEqual(self.entry_at(31) & 0x18, 0)
-        self.assertEqual(self.entry_at(33) & 0x18, 0)
-
-    def test_bad_arguments_are_refused_instead_of_building_a_partial_map(self):
-        self.assertEqual(self.library.pc5_pt_build_identity(self.base | 1, 4 << 30), 0)
-        self.assertEqual(self.library.pc5_pt_build_identity(self.base, 0), 0)
-        self.assertEqual(self.library.pc5_pt_build_identity(self.base, 8 << 30), 0)
-        self.assertEqual(self.library.pc5_pt_mark_uncached(self.base, 0x1000, 0x1000), 0)
-
-
-def _compile_pagetables():
-    build()
-    directory = tempfile.mkdtemp(prefix="pc5-pagetables-")
-    output = pathlib.Path(directory) / "libpagetables.so"
-    source = ROOT / "boot" / "uefi64" / "pagetables.c"
-    result = subprocess.run(["gcc", "-std=gnu11", "-O2", "-fPIC", "-shared",
-                             "-Wall", "-Wextra", "-Werror",
-                             "-I", str(source.parent), str(source), "-o", str(output)],
-                            capture_output=True, text=True)
-    if result.returncode != 0:
-        raise AssertionError(f"pagetables.c did not build for the host:\n{result.stderr}")
-    return output
+        self.assertEqual(len(machine.pack_boot_info()), 160)
+        self.assertEqual(len(machine.pack_memmap(machine.DEFAULT_MEMMAP)),
+                         32 * len(machine.DEFAULT_MEMMAP))
 
 
 class LoaderImageTests(unittest.TestCase):
@@ -240,8 +161,8 @@ class LoaderImageTests(unittest.TestCase):
         self.assertIsNotNone(record, "no .data section in the loader image")
         self.assertEqual(record[:8], b"PC5HND02")
         protocol, boot_info_size, pages, span = struct.unpack_from("<4Q", record, 8)
-        self.assertEqual(protocol, 1)
-        self.assertEqual(boot_info_size, 112)
+        self.assertEqual(protocol, 2)
+        self.assertEqual(boot_info_size, 160)
         self.assertEqual(pages, 6)
         self.assertEqual(span, 4 << 30)
 
@@ -300,7 +221,12 @@ class KernelContractTests(unittest.TestCase):
         self.assert_refuses(self.run_kernel(magic=0xDEADBEEF), "bootinfo-magic")
 
     def test_unknown_version_is_refused(self):
-        self.assert_refuses(self.run_kernel(version=2), "bootinfo-version")
+        # The kernel accepts exactly the version it was compiled for.  Version 1 is
+        # now the *old* protocol - it had no stack size, no page-table description
+        # and no identity span, so it cannot be validated and must be refused just
+        # like any other version the kernel does not know.
+        self.assert_refuses(self.run_kernel(version=1), "bootinfo-version")
+        self.assert_refuses(self.run_kernel(version=3), "bootinfo-version")
 
     def test_wrong_size_is_refused(self):
         self.assert_refuses(self.run_kernel(size=104), "bootinfo-size")
@@ -317,8 +243,14 @@ class KernelContractTests(unittest.TestCase):
                             "bootinfo-memmap-descsize")
 
     def test_empty_descriptor_is_refused(self):
+        # A descriptor with no pages describes nothing; accepting it would mean
+        # silently dropping a slot of the map and miscounting everything after it.
+        # The kernel's own reason for this is bootinfo-memmap-descriptor, because the
+        # check is "is this descriptor self-consistent", not "is the map empty"
+        # (bootinfo-memmap-empty is the case where the map has no entries at all).
         memmap = [(0, 0, 7)] + list(self.machine_module.DEFAULT_MEMMAP[1:])
-        self.assert_refuses(self.run_kernel(memmap=memmap), "bootinfo-memmap-empty")
+        self.assert_refuses(self.run_kernel(memmap=memmap),
+                            "bootinfo-memmap-descriptor")
 
     def test_no_conventional_memory_is_refused(self):
         memmap = [(0, 0x9F, 2), (0x100000, 0x100, 2)]
@@ -337,6 +269,211 @@ class KernelContractTests(unittest.TestCase):
         # A zero stack is a broken loader, and the kernel says so instead of
         # borrowing firmware's stack and losing the evidence.
         self.assert_refuses(self.run_kernel(stack_top=0), "bootinfo-stack")
+
+    # ---------------------------------------------------- version 2 contract ----
+    # The boot info now describes the stack, the page tables, the identity span and
+    # the loader's own image, and the kernel proves each of them before it
+    # dereferences anything.  Each test below breaks exactly one of those.
+
+    def test_stack_size_is_validated(self):
+        for size, reason in ((0, "bootinfo-stack-size"),
+                             (0x1001, "bootinfo-stack-size"),
+                             (1 << 21, "bootinfo-stack-size")):
+            with self.subTest(stack_size=size):
+                self.assert_refuses(self.run_kernel(stack_size=size), reason)
+
+    def test_stack_that_underflows_is_refused(self):
+        self.assert_refuses(self.run_kernel(stack_top=0x1000, stack_size=0x2000),
+                            "bootinfo-stack-underflow")
+
+    def test_stack_outside_the_span_is_refused(self):
+        self.assert_refuses(self.run_kernel(stack_top=5 << 30, stack_size=0x2000),
+                            "bootinfo-stack-span")
+
+    def test_stack_in_memory_the_map_calls_unusable_is_refused(self):
+        # 0x60000000 is inside the span but the map does not describe it at all.
+        self.assert_refuses(self.run_kernel(stack_top=0x60000000, stack_size=0x2000),
+                            "bootinfo-stack-range")
+
+    def test_page_table_description_is_validated(self):
+        for override, reason in (
+                (dict(pagetable_addr=self.machine_module.PML4 + 8), "bootinfo-pagetable"),
+                (dict(pagetable_pages=2), "bootinfo-pagetable-pages"),
+                (dict(pagetable_pages=515), "bootinfo-pagetable-pages")):
+            with self.subTest(**override):
+                self.assert_refuses(self.run_kernel(**override), reason)
+
+    def test_page_tables_at_the_top_of_the_span_are_refused(self):
+        self.assert_refuses(
+            self.run_kernel(pagetable_addr=(4 << 30) - 0x1000, pagetable_pages=6),
+            "bootinfo-pagetable-span")
+
+    def test_identity_span_must_match_the_tables_that_were_built(self):
+        # 6 pages cannot describe 2 GiB: (pages-2)*512*2 MiB is the only capacity
+        # those pages have, and the kernel recomputes it rather than trusting the
+        # number it was handed.
+        self.assert_refuses(self.run_kernel(identity_span=2 << 30),
+                            "bootinfo-pagetable-span-mismatch")
+
+    def test_identity_span_above_the_limit_is_refused(self):
+        self.assert_refuses(self.run_kernel(identity_span=8 << 30,
+                                            pagetable_pages=6),
+                            "bootinfo-pagetable-span-mismatch")
+
+    def test_loader_image_outside_the_map_is_refused(self):
+        self.assert_refuses(self.run_kernel(loader_image_addr=0x60000000,
+                                            loader_image_size=0x1000),
+                            "bootinfo-loader-range")
+
+    def test_loader_image_that_wraps_is_refused(self):
+        self.assert_refuses(self.run_kernel(loader_image_addr=MASK64 - 0xFFF,
+                                            loader_image_size=0x2000),
+                            "bootinfo-loader-span")
+
+    def test_kernel_size_that_does_not_match_the_image_is_refused(self):
+        # The kernel knows its own size from the linker script, so it rejects any
+        # other value outright - which is also what makes the span check below it
+        # unreachable in practice (the linked image cannot leave the map).
+        self.assert_refuses(self.run_kernel(kernel_size=4 << 30),
+                            "bootinfo-kernel-size")
+
+    def test_memory_map_size_must_be_a_multiple_of_the_stride(self):
+        self.assert_refuses(self.run_kernel(memmap_bytes=100),
+                            "bootinfo-memmap-bytes")
+
+    def test_descriptor_that_wraps_is_refused(self):
+        memmap = [(MASK64 - 0xFFF, 2, 7)] + list(self.machine_module.DEFAULT_MEMMAP[1:])
+        self.assert_refuses(self.run_kernel(memmap=memmap),
+                            "bootinfo-memmap-descriptor")
+
+    def test_descriptor_with_an_impossible_type_is_refused(self):
+        memmap = [(0x100000, 0x100, 99)] + list(self.machine_module.DEFAULT_MEMMAP[1:])
+        self.assert_refuses(self.run_kernel(memmap=memmap),
+                            "bootinfo-memmap-descriptor")
+
+    # ------------------------------------------- optional resources (stage 4) ---
+    # A framebuffer or RSDP that cannot be validated is reported as unsupported and
+    # the boot continues: neither is dereferenced, and neither is called usable.
+
+    def test_framebuffer_crossing_the_span_is_unsupported_not_fatal(self):
+        result = self.run_kernel(framebuffer_addr=(4 << 30) - 0x1000)
+        self.assert_boots(result)
+        self.assertIn("PC5-64-FB", result["serial"])
+        self.assertIn("usability=unsupported reason=outside-span", result["serial"])
+
+    def test_framebuffer_above_the_span_is_never_called_usable(self):
+        result = self.run_kernel(framebuffer_addr=4 << 30)
+        self.assert_boots(result)
+        self.assertNotIn("PC5-64-FB addr=0x100000000 width=1024 height=768 pitch=4096 usability=ok",
+                         result["serial"])
+        self.assertIn("usability=unsupported reason=outside-span", result["serial"])
+
+    def test_framebuffer_with_a_short_pitch_is_unsupported(self):
+        result = self.run_kernel(framebuffer_pitch=4)
+        self.assert_boots(result)
+        self.assertIn("usability=unsupported reason=pitch-too-small", result["serial"])
+
+    def test_empty_framebuffer_is_unsupported(self):
+        result = self.run_kernel(framebuffer_width=0)
+        self.assert_boots(result)
+        self.assertIn("usability=unsupported reason=empty", result["serial"])
+
+    def test_huge_framebuffer_is_classified_not_dereferenced(self):
+        # 2 GiB of pitch times 64 rows is 128 GiB: inside 64-bit arithmetic but far
+        # outside the map, so it must be reported, not used.
+        result = self.run_kernel(framebuffer_pitch=0x80000000,
+                                 framebuffer_height=0x40)
+        self.assert_boots(result)
+        self.assertIn("usability=unsupported reason=outside-span", result["serial"])
+
+    def test_rsdp_without_the_signature_is_unsupported(self):
+        result = self.run_kernel(rsdp_signature=b"NOPE NOPE")
+        self.assert_boots(result)
+        self.assertIn("PC5-64-RSDP addr=", result["serial"])
+        self.assertIn("usability=unsupported reason=signature", result["serial"])
+
+    def test_rsdp_outside_the_map_is_unsupported(self):
+        result = self.run_kernel(acpi_rsdp=0x60000000)
+        self.assert_boots(result)
+        self.assertIn("usability=unsupported reason=not-firmware-memory",
+                      result["serial"])
+
+    def test_a_loader_that_says_a_resource_is_unmapped_is_believed(self):
+        # The loader zeroes the address and sets the flag when it cannot map the
+        # resource.  The kernel must report that, not invent an address.
+        flags = (0xF & ~0x2) | 0x10              # clear FB, set UNMAPPED_FRAMEBUFFER
+        result = self.run_kernel(flags=flags, framebuffer_addr=0)
+        self.assert_boots(result)
+        self.assertIn("PC5-64-FB usability=unsupported reason=unmapped-by-loader",
+                      result["serial"])
+
+    def test_conventional_memory_is_accepted_for_loader_owned_ranges(self):
+        # The loader's own allocations may still be typed Conventional (firmware is
+        # not obliged to retype), so the kernel must accept them - but only for
+        # ranges the loader owns, never for the framebuffer.
+        memmap = [
+            (0x00000000, 0x9F, 7),
+            (0x00100000, 0x320, 7),
+            (0x00500000, 0x020, 7),
+            (self.machine_module.FB_BASE, self.machine_module.FB_SIZE // 4096, 11),
+        ]
+        self.assert_boots(self.run_kernel(memmap=memmap))
+
+
+class PlacementPolicyTests(unittest.TestCase):
+    """The loader's own placement rule, evaluated at the boundary.
+
+    `require_below_span()` in the loader and every range check in the kernel call
+    the same function, `pc5_range_within()` from kernel64/include/pc5_map.h.  The
+    stub firmware can place the application at the top of the map (see
+    tests/test_boot64_stub.py), but it cannot place it *above* the map and still
+    execute it faithfully - a PE32+ image carries 32-bit relocations, so above
+    4 GiB the emulated code would no longer be the code under test.  The rejection
+    side is therefore checked here, against the function itself.
+    """
+
+    def _decisions(self, cases):
+        header = ROOT / "kernel64" / "include"
+        lines = ",\n".join("{ %sULL, %sULL }" % (base, size) for base, size in cases)
+        probe = (
+            '#include "pc5_boot64.h"\n'
+            '#include "pc5_map.h"\n'
+            "#include <stdio.h>\n"
+            "static const unsigned long long cases[][2] = {\n%s\n};\n"
+            "int main(void){\n"
+            "  unsigned i;\n"
+            "  for (i = 0; i < sizeof(cases)/sizeof(cases[0]); i++)\n"
+            "    printf(\"%%s\\n\", pc5_range_within(cases[i][0], cases[i][1],\n"
+            "                            PC5_IDENTITY_LIMIT) ? \"ok\" : \"reject\");\n"
+            "  return 0;}\n" % lines)
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "probe.c"
+            path.write_text(probe)
+            binary = pathlib.Path(directory) / "probe"
+            compiled = subprocess.run(["gcc", "-std=gnu11", "-Wall", "-Wextra",
+                                       "-Werror", "-I", str(header), str(path),
+                                       "-o", str(binary)],
+                                      capture_output=True, text=True)
+            self.assertEqual(compiled.returncode, 0, compiled.stderr)
+            done = subprocess.run([str(binary)], capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout.split()
+
+    def test_placement_at_and_around_the_top_of_the_span(self):
+        limit = 4 << 30
+        cases = [
+            (0x100000, 0x1000),            # ordinary: below the map
+            (limit - 0x1000, 0x1000),      # ends exactly at the top: still mapped
+            (limit, 0x1000),               # starts at the top: not mapped
+            (limit - 0x1000, 0x2000),      # crosses the top
+            (limit + 0x1000, 0x1000),      # entirely above
+            (0, 0),                        # empty range
+            (MASK64 - 0xFFF, 0x2000),       # wraps 64-bit
+            (MASK64, 1),                    # last byte: inside no map
+        ]
+        self.assertEqual(self._decisions(cases),
+                         ["ok", "ok", "reject", "reject", "reject", "reject",
+                          "reject", "reject"])
 
 
 class ReleaseIsolationTests(unittest.TestCase):

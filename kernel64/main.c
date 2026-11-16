@@ -2,15 +2,21 @@
  *
  * This is the first execution path in PC5 that runs in long mode with paging owned by
  * PC5 rather than by firmware.  It is deliberately small: validate the handover, prove
- * the CPU state, collect the feature report, and say so.  It refuses to print its success
- * marker unless every one of those checks passed, because a marker that appears anyway
- * would be worse than no marker at all.
+ * the CPU state, collect the feature report, and say so.  It refuses to print its
+ * success marker unless every mandatory check passed, because a marker that appears
+ * anyway would be worse than no marker at all.
  *
- * It is an *experimental* path: `make kernel64` builds it and `make stubtest64` runs it;
- * nothing in the release ISO consumes it yet.
+ * Validation order matters and is the point of this file (see pc5_boot64.h):
+ *   address arithmetic on the structure -> header -> memory map -> everything else,
+ *   with each remaining pointer checked against the map for range and memory type
+ *   before it is dereferenced or reported as usable.
+ *
+ * It is an *experimental* path: `make kernel64` builds it and `make stubtest64` runs
+ * it; nothing in the release ISO consumes it yet.
  */
-#include "include/pc5_boot64.h"
-#include "include/pc5_io.h"
+#include "pc5_boot64.h"
+#include "pc5_map.h"
+#include "pc5_io.h"
 #include "cpu64.h"
 #include "serial64.h"
 
@@ -18,16 +24,29 @@
 #define CR0_PE (1ULL << 0)
 #define CR4_PAE (1ULL << 5)
 
-_Static_assert(sizeof(struct pc5_boot64) == 112, "pc5_boot64 abi");
+#define KERNEL_MAX_BYTES (64ULL << 20)
+#define STACK_MAX_BYTES (1ULL << 20)
+#define MEMMAP_MAX_BYTES (1024ULL * 32ULL)
+#define MEMMAP_MAX_ENTRIES 1024ULL
+#define RSDP_SIGNATURE "RSD PTR "
+
+_Static_assert(sizeof(struct pc5_boot64) == 160, "pc5_boot64 abi");
 _Static_assert(sizeof(struct pc5_memdesc64) == 32, "pc5_memdesc64 abi");
 _Static_assert(__builtin_offsetof(struct pc5_boot64, memmap_addr) == 16, "boot64 abi");
 _Static_assert(__builtin_offsetof(struct pc5_boot64, framebuffer_addr) == 40, "boot64 abi");
 _Static_assert(__builtin_offsetof(struct pc5_boot64, acpi_rsdp) == 64, "boot64 abi");
 _Static_assert(__builtin_offsetof(struct pc5_boot64, kernel_base) == 72, "boot64 abi");
 _Static_assert(__builtin_offsetof(struct pc5_boot64, stack_top) == 88, "boot64 abi");
-_Static_assert(__builtin_offsetof(struct pc5_boot64, exit_boot_services) == 96, "boot64 abi");
+_Static_assert(__builtin_offsetof(struct pc5_boot64, stack_size) == 96, "boot64 abi");
+_Static_assert(__builtin_offsetof(struct pc5_boot64, pagetable_addr) == 104, "boot64 abi");
+_Static_assert(__builtin_offsetof(struct pc5_boot64, identity_span) == 120, "boot64 abi");
+_Static_assert(__builtin_offsetof(struct pc5_boot64, loader_image_addr) == 128, "boot64 abi");
+_Static_assert(__builtin_offsetof(struct pc5_boot64, exit_boot_services) == 144, "boot64 abi");
 
 extern char __kernel_start[], __kernel_end[];
+
+/* Arithmetic, descriptor and coverage helpers live in pc5_map.h, shared with
+ * the loader so both sides apply exactly one rule. */
 
 static void halt_forever(void)
 {
@@ -43,11 +62,20 @@ static void fail(const char *reason)
     halt_forever();
 }
 
-/* The boot information has to be validated before a single field is dereferenced. */
-static void validate_boot_info(const struct pc5_boot64 *bi)
+/* Stage 1: nothing is dereferenced here that has not been checked arithmetically. */
+static void validate_structure_address(const struct pc5_boot64 *bi)
 {
     if (!bi)
         fail("bootinfo-null");
+    u64 address = (u64)(unsigned long)bi;
+    if (address & 7)
+        fail("bootinfo-misaligned");
+    if (!pc5_range_within(address, sizeof(struct pc5_boot64), PC5_IDENTITY_LIMIT))
+        fail("bootinfo-address");
+}
+
+static void validate_header(const struct pc5_boot64 *bi)
+{
     if (bi->magic != PC5_BOOT64_MAGIC)
         fail("bootinfo-magic");
     if (bi->version != PC5_BOOT64_VERSION)
@@ -56,6 +84,13 @@ static void validate_boot_info(const struct pc5_boot64 *bi)
         fail("bootinfo-size");
     if (!(bi->flags & PC5_BOOT64_F_MEMMAP))
         fail("bootinfo-no-memmap");
+}
+
+/* Stage 2: the map's address is checked arithmetically, then it is read and every
+ * descriptor is checked for internal consistency before anyone trusts a bound. */
+static struct pc5_map_view validate_memmap(const struct pc5_boot64 *bi)
+{
+    struct pc5_map_view map = {0, 0};
     if (bi->memmap_addr == 0)
         fail("bootinfo-memmap-null");
     if (bi->memmap_addr & 7)
@@ -64,40 +99,201 @@ static void validate_boot_info(const struct pc5_boot64 *bi)
         fail("bootinfo-memmap-descsize");
     if (bi->memmap_bytes == 0 || bi->memmap_bytes % bi->memmap_desc_size)
         fail("bootinfo-memmap-bytes");
+    if (bi->memmap_bytes > MEMMAP_MAX_BYTES)
+        fail("bootinfo-memmap-too-large");
+    if (!pc5_range_within(bi->memmap_addr, bi->memmap_bytes, PC5_IDENTITY_LIMIT))
+        fail("bootinfo-memmap-range");
+
+    map.descriptors = (const struct pc5_memdesc64 *)(unsigned long)bi->memmap_addr;
+    map.entries = bi->memmap_bytes / bi->memmap_desc_size;
+    if (map.entries > MEMMAP_MAX_ENTRIES)
+        fail("bootinfo-memmap-entries");
+
+    u64 conventional_pages = 0;
+    for (u64 index = 0; index < map.entries; index++) {
+        if (!pc5_descriptor_valid(&map.descriptors[index]))
+            fail("bootinfo-memmap-descriptor");
+        if (map.descriptors[index].type == PC5_MMAP_CONVENTIONAL)
+            conventional_pages += map.descriptors[index].page_count;
+    }
+    if (conventional_pages == 0)
+        fail("bootinfo-no-conventional-memory");
+
+    serial64_write("PC5-64-MAP entries=");
+    serial64_dec(map.entries);
+    serial64_write(" conventional_pages=");
+    serial64_dec(conventional_pages);
+    serial64_write(" bytes=");
+    serial64_hex(bi->memmap_bytes);
+    serial64_write("\n");
+    return map;
+}
+
+/* Stage 3: every mandatory pointer, validated against the map before use. */
+static void validate_mandatory_ranges(const struct pc5_boot64 *bi,
+                                      const struct pc5_map_view *map)
+{
     if (bi->kernel_base == 0 || bi->kernel_base & 0xFFF)
         fail("bootinfo-kernel-base");
     if (bi->kernel_base != PC5_KERNEL64_LINK_BASE)
         fail("bootinfo-kernel-address");
     if ((u64)(unsigned long)__kernel_start != PC5_KERNEL64_LINK_BASE)
         fail("link-base-mismatch");
+    if (bi->kernel_size == 0 || bi->kernel_size > KERNEL_MAX_BYTES)
+        fail("bootinfo-kernel-size");
+    if (!pc5_range_within(bi->kernel_base, bi->kernel_size, PC5_IDENTITY_LIMIT))
+        fail("bootinfo-kernel-span");
+    if (!pc5_map_covers(map, bi->kernel_base, bi->kernel_size, PC5_MMAP_LOADER_OWNED_TYPES))
+        fail("bootinfo-kernel-range");
+    serial64_write("PC5-64-IMAGE base=");
+    serial64_hex(bi->kernel_base);
+    serial64_write(" size=");
+    serial64_hex(bi->kernel_size);
+    serial64_write(" range=ok\n");
+
     if (bi->stack_top == 0 || (bi->stack_top & 0xF))
         fail("bootinfo-stack");
+    if (bi->stack_size < 4096 || bi->stack_size > STACK_MAX_BYTES ||
+        (bi->stack_size & 0xFFF))
+        fail("bootinfo-stack-size");
+    if (bi->stack_top < bi->stack_size)
+        fail("bootinfo-stack-underflow");
+    u64 stack_base = bi->stack_top - bi->stack_size;
+    if (!pc5_range_within(stack_base, bi->stack_size, PC5_IDENTITY_LIMIT))
+        fail("bootinfo-stack-span");
+    if (!pc5_map_covers(map, stack_base, bi->stack_size, PC5_MMAP_LOADER_OWNED_TYPES))
+        fail("bootinfo-stack-range");
 
-    const struct pc5_memdesc64 *desc =
-        (const struct pc5_memdesc64 *)(unsigned long)bi->memmap_addr;
-    u64 entries = bi->memmap_bytes / bi->memmap_desc_size;
-    u64 conventional = 0;
-    for (u64 i = 0; i < entries; i++) {
-        if (desc[i].page_count == 0)
-            fail("bootinfo-memmap-empty");
-        if (desc[i].type == PC5_MMAP_CONVENTIONAL)
-            conventional += desc[i].page_count;
-    }
-    if (conventional == 0)
-        fail("bootinfo-no-conventional-memory");
+    if (bi->pagetable_addr == 0 || (bi->pagetable_addr & 0xFFF))
+        fail("bootinfo-pagetable");
+    if (bi->pagetable_pages < 3 || bi->pagetable_pages > PC5_PAGETABLE_MAX_PAGES)
+        fail("bootinfo-pagetable-pages");
+    /* The table block's *size* is pages * 4096; the sum is only needed to prove the
+     * block does not wrap.  Passing the sum where the size belongs would validate a
+     * range many times too large (and reject a correct handover), so the two are
+     * kept in separate variables on purpose. */
+    u64 table_bytes = bi->pagetable_pages * 4096ull;
+    u64 table_end = 0;
+    if (pc5_add_overflows(bi->pagetable_addr, table_bytes, &table_end))
+        fail("bootinfo-pagetable-overflow");
+    if (table_end > PC5_IDENTITY_LIMIT)
+        fail("bootinfo-pagetable-span");
+    if (!pc5_map_covers(map, bi->pagetable_addr, table_bytes,
+                        PC5_MMAP_LOADER_OWNED_TYPES))
+        fail("bootinfo-pagetable-range");
+    /* The declared span must be exactly what a 1 PML4 + 1 PDPT + (pages-2) PD block
+     * maps with 2 MiB pages; anything else would make "inside the span" a guess. */
+    if (bi->identity_span != (bi->pagetable_pages - 2ull) * 512ull * (2ull << 20))
+        fail("bootinfo-pagetable-span-mismatch");
+    if (bi->identity_span == 0 || bi->identity_span > PC5_IDENTITY_LIMIT)
+        fail("bootinfo-span-limit");
+
+    if (bi->loader_image_addr == 0 || bi->loader_image_size == 0)
+        fail("bootinfo-loader");
+    if (!pc5_range_within(bi->loader_image_addr, bi->loader_image_size,
+                      PC5_IDENTITY_LIMIT))
+        fail("bootinfo-loader-span");
+    if (!pc5_map_covers(map, bi->loader_image_addr, bi->loader_image_size,
+                    PC5_MMAP_LOADER_OWNED_TYPES))
+        fail("bootinfo-loader-range");
 }
 
-static void report_environment(const struct pc5_boot64 *bi)
+/* Stage 4: optional resources are validated too, but a failure here is recorded
+ * rather than fatal: the kernel simply must not report an unusable resource as
+ * usable.  Neither is dereferenced before it passes. */
+static void report_optional_resources(const struct pc5_boot64 *bi,
+                                      const struct pc5_map_view *map)
+{
+    if (bi->flags & PC5_BOOT64_F_FRAMEBUFFER) {
+        const char *reason = 0;
+        u64 pixels = 0, bytes = 0;
+        if (bi->framebuffer_addr == 0)
+            reason = "null";
+        else if (bi->framebuffer_width == 0 || bi->framebuffer_height == 0)
+            reason = "empty";
+        else if (pc5_add_overflows((u64)bi->framebuffer_width * 4ull, 0, &pixels))
+            reason = "width-overflow";
+        else if (bi->framebuffer_pitch < pixels)
+            reason = "pitch-too-small";
+        else if (pc5_add_overflows((u64)bi->framebuffer_pitch * bi->framebuffer_height,
+                               0, &bytes))
+            reason = "size-overflow";
+        else if (!pc5_range_within(bi->framebuffer_addr, bytes, bi->identity_span))
+            reason = "outside-span";
+        else if (!pc5_map_covers(map, bi->framebuffer_addr, bytes,
+                             PC5_MMAP_FRAMEBUFFER_TYPES))
+            reason = "not-device-memory";
+        serial64_write("PC5-64-FB addr=");
+        serial64_hex(bi->framebuffer_addr);
+        serial64_write(" width=");
+        serial64_dec(bi->framebuffer_width);
+        serial64_write(" height=");
+        serial64_dec(bi->framebuffer_height);
+        serial64_write(" pitch=");
+        serial64_dec(bi->framebuffer_pitch);
+        if (reason) {
+            serial64_write(" usability=unsupported reason=");
+            serial64_write(reason);
+            serial64_write("\n");
+        } else {
+            serial64_write(" usability=ok\n");
+        }
+    } else {
+        serial64_write(bi->flags & PC5_BOOT64_F_UNMAPPED_FRAMEBUFFER
+                           ? "PC5-64-FB usability=unsupported reason=unmapped-by-loader\n"
+                           : "PC5-64-FB usability=absent\n");
+    }
+
+    if (bi->flags & PC5_BOOT64_F_RSDP) {
+        const char *reason = 0;
+        if (bi->acpi_rsdp == 0)
+            reason = "null";
+        else if (!pc5_range_within(bi->acpi_rsdp, 36, bi->identity_span))
+            reason = "outside-span";
+        else if (!pc5_map_covers(map, bi->acpi_rsdp, 36, PC5_MMAP_FIRMWARE_DATA_TYPES))
+            reason = "not-firmware-memory";
+        else {
+            const char *signature = (const char *)(unsigned long)bi->acpi_rsdp;
+            for (unsigned i = 0; i < 8; i++) {
+                if (signature[i] != RSDP_SIGNATURE[i]) {
+                    reason = "signature";
+                    break;
+                }
+            }
+        }
+        serial64_write("PC5-64-RSDP addr=");
+        serial64_hex(bi->acpi_rsdp);
+        if (reason) {
+            serial64_write(" usability=unsupported reason=");
+            serial64_write(reason);
+            serial64_write("\n");
+        } else {
+            serial64_write(" usability=ok\n");
+        }
+    } else {
+        serial64_write(bi->flags & PC5_BOOT64_F_UNMAPPED_RSDP
+                           ? "PC5-64-RSDP usability=unsupported reason=unmapped-by-loader\n"
+                           : "PC5-64-RSDP usability=absent\n");
+    }
+}
+
+/* ------------------------------------------------------------- environment */
+static void report_environment(const struct pc5_boot64 *bi, u32 physical_bits)
 {
     u64 cr0 = read_cr0(), cr3 = read_cr3(), cr4 = read_cr4();
-    u64 efer = 0;
-    int efer_readable = 1;
+    int efer_readable;
 
     /* The MSR may be unreadable under some emulators; that makes it informational,
      * never a substitute for the architectural checks below. */
-    efer = read_msr(MSR_EFER);
-    if ((efer & (EFER_LME | EFER_LMA)) == 0 && (cr0 & CR0_PG) && (cr4 & CR4_PAE))
-        efer_readable = 0;
+    u64 efer = read_msr(MSR_EFER);
+    efer_readable = !((efer & (EFER_LME | EFER_LMA)) == 0 &&
+                      (cr0 & CR0_PG) && (cr4 & CR4_PAE));
+    if (!(cr0 & CR0_PG))
+        fail("paging-disabled");
+    if (!(cr4 & CR4_PAE))
+        fail("pae-disabled");
+    if (cr3 == 0 || (cr3 & 0xFFF))
+        fail("page-table-root-invalid");
 
     serial64_write("PC5-64-BANNER PC5 64-bit kernel entry\n");
     serial64_write("PC5-64-ENV cr0=");
@@ -109,19 +305,21 @@ static void report_environment(const struct pc5_boot64 *bi)
     serial64_write(" efer=");
     serial64_hex(efer);
     serial64_write(efer_readable ? "\n" : " (not reported by this environment)\n");
-
-    if (!(cr0 & CR0_PG))
-        fail("paging-disabled");
-    if (!(cr4 & CR4_PAE))
-        fail("pae-disabled");
-    if (cr3 == 0 || (cr3 & 0xFFF))
-        fail("page-table-root-invalid");
-    if (!efer_readable && !(efer & EFER_LMA))
+    if (!efer_readable)
         serial64_write("PC5-64-NOTE efer.lma unavailable; long mode proven by "
                        "64-bit register arithmetic and the CPUID long-mode bit\n");
 
+    /* The kernel must be running on the page tables the loader declared, or the
+     * whole "PC5 owns the map" claim is a story about a different table. */
+    if ((cr3 & 0x000FFFFFFFFFF000ull) != bi->pagetable_addr)
+        fail("pagetable-root-mismatch");
+
     serial64_write("PC5-64-PAGING enabled=1 root=");
-    serial64_hex(cr3 & 0x000FFFFFFFFFF000ull);
+    serial64_hex(bi->pagetable_addr);
+    serial64_write(" pages=");
+    serial64_dec(bi->pagetable_pages);
+    serial64_write(" span=");
+    serial64_hex(bi->identity_span);
     serial64_write(" kernel=");
     serial64_hex((u64)(unsigned long)__kernel_start);
     serial64_write("-");
@@ -130,8 +328,8 @@ static void report_environment(const struct pc5_boot64 *bi)
     serial64_hex(bi->kernel_base);
     serial64_write("\n");
 
-    /* A 64-bit-only proof: in 32-bit mode the upper half of this value cannot survive
-     * the move, and the comparison below would fail. */
+    /* A 64-bit-only proof: in 32-bit mode the upper half of this value cannot
+     * survive the move, and the comparison below would fail. */
     u64 probe = 0x1122334455667788ull;
     u64 copy;
     __asm__ volatile("movq %1, %%rax; movq %%rax, %0" : "=r"(copy) : "r"(probe)
@@ -142,60 +340,103 @@ static void report_environment(const struct pc5_boot64 *bi)
         fail("not-64-bit-arithmetic");
     serial64_write("PC5-64-REGS wide-operands=ok arithmetic=ok\n");
 
-    /* Stack alignment: the start stub aligned rsp to 16 and the C ABI keeps it there. */
+    /* Stack: the loader says where it is and how big; the kernel checks both the
+     * architectural alignment and that RSP is really inside that range. */
     u64 rsp;
     __asm__ volatile("mov %%rsp, %0" : "=r"(rsp));
     if (rsp & 0xF)
         fail("stack-misaligned");
-    if (bi->stack_top == 0 || rsp > bi->stack_top || bi->stack_top - rsp > 64 * 1024)
+    if (rsp > bi->stack_top || bi->stack_top - rsp >= bi->stack_size)
         fail("stack-not-from-bootinfo");
     serial64_write("PC5-64-STACK rsp=");
     serial64_hex(rsp);
     serial64_write(" top=");
     serial64_hex(bi->stack_top);
-    serial64_write(" aligned=16\n");
+    serial64_write(" size=");
+    serial64_dec(bi->stack_size);
+    serial64_write(" aligned=16 range=ok\n");
+
+    serial64_write("PC5-64-LOADER image=");
+    serial64_hex(bi->loader_image_addr);
+    serial64_write(" size=");
+    serial64_hex(bi->loader_image_size);
+    serial64_write(" range=ok\n");
+
+    /* Physical address width, when CPUID reports it: a pointer that does not fit
+     * the CPU's physical address is not a pointer, whatever the map says. */
+    if (physical_bits >= 32 && physical_bits <= 52) {
+        u64 limit = 1ull << physical_bits;
+        const u64 checked[] = {bi->kernel_base, bi->kernel_base + bi->kernel_size,
+                               bi->stack_top, bi->pagetable_addr,
+                               bi->loader_image_addr + bi->loader_image_size,
+                               bi->memmap_addr + bi->memmap_bytes};
+        for (unsigned i = 0; i < sizeof(checked) / sizeof(checked[0]); i++) {
+            if (checked[i] > limit)
+                fail("address-width");
+        }
+    }
 }
 
-static void report_boot_info(const struct pc5_boot64 *bi)
+static void report_handover_flags(const struct pc5_boot64 *bi)
 {
-    u64 entries = bi->memmap_bytes / bi->memmap_desc_size;
     serial64_write("PC5-64-BOOTINFO magic=ok version=");
     serial64_dec(bi->version);
     serial64_write(" size=");
     serial64_dec(bi->size);
     serial64_write(" memdesc=");
     serial64_dec(bi->memmap_desc_size);
-    serial64_write(" entries=");
-    serial64_dec(entries);
     serial64_write(" flags=");
     serial64_hex(bi->flags);
-    serial64_write("\n");
-    serial64_write("PC5-64-HANDOVER framebuffer=");
-    serial64_hex(bi->framebuffer_addr);
-    serial64_write(" rsdp=");
-    serial64_hex(bi->acpi_rsdp);
     serial64_write(" exit_boot_services=");
     serial64_dec(bi->exit_boot_services);
     serial64_write("\n");
 }
+
+/* Validated memory map, kept for the half of the boot that runs after the stack
+ * switch: it is read-only after validate_memmap() and re-parsing it would only add
+ * another chance to disagree with the checks already made. */
+static struct pc5_map_view g_map;
+
+/* kernel64/start.S: switches RSP to a validated stack and calls the continuation
+ * there.  It never returns. */
+void pc5_adopt_stack(u64 stack_top, void (*continuation)(void *), void *argument)
+    __attribute__((noreturn));
+
+static void continue_on_handed_stack(void *argument);
 
 void kmain(struct pc5_boot64 *bi)
 {
     serial64_init();
     serial64_write("PC5-64BIT-KERNEL-ENTRY\n");
 
-    validate_boot_info(bi);
-    report_environment(bi);
-    report_boot_info(bi);
+    validate_structure_address(bi);
+    validate_header(bi);
+    g_map = validate_memmap(bi);
+    validate_mandatory_ranges(bi, &g_map);
 
+    /* The loader's stack is now known to be inside the map, page-aligned and
+     * inside a range the map calls loader-owned.  Adopting it is the first moment it
+     * is legal to use it; until now every frame lived on the image's own stack. */
+    pc5_adopt_stack(bi->stack_top, continue_on_handed_stack, (void *)bi);
+
+    /* pc5_adopt_stack does not return. */
+    fail("stack-adopt-returned");
+}
+
+static void continue_on_handed_stack(void *argument)
+{
+    const struct pc5_boot64 *bi = (const struct pc5_boot64 *)argument;
     struct pc5_cpu64 cpu;
     cpu64_report(&cpu);
-    cpu64_print(&cpu);
-
     if (!cpu.long_mode)
         fail("cpuid-reports-no-long-mode");
 
-    /* Every check above passed; only now is the marker emitted. */
+    report_environment(bi, cpu.phys_addr_bits);
+    report_handover_flags(bi);
+    report_optional_resources(bi, &g_map);
+    cpu64_print(&cpu);
+
+    /* Every mandatory check passed; only now is the marker emitted. */
     serial64_write("PC5-64BIT-LONG-MODE-OK\n");
     serial64_write("PC5-64-DONE\n");
     halt_forever();

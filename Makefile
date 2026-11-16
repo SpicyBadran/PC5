@@ -117,7 +117,8 @@ KERNEL64_CFLAGS := -m64 -std=gnu11 -O2 -Wall -Wextra -Werror -ffreestanding \
                    -Ikernel64/include
 KERNEL64_SRC := kernel64/start.S kernel64/main.c kernel64/serial64.c \
                 kernel64/cpu64.c
-KERNEL64_HDR := kernel64/include/pc5_boot64.h kernel64/include/pc5_io.h \
+KERNEL64_HDR := kernel64/include/pc5_boot64.h kernel64/include/pc5_map.h \
+                kernel64/include/pc5_io.h \
                 kernel64/serial64.h kernel64/cpu64.h kernel64/kernel64.ld
 LOADER64_SRC := boot/uefi64/uefi64_main.c boot/uefi64/pagetables.c \
                 boot/uefi64/bootx64.S
@@ -136,10 +137,13 @@ $(BUILD)/kernel64:
 
 # The image is flat and linked at 0x100000: it is loaded unchanged, so there is
 # no relocation step and no PIE.
+# $(filter %.o,$^): the linker script is a prerequisite so edits relink, but it is
+# already named by -T, and passing it twice is a hard ld error ("appears multiple
+# times") - which is what a from-scratch build of this target used to hit.
 $(BUILD)/kernel64/pc5-64.elf: $(BUILD)/kernel64/start.o $(BUILD)/kernel64/main.o \
                               $(BUILD)/kernel64/serial64.o $(BUILD)/kernel64/cpu64.o \
                               kernel64/kernel64.ld
-	$(LD) -m elf_x86_64 -T kernel64/kernel64.ld -nostdlib -o $@ $^
+	$(LD) -m elf_x86_64 -T kernel64/kernel64.ld -nostdlib -o $@ $(filter %.o,$^)
 
 # .bss carries the kernel stack, so it has to travel with the image: a binary
 # that stops before .bss would put the stack outside the loaded window.

@@ -7,20 +7,32 @@
  *   - it builds PC5-owned 4-level page tables and switches CR3 to them, so the
  *     kernel runs on mappings PC5 can describe;
  *   - it hands over a versioned, size-checked boot-info structure
- *     (`struct pc5_boot64`, protocol version 1) rather than a flat 32-bit one;
+ *     (`struct pc5_boot64`, protocol version 2) rather than a flat 32-bit one;
  *   - it calls ExitBootServices with the memory-map key and retries when
  *     firmware invalidates that key, which real firmware does routinely;
  *   - it gives the kernel its own stack instead of firmware's;
  *   - it says what it did on COM1, so the execution can be checked without a
  *     screen.
  *
- * Every allocation is requested below 4 GiB (EFI_ALLOCATE_MAX_ADDRESS), because
- * the identity map covers the first 4 GiB only; a boot-info pointer above that
- * would be a pointer the kernel cannot dereference.  That limit is a documented
- * property of protocol version 1, not a hidden assumption.
+ * Placement is validated, not assumed.  Version 2 maps one identity region and the
+ * kernel refuses to run outside it, so the loader:
+ *
+ *   - asks firmware where it loaded this application (Loaded Image Protocol) and
+ *     refuses to continue if the image is outside the region, instead of switching
+ *     CR3 and executing code nothing maps;
+ *   - requests every allocation below the region (EFI_ALLOCATE_MAX_ADDRESS) and
+ *     asserts the result is inside it;
+ *   - records a framebuffer or RSDP that lies outside it as *unmapped* - the
+ *     address is zeroed and the flag says why - rather than passing a physical
+ *     address to the kernel that the kernel would dereference and fault on.
+ *
+ * The switch itself is in bootx64.S: the only code between installing CR3 and
+ * entering the kernel is an instruction sequence that cannot be interrupted, and
+ * that puts firmware's root back if the write does not take effect.
  */
 #include "../uefi/efi.h"
 #include "pc5_boot64.h"
+#include "pc5_map.h"
 #include "handover64.h"
 #include "pagetables.h"
 
@@ -137,6 +149,8 @@ static void serial_dec(u64 value)
     serial_write(&buffer[index + 1]);
 }
 
+static void die(const char *why) __attribute__((noreturn));
+
 static void die(const char *why)
 {
     serial_write("PC5-64-LOADER-FAIL=");
@@ -148,11 +162,72 @@ static void die(const char *why)
 
 /* ------------------------------------------------------------- registers */
 static u64 read_cr0(void) { u64 v; __asm__ volatile("mov %%cr0, %0" : "=r"(v)); return v; }
-static u64 read_cr3(void) { u64 v; __asm__ volatile("mov %%cr3, %0" : "=r"(v)); return v; }
 static u64 read_cr4(void) { u64 v; __asm__ volatile("mov %%cr4, %0" : "=r"(v)); return v; }
-static void write_cr3(u64 v) { __asm__ volatile("mov %0, %%cr3" : : "r"(v) : "memory"); }
 
-void pc5_enter_kernel64(u64 entry, struct pc5_boot64 *boot_info) __attribute__((noreturn));
+/* Installs CR3, verifies it reads back, switches to the kernel stack and jumps in
+ * long mode.  Defined in bootx64.S: it is the only code that runs between the map
+ * switch and the kernel, and it is written in assembly so that "nothing else runs
+ * on the new map" is a property of the instruction sequence, not a promise. */
+int pc5_enter_kernel64(u64 pagetable, u64 entry, struct pc5_boot64 *boot_info);
+
+/* The assembly handoff loads the kernel stack with `movq 88(%rdx), %rsp`.  If the
+ * structure ever moves, that instruction becomes a stack switch to the wrong
+ * address - the kind of failure that is invisible until a machine happens to have
+ * something writable there.  Fail the build instead. */
+_Static_assert(__builtin_offsetof(struct pc5_boot64, stack_top) == 88,
+               "bootx64.S loads stack_top from offset 88");
+_Static_assert(sizeof(struct pc5_boot64) == 160, "boot info ABI is 160 bytes");
+/* The map spans PC5_IDENTITY_LIMIT and nothing else; the loader's placement policy
+ * and the kernel's range checks must use the same limit or a region could pass one
+ * and fail the other. */
+_Static_assert(PC5_PT_SPAN == PC5_IDENTITY_LIMIT, "map span differs from the ABI limit");
+
+/* ------------------------------------------------------- placement policy */
+/* Every address the loader will touch after the map switch must be inside the
+ * map, and the map is all the loader can build in version 2.  These helpers are
+ * the single place that decides what "inside" means, so the loader and the kernel
+ * cannot disagree about it. */
+static void require_below_span(const char *what, u64 address, u64 size)
+{
+    if (!pc5_range_within(address, size, PC5_PT_SPAN)) {
+        serial_write("PC5-64-LOADER-REJECT ");
+        serial_write(what);
+        serial_write("=");
+        serial_hex(address);
+        serial_write(" size=");
+        serial_hex(size);
+        serial_write(" above identity span\n");
+        die("above-identity-map");
+    }
+}
+
+/* Records the EFI application's own placement and refuses to continue if firmware
+ * put it where PC5's map cannot reach it.  The alternative - assuming firmware
+ * loads applications low - is exactly the assumption that crashes on the first
+ * machine that does not. */
+static void validate_loader_placement(efi_handle image, struct pc5_boot64 *boot_info)
+{
+    struct efi_loaded_image *loaded = 0;
+    efi_status status = g_bs->handle_protocol(
+        image, (struct efi_guid *)&EFI_LOADED_IMAGE_PROTOCOL_GUID, (void **)&loaded);
+    if (EFI_ERROR(status) || !loaded)
+        die("no-loaded-image");
+    u64 base = (u64)(unsigned long)loaded->image_base;
+    u64 size = loaded->image_size;
+    if (!base || !size)
+        die("loaded-image-empty");
+    u64 end = 0;
+    if (pc5_add_overflows(base, size, &end))
+        die("loader-image-overflow");
+    require_below_span("loader-image", base, size);
+    boot_info->loader_image_addr = base;
+    boot_info->loader_image_size = size;
+    serial_write("PC5-64-LOADER image=");
+    serial_hex(base);
+    serial_write("-");
+    serial_hex(end);
+    serial_write(" below-span=1\n");
+}
 
 /* --------------------------------------------------------------- helpers */
 static void *alloc_below_4g(u64 pages, u64 *physical)
@@ -283,13 +358,30 @@ static void collect_framebuffer(struct pc5_boot64 *boot_info, u64 *fb_end)
     if (!gop->mode->frame_buffer_base || !info->pixels_per_scan_line)
         return;
 
-    boot_info->framebuffer_addr = gop->mode->frame_buffer_base;
+    u64 base = gop->mode->frame_buffer_base;
+    u64 pitch = (u64)info->pixels_per_scan_line * 4ull;
+    u64 bytes = 0;
+    if (pc5_add_overflows(pitch, 0, &bytes) ||
+        pc5_add_overflows(pitch * info->vertical_resolution, 0, &bytes) ||
+        !pc5_range_within(base, bytes, PC5_PT_SPAN)) {
+        /* Firmware offered a framebuffer outside the single region version 2 can
+         * map.  Say so, zero the address, and let the kernel record it as
+         * unsupported: a 64-bit address that cannot be dereferenced must never be
+         * handed over as if it could be. */
+        serial_write("PC5-64-LOADER framebuffer=");
+        serial_hex(base);
+        serial_write(" unusable=outside-identity-span\n");
+        boot_info->framebuffer_addr = 0;
+        boot_info->flags |= PC5_BOOT64_F_UNMAPPED_FRAMEBUFFER;
+        return;
+    }
+    boot_info->framebuffer_addr = base;
     boot_info->framebuffer_width = info->horizontal_resolution;
     boot_info->framebuffer_height = info->vertical_resolution;
-    boot_info->framebuffer_pitch = info->pixels_per_scan_line * 4;
+    boot_info->framebuffer_pitch = (u32)pitch;
     boot_info->framebuffer_format = info->pixel_format;
     boot_info->flags |= PC5_BOOT64_F_FRAMEBUFFER;
-    *fb_end = gop->mode->frame_buffer_base + gop->mode->frame_buffer_size;
+    *fb_end = base + bytes;
     serial_write("PC5-64-LOADER framebuffer=");
     serial_hex(boot_info->framebuffer_addr);
     serial_write(" ");
@@ -324,10 +416,19 @@ static void collect_rsdp(struct pc5_boot64 *boot_info)
         if (!guid_equal(&table[index].guid, &ACPI2_GUID) &&
             !guid_equal(&table[index].guid, &ACPI1_GUID))
             continue;
-        boot_info->acpi_rsdp = (u64)(unsigned long)table[index].table;
+        u64 rsdp = (u64)(unsigned long)table[index].table;
+        if (!pc5_range_within(rsdp, 36, PC5_PT_SPAN)) {
+            boot_info->flags |= PC5_BOOT64_F_UNMAPPED_RSDP;
+            boot_info->acpi_rsdp = 0;
+            serial_write("PC5-64-LOADER rsdp=");
+            serial_hex(rsdp);
+            serial_write(" unusable=outside-identity-span\n");
+            return;
+        }
+        boot_info->acpi_rsdp = rsdp;
         boot_info->flags |= PC5_BOOT64_F_RSDP;
         serial_write("PC5-64-LOADER rsdp=");
-        serial_hex(boot_info->acpi_rsdp);
+        serial_hex(rsdp);
         serial_write("\n");
         return;
     }
@@ -422,29 +523,37 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
     g_bs = system_table->boot_services;
     g_bs->set_watchdog_timer(0, 0, 0, 0);
 
-    /* Everything we allocate lives below 4 GiB, in PC5's own memory. */
+    /* Everything PC5 allocates lives below the identity span, because version 2
+     * maps exactly one region and the kernel will validate every pointer against
+     * it.  Each requirement is asserted rather than assumed. */
     u64 boot_info_physical = 0;
     struct pc5_boot64 *boot_info = alloc_below_4g(1, &boot_info_physical);
     if (!boot_info)
         die("bootinfo-allocate");
+    require_below_span("bootinfo", boot_info_physical, sizeof(struct pc5_boot64));
     boot_info->magic = PC5_BOOT64_MAGIC;
     boot_info->version = PC5_BOOT64_VERSION;
     boot_info->size = sizeof(struct pc5_boot64);
 
     load_kernel(boot_info);
+    require_below_span("kernel", boot_info->kernel_base, boot_info->kernel_size);
 
     u64 fb_end = 0;
     collect_framebuffer(boot_info, &fb_end);
     collect_rsdp(boot_info);
 
     u64 pt_physical = 0;
-    void *pt = alloc_below_4g(PC5_PT_PAGES, &pt_physical);
-    if (!pt)
+    if (!alloc_below_4g(PC5_PT_PAGES, &pt_physical))
         die("pagetable-allocate");
+    require_below_span("pagetable", pt_physical, PC5_PT_PAGES * PC5_PT_PAGE);
     unsigned long mapped = pc5_pt_build_identity(pt_physical, PC5_PT_SPAN);
     if (mapped != (unsigned long)(PC5_PT_SPAN / PC5_PT_2MIB))
         die("pagetable-incomplete");
-    if (boot_info->framebuffer_addr)
+    if ((boot_info->flags & PC5_BOOT64_F_FRAMEBUFFER) &&
+        !pc5_range_within(boot_info->framebuffer_addr,
+                          fb_end - boot_info->framebuffer_addr, PC5_PT_SPAN))
+        die("framebuffer-outside-span");
+    if (boot_info->flags & PC5_BOOT64_F_FRAMEBUFFER)
         pc5_pt_mark_uncached(pt_physical, boot_info->framebuffer_addr, fb_end);
     serial_write("PC5-64-LOADER pagetables=");
     serial_hex(pt_physical);
@@ -459,12 +568,16 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
     u64 stack_physical = 0;
     if (!alloc_below_4g(KERNEL_STACK_PAGES, &stack_physical))
         die("stack-allocate");
+    require_below_span("stack", stack_physical, KERNEL_STACK_PAGES * 4096);
     boot_info->stack_top = stack_physical + KERNEL_STACK_PAGES * 4096;
+    boot_info->stack_size = KERNEL_STACK_PAGES * 4096;
     serial_write("PC5-64-LOADER stack=");
     serial_hex(stack_physical);
     serial_write("-");
     serial_hex(boot_info->stack_top);
     serial_write("\n");
+
+    validate_loader_placement(image, boot_info);
 
     u64 entries = 0;
     struct pc5_memdesc64 *memmap = memmap_and_exit(image, &entries);
@@ -472,34 +585,38 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
     boot_info->memmap_bytes = entries * sizeof(struct pc5_memdesc64);
     boot_info->memmap_desc_size = sizeof(struct pc5_memdesc64);
     boot_info->memmap_desc_version = 1;
+    boot_info->pagetable_addr = pt_physical;
+    boot_info->pagetable_pages = PC5_PT_PAGES;
+    boot_info->identity_span = PC5_PT_SPAN;
     boot_info->flags |= PC5_BOOT64_F_MEMMAP | PC5_BOOT64_F_EXIT_BOOT_SERVICES;
     boot_info->exit_boot_services = 1;
+    require_below_span("memmap", boot_info->memmap_addr, boot_info->memmap_bytes);
 
-    /* No boot services from here on.  The map we own is what the kernel will
-     * run on; firmware's tables are abandoned together with its stack. */
-    write_cr3(pt_physical);
-    u64 cr3 = read_cr3();
+    /* Everything the loader needs after the switch is now inside the map, so the
+     * switch itself is the last thing this code does.  Firmware's stack and
+     * firmware's tables are abandoned here; the kernel gets PC5's stack. */
     u64 cr0 = read_cr0();
     u64 cr4 = read_cr4();
-    if ((cr3 & 0x000FFFFFFFFFF000ull) != pt_physical)
-        die("cr3-not-installed");
     if (!(cr0 & (1ull << 31)))
         die("paging-off");
     if (!(cr4 & (1ull << 5)))
         die("pae-off");
-    serial_write("PC5-64-LOADER cr3=");
-    serial_hex(cr3);
+    serial_write("PC5-64-LOADER cr3-plan=");
+    serial_hex(pt_physical);
     serial_write(" cr0=");
     serial_hex(cr0);
     serial_write(" cr4=");
     serial_hex(cr4);
     serial_write(" long-mode=1\n");
-
     serial_write("PC5-64-LOADER-JUMP entry=");
     serial_hex(boot_info->kernel_base);
     serial_write(" bootinfo=");
     serial_hex(boot_info_physical);
+    serial_write(" stack=");
+    serial_hex(boot_info->stack_top);
     serial_write("\n");
 
-    pc5_enter_kernel64(boot_info->kernel_base, boot_info);
+    if (pc5_enter_kernel64(pt_physical, boot_info->kernel_base, boot_info) != 0)
+        die("cr3-not-installed");
+    die("handoff-returned");
 }

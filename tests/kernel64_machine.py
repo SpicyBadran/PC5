@@ -27,44 +27,76 @@ STACK_TOP = BOOT_AREA[0] + 0x18000
 PML4 = TABLE_AREA[0]
 
 MAGIC = 0x42354350
-VERSION = 1
-BOOT_INFO_SIZE = 112
+VERSION = 2
+BOOT_INFO_SIZE = 160
 DESC_SIZE = 32
+
+# Where the machine puts a synthetic framebuffer and RSDP.  Only the RSDP is
+# dereferenced by the kernel (it checks the signature), so only that page has to be
+# real memory; the framebuffer is validated by range, not read.
+FB_BASE = 0x04000000
+FB_SIZE = 0x00400000
+RSDP = FB_BASE + 0x1000
+RSDP_SIGNATURE = b"RSD PTR "
 LINK_BASE = KERNEL_BASE
 
 PC5_MMAP_CONVENTIONAL = 7
 PC5_MMAP_LOADER_DATA = 2
 PC5_MMAP_MMIO = 11
 
+# The kernel checks that every handoff region is covered by memory of an acceptable
+# type, so the map has to describe the kernel window, the boot area, the page-table
+# area and the framebuffer - which is what firmware does for memory it has handed out.
 DEFAULT_MEMMAP = [
-    (0x00000000, 0x9F, PC5_MMAP_CONVENTIONAL),
-    (0x00100000, 0x100, PC5_MMAP_LOADER_DATA),
-    (0x04000000, 0x400, PC5_MMAP_MMIO),
+    (0x00000000, 0x9F, PC5_MMAP_CONVENTIONAL),          # 0 .. 0x9F000
+    (0x00100000, 0x320, PC5_MMAP_LOADER_DATA),          # kernel + boot area + stack
+    (0x00500000, 0x020, PC5_MMAP_LOADER_DATA),          # page tables
+    (FB_BASE, FB_SIZE // 4096, PC5_MMAP_MMIO),          # framebuffer + RSDP
 ]
 
 
 def pack_boot_info(**overrides):
-    """Build a `struct pc5_boot64` image, with per-field overrides for tests."""
+    """Build a `struct pc5_boot64` image, with per-field overrides for tests.
+
+    The layout is written as a sequence of (code, field) pairs rather than one
+    hand-written format string: the format string is derived, so a missing or
+    duplicated field cannot silently shift every field after it.  The order is the
+    C structure's order, and tests/test_kernel64.py checks the total size against a
+    host build of the header.
+    """
     fields = dict(
         magic=MAGIC, version=VERSION, size=BOOT_INFO_SIZE, flags=0xF,
         memmap_addr=MEMMAP, memmap_bytes=DESC_SIZE * len(DEFAULT_MEMMAP),
         memmap_desc_size=DESC_SIZE, memmap_desc_version=1,
-        framebuffer_addr=0x04000000, framebuffer_width=1024,
+        framebuffer_addr=FB_BASE, framebuffer_width=1024,
         framebuffer_height=768, framebuffer_pitch=4096, framebuffer_format=0,
-        acpi_rsdp=0x04001000, kernel_base=LINK_BASE, kernel_size=0xA000,
-        stack_top=STACK_TOP, exit_boot_services=1, time_stamp=0,
+        acpi_rsdp=RSDP, kernel_base=LINK_BASE, kernel_size=0xA000,
+        stack_top=STACK_TOP, stack_size=0x8000,
+        pagetable_addr=PML4, pagetable_pages=6, identity_span=4 << 30,
+        loader_image_addr=LINK_BASE, loader_image_size=0xA000,
+        exit_boot_services=1, time_stamp=0,
     )
     fields.update(overrides)
-    return struct.pack(
-        "<IIIIQQIIQIIIIQQQQQQ",
-        fields["magic"], fields["version"], fields["size"], fields["flags"],
-        fields["memmap_addr"], fields["memmap_bytes"],
-        fields["memmap_desc_size"], fields["memmap_desc_version"],
-        fields["framebuffer_addr"], fields["framebuffer_width"],
-        fields["framebuffer_height"], fields["framebuffer_pitch"],
-        fields["framebuffer_format"], fields["acpi_rsdp"],
-        fields["kernel_base"], fields["kernel_size"], fields["stack_top"],
-        fields["exit_boot_services"], fields["time_stamp"])
+    layout = [
+        ("I", "magic"), ("I", "version"), ("I", "size"), ("I", "flags"),
+        ("Q", "memmap_addr"), ("Q", "memmap_bytes"),
+        ("I", "memmap_desc_size"), ("I", "memmap_desc_version"),
+        ("Q", "framebuffer_addr"),
+        ("I", "framebuffer_width"), ("I", "framebuffer_height"),
+        ("I", "framebuffer_pitch"), ("I", "framebuffer_format"),
+        ("Q", "acpi_rsdp"),
+        ("Q", "kernel_base"), ("Q", "kernel_size"),
+        ("Q", "stack_top"), ("Q", "stack_size"),
+        ("Q", "pagetable_addr"), ("Q", "pagetable_pages"),
+        ("Q", "identity_span"),
+        ("Q", "loader_image_addr"), ("Q", "loader_image_size"),
+        ("Q", "exit_boot_services"), ("Q", "time_stamp"),
+    ]
+    known = {name for _, name in layout}
+    unknown = set(fields) - known
+    assert not unknown, f"unknown boot-info field(s): {sorted(unknown)}"
+    return struct.pack("<" + "".join(code for code, _ in layout),
+                       *[fields[name] for _, name in layout])
 
 
 def pack_memmap(descriptors):
@@ -75,7 +107,7 @@ def pack_memmap(descriptors):
 
 
 class Machine:
-    def __init__(self, kernel):
+    def __init__(self, kernel, rsdp_signature=RSDP_SIGNATURE):
         from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
             UC_HOOK_INSN
         from unicorn.x86_const import UC_X86_INS_IN, UC_X86_INS_OUT
@@ -84,6 +116,8 @@ class Machine:
         self.uc.mem_map(*KERNEL_WINDOW)
         self.uc.mem_map(*BOOT_AREA)
         self.uc.mem_map(*TABLE_AREA)
+        self.uc.mem_map(FB_BASE, 0x2000)          # RSDP page; nothing else is read
+        self.uc.mem_write(RSDP, rsdp_signature[:8].ljust(8, b" ") + bytes(28))
         self.uc.mem_write(KERNEL_BASE, bytes(kernel))
         self.serial = ""
         self.stop_markers = ("PC5-64-DONE", "PC5-64BIT-FAIL=")
@@ -167,8 +201,9 @@ class Machine:
         return dict(serial=self.serial, stopped_on=self.stopped_on, error=error)
 
 
-def run_kernel(kernel, memmap=None, paging=True, **overrides):
-    machine = Machine(kernel)
+def run_kernel(kernel, memmap=None, paging=True, rsdp_signature=RSDP_SIGNATURE,
+               **overrides):
+    machine = Machine(kernel, rsdp_signature=rsdp_signature)
     if memmap is not None:
         overrides.setdefault("memmap_bytes", DESC_SIZE * len(memmap))
     result = machine.run(pack_boot_info(**overrides), paging=paging,

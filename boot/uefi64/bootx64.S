@@ -31,17 +31,60 @@ _start:
     hlt
     jmp 1b
 
-/* Hand the machine to the kernel: RDI = entry point, RSI = boot info.
- * The kernel gets PC5's own stack, taken from the boot-info structure, so the
- * firmware's stack can be abandoned with the rest of boot services. */
+/* Hand the machine to the kernel.
+ *   RDI = physical address of PC5's PML4, RSI = kernel entry, RDX = boot info
+ *
+ * This is the only code that runs between installing PC5's page tables and
+ * entering the kernel, and it is assembly so that "nothing else executes on the
+ * new map" is a property of the instruction sequence rather than a comment on a C
+ * function.  It never returns on success.
+ *
+ * Order matters:
+ *   - the caller's interrupt state and firmware CR3 are saved first, so a failed
+ *     switch can put the machine back exactly as it was and return -1;
+ *   - interrupts are masked, because PC5 installs no IDT and an interrupt taken
+ *     between the CR3 write and the kernel's first instruction would run a
+ *     handler described by firmware's now-abandoned tables;
+ *   - CR3 is read back and compared: a silently ignored write would otherwise
+ *     leave the loader executing on firmware's map believing otherwise;
+ *   - only then is RSP moved to the kernel stack.  Until that instruction, every
+ *     memory access - including these - is on firmware's stack, which is still
+ *     mapped because the map is an identity map that includes it.
+ *
+ * stack_top lives at offset 88 of struct pc5_boot64; that offset is asserted with
+ * _Static_assert in kernel64/main.c and boot/uefi64/uefi64_main.c, so a layout
+ * change breaks the build instead of this jump.
+ */
     .globl pc5_enter_kernel64
     .type pc5_enter_kernel64, @function
 pc5_enter_kernel64:
-    movq %rdi, %rax                /* entry point */
-    movq 88(%rsi), %rsp            /* struct pc5_boot64.stack_top */
-    andq $-16, %rsp
-    movq %rsi, %rdi                /* first argument: boot info */
-    jmp *%rax                      /* still in long mode: no mode switch */
+    pushq %rbx
+    pushq %r12
+    pushq %r13
+    pushfq
+    popq %rbx                      /* caller's RFLAGS, restored on failure */
+    movq %cr3, %r12                /* firmware's root, restored on failure */
+    movq %rdi, %r13                /* PC5's root, the only value written */
+    cli
+    movq %r13, %cr3
+    movq %cr3, %rax
+    cmpq %r13, %rax
+    jne .Lpc5_handoff_failed
+    movq 88(%rdx), %rsp            /* struct pc5_boot64.stack_top */
+    andq $-16, %rsp                /* SysV: 16-byte alignment at entry */
+    cld
+    xorl %ebp, %ebp                /* no caller frame for the kernel to unwind */
+    movq %rdx, %rdi                /* SysV first argument: boot info */
+    jmpq *%rsi                     /* still in long mode: no mode switch */
+.Lpc5_handoff_failed:
+    movq %r12, %cr3
+    pushq %rbx
+    popfq
+    popq %r13
+    popq %r12
+    popq %rbx
+    movl $-1, %eax
+    ret
     .size pc5_enter_kernel64, . - pc5_enter_kernel64
 
     .section .note.GNU-stack, "", @progbits
