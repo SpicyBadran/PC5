@@ -4,9 +4,9 @@
     "skipped": 0,
     "total": 653
   },
-  "code_revision": "32f3a14a3eae3dd07248a775372ee3765e3334f9",
+  "code_revision": "02f0fb0921c5fc075c00f686d426055fd86f6ae3",
   "command": "make check",
-  "commit": "32f3a14a3eae3dd07248a775372ee3765e3334f9",
+  "commit": "02f0fb0921c5fc075c00f686d426055fd86f6ae3",
   "date": "2026-11-16",
   "dirty": false,
   "exit_code": 0,
@@ -16,6 +16,6 @@
   "result": "passed",
   "schema": "pc5.validation/1",
   "source_date_epoch": 1763251200,
-  "summary": "Ran 653 tests in 75.832s",
+  "summary": "Ran 653 tests in 71.744s",
   "tool": "tools/validation.py"
 }

@@ -1,7 +1,7 @@
 {
-  "code_revision": "32f3a14a3eae3dd07248a775372ee3765e3334f9",
+  "code_revision": "02f0fb0921c5fc075c00f686d426055fd86f6ae3",
   "command": "make ovmf-test",
-  "commit": "32f3a14a3eae3dd07248a775372ee3765e3334f9",
+  "commit": "02f0fb0921c5fc075c00f686d426055fd86f6ae3",
   "date": "2026-11-16",
   "dirty": false,
   "exit_code": 2,
