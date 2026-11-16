@@ -9,6 +9,7 @@
 See <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html> for the full text.
 
 PC5 is distributed under GPL version 2 only (not "or any later version").
-The PC5 boot environment is original work; the AnyPS5 sources under
-vendor/anyps5 (if present) remain Copyright (C) their authors and are
-GPL-2.0-only as well.
+The PC5 boot environment is original work. No third-party source archive is
+vendored in this repository: third-party material, where cited, remains
+Copyright (C) its authors and is used only as public prior art, never as a
+dependency (ADR-025).

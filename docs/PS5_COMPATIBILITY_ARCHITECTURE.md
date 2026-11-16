@@ -18,7 +18,7 @@
                      └─────────────────────────────────────────────┘
                      ┌─────────────────────────────────────────────┐
    execution path    │ 5 package/executable intake (FIH/CNT, SELF) │  RESEARCH
-   (PS5 binaries on  │ 6 static relinking + PRX shims (AnyPS5)     │  RESEARCH
+   (PS5 binaries on  │ 6 static relinking + PRX shims (public)     │  RESEARCH
     a PC host)       │ 7 graphics translation for relinked titles  │  RESEARCH
                      └─────────────────────────────────────────────┘
 ```

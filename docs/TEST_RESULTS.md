@@ -2203,3 +2203,102 @@ edited in the registry without regenerating the document fails `make check`.
 * `M1` (physical boot) remains `not_started`; no physical machine was touched.
 * The OVMF gate was not executed, so `OVMF-EXECUTED` is not claimed for this
   section. The prior execution recorded in §16/§18 stands as it was.
+
+---
+
+## 20. Repository cleanup: the third-party archive, and project independence
+
+Requested as a repository-cleanup requirement: the tree must contain no
+third-party source archive and no references presenting PC5 as derived from,
+affiliated with or dependent on another project. This section records what was
+removed, what replaced it, and what the gates said afterwards.
+
+### 20.1 What was in the tree
+
+| Item | State at the start of this change |
+|---|---|
+| a third-party source archive at the repository root (a ZIP of a PS5 static relinker) | tracked as a **Git LFS pointer**, 133 bytes, oid `eb4fd557…4bb2`, declared size 19,749,977 B. The payload was never fetched into any checkout here. |
+| `vendor/` | one file: a provenance note about that archive |
+| `tools/fetch_*.sh` | a script that re-obtained it, extraction or clone |
+| references | 14 tracked files named the upstream project, including `LICENSE`, `README.md`, the architecture specs, the migration plan, the research log and two dated audits |
+
+No build target read the archive; no test referenced it; no release asset
+contains it (`gh release view pc5-0.1.0 --json assets` → `[]`); there is no
+`.gitmodules`, so it was never a submodule.
+
+### 20.2 What was removed, and what replaced it
+
+* the archive's tracked pointer, the `vendor/` note and the fetch script — all
+  deleted from the tree, nothing substituted (no copy, no extract, no rename, no
+  new pointer);
+* every textual reference: replaced with a neutral description ("a third-party
+  source archive"), keeping the audit's own measurements — C/C++ line count, PRX
+  library count, NID declarations, stub counts — which are this project's work,
+  not the upstream project's identity;
+* the licence and README paragraphs that described the archive as a dependency:
+  both now state that PC5 vendors no third-party source archive (ADR-025);
+* `docs/PROJECT_AUDIT.md` §3 and `docs/architecture/REPOSITORY_AUDIT_2026-11-15.md`
+  §8.1 keep the *finding* (what arrived, what it measured, why it cannot serve
+  the destination) and record that the archive is now gone. They no longer name
+  the project or link to it; both say so explicitly, so the omission is disclosed
+  rather than concealed.
+
+### 20.3 The guard, and what it actually checks
+
+`tests/test_project_independence.py` — 9 tests, run by `make check`:
+
+| Check | Fails when |
+|---|---|
+| tracked paths | any tracked path contains the removed project's name |
+| tracked text | any tracked text file contains it (binary files are skipped by sniffing, their paths are still checked) |
+| root archives | any `.zip` is tracked at the repository root |
+| LFS recurrence | any tracked file references the removed archive's LFS object id |
+| vendor directory | anything under `vendor/` is tracked again |
+| PC5 identity | the licence, the README destination statement and ADR-025 are present |
+
+The forbidden token is assembled from two literals inside the test, so the guard
+does not itself reintroduce the string it forbids.
+
+### 20.4 Gates, actually executed after the change
+
+```
+$ make check
+Ran 417 tests ... OK (skipped=2)
+
+$ make roadmap
+roadmap: OK - 35 milestones in 14 workstreams, destination M19 reachable, document in sync
+
+$ make psm
+registry: OK   audit: OK   conformance 261/261   document blocks: OK
+
+$ SOURCE_DATE_EPOCH=1763251200 make verify
+VALID: build/pc5.iso  sha256=0c995fb6835b815f116e29d20eaff665fcbf5e1cf2d7b9cc5cc5dcfbf7f14c26
+
+$ SOURCE_DATE_EPOCH=1763251200 make boot-test
+PASSED: boot evidence written to build/test/boot-evidence.json   (119 checks)
+
+$ PATH=/tmp/venv-unicorn/bin:$PATH make stubtest
+PASSED: 58/58 checks against the stub firmware
+
+$ make ovmf-test
+exit 3 — NOT TESTED: no QEMU and no OVMF on this machine (22 required rows, none executed)
+```
+
+`make check` went from 408 to 417 tests: the nine new independence guards, with
+no existing test weakened, skipped or removed. The ISO hash differs from §19.2
+because `README.md` is embedded in the image and its licence paragraph changed.
+
+### 20.5 What this section does not establish
+
+* **History was not rewritten.** The commits that added and updated the archive
+  remain; the requirement was to clean the current tree and stop the file
+  returning, and a force-push would have concealed rather than cleaned. Anyone
+  browsing the commit history of `main` can still see that the archive was once
+  there, which is the honest state of affairs.
+* **Git LFS storage is outside this repository.** Deleting the pointer removes the
+  file from every checkout; it does not reach into the hosting service's object
+  store. No claim is made that the 19.7 MB payload has been deleted there, and it
+  was never fetched, extracted or opened here.
+* **Nothing about Sony's software changed.** This section is repository hygiene:
+  it is `BUILD-VERIFIED` at most, and it says nothing about the PS5, `M1`, or any
+  execution path.

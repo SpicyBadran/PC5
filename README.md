@@ -180,5 +180,6 @@ decryption or authentication circumvention, and will not redistribute them. See
 [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/FIRMWARE_ANALYSIS.md`](docs/FIRMWARE_ANALYSIS.md)
 and ADR-022.
 
-PC5 is licensed under the GNU General Public License version 2 only, matching the
-AnyPS5 sources it studies and intends to interoperate with.
+PC5 is licensed under the GNU General Public License version 2 only. It vendors no
+third-party source archive and depends on no other project's code: prior art is
+cited in documentation, never copied into the tree (ADR-025).

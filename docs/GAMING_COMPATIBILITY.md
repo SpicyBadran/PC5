@@ -5,7 +5,7 @@
 | Category | What it means | Status |
 |---|---|---|
 | **PS5 games** | an actual PlayStation 5 title's code executing | not possible today; no path implemented |
-| **PS5 binaries relinked** | a decrypted PS5 user-space executable converted to a native program and run with host implementations of the PSX libraries (the AnyPS5 approach) | research stage; not implemented in PC5 |
+| **PS5 binaries relinked** | a decrypted PS5 user-space executable converted to a native program and run with host implementations of the PSX libraries (the static-relinking approach) | research stage; not implemented in PC5 |
 | **PC games** | native Linux/Windows titles through Steam/Proton/Wine | out of scope for this build; will be an explicitly separate category |
 
 A PC game running under Proton is not a PS5 game running through PC5
@@ -35,8 +35,9 @@ legitimate inputs today):
 
 1. **Obtain a decrypted, unpacked PS5 executable** — the owner's own dump of
    their own disc; PC5 never distributes these and never circumvents encryption.
-2. **Relink it** — the AnyPS5 relinker resolves imports by NID and rewrites the
-   image for the host (ELF/PE). Requires its PRX library implementations.
+2. **Relink it** — a static relinker resolves imports by NID and rewrites the
+   image for the host (ELF/PE). It needs host implementations of the PRX
+   libraries. No such tool is vendored, built or depended on in this repository.
 3. **Provide the system libraries it imports** — 411 PRX projects exist
    upstream; coverage per title is what determines whether it starts.
 4. **Provide the GPU translation** — shader recompilation is the upstream
@@ -62,12 +63,12 @@ in the host tool and the reporting infrastructure around it.
 |---|---|---|
 | 1 | Storage read path in the kernel (ATAPI PIO + ISO9660) | COMPLETE AND VERIFIED (emulated); writable target still missing |
 | 2 | `pc5ctl fw` intake for a user's own package images, hash + structure only | tool exists; kernel intake pending |
-| 3 | An execution-layer prototype: build AnyPS5 on a capable host and run one known-good homebrew PS5 ELF | RESEARCH REQUIRED |
+| 3 | An execution-layer prototype: relink one known-good homebrew PS5 ELF on a capable host with an independent relinker | RESEARCH REQUIRED |
 | 4 | Record the first per-title row in `docs/PS5_GAME_TEST_RESULTS.md` | NOT STARTED |
 
-Step 3 must happen on a host that can build AnyPS5 (CMake + C++ toolchain +
-submodules). This build environment cannot, and says so rather than faking a
-result.
+Step 3 must happen on a host with a C++ toolchain and the relinker's build
+prerequisites. This build environment has neither, and says so rather than faking
+a result.
 
 ## 6. Dependency map and the four architectures
 
@@ -79,7 +80,7 @@ for each row is not a route.
 
 | # | Dependency | Native system software would supply | Relink/translation route supplies | Status here |
 |---|---|---|---|---|
-| 1 | executable format and loader | console loader | the relinker (AnyPS5) | RESEARCH |
+| 1 | executable format and loader | console loader | a static relinker | RESEARCH |
 | 2 | CPU ISA execution | the CPU | the same CPU | available (x86-64) |
 | 3 | GPU commands and shaders | console driver + firmware | translation layer | NOT STARTED |
 | 4 | memory layout and aliasing | console MMU | host mapping | NOT STARTED |
@@ -97,7 +98,7 @@ for each row is not a route.
 |---|---|---|---|---|
 | What runs | Sony's kernel and shell | game binaries against translated interfaces | console hardware, emulated | PC5, with PS5-facing services |
 | Prerequisite | boot chain + authorisation (`docs/playstation/BOOT_FEASIBILITY.md`) | decrypted executables and libraries | full SoC model incl. security processor | all of B's work, plus a host OS |
-| Public examples | none | AnyPS5 (relinking, partial) | none in full | none |
+| Public examples | none | public relinking tools (partial) | none in full | none |
 | Legal exposure | high (Sony binaries) | medium (user's own dumps only) | high | medium |
 | PC5 stance | research, blocked, honestly reported | the only route that can produce results now | out of scope | the destination (WS10/WS11) |
 

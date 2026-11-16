@@ -57,12 +57,12 @@ evidence, the choice, and what would reverse it.
 
 * **Problem**: there are two very different ways to run PS5 software: booting
   Sony's system software, or executing PS5 binaries natively after relinking
-  (the AnyPS5 approach).
+  (the static-relinking approach).
 * **Alternatives**: pretend they are the same problem; pick one and ignore the
   other.
-* **Evidence**: AnyPS5's own architecture document shows it is a static
-  relinker that never runs firmware; public research shows PS5 system software
-  is signed and bound to the SoC. No public path exists from generic x86
+* **Evidence**: the public static-relinking prior art is a relinker that never
+  runs firmware; public research shows PS5 system software is signed and bound to
+  the SoC. No public path exists from generic x86
   hardware to genuine PS5 system-software execution.
 * **Decision**: model both explicitly. The compatibility chain (13 stages) is
   the firmware path; `docs/GAMING_COMPATIBILITY.md` requires PS5 titles to be
@@ -911,3 +911,63 @@ that every claim about how far it has got is machine-checked.**
   render, ten doubles), `tests/test_psm_registry.py`,
   `tests/test_psm_conformance.py`, `tests/test_psm_mutations.py`,
   `tests/test_psm_document.py`.
+
+---
+
+## ADR-025 — PC5 vendors no third-party source archive and borrows no project identity
+
+* **Context**: the repository began as a single upload: a 19.7 MB third-party
+  source archive of a PS5 static relinker, committed at the root and tracked as a
+  Git LFS pointer. Around it grew a vendor note explaining why it was studied
+  rather than vendored, a fetch script that could re-download it, and roughly a
+  dozen documents that referenced the project by name — including the licence
+  paragraph, the README, the architecture specs, the audit records and the
+  research log. None of that was ever a dependency: no build target read the
+  archive, and PC5's destination (genuine PS5 system software on PC hardware) has
+  nothing to do with relinking game binaries. But a tree that names another
+  project a dozen times reads, to anyone arriving later, as a derivative of it.
+  PC5 is not a fork, not a companion and not an affiliate of any other project.
+* **Decision**:
+  1. **The archive is removed.** The ZIP, its LFS pointer, the vendor note and the
+     fetch script are deleted from the tree. The payload was never fetched here
+     and is not reproduced in any form — not as an archive, not extracted, not
+     renamed, not as a pointer.
+  2. **No references remain.** The project's name is not used in PC5's README,
+     documentation, architecture, roadmap, specifications, comments, commit
+     messages or release notes, and no new reference may be added. Where the
+     audit record needs to say what arrived with the repository, it says "a
+     third-party source archive" and keeps the measurements, which are PC5's own
+     work. Nothing about the removal is concealed: the audit documents state that
+     the archive existed, that it was assessed, and that it is gone.
+  3. **No third-party archive is vendored, ever.** PC5 tracks no source archive of
+     another project and fetches none at build time. Prior art is cited in prose,
+     with its own licence, and is never copied into the tree.
+  4. **A guard test enforces it.** `tests/test_project_independence.py` walks every
+     tracked file and fails the build if the removed project's name appears in a
+     path or a text file, if any `.zip` is tracked at the repository root, if the
+     removed archive's LFS object id reappears, or if `vendor/` comes back. The
+     forbidden token is assembled from parts inside the test so that the guard
+     does not itself reintroduce the string it forbids.
+  5. **History is not rewritten.** The commits that added and updated the archive
+     stay in the repository. Deleting history would hide how the tree reached its
+     present state, which is the opposite of what this project does elsewhere; the
+     requirement was to remove the file from the current tree and stop it
+     returning, and both are satisfied without a force-push.
+* **Alternatives considered**: keeping the archive as "provenance" (rejected: it
+  is another project's source, not PC5's evidence, and it was 99.9% of the
+  repository by size); keeping the vendor note and the fetch script as
+  documentation of prior art (rejected: both are build-time paths to another
+  project's tree, and both name it); rewriting history to erase the archive from
+  the commits (rejected: unauthorised, and it would conceal rather than clean);
+  leaving the references and only deleting the file (rejected: the documents, not
+  the file, are what made PC5 look derived).
+* **Consequences**: the tree is smaller, self-describing and free of another
+  project's name; the audit documents now describe the archive instead of naming
+  it, so a reader cannot identify the upstream project from PC5 alone — which is
+  the point, and is stated in those documents rather than hidden; and any future
+  attempt to re-add the archive fails `make check` instead of landing quietly.
+* **Evidence**: `tests/test_project_independence.py` (five path/content guards
+  plus three identity assertions), `git ls-files` showing no archived ZIP and no
+  `vendor/`, `docs/PROJECT_AUDIT.md` §3 (the assessment, kept, renamed),
+  `docs/architecture/REPOSITORY_AUDIT_2026-11-15.md` §8.1 (repository weight, now
+  resolved), and `docs/TEST_RESULTS.md` §20 for the executed gates.

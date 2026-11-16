@@ -56,9 +56,12 @@ classified in §2.6.
 |---|---|---|
 | `README.md` | 7,034 B | project entry point; capability table is evidence-linked |
 | `Makefile` | 8,345 B | build; targets `iso`, `uefi`, `check`, `unit`, `verify`, `boot-test`, `stubtest`, `metadata`, `release-assets`, `test` |
-| `LICENSE` | GPL-2.0-only | matches the licence of the AnyPS5 sources the project studies |
+| `LICENSE` | GPL-2.0-only | PC5's own licence; no third-party source is vendored |
 | `.gitignore` | 472 B | excludes `build/`, `node_modules/`, `.venv/`, `firmware/`, bytecode |
-| `AnyPS5-main (1).zip` | 19.7 MB | **audit input**, not a PC5 component (see §8.1) |
+
+A 19.7 MB third-party source archive was also tracked at this date. It was an
+audit input, never a PC5 component, and has since been removed from the tree
+(ADR-025, §8.1).
 
 ### 2.2 `boot/` — 6 files, 2,065 lines
 
@@ -109,7 +112,7 @@ classified in §2.6.
 | `tools/pc5ctl.py` | 191 | operator CLI (`info`, `verify`, `boot`, `chain`, `fw`, `usb`). |
 | `tools/buildmeta.py` | 253 | build provenance and release metadata. |
 | `tools/release_notes.py` | 114 | release notes from recorded evidence. |
-| `tools/publish_release.sh` | 118 / `tools/fetch_anyps5.sh` 45 | release publishing gate; reproducible AnyPS5 fetch. |
+| `tools/publish_release.sh` | 118 | release publishing gate (the third-party fetch script listed at this date has since been removed, ADR-025) |
 
 ### 2.5 `tests/` — 8 files, 2,826 lines
 
@@ -147,7 +150,7 @@ measurements in §3 and are corrected in §6. Nine new documents in this directo
 |---|---|
 | `ci/build.yml` | complete build-and-release pipeline, **stored outside `.github/workflows/`** because the GitHub App token has no Workflows permission |
 | `ci/README.md` | why, with two recorded activation rejections |
-| `vendor/anyps5/README.md` | why AnyPS5 is studied rather than vendored (GPL-2.0-only, build prerequisites unavailable) |
+| `vendor/` (removed) | held a short provenance note about that archive; removed with it (ADR-025) |
 
 ---
 
@@ -276,11 +279,13 @@ it is accepted.
 
 ### 8.1 Repository weight
 
-`AnyPS5-main (1).zip` is 19,749,977 bytes — 99.9% of the repository by size — and
-is an audit input, not a component. It is kept because removing it without the
-owner's decision would destroy the provenance of the AnyPS5 assessment. The
-migration plan proposes moving it to a release asset or documented external
-source (§`MIGRATION_PLAN.md` phase 2).
+A 19,749,977-byte third-party source archive was 99.9% of the repository by size
+at this date. It was an audit input, not a component, and it was kept then
+because removing it without the owner's decision would have destroyed the
+provenance of the assessment. The owner has since decided: the archive, the
+vendor note and the fetch script are gone (ADR-025), and
+`tests/test_project_independence.py` fails the build if a third-party archive or a
+reference to another project's identity returns.
 
 ### 8.2 Directories that do not exist yet
 
@@ -371,7 +376,7 @@ that reason.
 
 | Item | State |
 |---|---|
-| AnyPS5 relinker route (`vendor/anyps5/README.md`, `tools/fetch_anyps5.sh`) | source snapshot only; never built here; no PS5 binary has been relinked or executed |
+| Static-relinking route (third-party prior art, never vendored) | source snapshot only at audit date; never built here; no PS5 binary has been relinked or executed |
 | Firmware container research | third-party reports only; no image analysed |
 | Genuine-PS5 boot and game execution | no path exists; `docs/playstation/BOOT_FEASIBILITY.md` records why |
 
@@ -410,12 +415,11 @@ never a claimed boot. This is a constraint, not a scheduling problem — see
 
 ### 7.3 Findings that are not capabilities
 
-1. **A 19 MB archive is committed at the repository root**
-   (`AnyPS5-main (1).zip`). It is third-party source, not PC5 code, it is never
-   built by any target, and it inflates every clone. Recommendation: remove it
-   from the tree and rely on `tools/fetch_anyps5.sh` plus the provenance note in
-   `vendor/anyps5/README.md`. Not done here because deleting a tracked artefact
-   is an owner decision, not a side effect of a storage task.
+1. **A 19 MB third-party archive was committed at the repository root.** It was
+   third-party source, not PC5 code, never built by any target, and it inflated
+   every clone. It has since been removed, together with the vendor note and the
+   fetch script that referenced it (ADR-025), and a guard test now keeps it and
+   its LFS pointer out of the tree.
 2. **`.venv` is not reproducible in a fresh sandbox.** `make stubtest` needs
    unicorn; the check prints the install command and exits 2 rather than
    skipping silently. Documented in `docs/BUILDING.md`.
