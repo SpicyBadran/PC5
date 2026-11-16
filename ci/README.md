@@ -31,7 +31,7 @@ gh release view v0.2.0 --json assets
 
 | Trigger | Job | Result |
 |---|---|---|
-| push to any branch, pull request, manual dispatch | `build` | ISO built twice (identical hashes required), verified, unit/host/boot tests run, assets kept as a workflow artifact |
+| push to any branch, pull request, manual dispatch | `build` | ISO built twice (identical hashes required), verified, architecture/roadmap gate, unit/host/boot tests run, assets kept as a workflow artifact |
 | push tag `v*` or `pc5-*` | `build`, then `release` | the same, then `pc5.iso`, `pc5.iso.sha256` and `build-info.json` published on the release |
 
 The release job is the only one with `contents: write`, runs only for tags, only
@@ -39,6 +39,14 @@ after `build` succeeded, and delegates the publishing to
 `tools/publish_release.sh` (checksum gate, verdict gate, create-or-update,
 `--clobber`, final asset assertion). That script is unit-tested against a stub
 `gh` in `tests/test_release.py`.
+
+## Configuration
+
+The pipeline asserts no capability level; it asserts that the repository is
+self-consistent. `make roadmap` re-validates the milestone graph and compares it
+with the generated `docs/architecture/PC5_MILESTONE_GRAPH.md`, and the host test
+suite includes `tests/test_product_identity.py`, which fails if the product
+identity, the destination or the forbidden-claim list drifts from the documents.
 
 ## Evidence that exists today, and what does not
 

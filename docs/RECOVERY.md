@@ -1,10 +1,13 @@
 # Recovery
 
-## 1. Nothing is written, so nothing breaks
+## 1. Nothing is written at boot, so a boot breaks nothing
 
-PC5 currently boots and runs entirely from the medium. It does not partition,
-format, or write to any disk. "Recovery" therefore means getting back to a
-working image, not restoring data.
+PC5 boots and runs entirely from the medium: no boot path partitions, formats or
+writes to a disk. The kernel *has* a write path (`M1d` ATA sectors, `M1g` file
+creation, `M1i` overwrite and directories) but it runs only when an explicit
+command asks for it, against an explicitly named device, and it has only ever
+been exercised on emulated disks. "Recovery" therefore still means getting back
+to a working image, not restoring data — until the installer exists (`M8`).
 
 ## 2. Recovering a machine that will not boot PC5
 
@@ -13,8 +16,9 @@ working image, not restoring data.
    (or use the firmware's one-time boot menu).
 3. Re-flash the medium: `python3 tools/pc5ctl.py usb --iso build/pc5.iso
    --device /dev/sdX --yes` — the tool re-verifies the checksum first.
-4. If the machine offers CSM/legacy boot, make sure it is enabled; the current
-   image is BIOS-only.
+4. The image is hybrid: it boots legacy/CSM (El Torito or the MBR) and UEFI (the
+   ESP inside the ISO). If one path fails, try the other; the UEFI path has been
+   verified under OVMF only, never on a physical board.
 
 `docs/INSTALLATION.md` has the full flashing and troubleshooting matrix,
 including the meaning of each loader failure code.
@@ -55,6 +59,8 @@ If `make boot-test` cannot find the emulator: `npm install v86-system` (or set
 ## 5. Planned recovery environment
 
 A dedicated recovery entry (separate boot option, minimal kernel, disk tools,
-update rollback) is on the roadmap once the installer exists. It cannot be
-built before there is storage support, because recovery without disk access
-would be a menu of buttons that do nothing.
+update rollback) is `M1b` in the roadmap — blocked on `M8` (installation), which
+is blocked in turn on the installer and a real disk. The storage primitives it
+needs now exist (`M1d`–`M1i`); what is missing is an installer that writes a
+system, and physical hardware to prove it. Recovery without disk access would be
+a menu of buttons that do nothing, so it is not scheduled before then.

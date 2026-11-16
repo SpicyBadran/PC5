@@ -115,6 +115,12 @@ evidence, the choice, and what would reverse it.
 
 ## ADR-009 — Linux is the PC5 Native foundation; the freestanding kernel becomes recovery
 
+**Status: superseded by ADR-020 (2026-11-15).** The engineering reasoning below
+(drivers, economics, the build-environment blocker) is still correct and is
+carried forward; what is withdrawn is the claim that Linux is *the product*.
+Linux is now an optional hardware-enablement substrate and PC5's own platform
+remains the product surface.
+
 * **Problem**: PC5 Native must drive mainstream AMD, Intel and NVIDIA hardware.
   The existing 32-bit freestanding kernel has no NVMe, AHCI, xHCI, audio, network
   or GPU driver, no user mode and no scheduler. Writing those is years of work
@@ -146,6 +152,11 @@ evidence, the choice, and what would reverse it.
   device set (recorded in the risk register as A1/B4).
 
 ## ADR-010 — Dual-track governance with a machine-enforced Track A/Track B gate
+
+**Status: superseded by ADR-019 and ADR-021 (2026-11-15).** The *safety* concern
+was real and is preserved as the release-isolation invariant; the *gate* was
+wrong, because it made the mission structurally unable to be a dependency of the
+product. History is kept below because the reasoning is worth reading.
 
 * **Problem**: PC5 has two objectives with very different feasibility: an
   installable PlayStation-like operating system (achievable), and genuine PS5
@@ -464,3 +475,327 @@ evidence, the choice, and what would reverse it.
 * **Credit where it is due**: the harness prints `PC5-OVMF-BOOT-OK` from its own
   process after the checks pass. The guest never prints that marker, so a boot
   that merely *looks* right cannot fake success.
+
+## ADR-019 — One PC5 platform: genuine PS5 system software is the destination, everything else serves it
+
+*Naming note: the directive that ordered this decision proposed "ADR-016".
+ADR-016, ADR-017 and ADR-018 were already issued for the M2 real-firmware work,
+so this decision is ADR-019. Nothing about the decision depends on its number.*
+
+### Context
+
+PC5 exists to make compatible PC hardware operate as a PlayStation 5, with the
+genuine Sony system software as the execution target. Until this decision the
+repository was organised in two tracks (ADR-010): "PC5 Native" (a
+PlayStation-inspired PC operating system with Linux as its foundation) and
+"Prospero" (PS5 compatibility and research), with a machine-enforced rule that
+the second may never gate the first.
+
+That structure answered a real engineering question — *how do we keep an
+experimental, legally constrained workstream from making a bootable product
+unbootable?* — with an answer that also answered a question nobody asked: *how do
+we keep the mission from being the product?* The roadmap made it explicit: the
+rendered critical path (`M0 → … → M8`) contained no PS5 milestone, and
+`tools/roadmap.py` **failed the build** if one appeared as a dependency.
+
+### Original architectural problem
+
+Three requirements were conflated:
+
+1. **Product safety.** An experimental component must not be able to break the
+   platform that boots.
+2. **Legal safety.** PC5 must never require key material, decryption or
+   circumvention to be useful or to be built (ADR-007).
+3. **Mission ordering.** Which work gets done first.
+
+Treating (1) and (2) as *architectural separation of objectives* produced (3) by
+accident: the destination became optional.
+
+### Actual product mission (restated, and now normative)
+
+> **PC5 — a native PlayStation 5 operating system for PC hardware.**
+> PC5 is an engineering platform whose destination is to run the genuine Sony
+> PlayStation 5 system software on compatible PC hardware, and to deliver the
+> authentic PS5 platform and gaming experience there. PC5 is not a Linux
+> distribution with a PlayStation theme, not an imitation of the PS5 interface,
+> and not a project in which PS5 compatibility is optional.
+
+The mission statement is data in `docs/architecture/roadmap.json`
+(`product.identity`, `product.destination`) so that it is machine-checked rather
+than retyped in each document.
+
+### Existing architectural assumptions that were examined
+
+| Assumption | Held? | Consequence |
+|---|---|---|
+| "A PlayStation-like PC operating system is the achievable product" | **no** | it is a different product; the achievable part is the *substrate*, not the destination |
+| "PS5 compatibility must not gate the platform" | **no** | it must gate the destination, or the destination is a hobby |
+| "Experimental code must not break boot" | **yes** | kept, as release isolation (ADR-021) |
+| "Linux is the foundation" | **partly** | kept as hardware enablement, rejected as product identity (ADR-020) |
+| "The freestanding kernel is the recovery environment" | **yes** | kept, and promoted: it is also the reference substrate for the platform model |
+| "No Sony keys, firmware or derived binaries in the tree" | **yes** | kept and extended to the PUP (ADR-022) |
+
+### Alternatives evaluated
+
+**A. Keep two tracks, add a "shared vision" paragraph.** Rejected: nothing
+changes mechanically, the gate still forbids the dependency, and the next
+contributor reads the graph, not the paragraph.
+
+**B. One track, PS5 work first, nothing else until it is unblocked.** Rejected:
+the blocking condition (the authenticity boundary, §"Technical risks") is not
+under the project's control, so this stops all engineering progress and produces
+no evidence.
+
+**C. One product, many workstreams, one destination, with a release boundary.**
+**Selected.** Every workstream is required to state which part of the destination
+it serves; the destination milestone must exist, must be reachable in the
+dependency graph, and may never be marked complete without execution evidence.
+Experimental and legally constrained components are isolated at *build and
+runtime* boundaries instead of being isolated as *objectives*.
+
+### Linux foundation analysis (evidence-based)
+
+What Linux would provide: drivers for NVMe/AHCI, xHCI, audio codecs, Ethernet,
+Wi-Fi, three GPU vendors; a scheduler, memory manager, VFS and network stack;
+KVM for hardware-assisted virtualisation; VFIO for device passthrough. That is
+years of work this project will not repeat.
+
+What Linux cannot provide, and what decides the question:
+
+1. **It cannot execute PS5 system software.** Sony's kernel and services are
+   built against console devices and a console trust anchor. A Linux host can
+   only *host a model of that platform*; the PS5 software would still have to run
+   as the guest of that model. So Linux's role can only ever be substrate.
+2. **It would become the visible product by default.** If PC5 ships a Linux
+   userspace as the thing the user sees, the product is a Linux distribution, and
+   the destination quietly becomes "a nice front-end".
+3. **Its enablement does not touch the critical path.** The blocking research
+   (the authenticity boundary, §"Technical risks") is about the console's
+   security processor and fuses, not about how many Wi-Fi chipsets work.
+
+**Conclusion**: Linux is a *substrate of convenience* for bring-up and for the
+virtual-platform workstream, on hardware PC5's own kernel cannot drive yet. It is
+not the product, it is not required to build or demonstrate the product, and it
+is removable: the freestanding PC5 kernel remains the reference environment and
+is the substrate the platform model is specified against. Recorded as ADR-020
+with the exit condition.
+
+### Independent kernel analysis
+
+Cost: every device class becomes PC5 work — NVMe, xHCI, audio, network, GPU. On
+mainstream hardware that is the largest single risk in the project and it does
+not advance the destination, because the destination needs a *model* of PS5
+hardware, not broad PC support.
+
+Benefit: complete control of the platform contract, no foreign scheduler between
+PC5 and the guest, deterministic behaviour, and a small auditable surface. The
+existing kernel already proves the hardest part of the boot path (real OVMF
+firmware, ELF-free PE32+ loader, its own storage stack).
+
+**Conclusion**: the independent kernel stays, grows along the workstreams the
+destination needs (interrupts, timers, memory protection, PCIe, NVMe, VMX/SVM),
+and is not replaced by Linux. It is used for bring-up on qualified hardware even
+where Linux would be more convenient, because the platform model must eventually
+run on it.
+
+### Hybrid architecture analysis
+
+Selected shape: PC5 kernel is the platform; Linux is an *optional host tier*
+("hardware enablement tier") that may run the same virtual-platform component
+when PC5's own drivers are not yet sufficient. The boundary is a single
+interface: the virtual-platform component is a library plus a device-model set
+that can be hosted by either environment. Risk: two hosts to keep working. It is
+accepted because the alternative (Linux-only) makes the model unportable, and the
+other alternative (PC5-only) blocks bring-up on hardware today.
+
+### Genuine PS5 compatibility implications
+
+Running the genuine system software requires all of:
+
+1. a lawful, authenticated input (the update/reinstallation package),
+2. a platform contract close enough that Sony's kernel does not fault on
+   unimplemented devices,
+3. a device model presenting CPU features, memory map, interrupt controller,
+   storage, GPU command processor, audio, USB and **security state**,
+4. a trust story for the boot chain that does not involve circumvention.
+
+Items 1–4 are workstreams in the roadmap. Item 4 is the one that may not be
+solvable by engineering (see "Technical risks"). The architecture therefore
+separates *what PC5 builds* (1–3, plus the analysis of 4) from *what must be true
+externally* (a lawful trust path). It does not assume a breakthrough, and it does
+not disguise the assumption as a plan.
+
+### Selected architecture
+
+* **One product, one destination.** `product.destination` in `roadmap.json`,
+  level 6 of the success hierarchy, a milestone that must exist in the graph.
+* **Twelve engineering workstreams plus governance and experience** (WS0–WS13),
+  every milestone tagged with its workstream, its kind
+  (`infrastructure` / `native-platform` / `ps5-compatibility` / `research` /
+  `hardware-validation` / `product-experience`) and the mission link it advances.
+* **A success hierarchy of six levels** with measurable acceptance criteria
+  (`PC5_ARCHITECTURE_SPEC_v2.md` §5), from "boots on qualified PC hardware" to
+  "genuine PS5 system software running on qualified PC hardware".
+* **Release isolation instead of a track gate** (ADR-021): a component that is
+  experimental, legally constrained, or depends on unverified inputs may not be
+  *required* by the base platform's build or boot; it may be a dependency of the
+  destination.
+* **The destination is on the critical path.** The rendered graph's destination
+  path runs through the PS5 platform workstream, and the tool reports it as the
+  destination path, not as an optional branch.
+
+### Reasons for the decision
+
+* It removes the mechanism that made the mission optional while keeping the
+  safety property that mechanism was introduced for.
+* It makes the destination a data structure that tests can defend, so a future
+  refactor cannot quietly delete it.
+* It preserves every line of working code and every piece of evidence; no
+  milestone that is complete today changes state.
+* It makes the Linux question explicit and bounded instead of implicit and
+  unbounded.
+
+### Technical risks
+
+| # | Risk | Severity | Mitigation |
+|---|---|---|---|
+| R1 | The authenticity boundary cannot be crossed lawfully by anyone outside Sony | **existential for level 5** | stated as an external precondition; PC5 builds everything up to it; falsifiers recorded |
+| R2 | The platform model needs undocumented devices | high | model only what public documentation and observables support; never guess silently; each device model has a conformance test |
+| R3 | Emulating console hardware is mistaken for running console software | high | vocabulary rules stay enforced; level 5 requires execution evidence, not a model |
+| R4 | Two hosts (PC5 kernel, Linux tier) diverge | medium | one interface, one conformance suite, both hosts run it |
+| R5 | Performance of a modelled platform is unusable for games | high | measured per device model; passthrough path (VFIO/IOPM) evaluated before claiming game compatibility |
+| R6 | Legal exposure from distributing anything derived from Sony code | **critical** | ADR-007 and ADR-022: no keys, no decryption, no redistribution; analyses are hash-only |
+
+### Rejected alternatives
+
+* Two tracks with a shared-vision paragraph (no mechanical change).
+* PS5-work-first with everything else frozen (stops all progress on an external
+  precondition).
+* Linux-as-product with PS5 as a feature (the destination quietly changes).
+* Declaring genuine execution "out of scope" (dishonest: it is the mission *and*
+  the thing that may not be achievable).
+
+### Reversal conditions
+
+This decision is wrong if any of these is demonstrated:
+
+1. A lawful, public path to executing genuine PS5 system software on non-console
+   hardware exists and requires a *different* platform contract than the model
+   described here — the platform model is then re-specified.
+2. PC5's own kernel cannot reach the required device coverage on qualified
+   hardware within the project's means, **and** a Linux-hosted model is shown to
+   satisfy the same destination — the kernel tier is then demoted to reference
+   implementation only.
+3. The release-isolation rule proves unable to protect boot stability — a
+   stricter build boundary is introduced, not a return to two objectives.
+4. The authenticity boundary is proven uncrossable for everyone (not just for
+   PC5) — level 5 is then recorded as unreachable and the product is redefined
+   *explicitly and publicly*, never silently.
+
+### Evidence and unresolved questions
+
+Evidence for this decision: the audit in
+`ARCHITECTURE_DISCREPANCY_REPORT.md` (measured), the gates listed in
+`docs/TEST_RESULTS.md` §17, and the machine checks in
+`tests/test_architecture.py` and `tests/test_product_identity.py`.
+
+Unresolved, and stated as such:
+
+* the exact platform contract of the PS5 SoC (undocumented),
+* whether a modelled security state can ever satisfy Sony's boot chain lawfully,
+* the performance ceiling of a modelled GPU for real titles,
+* whether the PUP in the repository is the full reinstallation package (payload
+  not fetched, `NOT VERIFIED`).
+
+**This decision does not claim that genuine PS5 system software has been
+executed. It claims that the repository is now organised around doing so, and
+that every claim about how far it has got is machine-checked.**
+
+## ADR-020 — Linux is a hardware-enablement substrate, not the PC5 product
+
+* **Context**: ADR-009 made Linux the foundation of "PC5 Native". ADR-019
+  restates the mission and makes the substrate question explicit.
+* **Decision**: Linux may be used as an **optional host tier** that runs
+  PC5-authored components (drivers bring-up, the virtual-platform device models,
+  VFIO passthrough experiments) on hardware the PC5 kernel cannot yet drive. It
+  is **not** the product, not the thing the user sees, and not required to build,
+  boot or demonstrate PC5.
+* **What Linux provides, precisely**: device drivers for classes PC5 has not
+  written; a scheduler; memory management; KVM/SVM hosting; VFIO passthrough;
+  established filesystems. That is engineering economy, and it is the reason the
+  option is kept.
+* **What Linux never provides**: execution of Sony's system software. A Linux
+  host can only host a *model* of the PS5 platform; the PS5 software runs as that
+  model's guest, or it does not run.
+* **Boundary**: one interface — the virtual-platform component may be hosted by
+  PC5's kernel or by the Linux tier; both hosts run the same conformance suite.
+  No PC5 component may require Linux headers, binaries or a distribution.
+* **Exit condition**: the Linux tier is removed when the PC5 kernel's device
+  coverage and the model's host requirements are met on the qualified hardware
+  list. The roadmap records this as a milestone (`M8`, release quality) rather
+  than as an aspiration.
+* **What must not be claimed in the meantime**: that PC5 *is* a Linux
+  distribution; that Linux improves PS5 compatibility (it does not, in itself);
+  that shipping a Linux desktop is a step toward the destination (it is a step
+  toward a different product).
+* **Enforced by**: `docs/architecture/roadmap.json` `product.foundation`
+  (role `hardware-enablement`, ADR reference), and
+  `tests/test_product_identity.py`, which fails if a document declares Linux the
+  product's foundation or destination.
+
+## ADR-021 — Release isolation replaces the two-track gate
+
+* **Problem**: ADR-010's gate existed to stop an experimental component from
+  breaking the bootable platform. It achieved that by forbidding dependencies in
+  one direction, which also forbade the mission from being a dependency of the
+  product.
+* **Decision**: the safety property is re-expressed as *release isolation* and
+  enforced structurally instead of by freezing objectives:
+
+  1. The **base platform** (`make iso`, `make verify`, `make boot-test`,
+     `make stubtest`, `make ovmf-test`, `make check`) must build and boot with
+     every experimental and legally constrained component absent from the build.
+  2. Such components are marked `experimental: true` in `roadmap.json`; the
+     validator forbids them from being a dependency of any
+     `kind: infrastructure` or `kind: native-platform` milestone that is marked
+     `release_gating: true`.
+  3. The destination may depend on anything, including blocked research. Nothing
+     may depend on the destination to *boot*.
+* **Consequences**: PS5 work can be a real dependency of the product (the point
+  of ADR-019) while a broken experiment still cannot stop the machine booting.
+  The claim "a PC5 release builds with `playstation/` deleted" is kept and
+  generalised to "with every `experimental` milestone's code deleted".
+* **Test**: `tests/test_architecture.py` builds a synthetic graph where an
+  experimental milestone gates a release-gating one and requires the validator to
+  reject it, and checks the shipped graph satisfies the rule.
+
+## ADR-022 — The PS5 system-software package is a protected input, never a payload in the tree
+
+* **Context**: the directive places the original Sony package (`PS5UPDATE.PUP`,
+  declared as the fresh-installation/reinstallation package) at the centre of the
+  ultimate objective. The file at the repository root is a Git LFS pointer; the
+  1.33 GiB payload is in LFS storage and is not part of any checkout here.
+* **Decision**:
+  1. The payload is **never** committed as bytes, never extracted into the tree,
+     never redistributed, and never modified. Its identity is recorded by hash
+     and size only.
+  2. PC5 implements no decryption, no key handling, no signature bypass and no
+     authentication circumvention, for this package or any other Sony artifact
+     (ADR-007 unchanged and extended).
+  3. The package is an **input** to the platform model, not a disk image: it is a
+     console updater's payload, and whether it contains everything needed for a
+     first boot is `NOT VERIFIED`.
+  4. Any analysis that is performed records *hashes and structure*, never content
+     that could be redistributed, and runs in a workspace outside the repository.
+  5. The roadmap's first PS5 milestone (`M9`) exists to prove these rules with a
+     recorded provenance file rather than to promise progress: pointer hash,
+     declared object id and size, lawful-acquisition statement, and an explicit
+     "payload not present" status.
+* **Why a decision record**: because the next contributor will otherwise do the
+  obvious thing — `git lfs pull`, unpack it, and start writing a parser. That
+  path ends in a repository that cannot be published and a project that has
+  traded its legal position for a file.
+* **Evidence**: `ARCHITECTURE_DISCREPANCY_REPORT.md` §1.1 (measured pointer,
+  measured analyser output, LFS metadata), `tests/test_product_identity.py`
+  (the pointer's oid/size are asserted and the payload's absence is asserted),
+  `docs/PS5_SYSTEM_SOFTWARE_TARGET.md` (what is known and what is not).

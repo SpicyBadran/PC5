@@ -1,4 +1,10 @@
-# PC5 architecture
+# PC5 architecture — as implemented
+
+> **Scope.** This document describes the code that exists: the boot chain, the
+> kernel and the host tools. It is not the product architecture — that is
+> [`architecture/PC5_ARCHITECTURE_SPEC_v2.md`](architecture/PC5_ARCHITECTURE_SPEC_v2.md),
+> where PC5 is one platform whose destination is genuine PS5 system software on
+> PC hardware. Read this page as the map of the current implementation.
 
 ## 1. Boot chain as implemented today
 
@@ -180,12 +186,16 @@ The handover is also *executed*: `tests/uefi_stub_firmware.py` runs the real
 `BOOTX64.EFI` on the Unicorn CPU emulator, with firmware replaced by a stub that
 answers Simple Text Output, GOP, Boot Services, Loaded Image, Device Path and a
 two-volume Simple File System at the slots the specification assigns, and
-`tests/uefi_stubtest.py` (42 checks, `make stubtest`) asserts the trace, the
+`tests/uefi_stubtest.py` (48 checks, `make stubtest`) asserts the trace, the
 boot-info block, the VBE block, the E820 conversion, `ExitBootServices`, the GDT
 and the far jump. Because that stub is not firmware — no ACPI, no PCI, no
-interrupts, and `lgdt`/segment loads/`lretq` emulated by the harness — the label
-is IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF). The BIOS path remains
-the verified one, and only a recorded OVMF or hardware boot can change that.
+interrupts, and `lgdt`/segment loads/`lretq` emulated by the harness — a stub run
+proves the loader's logic and the handover contract, not UEFI compatibility.
+
+The firmware side is proved separately by `make ovmf-test`, which boots the ISO
+under genuine TianoCore OVMF in QEMU, cold and warm, and prints
+`PC5-OVMF-BOOT-OK` from the harness after 40 checks (1 NOT APPLICABLE). Physical
+UEFI hardware is still untested; see `docs/TEST_RESULTS.md` §16.
 
 ## 6. Why a Linux foundation is not in this build
 

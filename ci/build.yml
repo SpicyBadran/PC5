@@ -84,6 +84,14 @@ jobs:
       - name: Host tool tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v 2>&1 | tee build/logs/host.log
 
+      # The architecture is machine-checked: the roadmap graph must validate,
+      # the generated milestone document must match the data, and the product
+      # identity in `roadmap.json` must still agree with the documents.  This
+      # is deliberately a separate gate from the unit tests so that a broken
+      # graph fails with the validator's message rather than a test traceback.
+      - name: Architecture and roadmap gate
+        run: make roadmap | tee build/logs/roadmap.log
+
       - name: Execute the UEFI loader against the stub firmware
         run: |
           set -eu

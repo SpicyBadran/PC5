@@ -97,19 +97,25 @@ as PC5 — never as PlayStation software. The distinction is asserted by
 
 ## 6. What PC5 does instead
 
-Not waiting, and not pretending:
+The platform workstream (`WS10`) and the rest of the platform, in one product:
 
-1. **PC5 Native** (Track A) proceeds on its own evidence: boot, diagnostics,
-   storage, partitions, filesystem, installer.
-2. **Track B research** proceeds on what is legitimately available: container
-   identification, architecture study, documented platform analysis, and the
-   PS5-binary relocation route (`docs/GAMING_COMPATIBILITY.md`).
-3. Every claim is attached to a level in `docs/PS5_COMPATIBILITY_STATUS.md`, and
+1. The **platform model** is built where it can be: contract, CPU and memory
+   model, storage, graphics, audio, USB and service devices (`M10`–`M16`), each
+   with a conformance suite and PC5-authored test payloads.
+2. The **security boundary** analysis (`M17`) is published whatever it finds;
+   the load, boot, runtime and installation milestones (`M18`–`M21`) are
+   `blocked` on it and on a lawful input, and say so in the graph.
+3. Everything the destination needs and does not depend on Sony bytes — boot,
+   diagnostics, storage, partitions, filesystem, installer, drivers, services —
+   proceeds on its own evidence.
+4. Every claim is attached to a level in `docs/PS5_COMPATIBILITY_STATUS.md`, and
    "genuine PS5 software is running" stays `NO` until a log proves otherwise.
 
 ## 7. What this means for scheduling
 
-The genuine-boot objective is **not** on the critical path, because no
-prerequisite for it can be obtained today. It stays open, funded by research
-time, and blocked by matters outside engineering. That is the finding, and it is
-recorded rather than dressed up as a milestone.
+The genuine-execution milestone (`M19`) is the **end of the destination path** —
+the longest dependency chain in the graph — and it is `blocked`, not scheduled.
+That is a statement about the blocker, not a decision to leave the destination
+optional: the work that is *not* blocked (`M10`–`M16`) is on that path and is
+where the next engineering effort goes. The previous revision of this section
+drew the opposite conclusion, and ADR-019 withdrew it.

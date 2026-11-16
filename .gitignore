@@ -16,3 +16,10 @@ firmware/
 # python bytecode from the host test suite
 __pycache__/
 *.pyc
+
+# the PS5 system-software package (ADR-022): the tracked file at the repository
+# root is a git-lfs pointer, never the payload. Any copy that is analysed lives
+# outside this repository, and nothing derived from it is ever committed.
+pup-analysis*.json
+firmware-analysis/
+*.pup.part

@@ -1,5 +1,17 @@
 # Repository audit — 2026-11-15
 
+| | |
+|---|---|
+| Status | **Historical record.** Written before ADR-019. |
+| Measures | the tree at `9912c78` and the M1e change under review |
+| Superseded by | `ARCHITECTURE_DISCREPANCY_REPORT.md` (findings) and `PC5_ARCHITECTURE_SPEC_v2.md` (architecture authority) |
+
+The two-track vocabulary and the conclusions in §9 below are what this audit
+found and concluded at the time; they describe the architecture that ADR-019
+replaced. They are preserved because an audit that quietly rewrites itself is
+worth nothing. Where a statement here conflicts with `roadmap.json` or the v2
+spec, those two win.
+
 Scope: **every tracked file** in `SpicyBadran/pc5`, the build and test evidence
 that can be reproduced in this environment today, and every factual claim in the
 documentation that could be checked against it.

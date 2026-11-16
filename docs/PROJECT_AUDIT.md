@@ -1,6 +1,13 @@
 # Project audit — what existed before any work started
 
+| | |
+|---|---|
+| Status | **Historical record** — the state of the repository before any PC5 code existed. |
+| Superseded for current state by | `architecture/REPOSITORY_AUDIT_2026-11-15.md` (tree audit), `architecture/ARCHITECTURE_DISCREPANCY_REPORT.md` (findings), `architecture/PC5_ARCHITECTURE_SPEC_v2.md` (architecture) |
+
 Date of audit: 2026-11-12. Branch: `arena/2290edbd-pc5`, base commit `9576ad7`.
+Nothing in this file describes the project as it is now; it describes the upload
+it started from.
 
 ## 1. The repository as received
 

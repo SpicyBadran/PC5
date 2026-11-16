@@ -5,7 +5,7 @@ option that was rejected and the conditions under which the decision reverses.
 
 ## 1. The question, stated precisely
 
-PC5 needs to boot mainstream PCs, drive their hardware, host a PlayStation-like
+PC5 needs to boot mainstream PCs, drive their hardware, host an interface
 interface and run games. Which kernel provides the hardware foundation?
 
 The question is **not** "which kernel is better". It is: *what is the cheapest
@@ -178,7 +178,7 @@ machine, which is the same evidence standard every other milestone uses.
   small, dependency-free and already proven to boot.
 * Interface and experience: **PC5-owned** — sessions, shell, update model and the
   PlayStation experience.
-* Compatibility runtime: **user space, Track B, isolated** — never a kernel patch.
+* Compatibility runtime: **user space, WS10/WS11, isolated** — never a kernel patch.
 * Today: nothing in this document has been built. The decision is recorded, the
   evidence requirement is defined, and the environment that blocks it is
   documented instead of worked around.

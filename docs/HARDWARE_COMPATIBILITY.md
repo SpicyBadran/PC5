@@ -54,8 +54,8 @@ therefore mostly `UNTESTED`, and that column is the finding, not a placeholder.
 
 | Class | Tested | Partially supported | Unsupported | Untested |
 |---|---|---|---|---|
-| Firmware: BIOS/CSM legacy | v86/SeaBIOS (emulated) | — | UEFI-only firmware (no OVMF run yet) | every physical BIOS |
-| Firmware: UEFI | Unicorn stub harness only (not firmware) | — | Secure Boot enforced (unsigned loader) | every physical UEFI machine |
+| Firmware: BIOS/CSM legacy | v86/SeaBIOS (emulated) | — | — | every physical BIOS |
+| Firmware: UEFI | genuine OVMF in QEMU (emulated hardware, real firmware) | — | Secure Boot enforced (unsigned loader) | every physical UEFI machine |
 | CPU: Intel | — | — | — | Kaby Lake reference laptop, everything else |
 | CPU: AMD | — | — | — | all |
 | GPU: Intel / AMD / NVIDIA | emulated Bochs VBE | framebuffer console only | no GPU driver exists | all |

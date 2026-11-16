@@ -75,10 +75,10 @@ Each level has a pass condition that a log can prove.
 | L1 | Boots | firmware reaches the PC5 loader and the boot environment draws its first page; full `PC5-LOG` captured |
 | L2 | Installs | installer writes the system to the internal disk and the installed system boots without the medium |
 | L3 | Operates | display, input, storage, audio and network each pass their check in §5; no kernel panic in a 30-minute session |
-| L4 | PS5 firmware executes | not reachable; no path exists (Track B) |
+| L4 | PS5 execution interfaces validated | the destination workstream (WS10); not started |
 | L5 | PS5 interface operates | not reachable |
-| L6 | PS5 games execute | per-title, Track B |
-| L7 | PS5 games playable | per-title, Track B |
+| L6 | PS5 games execute | per-title, WS10/WS11 |
+| L7 | PS5 games playable | per-title, WS10/WS11 |
 
 A machine is described as **REF-qualified** only at L3 with every P0 device check
 passing. Anything less is reported with the exact level and the failing check.

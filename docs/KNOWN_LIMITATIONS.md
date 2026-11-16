@@ -5,17 +5,14 @@ work that has secretly been done.
 
 ## Boot
 
-1. **The UEFI boot path has been executed, but not under real firmware.**
-   `boot/uefi/` builds a PE32+ `\EFI\BOOT\BOOTX64.EFI` application, the ISO
-   carries the El Torito UEFI section that points at it, and the loader's own
-   machine code now runs end to end against `tests/uefi_stub_firmware.py` — a
-   stub that serves the UEFI protocols at their specified slots on top of the
-   Unicorn CPU emulator (`make stubtest`, 42 checks). That harness has no ACPI,
-   PCI, interrupt or timer model, and it emulates `lgdt`, the segment loads and
-   the far return itself, so a passing run proves the loader's logic and the
-   handover contract — *not* UEFI compatibility. No OVMF image and no
-   UEFI-capable virtual machine were obtainable here, so treat a UEFI machine as
-   unsupported until a recorded boot exists (§7 of `docs/TEST_RESULTS.md`). On the UEFI path the loader also cannot report the
+1. **The UEFI boot path is verified under OVMF firmware, not on hardware.**
+   `boot/uefi/` builds a PE32+ `\EFI\BOOT\BOOTX64.EFI` application and the ISO
+   carries the El Torito UEFI section that points at it. Three levels of
+   evidence exist and are never conflated: the loader's machine code runs against
+   a protocol stub (`make stubtest`, 48 checks); genuine TianoCore OVMF boots the
+   ISO cold and warm and the kernel reaches `PC5-BOOT-OK` (`make ovmf-test`,
+   40 checks, 1 NOT APPLICABLE, `docs/TEST_RESULTS.md` §16); and **no physical
+   UEFI machine has done it** — `M1` is not started. On this path the loader also cannot report the
    ISO volume id, the kernel LBA or the ISO9660 descriptor (the file protocol
    does not expose them), and it hands over no VGA font, so the kernel's
    framebuffer console falls back to text mode.
@@ -117,9 +114,18 @@ Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
 
 ## PS5 compatibility
 
-15. **Genuine PS5 system software does not run and no path to run it is
-    implemented.** Stages 5–13 of the compatibility chain are BLOCKED or
-    NOT-STARTED by measurement.
+15. **Genuine PS5 system software does not run and no lawful path to run it is
+    known.** Stages 5–13 of the compatibility chain are BLOCKED or NOT-STARTED by
+    measurement, milestones `M17`–`M21` are `blocked` in the graph, and the trust
+    analysis (`M17`) is the milestone that decides whether level 5 is reachable
+    at all (ADR-019).
+15a. **The PS5 package in the repository is a pointer, not the package.** The
+    working-tree `PS5UPDATE.PUP` is a 135-byte Git LFS pointer; the 1.33 GiB
+    payload is not in a checkout, was never fetched here and was never analysed.
+    PC5 records its hash and size only (ADR-022,
+    `docs/PS5_SYSTEM_SOFTWARE_TARGET.md`).
+15b. **Nothing in this repository is a PS5 platform model.** `M10` is a contract
+    document with UNKNOWN rows; `M11`–`M16` do not exist.
 16. **No PS5 package parsing.** The `FIH`/`CNT` structures are identified by
     signature in the host tool only; nothing in the kernel understands them.
 17. **No PS5 executable execution.** No SELF/ELF loader, no PRX shim, no
