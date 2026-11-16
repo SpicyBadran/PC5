@@ -48,7 +48,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: all iso uefi check test boot-test stubtest verify roadmap clean distclean info unit metadata release-assets
+.PHONY: all iso uefi check test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets
 
 all: iso
 
@@ -137,9 +137,16 @@ $(BUILD)/uefi/BOOTX64.EFI: $(UEFI_OBJ) boot/uefi/bootx64.ld
 	$(LD) $(UEFI_LDFLAGS) -e _start $(UEFI_OBJ) -o $@
 	@python3 tools/eficheck.py $@ --require-relocs --max-bytes 196608
 
-$(BUILD)/efi.img: $(BUILD)/uefi/BOOTX64.EFI tools/mkefiimg.py
+# The ESP carries the kernel next to BOOTX64.EFI.  Firmware has no ISO9660
+# driver (OVMF ships none), so on an El Torito UEFI boot the ESP the firmware
+# mounts is the *only* volume the loader can read: a kernel that lived only in
+# the ISO9660 root would be unreachable there.  The BIOS path keeps reading the
+# ISO9660 copy, and tests/boot_test.py proves the two copies are identical.
+$(BUILD)/efi.img: $(BUILD)/uefi/BOOTX64.EFI $(BUILD)/kernel.bin docs/ISO_README.txt tools/mkefiimg.py
 	python3 tools/mkefiimg.py --size-kb 1440 \
 	  --file $(BUILD)/uefi/BOOTX64.EFI=EFI/BOOT/BOOTX64.EFI \
+	  --file $(BUILD)/kernel.bin=KERNEL.BIN \
+	  --file docs/ISO_README.txt=README.TXT \
 	  --output $@ --info $(BUILD)/efi-info.json
 
 uefi: $(BUILD)/efi.img
@@ -197,6 +204,20 @@ boot-test: $(ISO)
 # mistaken for a passing boot.
 stubtest: $(ISO)
 	python3 tests/uefi_stubtest.py --json-out $(BUILD)/stubtest-report.json
+
+# Real OVMF/UEFI integration gate.  Deliberately NOT part of `make test` or
+# `make verify`: it needs genuine TianoCore firmware and a real emulator, which
+# most machines do not have, and a gate that silently degrades to "skipped"
+# must not be able to look like part of a green run.  Exit code 3 means NOT
+# TESTED (no firmware/emulator); it is never a pass.
+#
+#   PC5_QEMU=/usr/bin/qemu-system-x86_64
+#   PC5_OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
+#   PC5_OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
+ovmf-test: $(ISO) $(BUILD)/efi.img
+	python3 tests/ovmf_boot.py --iso $(ISO) --efi-image $(BUILD)/efi.img \
+	  --kernel $(BUILD)/kernel.bin --json-out $(BUILD)/ovmf-report.json \
+	  $(OVMF_ARGS)
 
 test: check boot-test stubtest
 

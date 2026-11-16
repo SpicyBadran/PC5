@@ -152,3 +152,45 @@ Expected on the serial port, in order: `PC5 UEFI LOADER uefi-0.2.0`,
 `kernel_bytes_read=…`, `kernel_protocol_version=1`, `memory_map_entries=…`,
 `boot_info_ready`, `boot_services_exited`, `entering 32-bit kernel`, then the
 kernel's own `PC5 KERNEL 0.2.0` banner and `PC5-BOOT-OK`.
+
+## Verified under real OVMF firmware (2026-11-15)
+
+`make ovmf-test` boots `build/pc5.iso` under TianoCore EDK II OVMF in QEMU and
+records the serial log. The chain it proves, end to end:
+
+```
+BdsDxe: starting Boot0001 "UEFI QEMU DVD-ROM"        <- firmware boot manager
+PC5 UEFI loader uefi-0.2.0                          <- \EFI\BOOT\BOOTX64.EFI
+PC5-UEFI: firmware=EDK II                           <- SystemTable->FirmwareVendor
+PC5-UEFI: kernel_volume=image                       <- kernel read from the ESP
+PC5-UEFI: boot_services_exited                      <- ExitBootServices succeeded
+PC5-UEFI: entering 32-bit kernel
+PC5-LOG kernel_entry eip=0x10000                    <- the kernel, running
+PC5-BOOT-OK
+```
+
+Four things this loader now does because real firmware required it, all found by
+running rather than reading:
+
+* the ESP carries `KERNEL.BIN`: EDK II has no ISO9660 driver, so on an El Torito
+  UEFI boot the ESP is the only volume the loader can open (ADR-016);
+* a file's size comes from `EFI_FILE_INFO`, because OVMF answers a `SetPosition`
+  past EOF with the position it was given rather than the file size (ADR-017);
+* `GetMemoryMap` + `ExitBootServices` are one retry loop, because firmware moves
+  the map when the console is written to, and `EFI_INVALID_PARAMETER` means "read
+  it again", not "give up" (ADR-017);
+* nothing is written to the console protocol once `ExitBootServices` has
+  returned: the post-exit markers go to the 16550 only.
+
+Still open: physical hardware, Secure Boot, disk-style UEFI boot (this medium has
+no ESP partition) and an ACPI RSDP handover — the kernel reports `acpi=absent` on
+this path. See `docs/KNOWN_LIMITATIONS.md`.
+
+### Stub firmware vs real firmware
+
+| | `make stubtest` | `make ovmf-test` |
+|---|---|---|
+| what runs | the real `BOOTX64.EFI` on Unicorn, protocols served by a Python stub | the real ISO under real OVMF in QEMU |
+| proves | the loader's own logic, including the 32-bit handover trampoline | firmware → loader → kernel on a real UEFI machine model |
+| cannot prove | anything about firmware | nothing about physical hardware |
+| result today | 48 checks | 40 checks + 1 NOT APPLICABLE |

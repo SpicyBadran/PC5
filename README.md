@@ -23,7 +23,7 @@ What *does* work today, verified in this repository:
 |---|---|---|
 | Reproducible ISO build (`build/pc5.iso`) | COMPLETE AND VERIFIED | `make iso`, [`docs/TEST_RESULTS.md`](docs/TEST_RESULTS.md) |
 | ISO structure (ISO9660 + El Torito BIOS and UEFI sections + boot descriptor + hybrid MBR) | COMPLETE AND VERIFIED | `make verify` → 75/75 checks |
-| Boots on an emulated x86 PC (SeaBIOS, CD-ROM and, with the CD detached, its hybrid MBR) | COMPLETE AND VERIFIED | `make boot-test` → 116/116 checks |
+| Boots on an emulated x86 PC (SeaBIOS, CD-ROM and, with the CD detached, its hybrid MBR) | COMPLETE AND VERIFIED | `make boot-test` → 119/119 checks |
 | ATA PIO write, cache flush and verified read-back (explicit test only) | COMPLETE AND VERIFIED (emulated IDE disk) | `wtest` over the serial console; `make boot-test` compares the image and SHA-256 |
 | Kernel reads its own medium (ATAPI + ISO9660, no firmware calls) | COMPLETE AND VERIFIED (emulated) | `storage_mounted volume=PC5` in the boot log |
 | MBR/GPT partition discovery, read-only | COMPLETE AND VERIFIED (emulated disk + unit tests) | `partitions device=0 scheme=gpt count=2 status=ok`; a damaged table reports `status=crc` |
@@ -34,7 +34,7 @@ What *does* work today, verified in this repository:
 | Framebuffer console with VGA text fallback | COMPLETE AND VERIFIED (emulated) | boot log, framebuffer self-test |
 | PS/2 keyboard navigation | IMPLEMENTED — TESTING REQUIRED | 8042 driver, emulator input |
 | Serial recovery console | COMPLETE AND VERIFIED | `pc5>` commands |
-| UEFI boot path (PE32+ `\EFI\BOOT\BOOTX64.EFI`, GOP, FAT ESP) | IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF) | `make stubtest` → 42/42 checks running the real image; no UEFI firmware exists in the build environment, so this is not a compatibility result — see [`docs/TEST_RESULTS.md`](docs/TEST_RESULTS.md) §7 |
+| UEFI boot path (PE32+ `\EFI\BOOT\BOOTX64.EFI`, GOP, FAT ESP) | BOOTED BY REAL OVMF FIRMWARE | `make ovmf-test` → 40 checks, 1 NOT APPLICABLE, `PC5-OVMF-BOOT-OK`: TianoCore EDK II started the ISO, the loader exited boot services and the kernel reached `PC5-BOOT-OK`. Stub-firmware run: `make stubtest` → 48/48. Physical hardware, Secure Boot and disk-style UEFI boot are NOT tested — see [`docs/TEST_RESULTS.md`](docs/TEST_RESULTS.md) §16 |
 | DualSense controller support | NOT STARTED (needs a USB stack) | chain stage 3 |
 | Genuine PS5 firmware execution | BLOCKED — no verified path exists | [`docs/FIRMWARE_ANALYSIS.md`](docs/FIRMWARE_ANALYSIS.md) |
 | Actual PS5 game execution | NOT STARTED | [`docs/PS5_GAME_TEST_RESULTS.md`](docs/PS5_GAME_TEST_RESULTS.md) |
@@ -77,7 +77,8 @@ stub firmware, not OVMF — install the one optional dependency:
 
 ```sh
 pip install "unicorn==2.1.4"
-make stubtest   # 42 checks; exits 2 and says so if unicorn is absent
+make stubtest   # 48 checks; exits 2 and says so if unicorn is absent
+make ovmf-test  # real OVMF boot; 0 = verified, 1 = failed, 3 = NOT TESTED
 ```
 
 A release pipeline (`.github/workflows`-ready, stored in `ci/build.yml` while the

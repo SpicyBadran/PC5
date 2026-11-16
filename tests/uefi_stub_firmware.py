@@ -141,7 +141,9 @@ class Trace:
 
 class StubFirmware:
     def __init__(self, image, esp_volume, kernel_bytes, trace=None,
-                 iso_volume_has_kernel=True, fat_walker=None):
+                 iso_volume_has_kernel=True, fat_walker=None,
+                 clamp_seek_past_end=True, race_map_key=False,
+                 support_get_info=True):
         if not HAVE_UNICORN:
             raise StubError("the 'unicorn' module is not installed "
                             "(pip install unicorn)")
@@ -156,6 +158,22 @@ class StubFirmware:
         self.services = []                   # [(name, callable)]
         self.gdt = None
         self.uc = Uc(UC_ARCH_X86, UC_MODE_64)
+        # Firmware behaviours the loader has to survive, switchable so each one
+        # can be the single difference in a regression run:
+        #   clamp_seek_past_end  SetPosition past EOF reports the file size
+        #                        (OVMF instead reports the position it was
+        #                        given, which is why the size must come from
+        #                        EFI_FILE_INFO)
+        #   race_map_key         firmware allocates between GetMemoryMap and
+        #                        ExitBootServices, so the first key is stale
+        #   support_get_info     Firmware<>GetInfo is available
+        self.clamp_seek_past_end = clamp_seek_past_end
+        self.race_map_key = race_map_key
+        self.support_get_info = support_get_info
+        self.map_generation = 1
+        self.map_key_races = 0
+        self.insn_at = (0, 1)
+        self.fixup_al = None
         self._map()
         self._load_image()
         self._build_tables()
@@ -296,8 +314,13 @@ class StubFirmware:
     # the wrong registers and the checks would fail.  That is the contract this
     # harness is here to test, so it is the contract it reads.
     BRIDGE_SLOT = 16
-    MSABI_ARGS = (UC_X86_REG_RCX, UC_X86_REG_RDX, UC_X86_REG_R8,
-                  UC_X86_REG_R9, UC_X86_REG_RAX, UC_X86_REG_RBX)
+    # The x64 calling convention: the first four integer arguments are in
+    # registers, everything after them is on the stack above the 32-byte shadow
+    # space.  Reading argument five out of RAX (which is what this harness used
+    # to do) only looks right while RAX happens to hold what the caller meant -
+    # after a service returns a status, it does not.
+    MSABI_REG_ARGS = (UC_X86_REG_RCX, UC_X86_REG_RDX, UC_X86_REG_R8, UC_X86_REG_R9)
+    SERVICE_ARGS = 6
 
     def add_service(self, name, function):
         index = len(self.services)
@@ -399,10 +422,24 @@ class StubFirmware:
         # A 16550 with the transmit register always ready and a scratch
         # register that reads back what was written: that is exactly what the
         # loader's serial probe checks, so this keeps the probe honest.
-        uc.reg_write(UC_X86_REG_RAX, 0x60 if port == 0x3F9 + 4 else 0x5A)
+        #
+        # Unicorn performs the port read itself and overwrites AL with whatever
+        # QEMU's ioport returns, so a value written here does not survive.  The
+        # value is therefore applied at the *next* instruction, which is where
+        # the loader's AL already holds the (wrong) port data.
+        value = 0x60 if port == 0x3F9 + 4 else 0x5A
+        address, length = self.insn_at
+        self.fixup_al = (address + length, value)
         return True
 
     def _hook_code(self, uc, address, size, userdata):
+        self.insn_at = (address, size)
+        fixup = self.fixup_al
+        if fixup is not None and address == fixup[0]:
+            # Only the low byte of RAX carries the byte the port handed over.
+            eax = uc.reg_read(UC_X86_REG_RAX)
+            uc.reg_write(UC_X86_REG_RAX, (eax & ~0xFF) | fixup[1])
+            self.fixup_al = None
         # service entries
         service_entry = self.service_entries.get(address)
         if service_entry is not None:
@@ -433,11 +470,13 @@ class StubFirmware:
         name, function = entry
         self.trace.count(name)
         uc = self.uc
-        args = [uc.reg_read(reg) for reg in self.MSABI_ARGS]
+        args = [uc.reg_read(reg) for reg in self.MSABI_REG_ARGS]
         # ms_abi: on entry to a callee [rsp] is the return address and the
         # caller's 32-byte shadow space sits above it.  Returning therefore
         # means "put the status in RAX, pop the return address, jump".
         rsp = uc.reg_read(UC_X86_REG_RSP)
+        for index in range(len(args), self.SERVICE_ARGS):
+            args.append(self.read_u64(rsp + 0x28 + (index - 4) * 8))
         return_address = self.read_u64(rsp)
         if not return_address:
             raise StubError(f"service {name} called with no return address on the stack")
@@ -570,13 +609,20 @@ class StubFirmware:
         joined = "".join(text)
         self.trace.console.append(joined)
         self.trace.put(joined)
+        if self.trace.exited:
+            # The console protocol is firmware memory that is gone the moment
+            # ExitBootServices returns; calling into it afterwards is exactly
+            # the bug a real firmware turns into a crash.
+            self.trace.problem("console output after ExitBootServices")
         return EFI_SUCCESS
 
     def svc_allocate_pages(self, alloc_type, memory_type, pages, memory_ptr, *_):
         self.write_u64(memory_ptr, self.alloc(pages * 4096, align=4096))
+        self.map_generation += 1
         return EFI_SUCCESS
 
     def svc_free_pages(self, *_):
+        self.map_generation += 1
         return EFI_SUCCESS
 
     def svc_get_memory_map(self, size_ptr, map_ptr, key_ptr, desc_ptr, ver_ptr):
@@ -605,14 +651,22 @@ class StubFirmware:
             self.write(map_ptr + index * entry,
                        struct.pack("<IIQQQQ", kind, 0, phys, 0, pages, 8))
         self.write_u64(size_ptr, needed)
-        self.write_u64(key_ptr, 0xB007)
+        # The key names the map generation this copy belongs to.  Real firmware
+        # invalidates it as soon as anything allocates, and OVMF does that
+        # without being asked; the race switch models exactly that.
+        self.write_u64(key_ptr, self.map_generation)
+        if self.race_map_key and self.map_key_races < 1:
+            self.map_key_races += 1
+            self.map_generation += 1
         return EFI_SUCCESS
 
     def svc_allocate_pool(self, pool_type, size, buffer_ptr):
         self.write_u64(buffer_ptr, self.alloc(size))
+        self.map_generation += 1
         return EFI_SUCCESS
 
     def svc_free_pool(self, _buffer):
+        self.map_generation += 1
         return EFI_SUCCESS
 
     def svc_handle_protocol(self, handle, guid_ptr, interface_ptr):
@@ -683,8 +737,13 @@ class StubFirmware:
         return EFI_SUCCESS
 
     def svc_exit_boot_services(self, _image, map_key):
-        self.trace.exited = True
         self.trace.note("exit_boot_services", map_key=map_key)
+        if map_key != self.map_generation:
+            # What OVMF does with a key from before the last allocation.
+            self.trace.note("exit_boot_services_stale_key", key=map_key,
+                            current=self.map_generation)
+            return EFI_INVALID_PARAMETER
+        self.trace.exited = True
         return EFI_SUCCESS
 
     # ------------------------------------------------------ file system
@@ -721,6 +780,7 @@ class StubFirmware:
         self.write_u64(table + 32, self.add_service("file_read", self.svc_file_read))
         self.write_u64(table + 48, self.add_service("file_get_position", self.svc_file_get_position))
         self.write_u64(table + 56, self.add_service("file_set_position", self.svc_file_set_position))
+        self.write_u64(table + 64, self.add_service("file_get_info", self.svc_file_get_info))
         return table
 
     file_protocol = None
@@ -761,7 +821,32 @@ class StubFirmware:
 
     def svc_file_set_position(self, file_ptr, position):
         state = self.objects[file_ptr]
-        state["pos"] = min(position, len(state["data"]))
+        if self.clamp_seek_past_end:
+            state["pos"] = min(position, len(state["data"]))
+        else:
+            state["pos"] = position        # what OVMF reports back
+        return EFI_SUCCESS
+
+    def svc_file_get_info(self, file_ptr, guid_ptr, size_ptr, buffer):
+        """EFI_FILE_INFO, the only authoritative source of a file size."""
+        if not self.support_get_info:
+            return EFI_UNSUPPORTED
+        guid = self.read(guid_ptr, 16)
+        if guid != bytes.fromhex("926e57093f6dd2118e3900a0c969723b"):
+            return EFI_UNSUPPORTED
+        state = self.objects[file_ptr]
+        name = (state["path"] or "").encode("utf-16-le") + b"\0\0"
+        info = struct.pack("<QQQ", 80 + len(name), len(state["data"]),
+                           len(state["data"]))
+        info += bytes(48)                       # create/access/write timestamps
+        info += struct.pack("<Q", 0x10 if state["is_dir"] else 0x20)
+        info += name
+        wanted = self.read_u64(size_ptr)
+        if not buffer or wanted < len(info):
+            self.write_u64(size_ptr, len(info))
+            return EFI_BUFFER_TOO_SMALL
+        self.write(buffer, info)
+        self.write_u64(size_ptr, len(info))
         return EFI_SUCCESS
 
     def _utf16(self, address):

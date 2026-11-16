@@ -135,9 +135,17 @@ class RealGraphTests(unittest.TestCase):
 
     def test_m1_is_not_claimed_as_started(self):
         # No physical installation has ever happened; the graph must say so.
+        # M1c became complete when genuine OVMF firmware booted the kernel
+        # (docs/TEST_RESULTS.md §16), and its acceptance list still carries the
+        # two things that are not done (physical hardware, and a GOP-only
+        # framebuffer that has never run on a real machine).
         self.assertEqual(milestone(self.data, "M1")["state"], "not_started")
-        self.assertEqual(milestone(self.data, "M1c")["state"], "in_progress")
+        self.assertEqual(milestone(self.data, "M1c")["state"], "complete")
         self.assertEqual(milestone(self.data, "M1b")["state"], "blocked")
+        uefi = milestone(self.data, "M1c")
+        unfinished = [entry for entry in uefi["acceptance"] if "NOT done" in entry]
+        self.assertTrue(unfinished, "M1c must keep saying what is not done")
+
 
 
 class TrackGateTests(unittest.TestCase):

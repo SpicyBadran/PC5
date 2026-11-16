@@ -14,10 +14,11 @@ node 22.22.3, v86 (npm `v86-system` 0.5.0) for the emulated boot test.
 Every number below was produced by the command quoted next to it, in this
 session, on this source tree.
 
-Sections 9–14 are later milestones (M1d, M1e, M1f, M1g, M1h). Each one starts
-with its own build inputs, sizes and hashes; the artifact numbers in §1 describe
-base `5ab7c48` and are kept as history, not as the current image. The current
-image is the one in §14.
+Sections 9–16 are later milestones (M1d, M1e, M1f, M1g, M1h, M1i, and M2 in
+§16 — the first section recorded against *real firmware* rather than an
+emulator). Each section starts with its own build inputs, sizes and hashes;
+the artifact numbers in §1 describe base `5ab7c48` and are kept as history, not
+as the current image. The current image is the one in §16.
 
 ## 1. Artifact
 
@@ -1624,3 +1625,198 @@ console commands, and a mount without a write callback refuses every write.
 * **Efficiency is not a goal here.** The allocation scan and the mirror re-reads
   are O(clusters)-ish deliberately; M2 and later can revisit them once AHCI/NVMe
   make the I/O cheaper.
+
+## 16. M2 — real UEFI firmware boot under OVMF, 2026-11-15
+
+Section 7 said, in as many words, that the UEFI path was *implemented but never
+executed against firmware*. This section removes that limitation: the real
+`build/pc5.iso` was booted by genuine TianoCore OVMF under QEMU, and the serial
+log shows real firmware handing control to the PC5 loader and the loader handing
+control to the PC5 kernel.
+
+Base: `main` `af726d2` (M1i merged). Branch `arena/473f5139-pc5`.
+
+### 16.1 Environment (external dependency, not part of the repository)
+
+| Item | Value |
+|---|---|
+| emulator | QEMU 11.0.2, `-machine q35`, TCG only (no `/dev/kvm` in this environment), 1 vCPU, 256 MiB |
+| firmware CODE | TianoCore EDK II OVMF, `OVMF_CODE-pure-efi.fd`, 1,966,080 bytes, `_FVH` firmware volume at offset 0x28, build dated 2023-06-03 |
+| firmware VARS | `OVMF_VARS-pure-efi.fd`, 131,072 bytes, copied per run (never written in place) |
+| firmware source | external package/repository; **no firmware image is committed here, embedded in the ISO or linked into the kernel** |
+| emulator build note | the QEMU used was a portable musl build run through a musl dynamic loader built from source in this environment; it is an external tool with no bearing on the ISO |
+
+`tests/ovmf_boot.py` records the firmware SHA-256, the QEMU version and the ISO
+SHA-256 in its JSON report (`build/ovmf-report.json`). The run recorded below
+booted the image pinned in §16.2 - `10971e54b0519f08ff04029ce9caa7576a4cb1fd71
+0fedde1f85f0e4191936d9` - so the verdict and the bytes it applies to can be
+checked against each other.
+
+### 16.2 Build inputs (pinned, two clean builds)
+
+```
+$ export SOURCE_DATE_EPOCH=1700000000
+$ make clean && make iso BUILD_ID=af726d2 && make clean && make iso BUILD_ID=af726d2
+# both builds identical
+```
+
+`BUILD_ID` is pinned because the build id is compiled into the kernel and printed
+at boot, so a default build differs by that string alone - and it changes with
+every commit, documentation commits included. A default `make iso` at the head of
+this branch therefore produces an image that differs from the one below in the
+embedded build id and nothing else. The numbers below are the pinned ones, and
+they can be reproduced exactly from any later commit.
+
+| Artifact | Bytes | SHA-256 |
+|---|---|---|
+| `build/pc5.iso` | 1,601,536 | `10971e54b0519f08ff04029ce9caa7576a4cb1fd710fedde1f85f0e4191936d9` |
+| `build/kernel.bin` | 66,836 | `93800460d4ba52cc393a75088377098c38f3776590b502ec3833e1e7d4c10b09` |
+| `build/loader.bin` | 4,096 | `f121b34a7ebc0e7dd6855e429496b7f3bbb636ac4249fad62542b8c6503da1bb` |
+| `build/mbr.bin` | 440 | `d07ec2ba3aeb06b200ed8e918d9a14dfa18b730477f03cbd632dec06ab19d107` |
+| `build/efi.img` (ESP) | 1,474,560 | `efc6c7580c147bf5cd7f0cc85b6bb3f3048907c49a1921ce19e6e932b1d8ae48` |
+| `build/uefi/BOOTX64.EFI` | 15,309 | `b51ea5a17d442cfb1df634c588d8839f88cc0df90de47b0148e9e45a6caf07bb` |
+
+`build/build-info.json` was byte-identical between the two builds. The MBR
+layout is unchanged from M1h (440-byte code area, same partition entry), and the
+BIOS loader is unchanged (its hash is the M1i value).
+
+### 16.3 The boot that now works
+
+`make ovmf-test` (cold boot, fresh VARS) — serial log, firmware console mirror
+de-duplicated:
+
+```
+BdsDxe: loading Boot0001 "UEFI QEMU DVD-ROM QM00005 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)
+BdsDxe: starting Boot0001 "UEFI QEMU DVD-ROM QM00005 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)
+PC5 UEFI LOADER uefi-0.2.0
+PC5 UEFI loader uefi-0.2.0
+PC5-UEFI: firmware_started
+PC5-UEFI: serial_probe=16550
+PC5-UEFI: firmware=EDK II
+PC5-UEFI: firmware_revision=65536
+PC5-UEFI: display_width=1280
+PC5-UEFI: display_height=800
+PC5-UEFI: display_pitch=5120
+PC5-UEFI: display_pixel_format=1
+PC5-UEFI: image_device=acpi
+PC5-UEFI: kernel_volume=image
+PC5-UEFI: kernel_volume_opened
+PC5-UEFI: medium_readme_bytes=1273
+PC5-UEFI: kernel_bytes_read=66836
+PC5-UEFI: kernel_protocol_version=1
+PC5-UEFI: boot_services_exited
+PC5-UEFI: memory_map_entries=40
+PC5-UEFI: ExitBootServices_retries=0
+PC5-UEFI: memory_conventional_mib=216
+PC5-UEFI: kernel_loaded_at=0x00010000
+PC5-UEFI: entering 32-bit kernel
+PC5 KERNEL 0.2.0 (build af726d2, …)
+PC5-LOG kernel_entry eip=0x10000
+PC5-LOG protocol=1 magic=ok
+PC5-LOG display=framebuffer 1280x800 pitch=5120 font=none
+PC5-LOG memory_mib=234 entries=40 top_mib=236
+…
+PC5-BOOT-OK
+```
+
+* Firmware: `firmware=EDK II`, revision `0x00010000` (1.0).
+* Display: GOP 1280×800, 32 bpp, pitch 5120, format 1 (BGR) — reported honestly,
+  so the kernel swaps red and blue, as documented since M1c.
+* Memory map: 40 descriptors converted to E820, 216 MiB conventional.
+* `ExitBootServices`: succeeded on the first attempt with the map key it had just
+  read (`ExitBootServices_retries=0`).
+* Kernel: entry at `0x10000`, protocol 1, magic ok, `PC5-BOOT-OK`.
+* The harness emits `PC5-OVMF-BOOT-OK` from its own process, and only after every
+  check has passed — the guest never prints that marker.
+
+**Warm boot**: same firmware, same ISO, the variable store the cold boot had just
+written. Identical result, `ExitBootServices_retries=0`, `PC5-BOOT-OK`.
+
+**Distinguishing UEFI from SeaBIOS**: the harness requires a `BdsDxe:` boot
+manager line, requires the El Torito UEFI boot option or the loader banner, and
+fails if the log contains `SeaBIOS`.
+
+### 16.4 What real firmware broke, and what was fixed
+
+Every fix below was found by running under OVMF, not by reading the code. Each
+one has a regression test in `tests/uefi_stubtest.py` (48 checks, up from 42) or
+in `tests/boot_test.py` (119 checks, up from 116).
+
+| # | Symptom on real firmware | Cause | Fix |
+|---|---|---|---|
+| 1 | `PC5-UEFI FAILURE E2: no volume on this machine holds \KERNEL.BIN` | OVMF has **no ISO9660 driver**. On an El Torito UEFI boot the only file system the loader can see is the RAM-disk copy of the ESP; a kernel that lived only in the ISO9660 root was unreachable | the ESP now carries `KERNEL.BIN` (and `README.TXT`) next to `BOOTX64.EFI`; the loader tries the volume it was booted from first, then falls back to scanning every file system (ADR-016) |
+| 2 | `E3: cannot read \KERNEL.BIN`, with `read_size=0x400000 read_got=0x10534` | the loader learned a file's size by seeking past EOF and reading the position back. OVMF *accepts* that seek and reports the requested position (4 MiB), so every file looked 4 MiB long | size now comes from `EFI_FILE_INFO` through `GetInfo`; the read loops until the reported size has arrived; the seek trick survives only as a fallback (ADR-017) |
+| 3 | `E13: ExitBootServices was refused (status=0x8000000000000002)` | the memory-map key was read, then boot information was printed to the console — firmware allocations invalidate the key — and `ExitBootServices` was called once with the stale key | the map is re-read and `ExitBootServices` retried with a fresh key (up to 8 attempts), and nothing that can allocate runs between the keyed `GetMemoryMap` and the call |
+| 4 | (latent) the console protocol was called after `ExitBootServices` | `uefi_puts` always wrote to `ConOut`, including the post-exit trace lines. That is firmware memory the loader no longer owns | `console_closed` is set the moment `ExitBootServices` returns; post-exit markers go to the 16550 only |
+| 5 | `PPCC55--UUEEFFII::  ffiirrmmwwaarree__ssttaarrtteedd` | OVMF's ConSplitter mirrors the console to the same serial port the loader writes to, so a character-at-a-time echo put every character on the wire twice | each line is assembled in a buffer and written once per sink; the log now shows each line twice, in order, and the harness de-duplicates consecutive duplicates |
+| 6 | `PC5-LOG display=framebuffer 1280x800x5120 pitch=122409 font=(null)` | the kernel's evidence line had one `%u` too many: the font name was read as the pitch and the font field read whatever followed | one conversion per argument in `kernel/main.c`, plus a `boot-test` assertion that the line carries one pitch and one recognised font name |
+
+The stub firmware was taught the two OVMF behaviours that caused #2 and #3
+(`clamp_seek_past_end=False` and `race_map_key=True`), so the same bugs cannot
+come back unnoticed without firmware, and the harness was corrected where it had
+modelled the x64 calling convention wrongly (arguments five and six are on the
+stack, not in spare registers).
+
+### 16.5 Negative tests — who fails, and how
+
+Each machine below is a real ISO built by the repository's own tools and booted
+under the same OVMF/QEMU configuration. Nothing calls a failing path directly.
+
+| Machine | What was changed | Observed | Attributed to |
+|---|---|---|---|
+| `no-boot-app` | ESP without `\EFI\BOOT\BOOTX64.EFI` | firmware falls back to its built-in UEFI shell, prints its file-system map and a `startup.nsh` prompt; the PC5 loader never runs | firmware |
+| `bad-pe` | `MZ` magic of `BOOTX64.EFI` corrupted | firmware refuses the image and drops to the same shell; no loader output | firmware |
+| `truncated-iso` | ISO cut at 64 KiB (boot catalog present, boot image missing) | firmware finds the catalog, cannot read the image, never starts anything | firmware |
+| `no-kernel` | kernel removed from both the ESP and the ISO9660 root | `PC5-UEFI FAILURE E2` + `PC5-UEFI-FAILURE E2`, no handover | bootloader |
+| `bad-signature` | `PC5K` signature in `KERNEL.BIN` corrupted | `PC5-UEFI FAILURE E4`, no handover | bootloader |
+| `deadline` | good ISO, one-second budget | harness reports a timeout; a timeout is never a pass | harness |
+
+### 16.6 BIOS regression (unchanged behaviour)
+
+| Gate | Result |
+|---|---|
+| `make verify` | `VALID: build/pc5.iso sha256=10971e54…36d9` (El Torito BIOS entry, UEFI section, catalog checksum, hybrid MBR, per-file SHA-256) |
+| `make boot-test` | **119/119** checks: SeaBIOS El Torito boot, MBR-as-hard-disk boot, FAT32 read/write on a disposable disk, GPT parsing, UI pages, and the two new M2 checks (ESP and ISO9660 copies of `KERNEL.BIN` are byte-identical; the display evidence line is well formed) |
+
+The MBR bytes are identical to M1h/M1i (`d07ec2ba…`); the hybrid-MBR path was
+not touched.
+
+### 16.7 Gate results, reported separately
+
+| Gate | Command | Result |
+|---|---|---|
+| structural | `make verify` | VALID |
+| host unit | `make unit` | 160 checks, 0 failures |
+| host suite | `make check` | 299 tests, OK (280 before this milestone + 19 new tests of the OVMF harness itself: `tests/test_ovmf_harness.py`) |
+| emulated BIOS boot | `make boot-test` | 119/119 |
+| stub firmware (loader executed, not firmware) | `tests/uefi_stubtest.py` | 48/48 |
+| roadmap graph | `make roadmap` | 18 milestones, document in sync |
+| **real OVMF boot** | `make ovmf-test` | **40 PASS, 1 NOT APPLICABLE, 0 FAIL**, `PC5-OVMF-BOOT-OK` |
+
+The harness that produces these numbers is itself tested, because a gate that
+lies is worse than no gate: `tests/test_ovmf_harness.py` (19 tests, part of
+`make check`) proves that a file without a `_FVH` volume header, a file that is
+really the PC5 loader, an implausibly small file and the real `build/efi.img` are
+all refused as firmware; that the firmware console mirror (the same line twice)
+is collapsed while character doubling (`PPCC55…`) is *not* silently repaired;
+that a SeaBIOS log is not mistaken for a UEFI one; and that with no firmware
+installed the harness exits **3** (NOT TESTED) with a blocker listed and no
+success marker in the report — the one outcome that must never look like a pass.
+
+### 16.8 Not tested, and not claimed
+
+* **Disk-style UEFI boot** (ESP attached as a block device) — reported as
+  NOT APPLICABLE, not as a pass: this ISO carries its ESP as an El Torito image
+  inside ISO9660, so there is no ESP partition to attach. Making that path real
+  is a partition-table change and was not done (the MBR layout is unchanged).
+* **Physical hardware.** No PS5, no PC, no UEFI board was booted. Everything in
+  this section is QEMU + OVMF, an emulator and firmware, not a machine.
+* **Secure Boot.** The firmware used is the "pure EFI" build without the
+  Microsoft-signed shim chain; Secure Boot was neither enabled nor tested.
+* **KVM.** This environment has no `/dev/kvm`; OVMF ran under TCG. Timing results
+  from TCG mean nothing about hardware performance.
+* **ACPI.** The UEFI handover still passes no RSDP, so the kernel reports
+  `acpi=absent` on this path. That is honest reporting of a real gap, not a
+  regression.
+* **Other firmware.** Only EDK II/OVMF was exercised. AMI, Insyde, Phoenix and
+  Apple firmware are untested; the loader's behaviour there is unknown.

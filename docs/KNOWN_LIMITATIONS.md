@@ -89,6 +89,32 @@ work that has secretly been done.
 14. **32-bit kernel, no paging.** Physical memory above 4 GiB is reported but
     not used; long mode is not entered.
 
+## UEFI boot path
+
+Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
+§16). What that does **not** cover:
+
+* **Physical hardware.** No PC and no PS5 has booted this ISO through UEFI. OVMF
+  is firmware, but it is firmware in an emulator; vendor firmware (AMI, Insyde,
+  Phoenix, Apple) is untested and its quirks are unknown.
+* **Secure Boot.** Never enabled, never tested. The loader is not signed and the
+  firmware used here is the "pure EFI" OVMF build without a shim.
+* **Disk-style UEFI boot.** The ISO carries its ESP as an El Torito image inside
+  ISO9660, so there is no ESP *partition* for firmware to mount as a disk. That
+  path is reported NOT APPLICABLE by the test harness, never passed. Adding it
+  means a partition table the MBR does not have today.
+* **ACPI.** The UEFI loader hands over no RSDP, so the kernel reports
+  `acpi=absent` and finds no ACPI tables on this path. The BIOS path parses ACPI
+  from the legacy areas; making the UEFI path do the same is future work.
+* **No block I/O handover.** The file protocol hides the LBA of the file it read,
+  so the kernel cannot mount its own medium on the UEFI path
+  (`storage_mounted=no`, chain blocked at stage 4). This is reported, not hidden.
+* **Framebuffer only via GOP.** A machine that provides no GOP gets the text
+  fallback; that path is implemented and unit-tested but has not run under real
+  firmware (OVMF always offers GOP).
+* **Timing.** The OVMF runs used TCG (no KVM in the build environment). Nothing
+  about boot time on real hardware may be inferred from them.
+
 ## PS5 compatibility
 
 15. **Genuine PS5 system software does not run and no path to run it is

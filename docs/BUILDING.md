@@ -27,7 +27,9 @@ make check       # unit tests + python test suite
 make verify      # independent ISO verification (+ build/verify-report.json)
 make roadmap     # validate the milestone graph and the Track A/B gate
 make uefi        # just the UEFI application and the FAT ESP (build/efi.img)
-make boot-test   # boot the ISO in the emulator; 80 assertions (incl. FAT32 create)
+make boot-test   # boot the ISO in the emulator; 119 assertions (incl. FAT32 write)
+make stubtest    # execute the UEFI loader against a stub firmware (48 checks)
+make ovmf-test   # boot the ISO under genuine OVMF; exit 3 = NOT TESTED
 make metadata    # add provenance to build/build-info.json
 make release-assets  # stage pc5.iso, pc5.iso.sha256, build-info.json
 make clean
@@ -61,6 +63,50 @@ re-checks.
 Take the digest from your own build rather than from a document: this
 repository quotes hashes with the commit they came from, and a hash built from a
 different commit is a different, equally valid image.
+
+## Booting the ISO under real UEFI firmware
+
+The BIOS path is tested with an emulator alone. The UEFI path needs firmware, and
+firmware is an external dependency this repository does not ship:
+
+```sh
+# Debian/Ubuntu:  sudo apt install ovmf qemu-system-x86
+# Fedora:         sudo dnf install edk2-ovmf qemu-system-x86
+# Arch:           sudo pacman -S edk2-ovmf qemu-system-x86
+
+make iso
+make ovmf-test                       # discovers firmware in /usr/share/OVMF/...
+```
+
+Anything unusual can be pointed at explicitly — a wrapper script around
+`qemu-system-x86_64` is fine, which is how a QEMU that needs its own loader or
+library path gets used:
+
+```sh
+PC5_QEMU=/path/to/qemu-system-x86_64 \
+PC5_QEMU_DATA_DIR=/path/to/share/qemu \
+PC5_OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd \
+PC5_OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd \
+make ovmf-test
+
+# or, equivalently:
+python3 tests/ovmf_boot.py --iso build/pc5.iso \
+  --ovmf-code …/OVMF_CODE.fd --ovmf-vars …/OVMF_VARS.fd \
+  --qemu qemu-system-x86_64 --json-out build/ovmf-report.json
+```
+
+`tests/ovmf_boot.py --list-firmware` prints every path it looks at. Three exit
+codes, and only the first is a pass:
+
+| Exit | Meaning |
+|---|---|
+| 0 | real OVMF booted the PC5 kernel; `PC5-OVMF-BOOT-OK` and `build/ovmf-report.json` written |
+| 1 | the boot ran and a check failed — the report names it |
+| 3 | **NOT TESTED**: no emulator, no firmware, or a file that is not a firmware volume |
+
+The harness copies the VARS image before every boot (firmware writes to it),
+records the firmware and QEMU versions and the SHA-256 of both images, keeps the
+serial logs under `build/ovmf/`, and never commits firmware to the repository.
 
 ## Continuous integration and releases
 

@@ -83,7 +83,11 @@ static void log_boot_evidence(const struct cpu_info *cpu, const struct mem_info 
     pc5_log("PC5-LOG protocol=%u magic=%s", boot_info->version,
             boot_info->magic == PC5_BOOT_MAGIC ? "ok" : "BAD");
 
-    pc5_snprintf(line, sizeof(line), "PC5-LOG display=%s %ux%ux%u pitch=%u font=%s",
+    /* One conversion per argument: printing the pitch twice left the font
+     * argument to be read as an integer and the font name to be read from
+     * whatever followed it, which the real UEFI boot showed as
+     * "pitch=122409 font=(null)". */
+    pc5_snprintf(line, sizeof(line), "PC5-LOG display=%s %ux%u pitch=%u font=%s",
                  con.fb ? "framebuffer" : "text", con.fb ? con.width : 80,
                  con.fb ? con.height : 25, con.fb ? con.pitch : 160,
                  con.font ? "firmware-8x16" : "none");
