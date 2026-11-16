@@ -25,7 +25,7 @@ Track A — PC5 Native
         depends on  M0
   M1b   blocked      Automated CI and release publication
         depends on  M1a
-  M1c   in_progress  UEFI boot path under real firmware
+  M1c   complete     UEFI boot path under real firmware
         depends on  M0
   M1d   complete     ATA PIO storage write path (emulated HDD)
         depends on  M0

@@ -380,3 +380,87 @@ evidence, the choice, and what would reverse it.
   transaction and the transient-space requirement disappears; the code already
   isolates the three moments (link, switch, reclaim) as separate stages, which is
   the structure a log would replay.
+
+## ADR-016 — The ESP carries a copy of the kernel, because firmware cannot read ISO9660
+
+* **Problem**: the UEFI path was built on an assumption that only a stub could
+  hold: that `\KERNEL.BIN` could be opened on the volume firmware boots from.
+  Real OVMF disproved it on the first run: `EFI_SIMPLE_FILE_SYSTEM_PROTOCOL` only
+  ever exposed the RAM-disk copy of the ESP that firmware extracts from the El
+  Torito catalog, and EDK II ships **no ISO9660 driver at all**, so the ISO9660
+  root the BIOS loader reads is invisible on the UEFI path. The loader stopped
+  with `E2`.
+* **Options**: (a) write an ISO9660 reader into the loader over
+  `EFI_BLOCK_IO_PROTOCOL`; (b) make the ESP carry the kernel; (c) build a second
+  medium layout for UEFI.
+* **Decision**: (b). `tools/mkefiimg.py` is invoked with `KERNEL.BIN` and
+  `README.TXT` as well as `BOOTX64.EFI`, and the loader tries the volume it was
+  *booted from* first (`kernel_volume=image`), falling back to scanning every
+  file system (`kernel_volume=scan`) for machines that keep the kernel elsewhere.
+  The ISO9660 root keeps its copy for the BIOS path, unchanged.
+* **Why not (a)**: it is a filesystem driver on the boot path, written twice (the
+  kernel has its own), inside a loader whose job is to be small enough to audit.
+  It also buys nothing: the medium must carry the file either way.
+* **Cost**: the kernel exists twice on the medium (≈65 KiB), and the two copies
+  must not diverge. `tests/boot_test.py` reads both back with independent readers
+  (the FAT12 walker and the ISO9660 directory-record parser) and fails if they
+  differ, and `tests/uefi_stubtest.py` covers the image-volume and scan paths
+  separately.
+* **Consequence for users**: an ISO built by this repository boots under UEFI
+  from the CD-ROM without a second partition. It still has no ESP *partition*, so
+  it cannot be booted as a disk by UEFI; that is reported as NOT APPLICABLE, not
+  as a pass.
+
+## ADR-017 — File size comes from `EFI_FILE_INFO`; `ExitBootServices` is retried with a fresh map key
+
+* **Problem**: two loader behaviours were correct against the stub and wrong
+  against firmware.
+  1. The loader learned a file's size by `SetPosition` past EOF and reading the
+     position back. OVMF *accepts* that position and reports it back verbatim, so
+     a 65 KiB kernel was read as a 4 MiB file and the read failed (`E3`,
+     `read_size=0x400000 read_got=0x10534`).
+  2. The loader read the memory map once, then printed to the console (which
+     allocates in firmware), then called `ExitBootServices` with the now-stale
+     key. OVMF answered `EFI_INVALID_PARAMETER` (`E13`).
+* **Decision**:
+  * Size is taken from `EFI_FILE_INFO` via `GetInfo`, the only authoritative
+    source; the read loops until the reported size has arrived; the seek trick is
+    kept **only** as a fallback for firmware without `GetInfo`.
+  * `GetMemoryMap` and `ExitBootServices` sit in one retry loop. The map is
+    re-read (with slack for descriptor growth, walked with the reported
+    descriptor stride), the E820 array is rebuilt from the same copy, and
+    `ExitBootServices` is retried up to eight times while firmware answers
+    `EFI_INVALID_PARAMETER`. Nothing that can allocate — console output included
+    — runs between the keyed `GetMemoryMap` and the call, and `console_closed` is
+    set the moment it succeeds so no protocol is called afterwards.
+* **Test coverage**: the stub firmware can now *be* OVMF in both respects
+  (`clamp_seek_past_end=False`, `race_map_key=True`) and asserts that the loader
+  boots anyway, that the retry count is exactly one, and that the console is
+  never used after `ExitBootServices`.
+* **Not claimed**: a memory map that keeps moving for more than eight attempts is
+  reported as `E13`, not retried forever. A firmware that implements neither
+  `GetInfo` nor the seek convention cannot be served, and that case ends at `E3`.
+
+## ADR-018 — Real firmware is an external gate with three outcomes, never two
+
+* **Problem**: the OVMF integration test cannot run on every machine — most
+  build environments have no OVMF package and no emulator. A gate that silently
+  degrades to "skipped" is the exact failure mode this project keeps hitting:
+  green everywhere, nothing actually verified.
+* **Decision**: `make ovmf-test` is its own gate, deliberately outside
+  `make test` and `make verify`, and `tests/ovmf_boot.py` returns **three**
+  outcomes: `0` verified, `1` verified failure, `3` NOT TESTED (no emulator, no
+  firmware, or a file that is not a firmware volume). NOT TESTED is loud, lists
+  what is missing, and is never reported as a pass. Inside a run, every check is
+  PASS, FAIL or **NOT APPLICABLE**; a path this ISO does not offer is printed as
+  N/A, counted separately, and never folded into the passes.
+* **Firmware is external and stays external**: the harness discovers
+  `PC5_OVMF_CODE` / `PC5_OVMF_VARS` / `PC5_QEMU` or the distribution paths, copies
+  the VARS image per run, records the firmware SHA-256 and QEMU version in
+  `build/ovmf-report.json`, and refuses a "firmware" that is not a firmware
+  volume (a `_FVH` signature at offset 0x28), is implausibly sized, or contains
+  the PC5 loader banner. No firmware is committed, embedded in the ISO or linked
+  into the kernel, and a test asserts that.
+* **Credit where it is due**: the harness prints `PC5-OVMF-BOOT-OK` from its own
+  process after the checks pass. The guest never prints that marker, so a boot
+  that merely *looks* right cannot fake success.

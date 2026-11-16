@@ -19,45 +19,57 @@ the current tree and corrects nine documented contradictions.
 
 ## M1 — Working bootable PC5 ISO · **COMPLETE (emulated)**
 
-* `make iso` → `build/pc5.iso` (1,593,344 bytes, reproducible; the image carries a
+* `make iso` → `build/pc5.iso` (1,601,536 bytes, reproducible; the image carries a
   1.44 MB UEFI ESP, which is why it grew from the 96,256-byte BIOS-only baseline
-  recorded in `docs/TEST_RESULTS.md` §1).
+  recorded in `docs/TEST_RESULTS.md` §1). Since M2 the ESP also carries
+  `KERNEL.BIN`, because firmware cannot read ISO9660 (§16, ADR-016).
 * `make verify` → 75/75 structural checks (M1h added the system-area MBR).
-* `make check` → 280 host tests (25 tools + 41 UEFI + 10 release + 32
+* `make check` → 299 host tests (25 tools + 41 UEFI + 10 release + 32
   architecture + 14 storage + 13 partitions + 20 FAT32 read + 38 FAT32 write + 50
-  FAT32 expand + 37 hybrid MBR).
-* `make boot-test` → 116/116 checks on the v86/SeaBIOS emulated PC, including the
+  FAT32 expand + 37 hybrid MBR + 19 OVMF-harness tests).
+* `make boot-test` → 119/119 checks on the v86/SeaBIOS emulated PC, including the
   kernel mounting its own volume through its ATAPI/ISO9660 driver, the ATA write
   test (M1d), partition discovery (M1e), FAT32 read/create/replace/mkdir (M1f,
   M1g, M1i), the hybrid-MBR boot with the CD detached (M1h) and a second boot that
   reads back what the first one wrote.
 
-## M1c — UEFI boot path · **IMPLEMENTED — EXECUTED AGAINST STUB FIRMWARE (not OVMF)**
+## M1c — UEFI boot path · **DONE — BOOTED BY REAL OVMF FIRMWARE**
 
 * `boot/uefi/`: a freestanding PE32+ EFI application (`\EFI\BOOT\BOOTX64.EFI`)
   built by binutils `i386pep`, filling the identical `struct pc5_boot_info`
   (offset-pinned against `kernel/include/pc5.h`), reading the GOP framebuffer and
   the kernel through `EFI_SIMPLE_FILE_SYSTEM`, and entering the kernel in 32-bit
   protected mode.
-* `tools/mkefiimg.py` (FAT12/16 ESP) and `tools/eficheck.py` (PE32+ validator)
-  are new; `tools/mkiso.py` now emits the BIOS default entry plus a UEFI section
-  and `tools/verify_iso.py` walks the ESP out of the finished ISO.
-* The BIOS path still boots and passes its checks in the emulator (25 at the
-  time; 45 today with the write test added in M1d), which is what caught the
-  catalog-layout bug this milestone started with.
-* **Executed, but not under real firmware:** no OVMF/UEFI firmware and no
-  UEFI-capable VM exist in the build environment. `tests/uefi_stub_firmware.py`
-  therefore runs the real `BOOTX64.EFI` machine code on the Unicorn CPU emulator
-  with the UEFI protocols served by a stub at their specified slots, and
-  `tests/uefi_stubtest.py` (`make stubtest`, 42 checks, including two negative
-  runs) asserts the whole path from `_start` to the far jump into the kernel.
-  That harness found and fixed two real loader defects (`find_kernel_volume`
-  reading a stale status, and the `PC5K` signature read at the wrong offset).
-  It is not a compatibility result: nothing about the UEFI path may be called
-  verified until a recorded OVMF or hardware boot exists.
-
-Not done here: physical hardware (M2). The hybrid USB path landed afterwards as
-M1h (see the milestone list below and ADR-014).
+* `tools/mkefiimg.py` (FAT12/16 ESP), `tools/eficheck.py` (PE32+ validator) and
+  `tools/verify_iso.py` (walks the ESP out of the finished ISO) were added with
+  it; the ESP now also carries `KERNEL.BIN`, because firmware has no ISO9660
+  driver and an El Torito UEFI boot can only read the ESP (ADR-016).
+* **Booted by genuine firmware:** `make ovmf-test` boots `build/pc5.iso` under
+  TianoCore EDK II OVMF (QEMU 11.0.2, q35, TCG) with a fresh writable VARS copy,
+  then again with the variable store the first boot wrote. Both runs show the
+  firmware boot manager starting the El Torito UEFI entry, the PC5 loader
+  identifying `EDK II`, 40 memory-map descriptors handed over,
+  `ExitBootServices` accepted on the first attempt, the kernel entering at
+  `0x10000` with protocol 1 and `PC5-BOOT-OK` on the serial log. The harness
+  prints `PC5-OVMF-BOOT-OK` itself, after all 40 checks pass, and one path
+  (disk-style UEFI boot) is reported NOT APPLICABLE rather than passed.
+* **Six broken machines** are attributed honestly: a missing `BOOTX64.EFI`, a
+  corrupted PE32+ header and a truncated ISO are refused by firmware (it drops to
+  its own shell or boots nothing); a missing kernel and a bad `PC5K` signature are
+  refused by the loader with `E2` and `E4`; a one-second deadline is reported as a
+  harness timeout and never as a pass.
+* **Real firmware found six genuine defects** the stub could not: the kernel was
+  unreachable on the El Torito path, the size of a file was learned with a seek
+  OVMF answers literally, `ExitBootServices` was refused because the map key had
+  been invalidated by console output, the console protocol was called after it
+  had been closed, the serial log doubled every character, and the kernel's
+  display evidence line had a format/argument mismatch. All six are fixed, each
+  with a regression test (`tests/uefi_stubtest.py` 48 checks,
+  `tests/boot_test.py` 119 checks); details in `docs/TEST_RESULTS.md` §16.4.
+* **Still not done:** physical hardware (one UEFI machine, Secure Boot off), the
+  disk-style UEFI path (this ISO has no ESP partition), and an ACPI RSDP handover
+  — the kernel reports `acpi=absent` on this path, honestly. Secure Boot was
+  never enabled, and only EDK II firmware was exercised.
 
 ## M1b — Automated, reproducible releases · **IMPLEMENTED, ACTIVATION BLOCKED**
 

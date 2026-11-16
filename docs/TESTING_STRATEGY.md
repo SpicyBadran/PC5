@@ -156,7 +156,34 @@ host, and the input file is never written back to. `tests/boot_test.py` then ass
 Evidence is written to `build/test/boot-evidence.json`, `serial.log`,
 `serial-ui.log`, `serial-mbr.log`, `serial-mbr-blank.log` and `screens.txt`.
 
-### 2.5 What the emulator cannot prove
+### 2.5 Real firmware boot — `make ovmf-test`
+
+`tests/ovmf_boot.py` boots the finished ISO under genuine TianoCore OVMF in QEMU
+and judges the serial log. It is a **separate gate**, never folded into
+`make test` or `make verify`, because firmware is an external dependency: a
+machine without OVMF must be able to say "not tested" out loud.
+
+It does, in this order: copy the pristine VARS image (firmware writes it, so it
+must never be the package's file), boot cold, boot again with the variable store
+the first boot wrote, then boot five deliberately broken machines built with the
+repository's own tools (no `BOOTX64.EFI`, corrupted PE32+ header, no kernel, bad
+`PC5K` signature, truncated ISO), and finally a one-second deadline to prove a
+hang is reported as a timeout. Each result is attributed: firmware refused to
+start something, the loader stopped with its own code, or the harness ran out of
+time.
+
+Three outcomes, never two: `0` verified (and `PC5-OVMF-BOOT-OK` printed by the
+harness, never by the guest), `1` verified failure, `3` **NOT TESTED** — no
+emulator, no firmware, or a file that is not a firmware volume. Individual checks
+can also be **NOT APPLICABLE**, which is printed, counted separately and never
+counted as a pass: a boot path this medium does not offer (disk-style UEFI) is
+not a boot path that works.
+
+Firmware stays external: nothing is committed, nothing is embedded in the ISO,
+nothing is linked into the kernel, and the harness refuses a "firmware" whose
+bytes are the PC5 loader or that lacks a `_FVH` volume header.
+
+### 2.6 What the emulators cannot prove
 
 v86 is an x86 PC emulator, not a PC. It proves the boot chain and the interface
 logic. It does **not** prove: real firmware behaviour (VBE vs GOP quirks), real

@@ -131,7 +131,7 @@
       "id": "M1c",
       "track": "A",
       "title": "UEFI boot path under real firmware",
-      "state": "in_progress",
+      "state": "complete",
       "owner_role": "kernel-engineer",
       "depends_on": [
         "M0"
@@ -141,21 +141,26 @@
       ],
       "deliverables": [
         "boot/uefi/ (PE32+ EFI application)",
-        "tools/mkefiimg.py (FAT ESP writer)",
+        "tools/mkefiimg.py (FAT ESP writer, now carrying KERNEL.BIN)",
         "tools/eficheck.py (PE32+ validator)",
-        "tests/uefi_stub_firmware.py (Unicorn stub firmware harness)"
+        "tests/uefi_stub_firmware.py (Unicorn stub firmware harness)",
+        "tests/uefi_stubtest.py (loader executed against stub firmware, 48 checks)",
+        "tests/ovmf_boot.py (real OVMF boot harness and gate)"
       ],
       "acceptance": [
-        "the loader's logic is executed end to end against the stub firmware (42 checks) — done",
-        "the same BOOTX64.EFI boots under OVMF and the serial log is recorded — NOT done",
+        "the loader's logic is executed end to end against the stub firmware (48 checks) — done",
+        "the same BOOTX64.EFI boots under genuine OVMF and the serial log is recorded — done (cold and warm variable store)",
+        "the kernel reaches its entry point and PC5-BOOT-OK under OVMF — done",
+        "six broken machines are attributed to firmware, bootloader or harness — done",
         "one physical UEFI machine reaches the PC5 kernel with Secure Boot off and the log is committed — NOT done",
-        "GOP-only machines get a working framebuffer console and the text fallback is no longer required"
+        "GOP-only machines get a working framebuffer console and the text fallback is no longer required — done under OVMF (GOP 1280x800, 32 bpp); physical hardware NOT tested"
       ],
       "evidence": [
         "boot/uefi/README.md",
-        "docs/TEST_RESULTS.md"
+        "docs/TEST_RESULTS.md",
+        "docs/TECHNICAL_DECISIONS.md"
       ],
-      "next_action": "Obtain OVMF (or a UEFI-capable VM) in the build environment; a stub run may never be relabelled as firmware compatibility."
+      "next_action": "Boot the same ISO on one physical UEFI machine (Secure Boot off) and commit that serial log; extend the loader to hand over the ACPI RSDP so the UEFI path stops reporting acpi=absent."
     },
     {
       "id": "M1d",
