@@ -1,7 +1,7 @@
 {
-  "code_revision": "196f504812dbecc226078d11045851ac473e1b56",
+  "code_revision": "ef064756047dbaf4beadc5cdd0ebb21b30c5a802",
   "command": "make stubtest64",
-  "commit": "196f504812dbecc226078d11045851ac473e1b56",
+  "commit": "ef064756047dbaf4beadc5cdd0ebb21b30c5a802",
   "date": "2026-11-16",
   "dirty": false,
   "exit_code": 0,
