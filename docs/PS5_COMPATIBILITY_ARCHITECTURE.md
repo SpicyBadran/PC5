@@ -1,6 +1,13 @@
 # PS5 compatibility architecture
 
-## 1. Two execution paths, one project
+| | |
+|---|---|
+| Status | current, reframed 2026-11-15. The two paths below are both **destination work**: they are the execution routes toward level 5-6, not a separate track |
+| Authority | [`architecture/PC5_ARCHITECTURE_SPEC_v2.md`](architecture/PC5_ARCHITECTURE_SPEC_v2.md) |
+| Contract | [`architecture/PS5_PLATFORM_CONTRACT.md`](architecture/PS5_PLATFORM_CONTRACT.md) |
+| Input | [`PS5_SYSTEM_SOFTWARE_TARGET.md`](PS5_SYSTEM_SOFTWARE_TARGET.md) |
+
+## 1. Two execution paths, one destination
 
 ```
                      ┌─────────────────────────────────────────────┐
@@ -16,9 +23,12 @@
                      └─────────────────────────────────────────────┘
 ```
 
-The firmware path and the execution path are reported separately everywhere.
-The dependency chain behind the firmware path, and why it cannot be scheduled
-today, is assessed in `docs/playstation/BOOT_FEASIBILITY.md`.
+The firmware path and the execution path are reported separately everywhere,
+because they produce different evidence; they are not separate products. Both
+are members of the destination workstream (WS10/WS11) in
+[`architecture/roadmap.json`](architecture/roadmap.json). The dependency chain
+behind the firmware path, and the one precondition that blocks it, is assessed in
+`docs/playstation/BOOT_FEASIBILITY.md` and milestone `M17`.
 in the compatibility chain (stages 5–13 are the firmware path), in
 `docs/GAMING_COMPATIBILITY.md`, and in the UI. Neither is ever used as evidence
 for the other.

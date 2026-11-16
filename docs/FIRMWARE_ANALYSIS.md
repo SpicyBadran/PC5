@@ -24,6 +24,12 @@ the update file:
   `PS5UPDATE2.PUP`, with a plaintext header followed by signed and/or encrypted
   entries whose layout is version specific
   (<https://gbatemp.net/threads/built-a-pc-based-pup-decrypt-tool-one-key-away-from-decrypting-any-firmware-forever-need-someone-on-13-60-to-run-an-extraction-payload.685380/>).
+* The repository root now carries `PS5UPDATE.PUP` as a **Git LFS pointer**
+  (135 bytes, declared object `42ea0e5a…`, size 1,423,697,408 B). The payload is
+  not present in a checkout without `git-lfs`, was never fetched here, and has
+  therefore **not** been analysed. See
+  [`PS5_SYSTEM_SOFTWARE_TARGET.md`](PS5_SYSTEM_SOFTWARE_TARGET.md) and ADR-022
+  for what may and may not be done with it.
 * A separate research thread records a `SLB2` file of 1,418,890,240 bytes
   containing those names and explicitly warns that no readable version string
   was found and that a modified PUP must pass authentication it does not control
