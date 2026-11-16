@@ -48,7 +48,7 @@ none of them is folded into a single "pass".
 | `make record-validation` | *writes* one record per gate, by running it — never part of `make check` | anything it does not run | exit 1 only if a gate reports `failed`/`error` |
 | `make kernel64` | the flat 64-bit kernel links at `0x100000` with no unresolved symbols | that it runs anywhere |
 | `make uefi64` | the experimental 64-bit loader is a valid PE32+, and the ESP image that carries `KERNEL64.BIN` is built | that firmware boots it |
-| `make stubtest64` | the 64-bit path runs end to end in long-mode emulation: page tables installed, `ExitBootServices` done, kernel validates the handover, marker printed last | real firmware, or that the MMU would accept the map on hardware | exit 3 without unicorn, 0/1 otherwise |
+| `make stubtest64` | the 64-bit path runs end to end in long-mode emulation: page tables installed, `ExitBootServices` done, kernel validates the handover (including placement at the top of the map), marker printed last | real firmware, or that the MMU would accept the map on hardware | exit 3 without unicorn, 0/1 otherwise |
 | `make ovmf-test` | a boot under genuine TianoCore OVMF | physical hardware, or Sony software | 0 verified, 1 failed, **NOT TESTED when the tool exits 3** (make then exits 2 and prints the reason) |
 
 `make check` deliberately does not include the emulator, stub, OVMF or hardware gates:
@@ -279,21 +279,40 @@ bytes are the PC5 loader or that lacks a `_FVH` volume header.
 
 ### 2.5b The 64-bit foundation — `make kernel64`, `make uefi64`, `make stubtest64`
 
-The 64-bit path is tested at three levels, and none of them is called a firmware
+The 64-bit path is tested at four levels, and none of them is called a firmware
 test:
 
 | Level | Command | What actually executes |
 |---|---|---|
-| unit | `make check` (`tests/test_kernel64.py`) | nothing: the ELF/PE images are inspected, `struct pc5_boot64` is compiled on the host and compared with the kernel's assertions, and `pagetables.c` is built as a host library so its entries can be read back |
-| kernel contract | `make check` (`kernel64_machine.py`) | the kernel binary alone, at its link address, with deliberately broken boot-info structures: each failure must print its reason and must **not** print the marker |
-| stub firmware | `make stubtest64` | the loader's PE image and the kernel's binary, under Unicorn in long mode with a modelled firmware: memory map, file protocol, `ExitBootServices` key checks, paging walked through PC5's own tables |
+| unit | `make check` (`tests/test_kernel64.py`, `tests/test_pagetables64.py`) | nothing: the ELF/PE images are inspected, `struct pc5_boot64` is compiled on the host and compared with the kernel's assertions, and `pagetables.c` is built as a host library twice — once to build a map, once with canary pages around the six-page block to prove every write lands inside it |
+| policy | `make check` (`PlacementPolicyTests`) | nothing: the function the loader and kernel both call (`pc5_range_within`) is compiled on the host and evaluated at the boundary — a range ending exactly at 4 GiB is accepted, one starting at 4 GiB or crossing it is refused, and empty or overflowing ranges are refused |
+| kernel contract | `make check` (`kernel64_machine.py`) | the kernel binary alone, at its link address, with valid and deliberately broken boot-info structures: every version-2 field (stack, page tables, identity span, loader image, framebuffer, RSDP, descriptors) is broken in turn, and each failure must print its reason and must **not** print the marker |
+| stub firmware | `make stubtest64` | the loader's PE image and the kernel's binary, under Unicorn in long mode with a modelled firmware: memory map, file protocol, `ExitBootServices` key checks, and every fetch after the `CR3` switch translated through PC5's own tables |
+
+The stub level runs the same checks with the application placed at the top of the
+map (`image_load=0x0FE00000`) and with the boot info, page tables and stack placed
+in the last megabyte of the span, because firmware chooses both and neither is
+guaranteed to be low. A region the map does not cover faults the emulation, so
+those runs are evidence about PC5's map rather than about the harness.
+
+What the stub level genuinely exercises: the loader's PE32+ code, the kernel's
+binary, the real `CR3` switch and the page walk that follows it, the
+`ExitBootServices` key retry path, and the whole handoff contract (the kernel
+refuses a boot info the loader did not produce correctly). What it does *not*
+prove: anything about real firmware, the MMU's treatment of cache attributes, PAT,
+`CR0.WP`, TLB invalidation or memory types, or any physical machine. Unicorn
+translates through the tables but is not a CPU.
+
+It also cannot place the application *above* 4 GiB and still execute it faithfully:
+a PE32+ image carries 32-bit base relocations (88 of them in `BOOTX64.EFI`), so
+above 4 GiB the emulated code would no longer be the code under test. That side is
+covered by the policy level instead, against the same function the loader calls.
 
 What is *not* proven at any of these levels: that real firmware accepts the
-image, that a real MMU honours the map (Unicorn walks the tables, but it is not a
-CPU), or that any physical machine reaches the marker. `make ovmf-test` remains
-the only gate that can claim real firmware, and it needs TianoCore plus
-`qemu-system-x86_64`; on this machine both are absent, so the honest result is
-**NOT TESTED** and the reason is stated with the result.
+image, that a real MMU honours the map, or that any physical machine reaches the
+marker. `make ovmf-test` remains the only gate that can claim real firmware, and
+it needs TianoCore plus `qemu-system-x86_64`; on this machine both are absent, so
+the honest result is **NOT TESTED** and the reason is stated with the result.
 
 ### 2.6 Provisioning the firmware
 

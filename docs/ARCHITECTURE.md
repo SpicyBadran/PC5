@@ -248,8 +248,18 @@ does not carry it, and `make -n all` shows no 64-bit work.
 5. PC5 builds its own page tables and calls `ExitBootServices` with the map key,
    retrying up to eight times when firmware invalidates the key. Only after a
    successful exit does it install `CR3`.
-6. `pc5_enter_kernel64` loads `RSP` from `boot_info->stack_top`, aligns it, and
-   jumps to the kernel — **in long mode, with no mode switch anywhere**.
+6. Before touching `CR3` it asks firmware where this application was loaded
+   (`EFI_LOADED_IMAGE_PROTOCOL`) and refuses to continue if the image is outside
+   the region it is about to map: `PC5-64-LOADER-REJECT loader-image=…` then
+   `PC5-64-LOADER-FAIL=above-identity-map`. Every PC5-owned buffer (boot info,
+   memory map copy, page tables, stack) is asserted to be inside that region too.
+7. `pc5_enter_kernel64` (assembly, `boot/uefi64/bootx64.S`) saves the caller's
+   `RFLAGS` and `CR3`, masks interrupts, writes `CR3`, **reads it back and
+   compares**, and only then loads `RSP` and jumps — **in long mode, with no mode
+   switch anywhere**. A write that does not take effect restores firmware's root
+   and returns −1, which the loader reports as `PC5-64-LOADER-FAIL=cr3-not-installed`.
+   It is assembly on purpose: "no loader code runs on the new map" is then a
+   property of the instruction sequence, not a comment on a C function.
 
 ### 7.2 Page tables
 
@@ -260,29 +270,76 @@ reported by CPUID, not required. The framebuffer's pages are marked PWT|PCD so
 they are uncached. Firmware's tables are abandoned with firmware's stack.
 
 `PC5-64-PAGING enabled=1 root=0x…` is printed by the *kernel*, from its own
-`CR3`, and the loader separately reads `CR3` back and compares it with the
-address it built. Both are needed: the first proves the kernel runs on the map,
-the second proves the map it runs on is the one PC5 built.
+`CR3`, and the kernel fails the boot when that value differs from the page-table
+address in the boot info (`pagetable-root-mismatch`). The loader's own plan is
+printed before the switch (`PC5-64-LOADER cr3-plan=…`), so the stub harness can
+check the two agree — a read-back performed by the kernel *on* the new map is
+stronger evidence than the loader checking its own write.
 
-### 7.3 Boot protocol, version 1
+The map has a hard edge, and the code says so rather than clipping quietly:
 
-`struct pc5_boot64` (`kernel64/include/pc5_boot64.h`) is 112 bytes, packed, with
-`magic` "PC5B", `version` = 1, `size` = 112, `flags`, a descriptor array
+- `pc5_pt_range_supported(start, size)` is overflow-free and answers whether a
+  range is inside the 4 GiB the map can describe at all;
+- `pc5_pt_mark_uncached()` clips to the span, refuses entries beyond
+  `PC5_PT_MAX_INDEX` (2047), skips entries already uncached, and returns the number
+  of entries it actually changed — so a framebuffer at or above 4 GiB can no longer
+  write past the six-page block into whatever follows it in memory;
+- a resource that cannot be mapped is *recorded* as unmapped (the loader zeroes the
+  address and sets `PC5_BOOT64_F_UNMAPPED_FRAMEBUFFER` / `..._RSDP`) instead of
+  handing over an address the kernel would dereference and fault on.
+
+`tests/test_pagetables64.py` builds the real `pagetables.c` as a host library with
+canary pages on both sides of the six-page block and covers: entirely below 4 GiB,
+ending exactly at 4 GiB, crossing it, entirely above, unaligned starts and ends,
+empty and inverted ranges, ranges that overflow 64-bit arithmetic, and an invalid
+page-table base.
+
+### 7.3 Boot protocol, version 2
+
+`struct pc5_boot64` (`kernel64/include/pc5_boot64.h`) is **160 bytes**, with
+`magic` "PC5B", `version` = 2, `size` = 160, `flags`, a descriptor array
 (`memmap_addr`, `memmap_bytes`, `memmap_desc_size`, `memmap_desc_version`), the
-framebuffer, the RSDP, the kernel base and size, the stack top, an
-`exit_boot_services` flag and a timestamp. Offsets are pinned by `_Static_assert`
-in `kernel64/main.c` and checked from the Python side by
-`tests/test_kernel64.py`, which compiles the same header on the host.
+framebuffer (address, width, height, pitch, format), the RSDP, the kernel base and
+size, the stack (`stack_top`, `stack_size`), the page tables (`pagetable_addr`,
+`pagetable_pages`, `identity_span`), the loader's own image
+(`loader_image_addr`, `loader_image_size`), an `exit_boot_services` flag and a
+timestamp. Offsets are pinned by `_Static_assert` in `kernel64/main.c` **and** in
+`boot/uefi64/uefi64_main.c` (the assembly handoff loads `stack_top` from offset 88,
+so a layout change must break the build rather than the jump), and checked from
+Python by `tests/test_kernel64.py`, which compiles the same header on the host.
 
-Rules both sides keep:
+Version 1 was 112 bytes and described none of the last three groups. A loader that
+still emits it is refused with `PC5-64BIT-FAIL=bootinfo-version`; the kernel accepts
+exactly the version it was compiled for and has no "unknown fields, hope for the
+best" path.
 
-- every pointer is physical, identity-mapped, and allocated below 4 GiB;
-- the loader owns a buffer only until the kernel has copied what it needs;
-- the kernel refuses a structure whose magic, version, size, descriptor stride,
-  alignment or stack it does not recognise, and prints
-  `PC5-64BIT-FAIL=<reason>` instead of guessing;
-- `kernel_base` must equal `PC5_KERNEL64_LINK_BASE`, because the image is flat
-  and not relocatable; the kernel checks this against its own linker symbol.
+What the kernel establishes before using anything (in this order):
+
+| Stage | Established |
+|---|---|
+| structure | the structure's own address does not wrap, is 8-byte aligned, lies inside the identity span and passes the header's magic/version/size/stride checks |
+| memory map | the map is non-empty, its byte count is a multiple of the stride, fits in `MEMMAP_MAX_BYTES`, and every descriptor is self-consistent: nonzero page count, no wrap at `physical_start + page_count·4096`, a known type |
+| mandatory ranges | kernel image (exactly the linked size, at the link address), stack (page-aligned top, sane size, no underflow), page tables (aligned, 3…514 pages, no overflow, and `identity_span == (pages − 2)·512·2 MiB`), the loader's own image, and the memory-map buffer are each inside the span **and** covered by memory of an acceptable type |
+| environment | `CR0.PG`, `CR4.PAE`, `CR3` equals `pagetable_addr`, 64-bit operand size and arithmetic really work, `RSP` is inside the declared stack and 16-byte aligned, and CPUID reports long mode; the CPU's physical address width is checked when CPUID reports one |
+| optional resources | framebuffer and RSDP are validated (geometry, no overflow, inside the span, memory type, `"RSD PTR "` signature for the RSDP). A resource that fails is reported as `usability=unsupported reason=…`; it is **never** dereferenced and never called usable |
+
+Memory types are a contract, not a guess: the loader's own ranges accept
+LoaderCode/LoaderData/BootServicesCode/BootServicesData/RuntimeServicesData **and
+Conventional** (firmware is not obliged to retype pages it just handed out, so
+demanding Conventional, or demanding *not* Conventional, would be wrong in one
+direction or the other); the framebuffer accepts only MMIO/MMIO-port/LoaderData/
+BootServicesData; the RSDP accepts ACPI-reclaim/NVS/MMIO/Reserved/loader and
+boot-services types plus a verified signature.
+
+### 7.3a Where the kernel's own stack comes from
+
+`kernel64/start.S` starts on the image's `.bss` stack, not on the loader's:
+taking `RSP` from an unvalidated `stack_top` means the very first `push` can fault,
+and the check that would have reported it never runs. Once the boot info has been
+validated, `pc5_adopt_stack()` switches to the loader's stack and continues in a
+fresh frame there; `PC5-64-STACK rsp=…` is printed *from that stack*, so the line is
+evidence that the switch happened. A broken `stack_top` is therefore refused
+(`bootinfo-stack*`) rather than executed.
 
 ### 7.4 What the kernel proves before it says anything good
 
@@ -291,10 +348,14 @@ Rules both sides keep:
 | Check | Evidence line |
 |---|---|
 | entered in 64-bit code | `PC5-64BIT-KERNEL-ENTRY` (from the kernel's own entry stub) |
-| boot info valid and consistent | `PC5-64-BOOTINFO magic=ok version=1 size=112 …` |
-| paging enabled, PAE on, CR3 page-aligned | `PC5-64-PAGING enabled=1 root=0x…` |
+| memory map parsed and descriptors consistent | `PC5-64-MAP entries=… conventional_pages=…` |
+| kernel image range validated | `PC5-64-IMAGE base=… size=… range=ok` |
+| loader's own image validated | `PC5-64-LOADER image=… size=… range=ok` |
+| boot info valid and consistent | `PC5-64-BOOTINFO magic=ok version=2 size=160 memdesc=32 …` |
+| paging enabled, PAE on, CR3 page-aligned and equal to `pagetable_addr` | `PC5-64-PAGING enabled=1 root=0x…` |
 | 64-bit operand size really active | `PC5-64-REGS wide-operands=ok arithmetic=ok` |
-| stack provided by the loader, 16-byte aligned | `PC5-64-STACK rsp=0x… top=0x… aligned=16` |
+| stack adopted from the loader, 16-byte aligned, inside the map | `PC5-64-STACK rsp=0x… top=0x… size=… aligned=16 range=ok` |
+| optional resources classified | `PC5-64-FB … usability=ok|unsupported reason=…|absent`, `PC5-64-RSDP …` |
 | CPU feature report collected | `PC5-64-CPU vendor=…`, `phys_bits`, `nx`, `svm_advertised`, … |
 
 `EFER.LMA` is printed when the environment reports it; when an emulator returns
@@ -312,6 +373,11 @@ Does not exist: a physical allocator, per-process address spaces, page-level
 protection, guard pages, NX use (reported by CPUID, not yet set in EFER), any
 mapping above 4 GiB, or any DMA protocol. No process-level protection is
 claimed, because none has been implemented.
+
+Nothing above 4 GiB is mapped, and nothing pretends to be: a framebuffer or RSDP
+above the span arrives as an explicit "unmapped" flag with a zero address, and an
+application that firmware placed above the span is refused before `CR3` changes.
+Widening the map is future work, not a silent behaviour.
 
 ### 7.6 CPU features and the SVM ladder
 

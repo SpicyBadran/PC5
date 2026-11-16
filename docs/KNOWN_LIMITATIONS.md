@@ -166,9 +166,18 @@ Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
     oversight, and `tests/test_kernel64.py` fails if that changes by accident.
 22d. **Stub firmware is emulation, and Unicorn is not a CPU.** The stub harness
     emits a memory map, answers the file protocol and enforces the
-    `ExitBootServices` map key, but it is a model written in Python. Its paging
-    model walks PC5's tables, which catches a wrong entry; it cannot prove cache
-    attributes, memory types or real firmware behaviour.
+    `ExitBootServices` map key, but it is a model written in Python. Unicorn does
+    walk the guest page tables through `CR3` (that is how the handoff is checked at
+    all: a region PC5's map does not cover faults the emulation), but it cannot
+    prove cache attributes, PAT, `CR0.WP`, TLB invalidation, memory types or real
+    firmware behaviour. It also cannot faithfully execute the application above
+    4 GiB, because a PE32+ image carries 32-bit base relocations; that case is
+    covered by evaluating the loader's placement rule on the host instead.
+22e. **The 64-bit map stops at 4 GiB, and resources beyond it are unusable.** A
+    framebuffer or RSDP above the span is recorded as unmapped (zero address plus a
+    flag) and the kernel reports it as `usability=unsupported`; an application that
+    firmware placed above the span is refused before `CR3` changes. Widening the map
+    is future work, and no code path pretends otherwise.
 
 ## Engineering process
 

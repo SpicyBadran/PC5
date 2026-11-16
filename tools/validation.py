@@ -147,11 +147,27 @@ def iso_sha() -> str:
         return ""
 
 
+def tree_is_dirty() -> bool:
+    """True when the worktree differs from HEAD outside the evidence directory.
+
+    This is asked *before* a gate runs and recorded, because a record that names a
+    commit is only true if the code that ran was that commit.  Previously the record
+    was written with HEAD as its commit while the tree was dirty, so a record could
+    claim a commit it never tested - which is exactly what a reader would take it to
+    mean.
+    """
+    return bool(git("status", "--porcelain", "--", ".",
+                    ":(exclude)docs/evidence/validation").strip())
+
+
 def run(gate: str, write: bool = True) -> dict:
     if gate not in GATES:
         raise SystemExit(f"unknown gate {gate!r}; known: {', '.join(sorted(GATES))}")
     argv, level, _cannot, notes = GATES[gate]
     env = dict(os.environ, SOURCE_DATE_EPOCH=os.environ.get("SOURCE_DATE_EPOCH", PINNED_EPOCH))
+    # Captured before the gate runs: a gate that writes files must not be able to
+    # make its own tree look clean.
+    dirty = tree_is_dirty()
     try:
         completed = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, env=env)
     except OSError as exc:
@@ -170,9 +186,6 @@ def run(gate: str, write: bool = True) -> dict:
             "result": classify(gate, completed.returncode, output),
             "summary": summarise(output),
             "commit": git("rev-parse", "HEAD"),
-            # a record is not dirty because it wrote itself
-            "dirty": bool(git("status", "--porcelain", "--", ".",
-                              ":(exclude)docs/evidence/validation")),
             "date": datetime.date.today().isoformat(),
             "source_date_epoch": int(env["SOURCE_DATE_EPOCH"]),
             "notes": notes,
@@ -184,6 +197,10 @@ def run(gate: str, write: bool = True) -> dict:
             digest = iso_sha()
             if digest:
                 record["iso_sha256"] = digest
+    record["dirty"] = dirty
+    # `code_revision` is what the record may be cited for.  On a dirty tree the
+    # commit alone does not identify the code, so say so rather than implying it.
+    record["code_revision"] = record["commit"] if not dirty else "dirty"
     record["tool"] = "tools/validation.py"
     if write:
         RECORDS.mkdir(parents=True, exist_ok=True)
@@ -222,6 +239,13 @@ def problems(entries: list | None = None) -> list:
             found.append(f"{name}: commit is not a full SHA-1")
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(record.get("date", ""))):
             found.append(f"{name}: date is not YYYY-MM-DD")
+        if "dirty" not in record:
+            found.append(f"{name}: record does not say whether the tree was dirty")
+        elif record["dirty"] and record.get("result") == "passed":
+            found.append(f"{name}: passed on a dirty tree, so it does not verify "
+                         f"{str(record.get('commit'))[:7]}; re-run it from a clean checkout")
+        if record.get("dirty") is False and record.get("code_revision") != record.get("commit"):
+            found.append(f"{name}: clean tree but code_revision != commit")
         if record.get("result") == "passed" and record.get("exit_code") != 0:
             found.append(f"{name}: claims passed with exit code {record.get('exit_code')!r}")
         if record.get("result") in ("failed", "not-tested", "skipped", "error") \
@@ -261,9 +285,16 @@ def main(argv=None) -> int:
         record = run(gate, write=not args.dry_run)
         checks = record.get("checks") or {}
         detail = f" {checks.get('passed')}/{checks.get('total')}" if checks else ""
+        revision = record["commit"][:7] + ("+dirty" if record["dirty"] else "")
         print(f"{gate:20} {record['result']:11} exit={record['exit_code']}{detail} "
-              f"commit={record['commit'][:7]} {record.get('summary', '')}")
+              f"commit={revision} {record.get('summary', '')}")
         if record["result"] == "failed" or record["result"] == "error":
+            worst = 1
+        if record["dirty"]:
+            # A record written here would claim a commit it did not test, so the
+            # command refuses to look successful.  Commit first, then record.
+            print(f"[FAIL] {gate}: the worktree is dirty; this record cannot be cited "
+                  f"as evidence for {record['commit'][:7]}. Commit, then re-run.")
             worst = 1
     return worst
 
