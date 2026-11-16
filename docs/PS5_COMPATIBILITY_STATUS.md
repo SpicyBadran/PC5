@@ -1,6 +1,6 @@
 # PS5 compatibility status
 
-**PC5 — An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.** This page is
+**PC5 — An independent engineering project that builds PC-side boot, hardware and compatibility infrastructure toward running genuine Sony PlayStation 5 system software on compatible PC hardware.** This page is
 the per-level account of the destination workstream. Every `NO` below is a
 measurement, not a mood.
 

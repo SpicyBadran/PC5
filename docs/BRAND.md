@@ -5,6 +5,18 @@ with, and the rules for using them. This document is about **PC5 the project**.
 It is not about the guest operating system PC5 is built to run, and nothing here
 may be read as a description of Sony's software, its interface, or its marks.
 
+Where the identity may appear: the repository, its documentation, the README and
+generated figures, presentations, the project website and release notes, and PC5's
+own tools — each clearly identified as PC5.
+
+Where it may **not** appear: on, or next to, anything that depicts Sony's
+software or that could be taken for the PS5 system interface. The PC5 logo is not
+a skin for a guest interface, and a screen carrying it is PC5's own tooling by
+definition. No PC5 screen, mock-up or artwork may be styled to read as the
+genuine PS5 setup, home screen or shell, whether or not the PC5 mark is present.
+If a figure needs to illustrate the destination, it illustrates it with words and
+a stated evidence level, not with a fabricated screenshot.
+
 The assets are generated, not hand-drawn: `tools/brand.py` writes every file in
 `brand/` from the geometry in that module. `make brand-check` (part of
 `make check`) fails if a file on disk no longer matches, so the artwork cannot

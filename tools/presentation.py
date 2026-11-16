@@ -246,8 +246,8 @@ def banner(data) -> str:
     body += f"  {brand.mark_paths(CYAN, brand.SYM_STROKE, 'translate(60,35) scale(0.234375)')}\n"
     body += text(200, 118, "PC5", size=64, weight="bold", spacing="4")
     body += text(206, 152,
-                 "an independent operating-system project, built toward genuine "
-                 "PS5 system software", size=15, fill=MUTED)
+                 "PC-side boot, hardware and compatibility infrastructure, built "
+                 "toward genuine PS5 system software", size=15, fill=MUTED)
     chips = (
         ("ROADMAP DOC " + data["document_version"].upper(), CYAN),
         (f"{streams} WORKSTREAMS", VIOLET),

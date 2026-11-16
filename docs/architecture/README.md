@@ -1,6 +1,6 @@
 # PC5 architecture
 
-**PC5 — An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.** The
+**PC5 — An independent engineering project that builds PC-side boot, hardware and compatibility infrastructure toward running genuine Sony PlayStation 5 system software on compatible PC hardware.** The
 destination is to run the genuine Sony PS5 system software on compatible PC
 hardware; every workstream below serves that, and the graph is checked by `make
 roadmap` and `make check`.

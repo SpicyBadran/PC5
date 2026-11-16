@@ -18,7 +18,7 @@ what is measured is in `docs/TEST_RESULTS.md`; what is implemented is in
 
 ## 1. Product identity
 
-> **PC5 — An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.**
+> **PC5 — An independent engineering project that builds PC-side boot, hardware and compatibility infrastructure toward running genuine Sony PlayStation 5 system software on compatible PC hardware.**
 >
 > PC5 is an independent engineering project whose destination is to run the
 > genuine Sony PlayStation 5 system software on compatible PC hardware, and to

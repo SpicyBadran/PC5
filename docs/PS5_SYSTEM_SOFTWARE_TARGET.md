@@ -1,6 +1,6 @@
 # The PS5 system-software target — what the protected input is, and what it is not
 
-**PC5 — An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.** This document
+**PC5 — An independent engineering project that builds PC-side boot, hardware and compatibility infrastructure toward running genuine Sony PlayStation 5 system software on compatible PC hardware.** This document
 is part of the destination workstream (WS10): it establishes what the protected
 input is before anything is built around it. Architecture authority:
 [`architecture/PC5_ARCHITECTURE_SPEC_v2.md`](architecture/PC5_ARCHITECTURE_SPEC_v2.md).
@@ -131,6 +131,20 @@ left implicit:
 ---
 
 ## 5. The clean-installation sequence, and which steps are console-bound
+
+Three install-shaped processes exist in this project and are **not** the same
+thing. Keeping them apart is what stops a PC5-authored flow from being mistaken
+for Sony's:
+
+| Process | Whose | State | What it may look like |
+|---|---|---|---|
+| Preparing a PC to boot PC5 | PC5's | Implemented and documented in [`INSTALLATION.md`](INSTALLATION.md) | an ordinary PC install: write a USB image, set firmware options, boot. A familiar Windows-like sequence is acceptable for this part because it is PC5's own tooling |
+| Installing genuine Sony system software | Sony's | `M21`, **blocked** | **unknown**. No authentic description of the console's installation flow exists in this project, so none is asserted, drawn or simulated |
+| Sony's first boot of its own software | Sony's | `M20`, **blocked** | **unknown**. The setup and first-boot experience is the guest's; PC5 must not invent it |
+
+PC5 may build a straightforward PC-side preparation sequence. It may **not**
+invent a Sony installation wizard, a setup assistant, an account flow or a
+first-boot experience, and it may not present a PC5 sequence as any of those.
 
 The directive asks for the genuine installation process to be understood. This is
 what is public, what follows from it, and what is unknown — in the order a console

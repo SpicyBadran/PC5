@@ -2,8 +2,9 @@
 
 # PC5
 
-**An independent operating-system project for PC hardware, built toward genuine Sony
-PlayStation 5 system software.**
+**An independent engineering project that builds PC-side boot, hardware and
+compatibility infrastructure toward running genuine Sony PlayStation 5 system
+software on compatible PC hardware.**
 
 PC5 is an independent engineering project whose destination is to run the
 **genuine Sony PlayStation 5 system software** on compatible PC hardware. It is not a Linux
@@ -44,6 +45,20 @@ The three things that are often confused, kept apart:
 A PUP inside an ISO, a rename, a PC5 kernel boot or a PS5-shaped screen does not
 establish the third row. [`docs/PS5_SYSTEM_SOFTWARE_TARGET.md`](docs/PS5_SYSTEM_SOFTWARE_TARGET.md)
 explains what running the system software would require.
+
+**Which operating system is whose.** This distinction is the project, so it is
+stated rather than left to inference:
+
+| Role | What it is |
+|---|---|
+| **The operating system** | The genuine Sony PS5 system software — its kernel, services, shell, setup and first-boot experience. That is the destination, and PC5 substitutes nothing for it. |
+| **PC5** | The PC-side boot, hardware and compatibility infrastructure: loader, kernel, drivers, device models and platform contract. It exists to run the software above. |
+| **PC5's own screens** | A diagnostic and recovery environment, clearly labelled as PC5. Supporting tooling for engineers — never presented as the PS5 system software or its interface. |
+
+PC5-authored payloads, device models and conformance fixtures are engineering
+test scaffolding. A PC5 kernel boot is evidence about PC5, never evidence that
+Sony's software executed. [`docs/BRAND.md`](docs/BRAND.md) governs the PC5 marks
+and forbids placing them on anything that depicts Sony's software.
 
 ## Dashboard
 

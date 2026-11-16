@@ -90,6 +90,28 @@ class IdentityTests(unittest.TestCase):
         self.assertIn("linux distribution", non_goals)
         self.assertIn("imitation", non_goals)
 
+    def test_pc5_is_not_described_as_the_operating_system(self):
+        """The mission's central distinction must survive an edit.
+
+        Genuine Sony PS5 system software is the operating system; PC5 is the
+        PC-side boot, hardware and compatibility infrastructure.  An earlier
+        identity line called PC5 itself "an operating-system project", which
+        reads as a claim to build a replacement OS -- the one thing the mission
+        rules out.  The words are asserted here so a future revision cannot
+        quietly reintroduce them.
+        """
+        identity = self.product["identity"].lower()
+        note = self.product["identity_note"].lower()
+        self.assertNotIn("operating-system project", identity)
+        self.assertNotIn("operating system project", identity)
+        # And the note has to say which is which, not merely be non-empty.
+        self.assertIn("infrastructure", note)
+        self.assertIn("operating system", note)
+        self.assertIn("sony", note)
+        # The non-goal that names the wrong product must be present as data.
+        non_goals = " ".join(self.product["non_goals"]).lower()
+        self.assertIn("imitation of the ps5 interface", non_goals)
+
     def test_the_foundation_is_not_the_product_and_not_required(self):
         foundation = self.product["foundation"]
         self.assertEqual(foundation["role"], "hardware-enablement")

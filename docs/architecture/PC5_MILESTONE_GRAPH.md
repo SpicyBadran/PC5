@@ -68,7 +68,7 @@ graph says so on every render rather than hiding it in prose.
 ```
 PC5 MILESTONE GRAPH  version ?  schema pc5.roadmap/2  updated 2026-11-16
 
-product     PC5 - An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.
+product     PC5 - An independent engineering project that builds PC-side boot, hardware and compatibility infrastructure toward running genuine Sony PlayStation 5 system software on compatible PC hardware.
 destination M19 (level 5): Genuine Sony PlayStation 5 system software executing on compatible PC hardware, through PC5's own platform.
 foundation  Linux tier (optional host) - role hardware-enablement, not required for the product (ADR-020)
 
