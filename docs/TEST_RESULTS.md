@@ -2742,12 +2742,12 @@ PC5-64-DONE
 
 ## 26. The 64-bit handover audited: placement, bounds, and a contract that is checked
 
-Recorded 2026-11-16. Start of this work: `7d5ef2e` (the head of PR #26). The audit
-itself ends at `196f504`, which is the commit every record in
-`docs/evidence/validation/` names (`dirty: false`, `code_revision` equal to the
-commit). The work was an audit of the 64-bit path, so the first section here is
-what was *rejected* as well as what was confirmed: three of the claims checked
-against the source did not survive contact with it.
+Recorded 2026-11-16. Start of this work: `7d5ef2e` (the head of PR #26). The gates
+below were run by `make record-validation` in a clean worktree; each record in
+`docs/evidence/validation/` names the commit it ran at, with `dirty: false` and
+`code_revision` equal to that commit. The work was an audit of the 64-bit path, so
+this section records what was *rejected* as well as what was confirmed: several of
+the claims checked against the source did not survive contact with it.
 
 ### 26.1 Findings
 
@@ -2792,8 +2792,8 @@ against the source did not survive contact with it.
 
 ### 26.3 Commands and results
 
-Every gate below was run by `make record-validation` in a clean worktree at
-`196f504`, and the exit code and summary in each record is that run's output.
+Every gate below was run by `make record-validation` in a clean worktree, and the
+exit code and summary in each record is that run's output.
 `ovmf-test` is **not tested**: TianoCore and `qemu-system-x86_64` are absent here,
 so the harness exits 2 and the record says `not-tested` with that reason. No
 hardware run, and no OVMF run, is claimed anywhere in this section.
