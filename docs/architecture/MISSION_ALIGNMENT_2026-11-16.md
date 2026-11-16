@@ -7,6 +7,15 @@ the user experience, and PC5 is the PC-side infrastructure required to run it."*
 It was written at PR #26 head `170e611dcdfa3fe12e9abe58c2e60ee323aa461c`, on branch
 `arena/af939eb1-pc5`, and re-checked after the source corrections described below.
 
+**Final state of this pass.** The three workstreams are committed on
+`arena/17f0c4f8-pc5` on top of `170e611`: `92f0678` (the 64-bit fixes),
+`71e55a5` (the first correction pass and this report), `687f127` (the brand),
+`32f3a14` (the second correction pass) and two evidence commits. Every gate
+was re-recorded at a clean `32f3a14`; `make check` runs 653 tests with zero
+skips, and `make ovmf-test` remains NOT TESTED because no OVMF or QEMU exists
+on this machine. PR #26 is still open and still an infrastructure change: it
+moves no milestone.
+
 The hierarchy the rest of the repository is judged against:
 
 ```
@@ -158,6 +167,29 @@ CPUID extended leaves are gated on the saved maximum leaf; the memory map is
 validated as a set for overlapping descriptors before any coverage decision; and
 framebuffer pixel formats the protocol cannot describe are classified unusable.
 The 32-bit release path is untouched.
+
+## 5.1 Release isolation, measured rather than asserted
+
+The contract at the top of this report is that PC5 is the PC-side
+infrastructure and Sony's software is the operating system. A weaker but
+related invariant is that none of this work may change the shipping 32-bit
+release image, which is the only artefact a user can boot today. It was checked
+by building the image on both trees rather than by reading the diff:
+
+```
+$ git checkout 8aab6d3 && make -s iso && sha256sum build/pc5.iso
+e21506341fb1bd84c39831d163f4518d6a20b033f5b271871a165659f126768f
+
+$ git checkout arena/17f0c4f8-pc5 && make -s iso && sha256sum build/pc5.iso
+e21506341fb1bd84c39831d163f4518d6a20b033f5b271871a165659f126768f
+```
+
+Identical bytes. Only `boot/uefi64/` and `kernel64/` changed under `boot/` and
+the kernel tree, both of which are outside the release closure;
+`tests/test_kernel64.py::ReleaseIsolationTests` fails if that ever stops being
+true. The brand work does not touch the kernel banner: the shipping 32-bit
+boot output is unchanged, and `brand/pc5-mark-boot.txt` is a separate artefact
+for a future console that does not exist yet.
 
 ## 6. Remaining limitations
 
