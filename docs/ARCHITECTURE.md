@@ -264,10 +264,18 @@ does not carry it, and `make -n all` shows no 64-bit work.
 ### 7.2 Page tables
 
 `boot/uefi64/pagetables.c` builds an identity map below 4 GiB from 2 MiB pages:
-one PML4, one PDPT and four PDs, six pages in all. 2 MiB pages are used because
-every x86-64 CPU that can enter long mode supports them; 1 GiB pages are only
-reported by CPUID, not required. The framebuffer's pages are marked PWT|PCD so
-they are uncached. Firmware's tables are abandoned with firmware's stack.
+one PML4, one PDPT and four PDs, six pages in all. A PDPT entry is consumed by a
+page-directory *pointer*, and one page directory holds 512 entries of 2 MiB — one
+gigabyte — so the span needs **four** PDPT entries, one per PD page, not one. An
+earlier version installed only `PDPT[0]`, which mapped the first gigabyte and left
+the other three PD pages unreachable while the builder still reported 2048 mapped
+entries (corrected in `de9c6a3`; see `TEST_RESULTS.md` §27). All six pages are
+zeroed before use, so no firmware value survives inside an active structure.
+
+2 MiB pages are used because every x86-64 CPU that can enter long mode supports
+them; 1 GiB pages are only reported by CPUID, not required. The framebuffer's
+pages are marked PWT|PCD so they are uncached. Firmware's tables are abandoned
+with firmware's stack.
 
 `PC5-64-PAGING enabled=1 root=0x…` is printed by the *kernel*, from its own
 `CR3`, and the kernel fails the boot when that value differs from the page-table
@@ -293,6 +301,14 @@ canary pages on both sides of the six-page block and covers: entirely below 4 Gi
 ending exactly at 4 GiB, crossing it, entirely above, unaligned starts and ends,
 empty and inverted ranges, ranges that overflow 64-bit arithmetic, and an invalid
 page-table base.
+
+It also walks the installed hierarchy rather than reading the leaf array, because
+those are not the same question: `IdentityHierarchyTests` asserts that the
+returned count equals what the PML4 → PDPT → PD walk actually reaches, that every
+PDPT entry points at its own PD page, that translation succeeds immediately below,
+at and above each 1 GiB boundary and fails at the 4 GiB exclusive edge, and that
+removing one PDPT link makes `pc5_pt_lookup()` stop translating even though the
+leaf is still populated.
 
 ### 7.3 Boot protocol, version 2
 
