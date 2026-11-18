@@ -127,9 +127,11 @@ def citations(text: str, *, resolves=None):
         for match in CITATION.finditer(line):
             reference = match.group(1)
             if reference.isdigit() and resolves is not None and not resolves(reference):
-                # A build timestamp or a placeholder. Not an object id, and the
-                # exemption is justified by the failed lookup rather than assumed
-                # from the shape.
+                # Could be a build timestamp or a placeholder, or a dead all-digit
+                # abbreviated object id: the token alone cannot tell these apart.
+                # The policy skips unresolved digit-only tokens so that timestamps
+                # do not become false positives, accepting that a dead all-digit id
+                # goes unreported. See the module docstring.
                 continue
             yield number, reference, line.strip()
 
