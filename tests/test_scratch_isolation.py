@@ -187,6 +187,110 @@ class ContainmentTest(unittest.TestCase):
                    if p.name.startswith(marker)]
         self.assertEqual(outside, [], f"escaped directories were created: {outside}")
 
+    def test_a_normal_prefix_still_works(self):
+        """``prefix`` is public API; guarding it must not remove it."""
+        path = scratch.directory("containment-prefix", prefix="case-")
+        self.assertInsideRoot(path)
+        self.assertEqual(
+            pathlib.Path(path).parent.resolve(),
+            (self.root / "containment-prefix").resolve(),
+            "the prefix must name the leaf, not a directory")
+        self.assertTrue(pathlib.Path(path).name.startswith("case-"),
+                        "the prefix was not honoured")
+        self.assertTrue(os.path.isdir(path))
+
+    def test_a_default_prefix_still_works(self):
+        path = scratch.directory("containment-prefix")
+        self.assertInsideRoot(path)
+        self.assertTrue(pathlib.Path(path).name.startswith("case-"))
+
+    def test_traversal_prefixes_are_rejected(self):
+        """The prefix is joined onto the parent exactly as a part is."""
+        for prefix in ("..", "../", "../escaped-", "../../escaped-",
+                       "..{}..{}escaped-".format(os.sep, os.sep),
+                       ".", "./escaped-"):
+            with self.subTest(prefix=prefix):
+                with self.assertRaises(ValueError, msg=f"{prefix!r} was accepted"):
+                    scratch.directory("containment-prefix", prefix=prefix)
+
+    def test_a_deeply_nested_parent_cannot_be_escaped_by_a_prefix(self):
+        """Enough traversal to climb out of a nested parent, not just the root.
+
+        With parts three levels deep, a single ``..`` only reaches a directory that
+        is still inside the root, so the test uses enough components to clear the
+        root regardless of depth.  A guard that only counted one level would pass
+        the shallower case and fail this one.
+        """
+        parts = ("containment-deep", "level-a", "level-b", "level-c")
+        depth = len(parts) + 4
+        prefix = (".." + os.sep) * depth + "escaped-deep-"
+        with self.assertRaises(ValueError):
+            scratch.directory(*parts, prefix=prefix)
+
+    def test_absolute_prefixes_are_rejected(self):
+        for prefix in (os.sep + "absolute-", os.path.abspath(os.sep)):
+            with self.subTest(prefix=prefix):
+                with self.assertRaises(ValueError, msg=f"{prefix!r} was accepted"):
+                    scratch.directory("containment-prefix", prefix=prefix)
+
+    def test_embedded_separators_in_a_prefix_are_rejected(self):
+        separators = {os.sep} | ({os.altsep} if os.altsep else set())
+        for separator in sorted(separators):
+            for prefix in (f"a{separator}b-", f"a{separator}..{separator}b-"):
+                with self.subTest(prefix=prefix):
+                    with self.assertRaises(ValueError, msg=f"{prefix!r} was accepted"):
+                        scratch.directory("containment-prefix", prefix=prefix)
+
+    def test_a_nul_or_non_string_prefix_is_rejected(self):
+        with self.assertRaises(ValueError):
+            scratch.directory("containment-prefix", prefix="a\x00b-")
+        with self.assertRaises(TypeError):
+            scratch.directory("containment-prefix", prefix=b"bytes-")
+
+    def test_a_rejected_prefix_creates_nothing(self):
+        """Refusal must happen before ``mkdtemp``, not after it.
+
+        This is the whole point of the finding: a post-creation check would raise
+        the same exception and still leave the escaped directory on disk.
+        """
+        marker = f"prefix-probe-{os.getpid()}-"
+        beside = self.root.parent / f"{marker}sibling"
+        absolute = self.root.parent / f"{marker}absolute"
+        self.assertFalse(beside.exists(), "fixture precondition")
+        self.assertFalse(absolute.exists(), "fixture precondition")
+        try:
+            with self.assertRaises(ValueError):
+                scratch.directory("containment-prefix", prefix=f"..{os.sep}{beside.name}-")
+            with self.assertRaises(ValueError):
+                scratch.directory("containment-prefix", prefix=str(absolute) + os.sep)
+            self.assertFalse(beside.exists(),
+                             f"rejecting the prefix still created {beside}")
+            self.assertEqual(
+                [p for p in self.root.parent.iterdir() if p.name.startswith(marker)], [],
+                "rejecting the prefix created a directory outside the scratch root")
+        finally:
+            shutil.rmtree(beside, ignore_errors=True)
+            shutil.rmtree(absolute, ignore_errors=True)
+
+    def test_repeated_rejected_prefixes_never_create_anything(self):
+        """Ten attempts, since a guard that fires once may not fire again."""
+        marker = f"prefix-repeat-{os.getpid()}-"
+        for index in range(10):
+            with self.assertRaises(ValueError):
+                scratch.directory("containment-prefix", prefix=f"..{os.sep}{marker}{index}-")
+        outside = [p for p in self.root.parent.iterdir() if p.name.startswith(marker)]
+        self.assertEqual(outside, [], f"escaped directories were created: {outside}")
+
+    def test_nested_parts_with_a_prefix_still_work(self):
+        path = scratch.directory("containment", "NestedTests", "test_case",
+                                 prefix="nested-")
+        self.assertInsideRoot(path)
+        self.assertEqual(
+            pathlib.Path(path).parent.resolve(),
+            (self.root / "containment" / "NestedTests" / "test_case").resolve(),
+            "the legitimate layout must be preserved exactly")
+        self.assertTrue(pathlib.Path(path).name.startswith("nested-"))
+
     def test_nested_owners_still_work(self):
         path = scratch.directory("containment", "NestedTests", "test_case")
         self.assertInsideRoot(path)

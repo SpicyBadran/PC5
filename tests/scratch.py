@@ -131,17 +131,29 @@ def directory(*parts: str, prefix: str = "") -> str:
     directory says what produced it.  The returned directory is unique, so callers
     may use fixed filenames inside it without colliding with anything else.
 
-    Every part is a single path component, and the result is guaranteed to be
-    inside :func:`root`.  Without that, ``directory("..", "elsewhere")`` built a
-    path outside the root, and because cleanup and ``atexit`` remove only the root,
-    the escaped directory survived the run: a leak that no test would report and
-    that ``PC5_KEEP_TEST_SCRATCH`` could not account for.  Containment is checked
-    on *resolved* paths, not string prefixes -- ``/tmp/pc5-tests-1-abc`` is a prefix
-    of ``/tmp/pc5-tests-1-abcdef``, and a symlinked component would defeat a prefix
-    test while still escaping.
+    Every part and the ``prefix`` are single path components, and the result is
+    guaranteed to be inside :func:`root`.  Without that, ``directory("..",
+    "elsewhere")`` built a path outside the root, and because cleanup and ``atexit``
+    remove only the root, the escaped directory survived the run: a leak that no test
+    would report and that ``PC5_KEEP_TEST_SCRATCH`` could not account for.
+    Containment is checked on *resolved* paths, not string prefixes --
+    ``/tmp/pc5-tests-1-abc`` is a prefix of ``/tmp/pc5-tests-1-abcdef``, and a
+    symlinked component would defeat a prefix test while still escaping.
+
+    ``prefix`` is validated on the same terms as the parts, and *before* anything is
+    created.  ``tempfile.mkdtemp`` joins the prefix onto ``dir`` textually, so a
+    prefix of ``"../../../"`` or an absolute path names a directory outside the root
+    and ``mkdtemp`` creates it.  Checking containment afterwards would then report
+    the escape while leaving the escaped directory on disk -- the check would
+    describe the damage instead of preventing it.  Validating first is what makes
+    the guarantee hold; the post-creation checks below are defence in depth.
     """
     base = root()
-    safe = [_component(part) for part in parts]
+    safe = [_component(part, "part") for part in parts]
+    # Rejected here, before ``os.makedirs`` and before ``mkdtemp``: an invalid
+    # prefix must not be able to create anything, anywhere.
+    safe_prefix = _component(prefix, "prefix") if prefix else ""
+
     parent = os.path.join(base, *safe) if safe else base
 
     # Before creating anything: a component here may be a pre-existing symlink
@@ -151,37 +163,44 @@ def directory(*parts: str, prefix: str = "") -> str:
     # Again after creation, so a component created concurrently cannot slip past.
     _require_within(base, parent)
 
-    path = tempfile.mkdtemp(prefix=prefix or "case-", dir=parent)
+    path = tempfile.mkdtemp(prefix=safe_prefix or "case-", dir=parent)
     _require_within(base, path)
     return path
 
 
-def _component(part) -> str:
+def _component(part, kind: str = "part") -> str:
     """Validate one path component of a scratch directory name.
 
-    Rejects everything that would let a part escape ``root``: an empty name, an
-    absolute path, a drive or UNC prefix, an embedded separator, ``.``/``..``, and
-    an embedded NUL.  Comparison is by component, so ``"a..b"`` and ``"..a"`` --
-    ordinary names -- are accepted; only a part that *is* ``..`` is traversal.
+    Rejects everything that could make the name land outside ``root``: an empty
+    name, an absolute path, a drive or UNC prefix, an embedded separator, ``.``/
+    ``..``, and an embedded NUL.  Comparison is by component, so ``"a..b"`` and
+    ``"..a"`` -- ordinary names -- are accepted; only a part that *is* ``..`` is
+    traversal.
+
+    ``kind`` only names the argument in the message.  Parts and ``prefix`` are one
+    rule, not two: a validator that is stricter in one place than the other is
+    exactly how the prefix came to be unguarded while the parts were not, and
+    ``os.path.join`` and ``tempfile.mkdtemp`` join both the same way.
     """
     if isinstance(part, os.PathLike):
         part = os.fspath(part)
     if not isinstance(part, str):  # bytes paths are not supported deliberately
-        raise TypeError(f"scratch directory part must be a path component, not {type(part).__name__}")
+        raise TypeError(
+            f"scratch directory {kind} must be a path component, not {type(part).__name__}")
     if not part:
-        raise ValueError("scratch directory part must not be empty")
+        raise ValueError(f"scratch directory {kind} must not be empty")
     if "\x00" in part:
-        raise ValueError(f"scratch directory part contains a NUL: {part!r}")
+        raise ValueError(f"scratch directory {kind} contains a NUL: {part!r}")
     drive, tail = os.path.splitdrive(part)
     if drive:
-        raise ValueError(f"scratch directory part must not name a drive: {part!r}")
+        raise ValueError(f"scratch directory {kind} must not name a drive: {part!r}")
     if os.path.isabs(part) or tail.startswith(os.sep):
-        raise ValueError(f"scratch directory part must be relative: {part!r}")
+        raise ValueError(f"scratch directory {kind} must be relative: {part!r}")
     separators = {os.sep} | ({os.altsep} if os.altsep else set())
     if any(separator in part for separator in separators):
-        raise ValueError(f"scratch directory part must be a single component: {part!r}")
+        raise ValueError(f"scratch directory {kind} must be a single component: {part!r}")
     if part in (os.pardir, os.curdir):
-        raise ValueError(f"scratch directory part must not be {part!r}")
+        raise ValueError(f"scratch directory {kind} must not be {part!r}")
     return part
 
 
