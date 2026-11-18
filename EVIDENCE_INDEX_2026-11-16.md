@@ -23,7 +23,7 @@ follow-up work: the commit that adds this file; the parent it applies to is
 | 6 | `FINAL_REVIEW_PR26_PR27_2026-11-16.md` | The review that produced verdict `DO NOT APPROVE — TECHNICAL FINDINGS REMAIN` and drove this follow-up. Self-discloses non-independence at its head. | `0a7eaa0` | **Author-reproduced** | Yes — its findings are what this branch addresses |
 | 7 | `LANDING_STRATEGY_D_READINESS_2026-11-16.md` | Landing readiness: Strategy D ordering, blockers, repository settings. | `170e611` | **Implementer-assessed** | Yes |
 | 8 | `EVIDENCE_INDEX_2026-11-16.md` | This file. | the follow-up commit | Implementer-assembled | No |
-| 9 | `FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md` | The follow-up: F2 coverage redesign, F1 doc corrections, F4/F5 delivery, cold-start investigation. | follow-up commit | **Implementer-reported**, reproduced on demand | No |
+| 9 | `FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md` | The follow-up: F2 coverage redesign, F1 doc corrections, F4/F5 delivery, cold-start investigation, **and (§9) the shared-scratch-path races**. | follow-up commits; §9 describes `995730d` and its successor | **Implementer-reported**, reproduced on demand | No |
 
 **Every one of documents 1–7 was written by the same author as the code it describes.**
 A reviewer should read them as a map of what to check, not as a verdict. The repository has
@@ -113,14 +113,39 @@ stays identifiable.
 | GitHub Actions / CI | **DOES NOT EXIST** | `.github/workflows/` is absent; `actions/workflows` returns `total_count: 0`. |
 | Branch protection | **ABSENT** | `protected: false` on `main` and both PR branches. |
 
+## 5a. Test scratch isolation (added later the same day)
+
+Three paths that should have been private were shared. All three are fixed:
+
+| Shared path | Was | Now |
+|---|---|---|
+| `build/test/m1i/{in,out}.img`, `lba.txt` | fixed directory and names | per-process root, per-case directory (`tests/scratch.py`) |
+| `$(BUILD)/kernel-unit` | one fixed name | `mktemp` + `trap` in the `unit` target |
+| `build/manifest-{test,cli}.json` | fixed names in the checkout | per-case directory |
+
+The isolation model is documented in `tests/scratch.py`: the compiled driver is
+per **process** (it may be executed concurrently but never rebuilt while in use,
+which is what `ETXTBSY` was about), and mutable run files are per **case**. A
+failing case keeps its directory as the diagnostic artifact; a passing run cleans
+up; `PC5_KEEP_TEST_SCRATCH=1` keeps everything.
+
+`tests/test_scratch_isolation.py` (14 tests) binds this, including a control that
+reproduces the old scheme in a throwaway tree and **requires it to collide**, plus
+its inverse, which **requires the isolated scheme not to**. Both were verified to
+fail in the wrong configuration, so the control is not vacuous.
+
+Measured: two concurrent `make -s check` runs → 727 OK / 727 OK, 0 failures
+(previously 40+ failures); four concurrent instances of the affected module →
+50 OK ×4. **This is not a general proof of concurrency safety** — see
+`FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md` §9.5.
+
 ## 6. Known defects and limitations carried forward
 
-1. **Test harness is not concurrency-safe.** `tests/test_fat32_expand.py` uses a fixed working
-   directory (`build/test/m1i`) with fixed filenames (`in.img`, `out.img`, `lba.txt`), so two
-   processes running the suite in the same worktree corrupt each other's images. Measured: a
-   single competing process produced 19–33 failures. Single-process runs are unaffected. This
-   is pre-existing, was not introduced by this stack, and is **not fixed here** — see
-   `FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md` §4.
+1. **~~Test harness is not concurrency-safe.~~ Fixed later the same day.** The fixed working
+   directory and the two other shared paths are described in §5a. The defect was real and was
+   reproduced (19–48 failures with a single competing process); it is no longer reproducible
+   after the fix. **The original single-process failure remains unexplained and is not claimed
+   to have been caused by this defect** — see `FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md` §9.6.
 2. **The suite has never run in CI.** Every green result in every document was produced on the
    author's machine.
 3. **The 64-bit path is not wired into the shipping artifact.** `boot/uefi64/` and `kernel64/`

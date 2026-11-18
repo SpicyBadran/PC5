@@ -161,7 +161,7 @@ the error. **No tracked file ever carried the claim**, so `main` was never affec
 | Command | Exit | Result |
 |---|---|---|
 | `make -s all` | 0 | builds |
-| `make -s check` | 0 | **713 tests OK**, 2 skips |
+| `make -s check` | 0 | **713 tests OK**, 2 skips — *see the correction in §9 below: an earlier draft of this line read "0 real skips", which was wrong* |
 | `make -s stubtest` | 0 | PASSED 58/58 |
 | `make -s stubtest64` | 0 | 22/22 |
 | `make -s verify` | 0 | `[PASS]` |
@@ -210,3 +210,168 @@ in. `boot/uefi64/` and `kernel64/` are compiled and tested but are not part of t
 - **OVMF, QEMU, physical hardware and genuine Sony firmware remain untested.**
 - **The concurrency bug in `test_fat32_expand.py` is real and unfixed.**
 - **The original cold-start failure is still unexplained.**
+
+---
+
+## 9. Addendum 2026-11-16 (later the same day): shared-path races fixed
+
+Appended, not rewritten. Everything above stands as written; this section records
+what was done afterwards and one correction to it.
+
+**Starting revision:** `d6f6c7ff22376fb04a9578323cf2495d708a2564`
+**Final revision:** the commit that adds this section (parent `995730d`).
+
+### 9.1 Correction: the skip count
+
+An earlier draft of §6 said the suite ran with **"0 real skips"** while the same
+paragraph reported `2 skips`. That was sloppy, and it is corrected here rather
+than quietly edited away. The truth, measured:
+
+- The run reports **2 skipped tests**, and the "Ran N tests" count **includes**
+  them. `713 tests` (now `727`) counts skips in the total.
+- The two skips, by fully-qualified ID:
+
+| Test ID | Reason reported by the runner | Optional? |
+|---|---|---|
+| `test_ovmf_harness.FirmwareAcceptanceTests.test_the_real_esp_is_not_firmware` | `build/efi.img is not built` | **Conditional** — a build artifact, not an environment capability |
+| `test_tools.BuiltImageTests.test_built_iso_verifies` | `build/pc5.iso not built` | **Conditional** — same |
+
+Neither hides required coverage: both run and pass as soon as `make all` has
+produced the artifacts. Measured after `make -s all`:
+`tests.test_ovmf_harness tests.test_tools` → **58 tests, OK, 0 skips**.
+
+- **A third, larger skip set exists and is environment-dependent.** Without the
+  `unicorn` package installed, **22 additional tests** in
+  `test_boot64_stub.StubFirmware64Tests` skip with
+  `'unicorn is not installed (pip install unicorn)'`, making the reported skip
+  count **24, not 2**. The figure of 2 in §6 is therefore only true in an
+  environment with `unicorn` present. Both numbers are recorded here so that
+  neither can be mistaken for the other, and no skip was removed or altered to
+  make the count look cleaner.
+
+### 9.2 Three shared-path races, not one
+
+The previous report named `test_fat32_expand.py` only. Two more were found by
+inspecting every path the suite writes:
+
+| # | Shared path | Failure mode | Measured before the fix |
+|---|---|---|---|
+| 1 | `build/test/m1i/{in,out}.img`, `lba.txt` | Two suite processes overwrite each other's images mid-run | 2 concurrent module runs → **41** and **33** failures |
+| 2 | `$(BUILD)/kernel-unit` | One run links the binary while the other executes it → `ETXTBSY` | 2 concurrent `make unit` → exits **2** and **0**, `Text file busy … Error 127` |
+| 3 | `build/manifest-test.json`, `build/manifest-cli.json` | Silent: both runs write identical bytes, so it passes by luck | 2 concurrent runs → OK, but only because the outputs are identical |
+
+Defect 3 was not failing, which is why it is worth stating plainly: it was a
+latent flake, not an observed failure. Any change making the two runs' manifests
+differ would have made it intermittent.
+
+### 9.3 The isolation fix
+
+`tests/scratch.py` is new and states the model in its own docstring. Three
+artifact kinds, three scopes:
+
+| Artifact | Scope | Why |
+|---|---|---|
+| Compiled driver (`fat32-write-check`) | **per process** | Immutable once linked and safe to *execute* concurrently, but rebuilding it while another process executes it gives `ETXTBSY`. Per-process is the smallest safe boundary. |
+| Mutable run files (`in.img`, `out.img`, `lba.txt`) | **per case** | Written and read on every `run_op()`. Per-process is not enough if tests ever run in parallel *within* one process, so each case gets its own directory. |
+| Failure diagnostics | kept on failure | The images are the only evidence of what the driver did; a failing case retains its tree. |
+
+Cleanup reliability: `addCleanup` / `addClassCleanup`, which `unittest` runs
+after failed assertions and after `tearDown`. `atexit` covers the ordinary exit
+path. A `SIGKILL`ed process leaves its directory behind — nothing can prevent
+that — but those live under the system temp directory as
+`pc5-tests-<pid>-*`, never in the checkout.
+
+`Makefile`: the `unit` target now creates its binary with `mktemp` and removes it
+via a `trap`. A `$$`-based name was tried first and **did not work** — make
+expands it at parse time, so every invocation of the same make process shared the
+name, and the concurrent runs still collided. That attempt is recorded because it
+is the kind of thing that looks correct in a diff.
+
+### 9.4 Regression tests (14 new)
+
+`tests/test_scratch_isolation.py`. These assert isolation, not that a helper was
+called.
+
+| Test | What it binds |
+|---|---|
+| `test_the_root_is_stable_within_a_process` | one root per process |
+| `test_the_root_is_outside_the_repository` | scratch cannot be committed or shared across checkouts |
+| `test_distinct_cases_get_distinct_directories` | same fixed filename in two cases resolves to different files |
+| `test_a_second_call_for_the_same_owner_still_gets_a_fresh_directory` | re-entry does not inherit stale images |
+| `test_cleanup_removes_only_its_own_tree` | cleanup is scoped, does not delete another case's tree |
+| `test_a_failing_case_keeps_its_directory` | diagnostics survive a failure |
+| `test_a_competing_process_gets_a_different_root` | 3 subprocesses → 3 distinct roots, none equal to ours |
+| `test_the_driver_does_not_use_the_old_fixed_directory` | the old path cannot return to `test_fat32_expand` |
+| `test_the_write_driver_uses_per_case_storage` | same for `test_fat32_write` |
+| `test_the_manifest_test_no_longer_writes_into_build` | same for `test_iso_manifest` |
+| `test_the_unit_binary_is_not_a_single_shared_name` | `mktemp` present, shared name gone |
+| `test_the_module_still_runs_its_real_operations` | coverage was isolated, not reduced |
+| `test_a_shared_directory_corrupts_concurrent_runs` | **control**: the old scheme must collide |
+| `test_the_isolated_scheme_does_not_corrupt_concurrent_runs` | the new scheme must not |
+
+The control was itself verified to discriminate, in both directions:
+
+- given two private directories, `test_a_shared_directory_corrupts_concurrent_runs`
+  **fails** with *"the old fixed-path scheme did NOT collide in this control"*;
+- given one shared directory, `test_the_isolated_scheme_does_not_corrupt_concurrent_runs`
+  **fails** with `['WRONG:BBBB', 'OK']`.
+
+An earlier draft of the control used the same directory for both processes and
+passed even when inverted — it proved nothing. That draft was discarded; the
+measurement above is from the corrected version.
+
+### 9.5 Concurrent execution results
+
+All from one checkout, all captured with exit codes.
+
+| Run | Processes | Result |
+|---|---|---|
+| affected module, single | 1 | 50 tests OK |
+| affected module, concurrent | 2 | **50 OK / 50 OK**, 0 failures |
+| affected module, concurrent | 4 | **50 OK ×4**, 0 failures |
+| full suite, `make -s check` | 1 | 727 OK, 2 skips |
+| full suite, `make -s check`, concurrent | 2 | **727 OK / 727 OK**, 0 failures |
+| … repeated 3 more rounds | 2 each | **8/8 process-runs OK**, 0 failures |
+
+Zero scratch directories were left behind after any of these.
+
+**This is not a proof of concurrency safety in general.** It is eight concurrent
+full-suite process-pairs plus the module-level runs above, on one machine, with
+one kernel. A race can be rare. What can be said precisely is that the three
+shared paths identified are gone, and that the specific collisions previously
+reproduced no longer reproduce.
+
+### 9.6 The original unexplained failure — still unexplained
+
+§4 reported one unreproduced single-process `make -s check` failure. **The fix in
+this section does not retroactively explain it.** The concurrency defect is a
+demonstrated mechanism by which *a* failure of that shape can occur, but the
+original run was single-process as far as I know, its test name was never
+captured, and 16 further single-process runs before this change were clean. That
+observation is preserved unaltered in §4 and is **not** claimed as resolved.
+
+### 9.7 Full-suite results after the fix
+
+`727 tests, OK, 2 skips` (was 713 before the 14 regression tests were added).
+No test was weakened, removed, skipped or relaxed. `make -s check`, `stubtest`,
+`stubtest64`, `verify`, `roadmap`, `docs-check`, `brand-check` and
+`presentation-check` all exit 0. `boot-test` and `ovmf-test` still do not run —
+no `node_modules`, no OVMF/QEMU — and are reported as not run, not as passes.
+
+### 9.8 Additional shared-path races discovered
+
+Only the three in §9.2. Every other test module was checked for fixed paths
+under `build/`; the remaining reads (`test_ovmf_harness` reading `build/efi.img`,
+`test_tools` reading `build/pc5.iso`) are **read-only** and stay safe while
+nothing writes those files concurrently. They are listed here so a reviewer can
+decide whether that is good enough.
+
+### 9.9 Remaining limitations
+
+1. **This is implementer-authored evidence, not independent review.**
+2. Eight concurrent full-suite process-pairs is not a proof of concurrency safety.
+3. `test_ovmf_harness` and `test_tools` still *read* shared build artifacts; a
+   concurrent `make all` would race with them in principle.
+4. The original cold-start failure remains unexplained (§9.6).
+5. No CI exists; these results are from one machine.
+6. OVMF, QEMU, physical hardware and genuine Sony firmware remain untested.
