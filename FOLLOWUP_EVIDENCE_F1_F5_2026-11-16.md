@@ -375,3 +375,138 @@ decide whether that is good enough.
 4. The original cold-start failure remains unexplained (§9.6).
 5. No CI exists; these results are from one machine.
 6. OVMF, QEMU, physical hardware and genuine Sony firmware remain untested.
+
+## 10. Addendum: the cleanup decision was broken, and is now correct
+
+This section corrects §9.3 and §5a of the index. The isolation model in §9.3 is
+unchanged; what was wrong is the *cleanup decision* - whether a directory is
+removed - and the tests that were supposed to bind it.
+
+### 10.1 The defect
+
+`tests/scratch.py:register_cleanup` decided whether to keep a directory by
+reading `case._outcome.errors + case._outcome.failures`. `unittest.case._Outcome`
+has neither attribute (measured on the project interpreter, Python 3.11.2):
+
+    expectedFailure, expecting_failure, result, result_supports_subtests,
+    success, testPartExecutor
+
+So the `except AttributeError` branch fired on **every** test, `failed` was
+always `True`, and every directory was kept. `note_failure()` then set a
+process-wide flag that made `drop_class_tree` retain every class tree too. The
+only thing that ever removed anything was the `atexit` hook at interpreter exit.
+
+Measured at the moment the runner returned (before `atexit` could hide it), with
+both FAT32 modules passing:
+
+| | before | after |
+|---|---|---|
+| tests run | 88 | 88 |
+| failures / errors | 0 / 0 | 0 / 0 |
+| per-case directories remaining | **82** | 0 |
+| class trees remaining | **84** | 0 |
+| files remaining | 234 | 0 |
+
+And with one failure injected into a 17-case class (`OverwriteTests`):
+
+| | before | after |
+|---|---|---|
+| directories remaining | 37 | 4 |
+| files remaining | 52 | 3 |
+
+Before: every case directory and every class tree, all 17 tests' images. After:
+the two owner directories (`fat32_expand`, `OverwriteTests`), the failing test's
+directory, and its `case-*` holding `in.img`, `out.img`, `lba.txt`. The three
+files belong to the failing case and to nothing else.
+
+The "after" run retains exactly one case directory - `in.img`, `out.img`,
+`lba.txt` - belonging to the failing test. That test uses `subTest`, so the two
+failure entries are `_SubTest` objects; the fix unwraps them.
+
+### 10.2 Why `outcome.success` is not the fix
+
+The obvious repair - use `outcome.success` - is also wrong, and this was
+measured rather than assumed. `TestCase.doCleanups` wraps every cleanup function
+in `outcome.testPartExecutor(self)`, whose `__enter__` sets `success = True`.
+So inside a cleanup body, `outcome.success` is **always** `True`, even after a
+failure:
+
+    in_test_before_fail    outcome.success=True  failures=0 errors=0
+    cleanup_after_fail     outcome.success=True  failures=1 errors=0
+    cleanup_after_error    outcome.success=True  failures=1 errors=1
+
+The result lists, by contrast, are appended to *before* `doCleanups` runs
+(`TestCase.run` order: `startTest` → `_outcome` → setUp/test/tearDown executors
+→ `doCleanups()` → `if outcome.success` → `_outcome = None` → `stopTest`), so
+scanning them is correct at every point a cleanup can observe.
+
+### 10.3 The fix
+
+`scratch.case_failed(case)` scans `result.failures`, `result.errors` and
+`result.unexpectedSuccesses`, unwraps `_SubTest.test_case`, and compares by
+identity to the case. Attribution is therefore per case: one failing test no
+longer retains another test's directory. Anything unusual - no `_outcome`, no
+`result` - keeps the tree, because losing a diagnostic artifact is worse than
+leaving a directory.
+
+`note_failure()` and the process-wide `_PROCESS_FAILURE` flag are removed; they
+were only referenced from `scratch.py` and had no other caller.
+`drop_class_tree` now removes the class tree unconditionally (subject to
+`PC5_KEEP_TEST_SCRATCH`). The layout makes that safe, and the layout is worth
+stating exactly because it is easy to get wrong from the directory names alone.
+`setUpClass` builds `scratch.directory("fat32_expand", cls.__name__)`, which is
+itself a `case-*` directory - that is what `drop_class_tree` is handed, and a
+trace confirms it contains exactly one file, the compiled driver. Per-case
+images live one level deeper, under
+`fat32_expand/<Class>/<test_name>/case-*`. The two `case-*` levels are therefore
+different things, and the class-level one is removed while the case-level
+survivor keeps its evidence. The measurement above shows this: the retained
+directory is the *inner* one, with 3 files. Empty owner directories left behind by removed case
+directories are pruned, so a passing run leaves the scratch root empty rather
+than a tree of empty shells.
+
+### 10.4 Regression tests
+
+`tests/test_scratch_isolation.py` previously faked `_outcome` with an object
+exposing `errors`/`failures` lists - a double that does not exist in the real
+runner. Those two tests are replaced by `CleanupLifecycleTest` (11 tests) that
+run real `TestCase` classes through a real `TextTestRunner` and inspect the
+scratch root when the runner returns: passing removes, failing keeps only its
+own, erroring keeps, failing `subTest` keeps, pass-after-fail still cleans up,
+class cleanup runs when `setUpClass` raises part-way, a `setUp` failure leaves
+no case directory, `PC5_KEEP_TEST_SCRATCH=1` keeps everything, the root is
+removed at interpreter exit (subprocess), and the two fail-safe branches of
+`case_failed`.
+
+The file now has 23 tests (was 14). The new lifecycle tests were run against the
+old `scratch.py` as a control: **7 of 11 fail** (5 failures, 2 errors from the
+missing `case_failed`). The 4 that pass against the old code are the "keeps"
+cases, which the old code satisfied trivially by keeping everything; every
+"removes" case fails. The control is not vacuous.
+
+### 10.5 Full suite
+
+With `unicorn` installed (2.1.4, in a venv; the system interpreter is
+externally managed and has no `unicorn`):
+
+    Ran 736 tests in 70.3s
+    OK (skipped=2)
+
+736 = the 727 of §9 plus the 9 net new tests. The 2 skips are the pre-existing
+`test_ovmf_harness` / `test_tools` "not built" skips. Without `unicorn`, 69
+tests error with `ModuleNotFoundError` / `StubError` - pre-existing, in
+`test_kernel64` and `test_boot64_stub`, neither of which imports `scratch`.
+
+Two concurrent runs of both FAT32 modules (88 tests each) both pass, and no
+scratch root remains after either exits.
+
+### 10.6 Corrections to earlier claims
+
+* §9.3: "`addCleanup` / `addClassCleanup`, which `unittest` runs after failed
+  assertions and after `tearDown`" - true, but the decision taken inside those
+  cleanups was broken (§10.1). The reliability claim did not hold.
+* Index §5a: "a passing run cleans up" - **not true** before this fix. A passing
+  run left 82 case directories and 84 class trees behind; only `atexit` removed
+  them, at process exit.
+* §9.4's "14 new" tests: the two cleanup tests among them were vacuous (they
+  tested a fake outcome). They are replaced by §10.4.

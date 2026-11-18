@@ -15,6 +15,12 @@ These tests assert the *isolation itself*, not that some helper was called:
 * distinct directories for distinct cases and distinct processes;
 * two real processes running the same module concurrently both pass;
 * cleanup removes only its own tree;
+* cleanup behaviour - a passing case removes its directory, a failing or
+  erroring case keeps it, the class tree is removed at the class boundary - is
+  verified through a real ``unittest`` runner, never through a fake outcome
+  object (``unittest.case._Outcome`` has no ``errors``/``failures`` attributes,
+  and its ``success`` flag is reset to ``True`` while a cleanup body runs, so
+  neither can be used to decide whether a case failed);
 * the operations the module exists to exercise are still exercised;
 * a **regression control** shows the old fixed-path scheme would collide, built
   in a throwaway tree so the real suite never corrupts shared state.
@@ -25,13 +31,16 @@ statement about the new code, not evidence that the old shape was ever broken.
 
 from __future__ import annotations
 
+import io
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
 import textwrap
 import unittest
+import unittest.mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
@@ -77,57 +86,6 @@ class ScratchIsolationTest(unittest.TestCase):
                             "re-entering an owner must not reuse a directory, or a "
                             "re-run in one process would inherit stale images")
 
-    def test_cleanup_removes_only_its_own_tree(self):
-        mine = scratch.directory("isolation", "mine")
-        theirs = scratch.directory("isolation", "theirs")
-        pathlib.Path(mine, "out.img").write_bytes(b"x")
-        pathlib.Path(theirs, "out.img").write_bytes(b"y")
-
-        class _Case:
-            def __init__(self):
-                self.cleanups = []
-                self._outcome = type("O", (), {"errors": [], "failures": []})()
-
-            def addCleanup(self, fn):
-                self.cleanups.append(fn)
-
-        case = _Case()
-        scratch.register_cleanup(case, mine)
-        for fn in case.cleanups:
-            fn()
-
-        self.assertFalse(os.path.exists(mine),
-                         "a passing case's own directory must be removed")
-        self.assertTrue(os.path.isdir(theirs),
-                        "cleanup removed another case's directory; cleanup must be "
-                        "scoped to the tree it was registered for")
-
-    def test_a_failing_case_keeps_its_directory(self):
-        mine = scratch.directory("isolation", "failing")
-        pathlib.Path(mine, "out.img").write_bytes(b"evidence")
-
-        class _Case:
-            def __init__(self):
-                self.cleanups = []
-                self._outcome = type("O", (), {
-                    "errors": [], "failures": [(None, "boom")]})()
-
-            def addCleanup(self, fn):
-                self.cleanups.append(fn)
-
-        case = _Case()
-        scratch.register_cleanup(case, mine)
-        for fn in case.cleanups:
-            fn()
-        try:
-            self.assertTrue(
-                os.path.isdir(mine),
-                "a failing case must keep its images: they are the only evidence "
-                "of what the driver did")
-        finally:
-            import shutil
-            shutil.rmtree(mine, ignore_errors=True)
-
     def test_a_competing_process_gets_a_different_root(self):
         """Two interpreters must not share the per-process root."""
         code = textwrap.dedent("""
@@ -149,6 +107,219 @@ class ScratchIsolationTest(unittest.TestCase):
                          f"a shared root is the defect this module exists to prevent")
         self.assertNotIn(ours, seen,
                          "a subprocess reused this process's scratch root")
+
+
+class CleanupLifecycleTest(unittest.TestCase):
+    """Cleanup behaviour observed through a real runner, not a fake outcome.
+
+    An earlier version of this file faked ``_outcome`` with an object exposing
+    ``errors``/``failures`` lists.  ``unittest.case._Outcome`` has neither
+    attribute, so those tests passed against a double that does not exist in the
+    real runner - and the real ``register_cleanup`` fell into its
+    ``except AttributeError`` branch on every test, keeping every directory.
+    These tests instead run real ``TestCase`` classes through a real
+    ``TextTestRunner`` and inspect the scratch root when the runner returns,
+    before ``atexit`` can hide anything.
+    """
+
+    def setUp(self):
+        # Start from an empty root so "nothing remains" is a meaningful claim.
+        shutil.rmtree(scratch.root(), ignore_errors=True)
+        self.addCleanup(self._clean_root)
+
+    @staticmethod
+    def _clean_root():
+        shutil.rmtree(scratch.root(), ignore_errors=True)
+
+    def _make_case(self, *, set_up_class_raises=False, set_up_raises=False):
+        """A TestCase that uses scratch exactly as the FAT32 drivers do.
+
+        Defined locally so the outer discovery run never collects it.
+        """
+
+        class _Case(unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                cls.tree = scratch.directory("lifecycle", cls.__name__)
+                pathlib.Path(cls.tree, "driver").write_bytes(b"bin")
+                cls.addClassCleanup(scratch.drop_class_tree, cls.tree)
+                if set_up_class_raises:
+                    raise RuntimeError("setUpClass boom")
+
+            def setUp(self):
+                if set_up_raises:
+                    raise RuntimeError("setUp boom")
+
+            def _work(self):
+                where = scratch.directory("lifecycle", type(self).__name__,
+                                          self._testMethodName)
+                pathlib.Path(where, "in.img").write_bytes(b"payload")
+                scratch.register_cleanup(self, where)
+                return where
+
+            def test_a_pass(self):
+                self._work()
+
+            def test_b_fail(self):
+                self._work()
+                self.fail("boom")
+
+            def test_c_error(self):
+                self._work()
+                raise RuntimeError("boom")
+
+            def test_d_subtest_fail(self):
+                self._work()
+                with self.subTest(part="x"):
+                    self.fail("boom")
+
+            def test_e_pass_after_fail(self):
+                self._work()
+
+            def test_f_never_runs(self):
+                self.fail("must not run")
+
+        return _Case
+
+    def _run(self, suite):
+        """Run ``suite`` for real and report what the scratch root still holds."""
+        result = unittest.TextTestRunner(stream=io.StringIO(),
+                                         verbosity=0).run(suite)
+        root = scratch.root()
+        remaining = []
+        for dirpath, _, _ in os.walk(root):
+            rel = os.path.relpath(dirpath, root)
+            if rel != ".":
+                remaining.append(rel)
+        return result, root, sorted(remaining)
+
+    def test_a_passing_case_removes_its_directory(self):
+        case = self._make_case()
+        result, _, remaining = self._run(unittest.TestSuite([case("test_a_pass")]))
+        self.assertEqual(result.testsRun, 1)
+        self.assertEqual(len(result.failures) + len(result.errors), 0)
+        self.assertEqual(remaining, [],
+                         f"a passing run left scratch behind: {remaining}")
+        self.assertFalse(os.path.exists(case.tree),
+                         "the class tree must be removed at the class boundary")
+
+    def test_a_failing_case_keeps_only_its_own_directory(self):
+        case = self._make_case()
+        suite = unittest.TestSuite([case("test_b_fail"), case("test_a_pass")])
+        result, _, remaining = self._run(suite)
+        self.assertEqual(len(result.failures), 1)
+        kept = [p for p in remaining if "test_b_fail" in p]
+        self.assertTrue(kept,
+                        f"the failing case's directory was removed: {remaining}")
+        self.assertFalse(any("test_a_pass" in p for p in remaining),
+                         "cleanup removed the wrong tree, or kept a passing "
+                         f"case's directory: {remaining}")
+        self.assertFalse(os.path.exists(case.tree),
+                         "the class tree must be removed at the class boundary "
+                         "even when a case in it failed")
+
+    def test_an_erroring_case_keeps_its_directory(self):
+        case = self._make_case()
+        result, _, remaining = self._run(unittest.TestSuite([case("test_c_error")]))
+        self.assertEqual(len(result.errors), 1)
+        self.assertTrue(any("test_c_error" in p for p in remaining),
+                        f"an erroring case's directory was removed: {remaining}")
+
+    def test_a_failing_subtest_keeps_its_directory(self):
+        case = self._make_case()
+        result, _, remaining = self._run(
+            unittest.TestSuite([case("test_d_subtest_fail")]))
+        self.assertEqual(len(result.failures), 1)
+        self.assertTrue(any("test_d_subtest_fail" in p for p in remaining),
+                        "a subTest failure was not attributed to its case, so its "
+                        f"directory was removed: {remaining}")
+
+    def test_a_pass_after_a_failure_still_cleans_up(self):
+        """One failing case must not retain another case's directory.
+
+        The old implementation recorded a process-wide failure flag, so a single
+        failure kept every later class tree.  Attribution is per case.
+        """
+        case = self._make_case()
+        suite = unittest.TestSuite([case("test_b_fail"),
+                                    case("test_e_pass_after_fail")])
+        result, _, remaining = self._run(suite)
+        self.assertEqual(len(result.failures), 1)
+        self.assertFalse(any("test_e_pass_after_fail" in p for p in remaining),
+                         "a passing case after a failure kept its directory; "
+                         f"failure attribution is process-wide: {remaining}")
+
+    def test_the_class_cleanup_runs_when_set_up_class_fails(self):
+        case = self._make_case(set_up_class_raises=True)
+        result, _, remaining = self._run(
+            unittest.TestSuite([case("test_f_never_runs")]))
+        self.assertEqual(len(result.errors), 1)
+        self.assertFalse(os.path.exists(case.tree),
+                         "addClassCleanup must run even when setUpClass raises "
+                         "part-way through")
+        self.assertEqual(remaining, [],
+                         f"a setUpClass failure left scratch behind: {remaining}")
+
+    def test_a_setup_failure_leaves_no_case_directory(self):
+        case = self._make_case(set_up_raises=True)
+        result, _, remaining = self._run(
+            unittest.TestSuite([case("test_f_never_runs")]))
+        self.assertEqual(len(result.errors), 1)
+        self.assertEqual(remaining, [],
+                         "a setUp failure must not leave a case directory "
+                         f"behind: {remaining}")
+        self.assertFalse(os.path.exists(case.tree))
+
+    def test_keep_env_keeps_everything(self):
+        case = self._make_case()
+        with unittest.mock.patch.dict(os.environ, {scratch.KEEP_ENV: "1"}):
+            result, _, remaining = self._run(
+                unittest.TestSuite([case("test_a_pass")]))
+        self.assertEqual(result.testsRun, 1)
+        self.assertTrue(any("test_a_pass" in p for p in remaining),
+                        "PC5_KEEP_TEST_SCRATCH=1 must keep even a passing case's "
+                        f"directory: {remaining}")
+        self.assertTrue(os.path.exists(case.tree),
+                        "PC5_KEEP_TEST_SCRATCH=1 must keep the class tree")
+
+    def test_the_root_is_removed_at_interpreter_exit(self):
+        code = textwrap.dedent("""
+            import os, sys
+            sys.path.insert(0, sys.argv[1])
+            import scratch
+            where = scratch.directory("atexit-probe")
+            open(os.path.join(where, "f"), "w").write("x")
+            print(scratch.root())
+        """)
+        result = subprocess.run(
+            [sys.executable, "-c", code, str(ROOT / "tests")],
+            capture_output=True, text=True, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        root = result.stdout.strip()
+        self.assertTrue(root, "the subprocess did not report its scratch root")
+        self.assertFalse(os.path.exists(root),
+                         "the scratch root must be removed at ordinary "
+                         "interpreter exit")
+
+    def test_a_case_without_an_outcome_keeps_its_directory(self):
+        class _Bare:
+            pass
+
+        self.assertTrue(scratch.case_failed(_Bare()),
+                        "a case with no _outcome must be treated as failed: "
+                        "losing a diagnostic artifact is worse than leaving a "
+                        "directory")
+
+    def test_a_case_with_no_result_keeps_its_directory(self):
+        class _Outcome:
+            result = None
+
+        class _Case:
+            _outcome = _Outcome()
+
+        self.assertTrue(scratch.case_failed(_Case()),
+                        "a case whose outcome has no result must be treated as "
+                        "failed")
 
 
 class Fat32HarnessIsolationTest(unittest.TestCase):

@@ -28,21 +28,40 @@ Three kinds of artifact live in a FAT32 test class, and they need different scop
    future refactor would).  So each class gets its own directory inside the
    per-process root, and each *case* gets its own directory inside that.
 
-3. **Diagnostic artifacts on failure.**  If a run fails, the images are the only way
-   to see what happened.  Deleting them eagerly would destroy the evidence, so the
-   root is kept when a test fails and removed when everything passed.  Setting
-   ``PC5_KEEP_TEST_SCRATCH=1`` keeps it unconditionally.
+3. **Diagnostic artifacts on failure.**  If a case fails, the images are the only
+   way to see what happened.  Deleting them eagerly would destroy the evidence, so
+   a failing case keeps its own directory and a passing case removes it.  Setting
+   ``PC5_KEEP_TEST_SCRATCH=1`` keeps everything unconditionally.
 
 Nothing here touches the repository working tree, so a stray directory can never be
 committed, and no test can be affected by another checkout's leftovers.
 
 Cleanup reliability
 -------------------
-``mkdtemp`` is removed by ``unittest``'s ``addClassCleanup``, which runs even when
-``setUpClass`` raises part-way through or a test raises.  A process that is
-``SIGKILL``ed leaves its directory behind by design (nothing can clean up after a
-kill); those directories are named ``pc5-tests-<pid>-*`` under the system temp dir
-and are harmless, and ``atexit`` handles the ordinary exit path.
+``addClassCleanup`` runs even when ``setUpClass`` raises part-way through, and it
+runs after every case in the class has finished, so it is the right boundary for
+the class tree.  Per-case cleanups run inside ``TestCase.run`` after the test body
+and after a failed assertion.
+
+Whether a case *failed* has to be read from the ``TestResult``, not from
+``_Outcome.success``: ``doCleanups`` re-enters ``testPartExecutor`` for every
+cleanup function, and that context manager resets ``success`` to ``True`` on
+entry, so ``success`` is always ``True`` while a cleanup body executes.  Measured
+on the project interpreter — see the addendum in
+``FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md``.
+
+A process that is ``SIGKILL``ed leaves its directory behind by design (nothing can
+clean up after a kill); those directories are named ``pc5-tests-<pid>-*`` under
+the system temp dir and are harmless, and ``atexit`` handles the ordinary exit
+path.
+
+The layout is worth stating exactly, because the directory names mislead.  The
+per-process root has no fixed shape; each class adds a tree under its own name,
+and that tree is *itself* a ``case-*`` directory holding the compiled driver -
+that is the path ``drop_class_tree`` receives.  Per-case images live deeper
+still, under ``<module>/<Class>/<test_name>/case-*``.  So the class-level
+``case-*`` and the case-level ``case-*`` are different things: the first is
+removed at the class boundary, the second survives when its case failed.
 
 This module deliberately uses only the standard library, because the defect it
 fixes is about file paths and does not justify a new dependency.
@@ -59,7 +78,6 @@ import tempfile
 KEEP_ENV = "PC5_KEEP_TEST_SCRATCH"
 
 _ROOTS: dict[int, str] = {}
-_PROCESS_FAILURE = [False]
 
 
 def _keep_requested() -> bool:
@@ -102,58 +120,100 @@ def directory(*parts: str, prefix: str = "") -> str:
     return tempfile.mkdtemp(prefix=prefix or "case-", dir=parent)
 
 
+def _outcome_owner(test):
+    """The ``TestCase`` a result entry is about.
+
+    A failed ``subTest`` is reported as a ``_SubTest`` whose ``test_case`` is the
+    case the caller knows; a plain failure is reported as the case itself.
+    """
+    return getattr(test, "test_case", test)
+
+
+def case_failed(case) -> bool:
+    """Whether ``case`` is recorded as failed, errored or unexpectedly successful.
+
+    Read from the ``TestResult`` that ``unittest`` attached to the case as
+    ``_outcome.result``.  This is the only signal that is both correct at cleanup
+    time and visible there:
+
+    * ``_Outcome.success`` is **always** ``True`` inside a cleanup body, because
+      ``doCleanups`` wraps each cleanup in ``testPartExecutor``, which sets
+      ``success = True`` on entry.  Measured, not assumed.
+    * ``_Outcome`` has no ``errors``/``failures`` attributes at all.
+
+    The result lists are appended to *before* ``doCleanups`` runs, so scanning
+    them is correct at every point a cleanup can observe.  Anything unusual — no
+    ``_outcome``, no ``result``, a result that is not the standard one — keeps the
+    tree, because losing a diagnostic artifact is worse than leaving a directory.
+    """
+    outcome = getattr(case, "_outcome", None)
+    result = getattr(outcome, "result", None) if outcome is not None else None
+    if result is None:
+        return True
+    for attribute in ("failures", "errors", "unexpectedSuccesses"):
+        try:
+            entries = getattr(result, attribute) or ()
+        except Exception:  # a non-standard result object: keep the evidence
+            return True
+        for entry in entries:
+            test = entry[0] if isinstance(entry, tuple) and entry else entry
+            if _outcome_owner(test) is case:
+                return True
+    return False
+
+
 def register_cleanup(case, path: str, *, keep_on_failure: bool = True) -> None:
     """Arrange for ``path`` to be removed when ``case`` (a TestCase) finishes.
 
     ``unittest`` runs ``doCleanups`` after ``tearDown`` and after a failed
     assertion, so this is reached on every outcome except a hard kill.
 
-    With ``keep_on_failure`` the tree survives when the test did not pass, because
-    the images are the diagnostic artifact.  That is decided from
-    ``case._outcome``, which is how ``unittest`` itself records results; if the
-    attribute is absent the tree is kept (failing safe towards evidence).
+    With ``keep_on_failure`` the directory survives when *this* case did not pass,
+    because the images are the diagnostic artifact.  Only this case's own result
+    counts, so one failing test never retains another test's directory.
     """
     def _cleanup():
-        outcome = getattr(case, "_outcome", None)
-        failed = True
-        if outcome is not None:
-            try:
-                failed = any(
-                    error is not None
-                    for _, error in outcome.errors + outcome.failures
-                )
-            except AttributeError:
-                failed = True
-        if failed:
-            note_failure()
-            if keep_on_failure:
-                return
+        if keep_on_failure and case_failed(case):
+            return
         _drop(path)
+        if not _keep_requested():
+            _prune_empty_parents(path, root())
 
     case.addCleanup(_cleanup)
 
 
-def drop_class_tree(path: str, *, case=None) -> None:
-    """Remove a class-level tree unless a test in it failed.
+def _prune_empty_parents(path: str, stop: str) -> None:
+    """Remove ``path``'s now-empty parent directories, up to but not including ``stop``.
 
-    Registered with ``addClassCleanup``.  It cannot see individual results the way
-    a per-case cleanup can, so the safe default is to keep the tree whenever the
-    process has recorded any failure at all; a passing run still cleans up, and
-    ``PC5_KEEP_TEST_SCRATCH=1`` overrides either way.
+    Containment is compared on whole path components: a plain ``startswith``
+    would treat ``/tmp/pc5-tests-1-abcdef`` as inside ``/tmp/pc5-tests-1-abc``.
+    """
+    parent = os.path.dirname(os.path.abspath(path))
+    stop = os.path.abspath(stop)
+    while parent != stop and parent.startswith(stop + os.sep):
+        try:
+            os.rmdir(parent)  # only succeeds when empty
+        except OSError:
+            return
+        parent = os.path.dirname(parent)
+
+
+def drop_class_tree(path: str, *, case=None) -> None:
+    """Remove a class-level tree at the class boundary.
+
+    Registered with ``addClassCleanup``, which ``unittest`` runs after the last
+    case in the class and also when ``setUpClass`` raises part-way through.
+
+    ``path`` is the class's own ``case-*`` directory and holds the compiled
+    driver, not the per-case images: those live deeper, under
+    ``<module>/<Class>/<test_name>/case-*``, and are removed or retained by their
+    own case cleanups.  Removing this tree therefore cannot destroy a failed
+    case's artifacts.  ``PC5_KEEP_TEST_SCRATCH=1`` keeps it.
     """
     if _keep_requested():
         return
-    if _PROCESS_FAILURE[0]:
-        return
     shutil.rmtree(path, ignore_errors=True)
-
-
-def note_failure() -> None:
-    """Record that at least one test failed, so class trees are preserved.
-
-    Called from the per-case cleanup of every case that uses a scratch tree.
-    """
-    _PROCESS_FAILURE[0] = True
+    _prune_empty_parents(path, root())
 
 
 def describe(path: str) -> str:

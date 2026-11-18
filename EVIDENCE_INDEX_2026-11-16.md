@@ -129,15 +129,38 @@ which is what `ETXTBSY` was about), and mutable run files are per **case**. A
 failing case keeps its directory as the diagnostic artifact; a passing run cleans
 up; `PC5_KEEP_TEST_SCRATCH=1` keeps everything.
 
-`tests/test_scratch_isolation.py` (14 tests) binds this, including a control that
-reproduces the old scheme in a throwaway tree and **requires it to collide**, plus
-its inverse, which **requires the isolated scheme not to**. Both were verified to
-fail in the wrong configuration, so the control is not vacuous.
+**Correction (see report §10):** as first landed, the second half of that
+sentence was false. The keep/remove decision read `_outcome.errors` and
+`_outcome.failures`, which do not exist on `unittest.case._Outcome`, so the
+`AttributeError` branch made every case "failed" and every directory was kept.
+A fully passing 88-test run left 82 case directories and 84 class trees behind;
+only `atexit` removed them, at process exit. `outcome.success` is not the fix
+either - `doCleanups` re-enters `testPartExecutor`, which resets it to `True`
+before every cleanup, so it reads `True` even after a failure.
+`scratch.case_failed()` now scans `result.failures` / `.errors` /
+`.unexpectedSuccesses` (unwrapping `_SubTest.test_case`) and attributes failures
+per case, and the process-wide `note_failure()` flag is gone. Measured after the
+fix, with the same passing 88 tests: **0** case directories, **0** class trees,
+**0** files. With one failure injected into a 17-case class, exactly that case's
+directory survives (3 files).
+
+`tests/test_scratch_isolation.py` (now **23** tests) binds this, including a
+control that reproduces the old scheme in a throwaway tree and **requires it to
+collide**, plus its inverse, which **requires the isolated scheme not to**. Both
+were verified to fail in the wrong configuration, so the control is not vacuous.
+The earlier 14 included two cleanup tests that faked `_outcome` with an object
+exposing `errors`/`failures` - a double that never existed in the real runner,
+so they passed while the code was broken. Those are replaced by
+`CleanupLifecycleTest` (11 tests) driving real `TestCases` through a real
+`TextTestRunner`. Against the old `scratch.py` as a control, 7 of the 11 fail.
 
 Measured: two concurrent `make -s check` runs → 727 OK / 727 OK, 0 failures
 (previously 40+ failures); four concurrent instances of the affected module →
 50 OK ×4. **This is not a general proof of concurrency safety** — see
-`FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md` §9.5.
+`FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md` §9.5. After the cleanup fix the full
+suite is 736 tests (727 + 9 net new); a single `unicorn`-enabled run and a
+concurrent pair of the two FAT32 modules (88 tests each, 0 scratch roots left
+after either exits) both pass.
 
 ## 6. Known defects and limitations carried forward
 
