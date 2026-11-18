@@ -262,12 +262,24 @@ $(ISO): $(BUILD)/loader.bin $(BUILD)/mbr.bin $(BUILD)/kernel.bin $(BUILD)/efi.im
 	  --output $(ISO) \
 	  --info $(BUILD)/build-info.json
 
+# The unit binary is written to a path private to this invocation and to this
+# process.  A single shared name under build/ made two concurrent `make check`
+# runs collide: one links the binary while the other executes it, which Linux
+# refuses with ETXTBSY ("Text file busy") and make reports as exit 127.  The
+# binary is therefore created under a name nothing else holds and removed by a
+# trap, so no other target or run can observe a half-written or in-use file.
+#
+# `mktemp` rather than a $$-based name: the shell's PID is not visible to make
+# for expansion, and a name derived at parse time is shared by every invocation
+# of that make process.  mktemp guarantees a name nothing else holds.
 unit: | $(BUILD)
-	$(CC) -std=gnu11 -O1 -Wall -Wextra -Wno-unused-parameter -ffreestanding \
-	  -fno-builtin -fno-stack-protector -DPC5_HOST_TEST -Ikernel/include \
-	  -o $(BUILD)/kernel-unit tests/kernel_unit.c kernel/lib.c kernel/mem.c kernel/chain.c \
-	  kernel/block.c kernel/sha256.c kernel/part.c kernel/fat32.c
-	$(BUILD)/kernel-unit
+	@unit_bin=$$(mktemp $(BUILD)/kernel-unit.XXXXXXXX); \
+	 trap 'rm -f "$$unit_bin"' EXIT; \
+	 $(CC) -std=gnu11 -O1 -Wall -Wextra -Wno-unused-parameter -ffreestanding \
+	   -fno-builtin -fno-stack-protector -DPC5_HOST_TEST -Ikernel/include \
+	   -o "$$unit_bin" tests/kernel_unit.c kernel/lib.c kernel/mem.c kernel/chain.c \
+	   kernel/block.c kernel/sha256.c kernel/part.c kernel/fat32.c && \
+	 "$$unit_bin"
 
 roadmap:
 	python3 tools/roadmap.py check

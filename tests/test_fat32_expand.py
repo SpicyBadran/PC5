@@ -39,6 +39,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys  # noqa: E402
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 
+import scratch  # noqa: E402  (sibling helper, after sys.path)
+
 import fat32_images  # noqa: E402
 
 SOURCES = ["tests/fat32_write_check.c", "kernel/fat32.c", "kernel/sha256.c",
@@ -143,14 +145,29 @@ def allowed_change_sectors(g: dict, extra_chains=()) -> set[int]:
 
 
 class ExpandDriver(unittest.TestCase):
-    """Builds the host driver once; each test works on its own image."""
+    """Builds the host driver once; each test works in its own directory.
+
+    Isolation model (see tests/scratch.py for the reasoning):
+
+    * the compiled driver is per *process* - immutable and safe to execute
+      concurrently, but rebuilding it while another process runs it fails with
+      ETXTBSY, so it must never be shared between processes;
+    * mutable run files (in.img, out.img, lba.txt) are per *case* - the three
+      were previously fixed names under build/test/m1i, which let two suite
+      processes overwrite each other's images mid-run;
+    * a failing case keeps its directory as the diagnostic artifact; a passing
+      run cleans up.
+
+    The previous implementation used the fixed path build/test/m1i for
+    everything, which made concurrent runs corrupt each other.
+    """
 
     @classmethod
     def setUpClass(cls):
         if not shutil.which("gcc"):
             raise unittest.SkipTest("gcc is required to build the host driver")
-        cls.tmp = os.path.join(ROOT, "build", "test", "m1i")
-        os.makedirs(cls.tmp, exist_ok=True)
+        cls.tmp = scratch.directory("fat32_expand", cls.__name__)
+        cls.addClassCleanup(scratch.drop_class_tree, cls.tmp)
         cls.binary = os.path.join(cls.tmp, "fat32-write-check")
         cmd = ["gcc", "-std=gnu11", "-O1", "-Wall", "-Wextra",
                "-Wno-unused-parameter", "-ffreestanding", "-fno-builtin",
@@ -164,9 +181,17 @@ class ExpandDriver(unittest.TestCase):
         """Run one operation; return (report fields, resulting image, exit code)."""
         if not os.path.exists(self.binary):
             self.fail("driver was not built:\n" + self.build.stderr[-3000:])
-        src = os.path.join(self.tmp, "in.img")
-        dst = os.path.join(self.tmp, "out.img")
-        lba_log = os.path.join(self.tmp, "lba.txt")
+        # One directory per case, created lazily so a case that calls run_op
+        # several times reuses it and one that never calls it allocates nothing.
+        work = getattr(self, "_work", None)
+        if work is None:
+            work = scratch.directory("fat32_expand", type(self).__name__,
+                                     self._testMethodName)
+            self._work = work
+            scratch.register_cleanup(self, work)
+        src = os.path.join(work, "in.img")
+        dst = os.path.join(work, "out.img")
+        lba_log = os.path.join(work, "lba.txt")
         for p in (dst, lba_log):
             if os.path.exists(p):
                 os.unlink(p)
