@@ -342,12 +342,19 @@ class IdentityHierarchyTests(unittest.TestCase):
         self.assertEqual(self.pdpt(4), 0, "PDPT[4] must be zero")
         for index in range(5, 512):
             self.assertEqual(self.pdpt(index), 0, f"PDPT[{index}] must be zero")
-        # The PD array is four pages of 512 entries; 2048 of them carry the map,
-        # and every remaining entry must be zero rather than leftover firmware data.
-        for index in range(2048, 4 * 512):
+        # The PD array is four pages of 512 entries.  At the full span all 2048
+        # carry the map, so nothing is left over *here* - an `unused` bound has to
+        # be derived from what this build actually mapped, not from a constant, or
+        # the loop is empty and asserts nothing.  The short-span case, where the
+        # tail is non-empty and must still be zero, is covered by
+        # ShortSpanInitialisationTests.
+        unused = (PT_PAGES - 2) * 512 - self.mapped
+        for index in range(self.mapped, (PT_PAGES - 2) * 512):
             entry = self.block.entry(index)
             if entry:
                 self.fail(f"PD entry {index} is {entry:#x}, expected 0")
+        self.assertEqual(unused, 0,
+                         "the full span should leave no unused PD entry")
         self.assertTrue(self.block.guards_intact())
 
     # --------------------------------------- translation at every 1 GiB ----
@@ -448,3 +455,336 @@ class IdentityHierarchyTests(unittest.TestCase):
             self.assertEqual(self.lib.pc5_pt_build_identity(pt, span), 0,
                              f"pt={pt:#x} span={span:#x} must be refused")
             self.assertTrue(fresh.guards_intact())
+
+
+class ShortSpanInitialisationTests(unittest.TestCase):
+    """Every page of the block must be initialised deterministically for *any* span.
+
+    The builder documents that "every page of the block is zeroed by this
+    function", and it accepts spans shorter than the full 4 GiB.  The production
+    loader only ever passes PC5_PT_SPAN, so a short-span defect is invisible to
+    the rest of this file: `test_every_active_structure_is_zero_beyond_the_span`
+    iterates `range(2048, 4 * 512)`, which is empty because 2048 PD entries are
+    exactly what the full span consumes.  A builder that cleared PML4 and the
+    PDPT correctly but left the unused PD tail stale therefore passed all of it.
+
+    These tests exercise the documented API rather than the current caller's
+    preferred configuration.  Two details keep them honest:
+
+      * assertions are at *word* granularity.  A present leaf encodes its physical
+        address, so with a block at 0xAA000000 the payload contains 0xAA bytes; a
+        byte-scan for the canary would report a false positive on a correct entry.
+      * "deterministic" is tested as span-invariance.  Whatever the builder writes
+        into a slot must depend only on the span, never on what was in the memory
+        beforehand - so a block pre-filled with one pattern and a block pre-filled
+        with another must come out identical.
+    """
+
+    SPANS = (
+        1 << 30,                      # exactly one 1 GiB region
+        3 << 30,                      # three regions: 512 unused PD entries
+        (2 << 20) + 0x1000,           # rounds down to a single 2 MiB page
+        (4 << 30) - 0x1000,           # rounds down to 2047 entries, not 2048
+    )
+
+    def setUp(self):
+        self.lib = library()
+
+    # ------------------------------------------------------------ helpers ---
+    @staticmethod
+    def poisoned_block(pattern):
+        """A block whose six pages are pre-filled with `pattern`."""
+        block = Block()
+        ctypes.memset(block.base, pattern, PT_PAGES * PAGE)
+        return block
+
+    def entries(self, block):
+        """Every one of the 2048 PD entries, read as words."""
+        return [block.entry(index) for index in range(PT_PAGES - 2)]
+
+    def pdpt_used_for(self, span):
+        total = span // TWO_MIB
+        return (total + 511) // 512
+
+    def total_for(self, span):
+        return span // TWO_MIB
+
+    # ------------------------------------------- unused PD tail is zero ----
+    def test_unused_pd_entries_are_zero_for_every_short_span(self):
+        """The defect: a stale PD tail below the full span must be cleared.
+
+        This is the assertion the old `range(2048, 4 * 512)` loop meant to make
+        and could not: with a short span the tail is non-empty, so the loop
+        actually runs.
+        """
+        for span in self.SPANS:
+            total = self.total_for(span)
+            with self.subTest(span=hex(span), unused=2048 - total):
+                block = self.poisoned_block(CANARY)
+                self.assertEqual(
+                    self.lib.pc5_pt_build_identity(block.base, span), total,
+                    f"span {span:#x}: builder returned the wrong page count")
+                for index in range(total, 2048):
+                    self.assertEqual(
+                        block.entry(index), 0,
+                        f"span {span:#x}: PD entry {index} is "
+                        f"{block.entry(index):#x}, expected 0 - a stale firmware "
+                        f"value survived in an unused page-directory entry")
+
+    def test_a_poisoned_tail_is_cleared_not_merely_ignored(self):
+        """A tail pre-filled with present-looking entries must be cleared too.
+
+        Poisoning with 0xAA makes every tail byte non-zero but leaves the present
+        bit clear, so a builder that "skips" the tail still looks right to a
+        check that only tests the present bit.  Filling the tail with
+        present|writable|2 MiB leaves is the harder case: an installation that
+        leaked those entries would claim mappings above the configured span.
+        """
+        leaked = (1 << 7) | 0x3
+        for span in self.SPANS:
+            total = self.total_for(span)
+            with self.subTest(span=hex(span)):
+                block = Block()
+                ctypes.memset(block.base, 0, PT_PAGES * PAGE)
+                for index in range(total, 2048):
+                    ctypes.c_ulonglong.from_address(
+                        block.base + PD_BASE_OFFSET + index * 8).value = leaked
+                self.lib.pc5_pt_build_identity(block.base, span)
+                for index in range(total, 2048):
+                    self.assertEqual(
+                        block.entry(index), 0,
+                        f"span {span:#x}: PD entry {index} still claims a mapping "
+                        f"above the configured span")
+                # ... and the addresses those entries would have described must
+                # not translate, which is the property that matters.
+                probe = ctypes.c_ulonglong(0)
+                self.assertEqual(
+                    self.lib.pc5_pt_lookup(block.base, span, ctypes.byref(probe)), 0,
+                    f"span {span:#x}: the first byte above the span translates")
+
+    # --------------------------------------- unused PDPT entries are zero --
+    def test_unused_pdpt_entries_are_zero_for_every_short_span(self):
+        for span in self.SPANS:
+            used = self.pdpt_used_for(span)
+            with self.subTest(span=hex(span), pdpt_used=used):
+                block = self.poisoned_block(CANARY)
+                self.lib.pc5_pt_build_identity(block.base, span)
+                for index in range(used, 512):
+                    self.assertEqual(
+                        ctypes.c_ulonglong.from_address(
+                            block.base + PAGE + index * 8).value, 0,
+                        f"span {span:#x}: PDPT[{index}] is not zero; only "
+                        f"{used} entries belong to this span")
+
+    def test_every_installed_pdpt_entry_points_inside_the_block(self):
+        """No PDPT entry may reference a page outside the six-page block."""
+        low = None
+        high = None
+        for span in self.SPANS:
+            used = self.pdpt_used_for(span)
+            with self.subTest(span=hex(span)):
+                block = self.poisoned_block(CANARY)
+                self.lib.pc5_pt_build_identity(block.base, span)
+                for index in range(used):
+                    entry = ctypes.c_ulonglong.from_address(
+                        block.base + PAGE + index * 8).value
+                    self.assertTrue(entry & 1, f"PDPT[{index}] not present")
+                    self.assertFalse(entry & (1 << 7),
+                                     f"PDPT[{index}] must be a table pointer")
+                    target = entry & 0x000FFFFFFFFFF000
+                    self.assertGreaterEqual(
+                        target, block.base + PD_BASE_OFFSET,
+                        f"PDPT[{index}] points below the PD array")
+                    self.assertLess(
+                        target, block.base + PT_PAGES * PAGE,
+                        f"PDPT[{index}] points past the end of the block")
+
+    # ------------------------------------------ reachable leaves are right --
+    def test_every_reachable_leaf_is_initialised_for_every_short_span(self):
+        for span in self.SPANS:
+            total = self.total_for(span)
+            with self.subTest(span=hex(span)):
+                block = self.poisoned_block(CANARY)
+                self.assertEqual(
+                    self.lib.pc5_pt_build_identity(block.base, span), total)
+                for index in range(total):
+                    entry = block.entry(index)
+                    self.assertEqual(
+                        entry, (index * TWO_MIB) | 0x83,
+                        f"span {span:#x}: reachable leaf {index} is {entry:#x}, "
+                        f"expected {(index * TWO_MIB) | 0x83:#x}")
+
+    def test_lookup_rejects_addresses_outside_the_configured_span(self):
+        for span in self.SPANS:
+            # The builder rounds the span down to whole 2 MiB pages, so the
+            # effective boundary is the rounded span, not the requested one.
+            effective = (span // TWO_MIB) * TWO_MIB
+            with self.subTest(span=hex(span), effective=hex(effective)):
+                block = self.poisoned_block(CANARY)
+                self.lib.pc5_pt_build_identity(block.base, span)
+                probe = ctypes.c_ulonglong(0)
+                self.assertEqual(
+                    self.lib.pc5_pt_lookup(block.base, effective - 1,
+                                           ctypes.byref(probe)),
+                    1, f"span {span:#x}: the last mapped byte must translate")
+                self.assertEqual(
+                    self.lib.pc5_pt_lookup(block.base, effective,
+                                           ctypes.byref(probe)),
+                    0, f"span {span:#x}: the first byte past the span translates")
+                self.assertEqual(
+                    self.lib.pc5_pt_lookup(block.base, effective + TWO_MIB,
+                                           ctypes.byref(probe)),
+                    0, f"span {span:#x}: a page past the span translates")
+
+    # -------------------------------- all six pages initialised, no escape --
+    def test_all_six_pages_are_initialised_deterministically(self):
+        """Same span, different prior contents -> identical block.
+
+        This is the property that makes "every page is zeroed" testable without
+        guessing which bytes a correct entry happens to contain.
+        """
+        for span in self.SPANS + (SPAN,):
+            with self.subTest(span=hex(span)):
+                # One block, rewritten.  Separate blocks sit at different
+                # addresses, so their pointer entries legitimately differ; the
+                # property under test is that the *same* block comes out the same
+                # whatever was in it beforehand.
+                block = Block()
+                results = {}
+                for name, pattern in (("0xAA-filled", CANARY),
+                                      ("0x5A-filled", 0x5A),
+                                      ("zero-filled", 0x00)):
+                    ctypes.memset(block.base, pattern, PT_PAGES * PAGE)
+                    self.lib.pc5_pt_build_identity(block.base, span)
+                    results[name] = ctypes.string_at(block.base, PT_PAGES * PAGE)
+                reference = results["0xAA-filled"]
+                for name in ("0x5A-filled", "zero-filled"):
+                    self.assertEqual(
+                        results[name], reference,
+                        f"span {span:#x}: the {name} block produced different "
+                        f"bytes; a page is not being fully initialised")
+
+    def test_no_write_escapes_the_six_page_block(self):
+        for span in self.SPANS + (SPAN,):
+            with self.subTest(span=hex(span)):
+                block = self.poisoned_block(CANARY)
+                self.lib.pc5_pt_build_identity(block.base, span)
+                self.assertTrue(block.guards_intact(),
+                                f"span {span:#x}: a guard page was written")
+
+    def test_invalid_spans_leave_the_block_completely_untouched(self):
+        """A refused span must not partially initialise the block."""
+        for span in (0, SPAN + 1, SPAN * 2, TWO_MIB - 1):
+            with self.subTest(span=hex(span)):
+                block = self.poisoned_block(CANARY)
+                before = ctypes.string_at(block.base, PT_PAGES * PAGE)
+                self.assertEqual(self.lib.pc5_pt_build_identity(block.base, span), 0)
+                after = ctypes.string_at(block.base, PT_PAGES * PAGE)
+                self.assertEqual(after, before,
+                                 f"span {span:#x} was refused but still wrote to "
+                                 f"the block")
+                self.assertTrue(block.guards_intact())
+
+    # ------------------------------------- the full production map is intact --
+    def test_the_full_production_span_still_maps_everything(self):
+        block = self.poisoned_block(CANARY)
+        self.assertEqual(self.lib.pc5_pt_build_identity(block.base, SPAN), 2048)
+        for index in range(2048):
+            self.assertEqual(block.entry(index), (index * TWO_MIB) | 0x83)
+        for region in range(4):
+            probe = ctypes.c_ulonglong(0)
+            self.assertEqual(
+                self.lib.pc5_pt_lookup(block.base, region * (1 << 30),
+                                       ctypes.byref(probe)), 1,
+                f"region {region} is not reachable through the hierarchy")
+        self.assertTrue(block.guards_intact())
+
+
+class UnusedPdTailMutationTests(unittest.TestCase):
+    """The short-span tests must actually be able to fail.
+
+    `test_unused_pd_entries_are_zero_for_every_short_span` is the replacement for
+    a vacuously-empty loop, so it is not enough for it to pass against the real
+    builder - it has to fail against a builder that leaves only the unused PD
+    tail stale.  This test compiles that mutant and runs the assertions above
+    against it in a subprocess, so a future refactor cannot quietly turn the
+    discrimination test back into a no-op.
+
+    The mutant keeps PML4 and the PDPT structurally correct, so it is caught by
+    the tail assertion alone and cannot be mistaken for the D1 defect.
+    """
+
+    ORIGINAL = (
+        "    /* Clear all six pages: PML4, the whole PDPT, and every PD entry. */\n"
+        "    for (unsigned i = 0; i < PC5_PT_PAGES * PC5_PT_ENTRIES_PER_PAGE; i++)\n"
+        "        store(pt + (u64)i * 8ull, 0);\n"
+    )
+    MUTANT = (
+        "    /* MUTANT: PML4 and the whole PDPT are cleared, but only the PD\n"
+        "     * entries this span uses.  The unused tail keeps whatever was in\n"
+        "     * memory, which is the stale-tail defect. */\n"
+        "    for (unsigned i = 0; i < PC5_PT_ENTRIES_PER_PAGE; i++) {\n"
+        "        store(pc5_pt_pml4(pt) + (u64)i * 8ull, 0);\n"
+        "        store(pc5_pt_pdpt(pt) + (u64)i * 8ull, 0);\n"
+        "    }\n"
+        "    for (unsigned long i = 0; i < total; i++)\n"
+        "        store(pc5_pt_pd_base(pt) + i * 8ull, 0);\n"
+    )
+
+    def test_the_mutant_anchor_is_present_and_unique(self):
+        source = SOURCE.read_text(encoding="utf-8")
+        self.assertEqual(
+            source.count(self.ORIGINAL), 1,
+            "the builder's whole-block zeroing line has changed shape; update "
+            "UnusedPdTailMutationTests.MUTANT so the blind spot stays guarded")
+
+    def test_stale_pd_tail_is_detected(self):
+        import tempfile
+
+        directory = pathlib.Path(tempfile.mkdtemp(prefix="pc5-pd-tail-mutant-"))
+        mutant = directory / "pagetables.c"
+        source = SOURCE.read_text(encoding="utf-8")
+        mutant.write_text(source.replace(self.ORIGINAL, self.MUTANT), encoding="utf-8")
+
+        library_path = directory / "libpagetables_mutant.so"
+        build = subprocess.run(
+            ["gcc", "-std=gnu11", "-O2", "-fPIC", "-shared", "-Wall", "-Wextra",
+             "-Werror", "-I", str(SOURCE.parent), str(mutant), "-o", str(library_path)],
+            capture_output=True, text=True)
+        self.assertEqual(build.returncode, 0,
+                         f"the mutant did not compile:\n{build.stderr}")
+
+        lib = ctypes.CDLL(str(library_path))
+        lib.pc5_pt_build_identity.restype = ctypes.c_ulong
+        lib.pc5_pt_build_identity.argtypes = [ctypes.c_ulonglong, ctypes.c_ulonglong]
+
+        # PML4 and PDPT stay correct in this mutant, so a short span still builds
+        # and still reports the right count.  Only the tail is wrong.
+        for span in ShortSpanInitialisationTests.SPANS:
+            total = span // TWO_MIB
+            with self.subTest(span=hex(span)):
+                block = Block()
+                ctypes.memset(block.base, CANARY, PT_PAGES * PAGE)
+                self.assertEqual(
+                    lib.pc5_pt_build_identity(block.base, span), total,
+                    "precondition: the mutant still reports the right page count")
+                stale = [index for index in range(total, 2048)
+                         if block.entry(index) != 0]
+                self.assertTrue(
+                    stale,
+                    f"span {span:#x}: the mutant left no stale tail, so this "
+                    f"discrimination test proves nothing")
+                self.assertEqual(
+                    block.entry(stale[0]), CANARY * 0x0101010101010101,
+                    f"span {span:#x}: expected the poisoned value to survive at "
+                    f"PD entry {stale[0]}")
+
+        # And the assertion the suite relies on really does reject it.
+        span = 1 << 30
+        total = span // TWO_MIB
+        block = Block()
+        ctypes.memset(block.base, CANARY, PT_PAGES * PAGE)
+        lib.pc5_pt_build_identity(block.base, span)
+        with self.assertRaises(AssertionError):
+            for index in range(total, 2048):
+                self.assertEqual(block.entry(index), 0)
