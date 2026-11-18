@@ -2674,7 +2674,7 @@ that cannot run, which is why this phase added a path instead of flipping flags.
 | Piece | File | Purpose |
 |---|---|---|
 | 64-bit EFI loader | `boot/uefi64/bootx64.S`, `boot/uefi64/uefi64_main.c` | stays in long mode, reads `KERNEL64.BIN` from the ESP, builds PC5 page tables, `ExitBootServices` with retry, jumps to the kernel |
-| page tables | `boot/uefi64/pagetables.c/.h` | identity map below 4 GiB, 2 MiB pages, 6 pages total, uncached framebuffer marking, lookup helper *(this row described the intent; the map covered only the first 1 GiB until `de9c6a3` — see §27)* |
+| page tables | `boot/uefi64/pagetables.c/.h` | identity map below 4 GiB, 2 MiB pages, 6 pages total, uncached framebuffer marking, lookup helper *(this row described the intent; the map covered only the first 1 GiB until `ed9c6a3` — see §27)* |
 | boot protocol | `kernel64/include/pc5_boot64.h` | `struct pc5_boot64`, version 1, 112 bytes, magic + size + flags, physical pointers below 4 GiB |
 | 64-bit kernel | `kernel64/start.S`, `kernel64/main.c`, `serial64.c`, `cpu64.c`, `kernel64.ld` | proves its own execution environment, reports CPU features, prints the marker last |
 | handover record | `boot/uefi64/handover64.h` | `PC5HND02`: protocol version, boot-info size, page-table pages, identity span |
@@ -2926,7 +2926,7 @@ on the first write to an unmapped framebuffer.
 
 ### 27.3 The correction
 
-Fixed in `de9c6a3` on `arena/17f0c4f8-pc5`:
+Fixed in `ed9c6a3` on `arena/17f0c4f8-pc5`:
 
 - one PDPT entry per gigabyte, each pointing at its own PD page, with the count
   derived from the span so a shorter map installs fewer entries and every

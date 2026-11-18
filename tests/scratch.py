@@ -88,6 +88,7 @@ import atexit
 import os
 import shutil
 import tempfile
+from pathlib import Path
 
 #: Set to any non-empty value to keep scratch directories even when tests pass.
 KEEP_ENV = "PC5_KEEP_TEST_SCRATCH"
@@ -129,10 +130,76 @@ def directory(*parts: str, prefix: str = "") -> str:
     ``parts`` name the owner (typically the test module and class) so a leftover
     directory says what produced it.  The returned directory is unique, so callers
     may use fixed filenames inside it without colliding with anything else.
+
+    Every part is a single path component, and the result is guaranteed to be
+    inside :func:`root`.  Without that, ``directory("..", "elsewhere")`` built a
+    path outside the root, and because cleanup and ``atexit`` remove only the root,
+    the escaped directory survived the run: a leak that no test would report and
+    that ``PC5_KEEP_TEST_SCRATCH`` could not account for.  Containment is checked
+    on *resolved* paths, not string prefixes -- ``/tmp/pc5-tests-1-abc`` is a prefix
+    of ``/tmp/pc5-tests-1-abcdef``, and a symlinked component would defeat a prefix
+    test while still escaping.
     """
-    parent = os.path.join(root(), *parts) if parts else root()
+    base = root()
+    safe = [_component(part) for part in parts]
+    parent = os.path.join(base, *safe) if safe else base
+
+    # Before creating anything: a component here may be a pre-existing symlink
+    # pointing out of the root, and makedirs must not be allowed to follow it.
+    _require_within(base, parent)
     os.makedirs(parent, exist_ok=True)
-    return tempfile.mkdtemp(prefix=prefix or "case-", dir=parent)
+    # Again after creation, so a component created concurrently cannot slip past.
+    _require_within(base, parent)
+
+    path = tempfile.mkdtemp(prefix=prefix or "case-", dir=parent)
+    _require_within(base, path)
+    return path
+
+
+def _component(part) -> str:
+    """Validate one path component of a scratch directory name.
+
+    Rejects everything that would let a part escape ``root``: an empty name, an
+    absolute path, a drive or UNC prefix, an embedded separator, ``.``/``..``, and
+    an embedded NUL.  Comparison is by component, so ``"a..b"`` and ``"..a"`` --
+    ordinary names -- are accepted; only a part that *is* ``..`` is traversal.
+    """
+    if isinstance(part, os.PathLike):
+        part = os.fspath(part)
+    if not isinstance(part, str):  # bytes paths are not supported deliberately
+        raise TypeError(f"scratch directory part must be a path component, not {type(part).__name__}")
+    if not part:
+        raise ValueError("scratch directory part must not be empty")
+    if "\x00" in part:
+        raise ValueError(f"scratch directory part contains a NUL: {part!r}")
+    drive, tail = os.path.splitdrive(part)
+    if drive:
+        raise ValueError(f"scratch directory part must not name a drive: {part!r}")
+    if os.path.isabs(part) or tail.startswith(os.sep):
+        raise ValueError(f"scratch directory part must be relative: {part!r}")
+    separators = {os.sep} | ({os.altsep} if os.altsep else set())
+    if any(separator in part for separator in separators):
+        raise ValueError(f"scratch directory part must be a single component: {part!r}")
+    if part in (os.pardir, os.curdir):
+        raise ValueError(f"scratch directory part must not be {part!r}")
+    return part
+
+
+def _require_within(base: str, path: str) -> None:
+    """Raise unless ``path`` resolves inside ``base``.
+
+    ``Path.resolve()`` collapses ``..`` and follows symlinks, so this answers the
+    question that matters -- where would a write actually land -- rather than
+    whether the string looks right.  ``is_relative_to`` compares whole components,
+    which a ``startswith`` check does not.
+    """
+    resolved_base = Path(base).resolve()
+    resolved = Path(path).resolve()
+    if resolved != resolved_base and not resolved.is_relative_to(resolved_base):
+        raise ValueError(
+            f"scratch directory would escape its root: {path} resolves to "
+            f"{resolved}, outside {resolved_base}"
+        )
 
 
 def _outcome_owner(test):

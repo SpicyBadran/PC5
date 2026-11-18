@@ -109,6 +109,130 @@ class ScratchIsolationTest(unittest.TestCase):
                          "a subprocess reused this process's scratch root")
 
 
+class ContainmentTest(unittest.TestCase):
+    """A scratch directory must never land outside the scratch root.
+
+    Cleanup and ``atexit`` remove the root only.  Before containment was enforced,
+    ``scratch.directory("..", "elsewhere")`` built a path beside the root, created
+    it, and left it there for the lifetime of the machine: no test failed, nothing
+    reported it, and ``PC5_KEEP_TEST_SCRATCH`` could not account for it.  These
+    tests exist because that failure is silent by construction.
+
+    The rejected inputs are checked by kind, not by one lucky string, and the
+    accepted ones are here so that "reject traversal" cannot be satisfied by
+    rejecting everything.
+    """
+
+    def setUp(self):
+        self.root = pathlib.Path(scratch.root()).resolve()
+
+    def assertInsideRoot(self, path):
+        resolved = pathlib.Path(path).resolve()
+        self.assertTrue(
+            resolved.is_relative_to(self.root),
+            f"{path} resolves to {resolved}, outside the scratch root {self.root}")
+
+    def test_traversal_components_are_rejected(self):
+        for parts in (
+            ("..",),
+            ("..", "escaped"),
+            ("..", "..", "escaped"),
+            ("owner", "..", "escaped"),
+            ("../escaped",),
+            ("owner/../../escaped",),
+            ("./relative",),
+            ("",),
+        ):
+            with self.subTest(parts=parts):
+                with self.assertRaises(ValueError, msg=f"{parts!r} was accepted"):
+                    scratch.directory(*parts)
+
+    def test_absolute_and_drive_paths_are_rejected(self):
+        for parts in (("/tmp/absolute",), (os.sep + "absolute",)):
+            with self.subTest(parts=parts):
+                with self.assertRaises(ValueError, msg=f"{parts!r} was accepted"):
+                    scratch.directory(*parts)
+
+    def test_a_nul_component_is_rejected(self):
+        with self.assertRaises(ValueError):
+            scratch.directory("a\x00b")
+
+    def test_non_string_components_are_rejected(self):
+        with self.assertRaises(TypeError):
+            scratch.directory(b"bytes")
+
+    def test_a_rejected_traversal_creates_nothing(self):
+        """The refusal must happen before anything is created on disk."""
+        sibling = self.root.parent / f"{self.root.name}-sibling-probe"
+        self.assertFalse(sibling.exists(), "fixture precondition")
+        try:
+            with self.assertRaises(ValueError):
+                scratch.directory("..", sibling.name)
+        finally:
+            self.assertFalse(
+                sibling.exists(),
+                f"rejecting the traversal still created {sibling}")
+        self.assertFalse(
+            sibling.exists(), "a directory was created outside the scratch root")
+
+    def test_repeated_rejection_never_creates_an_outside_directory(self):
+        """Ten attempts in a row, since a guard that fires once may not fire again."""
+        # Names are unique to this process, so debris left by an unrelated run (or
+        # by a previous negative-control experiment) cannot make this fail.
+        marker = f"escape-probe-{os.getpid()}-"
+        for index in range(10):
+            with self.assertRaises(ValueError):
+                scratch.directory("..", f"{marker}{index}")
+        outside = [p for p in self.root.parent.iterdir()
+                   if p.name.startswith(marker)]
+        self.assertEqual(outside, [], f"escaped directories were created: {outside}")
+
+    def test_nested_owners_still_work(self):
+        path = scratch.directory("containment", "NestedTests", "test_case")
+        self.assertInsideRoot(path)
+        self.assertEqual(
+            pathlib.Path(path).parent.resolve(),
+            (self.root / "containment" / "NestedTests" / "test_case").resolve(),
+            "the legitimate layout must be preserved exactly")
+        self.assertTrue(os.path.isdir(path))
+
+    def test_dotted_names_that_are_not_traversal_still_work(self):
+        """``a..b`` and ``..a`` are ordinary names; only ``..`` is traversal."""
+        for name in ("a..b", "..a", "a.", "with space", "unicode-üñï"):
+            with self.subTest(name=name):
+                path = scratch.directory("containment-dotted", name)
+                self.assertInsideRoot(path)
+
+    def test_every_created_directory_is_inside_the_root(self):
+        made = [scratch.directory("containment", f"case-{i}") for i in range(5)]
+        for path in made:
+            self.assertInsideRoot(path)
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "platform has no symlinks")
+    def test_a_symlinked_component_cannot_be_used_to_escape(self):
+        """Containment is checked on resolved paths, so a symlink cannot defeat it.
+
+        A string-prefix check would pass here: the path *text* starts with the root
+        even though the write lands outside it.
+        """
+        outside = self.root.parent / f"{self.root.name}-symlink-target"
+        outside.mkdir()
+        link = self.root / "linked"
+        try:
+            os.symlink(outside, link, target_is_directory=True)
+        except (OSError, NotImplementedError) as error:
+            self.skipTest(f"cannot create symlinks here: {error}")
+        try:
+            with self.assertRaises(ValueError):
+                scratch.directory("linked", "escaped-through-symlink")
+            self.assertEqual(
+                list(outside.iterdir()), [],
+                "a write escaped the root through a symlinked component")
+        finally:
+            link.unlink(missing_ok=True)
+            shutil.rmtree(outside, ignore_errors=True)
+
+
 class CleanupLifecycleTest(unittest.TestCase):
     """Cleanup behaviour observed through a real runner, not a fake outcome.
 

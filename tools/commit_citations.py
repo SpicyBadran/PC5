@@ -20,10 +20,15 @@ Backticked, and 7 to 40 lowercase hex characters -- the width of an abbreviated 
 full SHA-1. Two deliberate exclusions keep this from firing on things that merely
 look like object ids:
 
-  * **A token of only decimal digits is not a citation.** Build timestamps
-    (`2026111618480500`) and placeholder examples (`123456789`) have exactly that
-    shape and are not object ids. No object id this repository produces is
-    all-digits, so excluding that shape costs nothing.
+  * **A token of only decimal digits is a citation only if it resolves.** Build
+    timestamps (`2026111618480500`) and placeholder examples (`123456789`) have a
+    SHA's shape and are not objects, so they are skipped -- but "all digits" is not
+    by itself evidence of not being an object id. About 3.7% of 7-character object
+    ids are all decimal digits, so skipping that shape unconditionally would have
+    silently stopped checking a real citation roughly one time in 27. The digit
+    rule is therefore an exemption that must be *earned*: a digit-only token is
+    dropped only when Git cannot hand it back, and a digit-only token that does
+    resolve is checked like any other.
   * **Any object type is accepted, not only commits.** Several documents cite tree
     hashes on purpose -- "`merge(PR26, PR27)` = `5b452e2...` = `141f91f^{tree}`" --
     and a tree hash is as much evidence as a commit hash.
@@ -37,11 +42,25 @@ Reachability is a different question, and the documents that cite an old revisio
 answer it themselves, in prose, at the point of citation. Confusing the two would
 force those documents to delete an accurate historical record to satisfy a checker.
 
-    python3 tools/commit_citations.py            # exit 1 if any citation is dead
+Exit status
+-----------
+    0  every citation resolved
+    1  at least one citation names no object
+    2  the check could not be performed -- not a Git repository, no evidence
+       document matched, or no citation was found in any of them
+
+Status 2 exists because "I checked and it passed" and "I could not check" must not
+print the same thing. A gate whose document globbing has quietly stopped matching
+anything would otherwise report success forever, and the protection it was written to
+provide would be absent exactly when it was needed. Neither condition is a
+documentation defect, so neither is reported as one; both simply fail.
+
+    python3 tools/commit_citations.py            # exit 1 dead, 2 uncheckable
 """
 
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
 import sys
@@ -53,7 +72,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CITATION = re.compile(r"`([0-9a-f]{7,40})`")
 
 
-def evidence_documents(root: Path = ROOT) -> tuple[Path, ...]:
+def evidence_documents(root: Path | None = None) -> tuple[Path, ...]:
     """The documents that cite Git objects as evidence.
 
     The root-level dated evidence records, plus the architecture document, which
@@ -62,6 +81,7 @@ def evidence_documents(root: Path = ROOT) -> tuple[Path, ...]:
     revisions that later history rewrote out of existence, and rewriting a log so a
     checker agrees with it would destroy the record rather than repair it.
     """
+    root = ROOT if root is None else root
     documents = sorted(
         path for path in root.glob("*_2026-11-16.md") if path.is_file()
     )
@@ -71,13 +91,23 @@ def evidence_documents(root: Path = ROOT) -> tuple[Path, ...]:
     return tuple(documents)
 
 
-def citations(text: str):
-    """Yield ``(line_number, reference, line)`` for each citation in ``text``."""
+def citations(text: str, *, resolves=None):
+    """Yield ``(line_number, reference, line)`` for each citation in ``text``.
+
+    ``resolves``, when given, is called with a reference and answers whether it
+    names an object. It is what makes the digit-only exemption honest: a token of
+    only decimal digits is dropped only if it does *not* resolve, because a real
+    object id can be all digits. Without the callback the exemption cannot be
+    applied safely, so digit-only tokens are yielded and the caller checks them --
+    the cost of a spurious ``cat-file`` is one subprocess call.
+    """
     for number, line in enumerate(text.splitlines(), start=1):
         for match in CITATION.finditer(line):
             reference = match.group(1)
-            if reference.isdigit():
-                # A timestamp or a placeholder, not an object id.
+            if reference.isdigit() and resolves is not None and not resolves(reference):
+                # A build timestamp or a placeholder. Not an object id, and the
+                # exemption is justified by the failed lookup rather than assumed
+                # from the shape.
                 continue
             yield number, reference, line.strip()
 
@@ -111,18 +141,23 @@ def object_type(root: Path, reference: str) -> str | None:
     return result.stdout.strip() or None
 
 
-def problems(root: Path = ROOT) -> list[str]:
+def problems(root: Path | None = None) -> list[str]:
     """Every citation that does not resolve, as an actionable line per problem."""
+    root = ROOT if root is None else root
     if not is_repository(root):
         return []
     resolved: dict[str, str | None] = {}
+
+    def resolves(reference: str) -> bool:
+        if reference not in resolved:
+            resolved[reference] = object_type(root, reference)
+        return resolved[reference] is not None
+
     found = []
     for document in evidence_documents(root):
         text = document.read_text(encoding="utf-8", errors="ignore")
-        for number, reference, line in citations(text):
-            if reference not in resolved:
-                resolved[reference] = object_type(root, reference)
-            if resolved[reference] is not None:
+        for number, reference, line in citations(text, resolves=resolves):
+            if resolves(reference):
                 continue
             found.append(
                 f"{document.relative_to(root)}:{number}: `{reference}` does not name any "
@@ -131,14 +166,34 @@ def problems(root: Path = ROOT) -> list[str]:
     return found
 
 
+#: Exit status meaning "the check could not be performed", as distinct from
+#: "it ran and found dead citations".
+EXIT_UNCHECKED = 2
+
+
 def main(argv=None) -> int:
-    parser = __import__("argparse").ArgumentParser(
+    parser = argparse.ArgumentParser(
         description="Check that commit references in the evidence documents resolve."
     )
     parser.add_argument("--list", action="store_true", help="print each document checked")
     arguments = parser.parse_args(argv)
 
     documents = evidence_documents()
+
+    # "I checked and everything resolved" and "I could not check" must never print
+    # the same thing. A gate that says OK having examined nothing is worse than no
+    # gate: it converts an absent check into a positive claim. Both conditions below
+    # are therefore failures of the check itself, not documentation defects, and both
+    # exit non-zero.
+    if not is_repository(ROOT):
+        print(f"CITATIONS NOT CHECKED: {ROOT} is not a Git repository, so no commit "
+              f"reference can be resolved. This is not a pass.")
+        return EXIT_UNCHECKED
+    if not documents:
+        print(f"CITATIONS NOT CHECKED: no evidence documents matched in {ROOT}, so "
+              f"nothing was examined. This is not a pass.")
+        return EXIT_UNCHECKED
+
     found = problems()
     if arguments.list:
         for document in documents:
@@ -148,7 +203,21 @@ def main(argv=None) -> int:
     if found:
         print(f"{len(found)} dead commit reference(s) across {len(documents)} documents")
         return 1
-    print(f"CITATIONS OK: every commit reference resolves ({len(documents)} documents)")
+
+    checked = sum(
+        len(list(citations(
+            document.read_text(encoding="utf-8", errors="ignore"),
+            resolves=lambda reference: object_type(ROOT, reference) is not None,
+        )))
+        for document in documents
+    )
+    if checked == 0:
+        print(f"CITATIONS NOT CHECKED: {len(documents)} document(s) contained no "
+              f"citations, so nothing was examined. This is not a pass.")
+        return EXIT_UNCHECKED
+
+    print(f"CITATIONS OK: {checked} commit reference(s) resolve across "
+          f"{len(documents)} documents")
     return 0
 
 
