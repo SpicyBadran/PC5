@@ -18,6 +18,7 @@ import copy
 import importlib.util
 import os
 import re
+import urllib.parse
 import sys
 import unittest
 
@@ -413,7 +414,8 @@ def markdown_links(path):
         target = target.split("#", 1)[0]
         if not target:
             continue
-        yield target
+        # GitHub resolves `[x](a%20b.md)` to the file `a b.md`; so must this.
+        yield urllib.parse.unquote(target)
 
 
 class DocumentationTests(unittest.TestCase):

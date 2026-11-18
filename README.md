@@ -324,7 +324,8 @@ evidence levels and what each gate can prove · [`docs/TEST_RESULTS.md`](docs/TE
 append-only results · [`docs/evidence/`](docs/evidence): physical-boot and validation
 records · [`docs/PRESENTATION.md`](docs/PRESENTATION.md): how this page is generated
 
-**PS5 platform research** — [`docs/PS5_SYSTEM_SOFTWARE_TARGET.md`](docs/PS5_SYSTEM_SOFTWARE_TARGET.md) ·
+**PS5 platform research** — [`docs/original firmware ps5.md`](docs/original%20firmware%20ps5.md):
+the original PS5 system firmware, identified by hash and size · [`docs/PS5_SYSTEM_SOFTWARE_TARGET.md`](docs/PS5_SYSTEM_SOFTWARE_TARGET.md) ·
 [`docs/PS5_COMPATIBILITY_STATUS.md`](docs/PS5_COMPATIBILITY_STATUS.md) ·
 [`docs/PS5_COMPATIBILITY_ARCHITECTURE.md`](docs/PS5_COMPATIBILITY_ARCHITECTURE.md) ·
 [`docs/playstation/BOOT_FEASIBILITY.md`](docs/playstation/BOOT_FEASIBILITY.md) ·

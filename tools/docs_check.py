@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import urllib.parse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -105,6 +106,11 @@ def check(root: Path = ROOT) -> list:
                 destination, fragment = path, target[1:]
             else:
                 path_part, _, fragment = target.partition("#")
+                # GitHub renders `[x](a%20b.md)` as the file `a b.md`, so a path
+                # containing a space has to be percent-encoded to resolve there.
+                # Decode before touching the filesystem, or the checker rejects a
+                # link that GitHub follows.
+                path_part = urllib.parse.unquote(path_part)
                 destination = (path.parent / path_part).resolve()
                 if not path_part:
                     destination = path

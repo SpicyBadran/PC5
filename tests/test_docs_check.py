@@ -50,6 +50,17 @@ class DetectionTest(Fixture):
         self.write("README.md", "See [gone](docs/gone.md).\n")
         self.assertTrue(any("link target missing" in p for p in self.problems()))
 
+    def test_a_percent_encoded_path_resolves(self):
+        """GitHub follows `[x](a%20b.md)` to the file `a b.md`; so must this."""
+        self.write("docs/a b.md", "# Spaced\n\nText.\n")
+        self.write("README.md", "See [spaced](docs/a%20b.md) and "
+                                 "[its anchor](docs/a%20b.md#spaced).\n")
+        self.assertEqual(self.problems(), [])
+
+    def test_a_percent_encoded_path_to_nowhere_is_still_caught(self):
+        self.write("README.md", "See [gone](docs/no%20such%20file.md).\n")
+        self.assertTrue(any("link target missing" in p for p in self.problems()))
+
     def test_a_renamed_heading_is_caught(self):
         self.write("README.md", "See [the target](docs/target.md#old-heading).\n")
         problems = self.problems()

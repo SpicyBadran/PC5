@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import urllib.parse
 import sys
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -915,7 +916,8 @@ def local_links(text: str) -> list:
         target = match.group(2).split("#", 1)[0]
         if not target or target.startswith(("http://", "https://", "mailto:", "#", "//")):
             continue
-        found.append(target)
+        # GitHub resolves `[x](a%20b.md)` to the file `a b.md`; so must this.
+        found.append(urllib.parse.unquote(target))
     return found
 
 
