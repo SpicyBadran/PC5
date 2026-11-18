@@ -34,6 +34,70 @@ PD_BASE_OFFSET = 2 * PAGE
 CANARY = 0xAA
 PC5_UC_BITS = 0x18          # PWT | PCD on a 2 MiB leaf
 
+# ---------------------------------------------------------------------------
+# The required short-span coverage, anchored HERE.
+#
+# Why this is not derived from ShortSpanInitialisationTests.SPANS: the previous
+# design let SPANS and EXPECTED_UNUSED be edited together, so an adversary could
+# thin both consistently and the suite stayed green.  Coverage requirements must
+# not be a function of the thing being measured.
+#
+# Why these cases and not others - each one is the shortest span that exercises
+# a distinct branch or boundary in pc5_pt_build_identity() as documented in
+# boot/uefi64/pagetables.h:
+#
+#   1. Just over one 2 MiB leaf.  `span` is rounded DOWN to whole 2 MiB pages
+#      ("`span` is rounded down to a whole number of 2 MiB pages"), so this must
+#      install exactly one leaf and leave 2047 unused.  A builder that rounded up
+#      would install two and silently map an extra 2 MiB.  This is the only case
+#      that can distinguish round-down from round-up at the low end.
+#   2. Exactly one whole leaf.  Pins the boundary itself: 1 leaf, 0 rounding.
+#   3. Exactly one full PDPT entry (1 GiB).  The largest span needing exactly one
+#      PDPT entry; the low edge of the multi-region transition.
+#   4. One 2 MiB leaf past a whole PDPT entry.  The smallest span requiring a
+#      second PDPT entry.  Catches "pdpt_used = total / 512" style off-by-one
+#      (which would leave 513..1024 unreachable - the D1 failure mode again).
+#   5. The documented maximum minus one leaf (4 GiB - 2 MiB).  Rounds down to
+#      2047 leaves, leaving exactly one unused tail entry.  Exercises the
+#      upper bound of PC5_PT_MAX_INDEX with a non-empty tail.
+#   6. Just inside the maximum (4 GiB - 4 KiB).  Same 2047 leaves by a different
+#      rounding path: proves rounding is by 2 MiB, not by 4 KiB.
+#   7. Three whole PDPT entries (3 GiB).  A mid-range multi-region span: proves
+#      entries 0..2 are all installed, not just the first.
+#   8. The documented maximum (4 GiB).  All 2048 leaves, 4 PDPT entries, empty
+#      tail - the production configuration.
+#
+# Cases 3/4 and 1/6 come in pairs on either side of a boundary; removing either
+# half of a pair removes the ability to tell "correct" from "off by one".
+REQUIRED_SHORT_SPANS = (
+    (TWO_MIB + 0x1000, "one leaf + 4 KiB (rounds down to 1)"),
+    (TWO_MIB, "exactly one 2 MiB leaf"),
+    (1 << 30, "exactly one PDPT entry (1 GiB)"),
+    ((1 << 30) + TWO_MIB, "one leaf past a PDPT entry"),
+    (SPAN - TWO_MIB, "max - one leaf (2047)"),
+    (SPAN - 0x1000, "max - 4 KiB (2047)"),
+    (3 << 30, "three whole PDPT entries (multi-GiB)"),
+    (SPAN, "the maximum, 4 GiB (2048)"),
+)
+
+# Every required span MUST appear in the collection the shipped tests iterate.
+# The maximum span is the exception: it consumes all 2048 PD entries, so it has
+# no unused tail and cannot exercise the tail property.  It is covered separately
+# (test_the_full_production_span_still_maps_everything, IdentityHierarchyTests)
+# and is excluded here so that adding it cannot quietly turn the non-empty-tail
+# invariant into a vacuous pass.
+REQUIRED_SPAN_SET = frozenset(span for span, _ in REQUIRED_SHORT_SPANS
+                              if span != SPAN)
+REQUIRED_FULL_SPAN = SPAN
+
+# Unused PD entries each required span must leave behind (2048 - leaf count),
+# computed from the documented rounding rule rather than copied by hand.
+def _leaves_for(span):
+    return span // TWO_MIB
+
+REQUIRED_UNUSED = {span: (SPAN // TWO_MIB) - _leaves_for(span)
+                   for span in REQUIRED_SPAN_SET}
+
 _LIBRARY = {}
 
 
@@ -478,24 +542,46 @@ class ShortSpanInitialisationTests(unittest.TestCase):
         with another must come out identical.
     """
 
+    # The collection the tests below iterate.  It is deliberately independent of
+    # REQUIRED_SPAN_SET (module level) so neither can silently redefine the other:
+    # REQUIRED_SPAN_SET states what MUST be covered, this states what IS covered,
+    # and ShortSpanCoverageIntegrityTests requires the first to be a subset of the
+    # second.  Spans are ordered small-to-large and each has a comment saying which
+    # boundary it exercises.
     SPANS = (
-        1 << 30,                      # exactly one 1 GiB region
-        3 << 30,                      # three regions: 512 unused PD entries
-        (2 << 20) + 0x1000,           # rounds down to a single 2 MiB page
-        (4 << 30) - 0x1000,           # rounds down to 2047 entries, not 2048
+        (2 << 20) + 0x1000,           # 1 leaf: just over, rounds DOWN to one
+        2 << 20,                      # exactly one whole leaf
+        1 << 30,                      # exactly one PDPT entry, 512 leaves
+        (1 << 30) + (2 << 20),        # one leaf past a PDPT entry: 513
+        3 << 30,                      # three regions: 512 unused entries
+        (4 << 30) - (2 << 20),        # max - one leaf: 2047 entries, 1 unused
+        (4 << 30) - 0x1000,           # max - 4 KiB: 2047 entries, 1 unused
     )
-    # What each span above must exercise, so the collection cannot be thinned out
-    # without a failure.  Keyed by span; the value is the number of unused PD
-    # entries the span leaves behind, which is the quantity these tests exist for.
+    # What each span above must exercise.  The value is the number of unused PD
+    # entries the span leaves behind - the quantity these tests exist for.  This is
+    # a second, hand-written statement of the expectation: if it drifts from
+    # REQUIRED_UNUSED the integrity tests fail, so it cannot be edited to match a
+    # weakened collection without one of the two tables disagreeing.
     EXPECTED_UNUSED = {
-        1 << 30: 1536,
-        3 << 30: 512,
         (2 << 20) + 0x1000: 2047,     # rounds down to ONE 2 MiB entry
+        2 << 20: 2047,                # exactly one leaf consumed
+        1 << 30: 1536,
+        (1 << 30) + (2 << 20): 1535,  # 513 consumed
+        3 << 30: 512,
+        (4 << 30) - (2 << 20): 1,
         (4 << 30) - 0x1000: 1,
     }
 
     def setUp(self):
         self.lib = library()
+        # Without this, every test in this class iterates SPANS, so emptying it
+        # makes them all pass having asserted nothing.  Making the emptiness an
+        # error here means the shipped tests fail on their own, instead of relying
+        # on a separate integrity class to notice.
+        if not self.SPANS:
+            raise AssertionError(
+                "ShortSpanInitialisationTests.SPANS is empty: every short-span "
+                "test would iterate nothing and pass without asserting anything")
 
     # ------------------------------------------------------------ helpers ---
     @staticmethod
@@ -834,35 +920,88 @@ class UnusedPdTailMutationTests(unittest.TestCase):
                 _LIBRARY["lib"] = saved
 
 
-class ShortSpanCoverageIntegrityTests(unittest.TestCase):
-    """The short-span coverage must not be able to disappear quietly.
+MUTATION_TEST = UnusedPdTailMutationTests
 
-    Emptying or thinning ShortSpanInitialisationTests.SPANS previously left the
-    suite green: every short-span test iterates that tuple, so an empty tuple
-    made them all vacuously pass, and the mutation test's per-span loop stopped
-    exercising anything.  These tests pin the collection's contents and prove
-    that losing them is detected rather than tolerated.
+
+class ShortSpanCoverageIntegrityTests(unittest.TestCase):
+    """The short-span coverage must not be able to disappear or be redefined.
+
+    The previous design checked `SPANS` against `EXPECTED_UNUSED`, both of which
+    live on the same class and could be edited together.  An adversary could thin
+    both consistently, keep three whole-GiB spans, and the suite stayed green -
+    which is exactly what happened in review.
+
+    The requirement is now anchored outside the mutable state, in
+    REQUIRED_SHORT_SPANS, and justified case by case in the comment there.  These
+    tests require that:
+
+      * every required span is present in the collection the shipped tests iterate;
+      * the two independent expectation tables agree with each other and with the
+        documented rounding rule;
+      * every iterated span leaves a non-empty tail, so the tail assertion is
+        never vacuous;
+      * the collection still crosses several PDPT entries;
+      * each of those properties, when deliberately broken, is actually detected.
+
+    Subset, not equality: a span may be added deliberately, but a required one may
+    not be removed.
     """
 
     def setUp(self):
         self.spans = ShortSpanInitialisationTests.SPANS
         self.expected = ShortSpanInitialisationTests.EXPECTED_UNUSED
 
-    def test_the_span_collection_contains_the_cases_that_matter(self):
-        self.assertTrue(self.spans, "SPANS is empty: the short-span tests would all "
-                                    "pass without executing an assertion")
-        self.assertEqual(
-            set(self.spans), set(self.expected),
-            f"SPANS changed: {sorted(map(hex, self.spans))} vs expected "
-            f"{sorted(map(hex, self.expected))}. A span was added or removed, so "
-            f"EXPECTED_UNUSED must be updated deliberately.")
+    # ------------------------------------------------------- the guard ----
+    def test_every_required_span_is_present(self):
+        missing = sorted(REQUIRED_SPAN_SET - set(self.spans))
+        self.assertFalse(
+            missing,
+            "the collection the shipped tests iterate no longer covers "
+            f"{[hex(s) for s in missing]}. Each required span is there because it "
+            f"exercises a distinct boundary of pc5_pt_build_identity(); dropping "
+            f"one removes the ability to tell correct rounding from off-by-one. "
+            f"Required: {[hex(s) for s in sorted(REQUIRED_SPAN_SET)]}, "
+            f"present: {[hex(s) for s in sorted(self.spans)]}")
 
-    def test_every_span_leaves_a_non_empty_tail_to_check(self):
-        """A span that consumes all 2048 entries cannot test the tail at all."""
+    def test_the_required_set_is_non_empty_and_justified(self):
+        """A guard that requires nothing would always pass."""
+        self.assertTrue(REQUIRED_SHORT_SPANS,
+                        "REQUIRED_SHORT_SPANS is empty, so the coverage guard is a "
+                        "no-op; every required case must carry its justification")
+        for span, why in REQUIRED_SHORT_SPANS:
+            with self.subTest(span=hex(span)):
+                self.assertIsInstance(span, int)
+                self.assertTrue(why and why.strip(),
+                                f"required span {span:#x} has no justification, so "
+                                f"nobody can tell why removing it would matter")
+
+    def test_the_two_expectation_tables_agree(self):
+        """EXPECTED_UNUSED and REQUIRED_UNUSED must not be able to drift apart."""
+        shared = REQUIRED_SPAN_SET & set(self.expected)
+        self.assertEqual(
+            shared, REQUIRED_SPAN_SET,
+            "EXPECTED_UNUSED has no entry for every required span")
+        for span in sorted(shared):
+            with self.subTest(span=hex(span)):
+                self.assertEqual(
+                    self.expected[span], REQUIRED_UNUSED[span],
+                    f"span {span:#x}: EXPECTED_UNUSED says {self.expected[span]} "
+                    f"unused entries, the required table says "
+                    f"{REQUIRED_UNUSED[span]}. One of them was edited to match a "
+                    f"weakened collection.")
+                # And the number must follow the documented rounding rule.
+                self.assertEqual(
+                    REQUIRED_UNUSED[span], (SPAN // TWO_MIB) - (span // TWO_MIB),
+                    f"span {span:#x}: expected unused count does not follow the "
+                    f"documented round-down-to-2-MiB rule")
+
+    def test_every_iterated_span_leaves_a_non_empty_tail(self):
+        """A span consuming all 2048 entries cannot test the tail at all."""
+        self.assertTrue(self.spans, "SPANS is empty: every short-span test would "
+                                    "iterate nothing and pass vacuously")
         for span in self.spans:
             with self.subTest(span=hex(span)):
-                total = span // TWO_MIB
-                unused = (PT_PAGES - 2) * 512 - total
+                unused = (SPAN // TWO_MIB) - (span // TWO_MIB)
                 self.assertEqual(
                     unused, self.expected[span],
                     f"span {span:#x} leaves {unused} unused PD entries, expected "
@@ -870,31 +1009,359 @@ class ShortSpanCoverageIntegrityTests(unittest.TestCase):
                 self.assertGreater(
                     unused, 0,
                     f"span {span:#x} leaves no unused PD entries, so it cannot "
-                    f"exercise the stale-tail property these tests exist for")
+                    f"exercise the stale-tail property these tests exist for. The "
+                    f"full span is covered separately; do not add it here.")
 
-    def test_the_collection_covers_more_than_one_gigabyte(self):
-        regions = sorted({span // (1 << 30) for span in self.spans})
+    def test_the_collection_crosses_several_pdpt_entries(self):
+        entries = {((span // TWO_MIB) + 511) // 512 for span in self.spans}
         self.assertGreaterEqual(
-            len(regions), 3,
-            f"the span collection only exercises {regions} GiB regions; it must "
-            f"cross several PDPT entries to be meaningful")
+            max(entries), 4,
+            "no iterated span needs all four PDPT entries; the collection must "
+            f"exercise the multi-region path (entries needed: {sorted(entries)})")
+
+    # ------------------------------------------- the guard can fail, too ----
+    def test_a_removed_required_span_is_detected(self):
+        """Negative: drop ONE required case and the guard must fail."""
+        saved = ShortSpanInitialisationTests.SPANS
+        victim = TWO_MIB + 0x1000      # the rounding case
+        try:
+            ShortSpanInitialisationTests.SPANS = tuple(
+                s for s in saved if s != victim)
+            case = ShortSpanCoverageIntegrityTests(
+                "test_every_required_span_is_present")
+            case.setUp()
+            with self.assertRaises(AssertionError,
+                                   msg="removing one required span must be detected"):
+                case.test_every_required_span_is_present()
+        finally:
+            ShortSpanInitialisationTests.SPANS = saved
+
+    def test_consistent_thinning_is_detected(self):
+        """Negative: the exact review attack - thin SPANS and EXPECTED_UNUSED
+        together, keeping three whole-GiB spans."""
+        saved_spans = ShortSpanInitialisationTests.SPANS
+        saved_expected = ShortSpanInitialisationTests.EXPECTED_UNUSED
+        try:
+            ShortSpanInitialisationTests.SPANS = (1 << 30, 2 << 30, 3 << 30)
+            ShortSpanInitialisationTests.EXPECTED_UNUSED = {
+                1 << 30: 1536, 2 << 30: 1024, 3 << 30: 512}
+            for name in ("test_every_required_span_is_present",
+                         "test_the_two_expectation_tables_agree"):
+                with self.subTest(guard=name):
+                    case = ShortSpanCoverageIntegrityTests(name)
+                    case.setUp()
+                    with self.assertRaises(
+                            AssertionError,
+                            msg=f"{name} passed against consistently thinned "
+                                f"coverage, so the guard does not work"):
+                        getattr(case, name)()
+        finally:
+            ShortSpanInitialisationTests.SPANS = saved_spans
+            ShortSpanInitialisationTests.EXPECTED_UNUSED = saved_expected
+
+    def test_redefining_expected_unused_is_detected(self):
+        """Negative: leave SPANS intact but rewrite EXPECTED_UNUSED to fit it."""
+        saved = ShortSpanInitialisationTests.EXPECTED_UNUSED
+        try:
+            ShortSpanInitialisationTests.EXPECTED_UNUSED = {
+                span: 0 for span in ShortSpanInitialisationTests.SPANS}
+            case = ShortSpanCoverageIntegrityTests(
+                "test_the_two_expectation_tables_agree")
+            case.setUp()
+            with self.assertRaises(
+                    AssertionError,
+                    msg="rewriting EXPECTED_UNUSED must be detected"):
+                case.test_the_two_expectation_tables_agree()
+        finally:
+            ShortSpanInitialisationTests.EXPECTED_UNUSED = saved
 
     def test_empty_spans_would_be_detected(self):
-        """The negative case: prove the guard fails when the coverage is removed."""
-        saved = ShortSpanInitialisationTests.SPANS
+        """Negative: prove the guard fails when the coverage is removed."""
+        saved_spans = ShortSpanInitialisationTests.SPANS
         saved_expected = ShortSpanInitialisationTests.EXPECTED_UNUSED
         try:
             ShortSpanInitialisationTests.SPANS = ()
             ShortSpanInitialisationTests.EXPECTED_UNUSED = {}
-            case = ShortSpanCoverageIntegrityTests(
-                "test_the_span_collection_contains_the_cases_that_matter")
-            case.setUp()          # bind self.spans/self.expected from the empties
-            with self.assertRaises(AssertionError,
-                                   msg="emptying SPANS must be detected"):
-                case.test_the_span_collection_contains_the_cases_that_matter()
+            for name in ("test_every_required_span_is_present",
+                         "test_every_iterated_span_leaves_a_non_empty_tail"):
+                with self.subTest(guard=name):
+                    case = ShortSpanCoverageIntegrityTests(name)
+                    case.setUp()
+                    with self.assertRaises(AssertionError,
+                                           msg=f"emptying SPANS must trip {name}"):
+                        getattr(case, name)()
+        finally:
+            ShortSpanInitialisationTests.SPANS = saved_spans
+            ShortSpanInitialisationTests.EXPECTED_UNUSED = saved_expected
+
+
+class AdversarialCoverageTests(unittest.TestCase):
+    """Deliberate breakage of the suite's own guarantees, checked end to end.
+
+    Each test applies one of the attacks a reviewer or a future editor might
+    perform - on the collection, on the expectations, on the mutant, or on the
+    builder itself - and requires the suite to fail *for the intended reason*.
+
+    These are the negative controls for the positive tests above: without them a
+    guard could be silently inert and still look green.
+    """
+
+    PAGETABLES = SOURCE
+
+    # ------------------------------------------------------------ helpers ----
+    def _build_variant(self, source_text, label):
+        """Compile `source_text` into a throwaway shared object."""
+        directory = pathlib.Path(tempfile.mkdtemp(prefix=f"pc5-{label}-"))
+        path = directory / "pagetables.c"
+        path.write_text(source_text, encoding="utf-8")
+        output = directory / "lib.so"
+        build = subprocess.run(
+            ["gcc", "-std=gnu11", "-O2", "-fPIC", "-shared", "-Wall", "-Wextra",
+             "-Werror", "-I", str(SOURCE.parent), str(path), "-o", str(output)],
+            capture_output=True, text=True)
+        self.assertEqual(build.returncode, 0,
+                         f"{label} did not compile:\n{build.stderr}")
+        lib = ctypes.CDLL(str(output))
+        lib.pc5_pt_build_identity.restype = ctypes.c_ulong
+        lib.pc5_pt_build_identity.argtypes = [ctypes.c_ulonglong] * 2
+        return lib
+
+    def _run_shipped(self, lib, names):
+        """Run the shipped test methods against `lib`; return their exceptions."""
+        saved = _LIBRARY.get("lib")
+        _LIBRARY["lib"] = lib
+        caught = {}
+        try:
+            for name in names:
+                case = ShortSpanInitialisationTests(name)
+                try:
+                    case.setUp()          # may itself refuse a broken collection
+                    getattr(case, name)()
+                except AssertionError as exc:
+                    caught[name] = exc
+        finally:
+            if saved is None:
+                _LIBRARY.pop("lib", None)
+            else:
+                _LIBRARY["lib"] = saved
+        return caught
+
+    # 1 -------------------------------------------------------------------
+    def test_emptying_spans_makes_the_suite_fail(self):
+        """Attack 1: SPANS = () must break the suite, not pass it."""
+        saved = ShortSpanInitialisationTests.SPANS
+        try:
+            ShortSpanInitialisationTests.SPANS = ()
+            failures = 0
+            for name in ("test_unused_pd_entries_are_zero_for_every_short_span",
+                         "test_a_poisoned_tail_is_cleared_not_merely_ignored",
+                         "test_every_reachable_leaf_is_initialised_for_every_short_span"):
+                case = ShortSpanInitialisationTests(name)
+                try:
+                    case.setUp()
+                    getattr(case, name)()
+                except AssertionError:
+                    failures += 1
+            self.assertEqual(
+                failures, 3,
+                "emptying SPANS left short-span tests green, so they iterate "
+                "nothing and assert nothing; each must refuse an empty "
+                f"collection (caught {failures}/3)")
         finally:
             ShortSpanInitialisationTests.SPANS = saved
+
+    # 2 -------------------------------------------------------------------
+    def test_removing_one_required_span_is_detected(self):
+        """Attack 2: dropping the rounding case alone must be detected."""
+        for victim, why in ((TWO_MIB + 0x1000, "round-down case"),
+                            (TWO_MIB, "exact-leaf boundary"),
+                            ((1 << 30) + TWO_MIB, "PDPT off-by-one case")):
+            with self.subTest(victim=hex(victim), why=why):
+                saved = ShortSpanInitialisationTests.SPANS
+                try:
+                    ShortSpanInitialisationTests.SPANS = tuple(
+                        s for s in saved if s != victim)
+                    case = ShortSpanCoverageIntegrityTests(
+                        "test_every_required_span_is_present")
+                    case.setUp()
+                    with self.assertRaises(AssertionError,
+                                           msg=f"removing the {why} went undetected"):
+                        case.test_every_required_span_is_present()
+                finally:
+                    ShortSpanInitialisationTests.SPANS = saved
+
+    # 3 -------------------------------------------------------------------
+    def test_thinning_while_keeping_three_gibibyte_spans_is_detected(self):
+        """Attack 3: the exact review scenario, through the shipped guard."""
+        saved_spans = ShortSpanInitialisationTests.SPANS
+        saved_expected = ShortSpanInitialisationTests.EXPECTED_UNUSED
+        try:
+            ShortSpanInitialisationTests.SPANS = (1 << 30, 2 << 30, 3 << 30)
+            ShortSpanInitialisationTests.EXPECTED_UNUSED = {
+                1 << 30: 1536, 2 << 30: 1024, 3 << 30: 512}
+            case = ShortSpanCoverageIntegrityTests(
+                "test_every_required_span_is_present")
+            case.setUp()
+            with self.assertRaises(
+                    AssertionError,
+                    msg="thinning SPANS to three GiB spans while keeping "
+                        "EXPECTED_UNUSED consistent went undetected"):
+                case.test_every_required_span_is_present()
+        finally:
+            ShortSpanInitialisationTests.SPANS = saved_spans
             ShortSpanInitialisationTests.EXPECTED_UNUSED = saved_expected
+
+    # 4 -------------------------------------------------------------------
+    def test_expectations_edited_to_match_the_weakened_collection(self):
+        """Attack 4: EXPECTED_UNUSED rewritten to fit a thinned SPANS."""
+        saved_spans = ShortSpanInitialisationTests.SPANS
+        saved_expected = ShortSpanInitialisationTests.EXPECTED_UNUSED
+        try:
+            ShortSpanInitialisationTests.SPANS = (1 << 30,)
+            # Rewritten so the *iteration* test would be satisfied.
+            ShortSpanInitialisationTests.EXPECTED_UNUSED = {1 << 30: 1536}
+            case = ShortSpanCoverageIntegrityTests(
+                "test_the_two_expectation_tables_agree")
+            case.setUp()
+            with self.assertRaises(
+                    AssertionError,
+                    msg="EXPECTED_UNUSED was allowed to redefine adequate "
+                        "coverage; the independent table did not object"):
+                case.test_the_two_expectation_tables_agree()
+        finally:
+            ShortSpanInitialisationTests.SPANS = saved_spans
+            ShortSpanInitialisationTests.EXPECTED_UNUSED = saved_expected
+
+    # 5 -------------------------------------------------------------------
+    def test_a_no_op_mutant_is_rejected(self):
+        """Attack 5: replace the mutant with a no-op and require detection.
+
+        The shipped mutation test must not accept a mutant that changes nothing,
+        otherwise "the suite catches the mutant" proves only that the mutant is
+        the original code.
+        """
+        noop = self._build_variant(
+            self.PAGETABLES.read_text(encoding="utf-8"), "noop-mutant")
+        caught = self._run_shipped(
+            noop, ("test_unused_pd_entries_are_zero_for_every_short_span",))
+        self.assertEqual(
+            caught, {},
+            "a no-op 'mutant' (the unmodified builder) was reported as caught; "
+            "the discrimination would then be vacuous")
+
+        # And the shipped mutant-detection test must notice that the mutant text
+        # is identical to the original text.
+        original = MUTATION_TEST.ORIGINAL
+        identical = self._build_variant(
+            self.PAGETABLES.read_text(encoding="utf-8").replace(original, original),
+            "identity-mutant")
+        caught_identity = self._run_shipped(
+            identical, ("test_unused_pd_entries_are_zero_for_every_short_span",))
+        self.assertEqual(caught_identity, {},
+                         "an identity replacement was treated as a real mutation")
+        self.assertNotEqual(
+            MUTATION_TEST.ORIGINAL, MUTATION_TEST.MUTANT,
+            "UnusedPdTailMutationTests.MUTANT is identical to ORIGINAL, so the "
+            "mutation test replaces the code with itself and proves nothing")
+
+    # 6 -------------------------------------------------------------------
+    def test_the_original_d1_defect_is_still_detected(self):
+        """Attack 6: reintroduce the 1 GiB-only identity map."""
+        text = self.PAGETABLES.read_text(encoding="utf-8")
+        current = (
+            "    /* One PDPT entry per gigabyte, each pointing at its own page directory.  The\n"
+            "     * number of PD pages is derived from the span, so a shorter map installs fewer\n"
+            "     * PDPT entries and still leaves every one of them pointing at a PD that exists\n"
+            "     * inside the block. */\n"
+            "    unsigned long pdpt_used =\n"
+            "        (total + PC5_PT_ENTRIES_PER_PAGE - 1) / PC5_PT_ENTRIES_PER_PAGE;\n"
+            "    for (unsigned long g = 0; g < pdpt_used; g++) {\n"
+            "        store(pc5_pt_pdpt(pt) + g * 8ull,\n"
+            "              (pc5_pt_pd_base(pt) + g * PC5_PT_PAGE) | PC5_PT_TABLE_FLAGS);\n"
+            "    }\n")
+        self.assertIn(current, text,
+                      "the D1-sensitive PDPT loop is not in the expected shape; "
+                      "update AdversarialCoverageTests so the defect it guards "
+                      "stays reproducible")
+        d1 = text.replace(current,
+                          "    store(pc5_pt_pdpt(pt),\n"
+                          "          pc5_pt_pd_base(pt) | PC5_PT_TABLE_FLAGS);\n")
+        lib = self._build_variant(d1, "d1-defect")
+
+        # The builder still *claims* 2048 pages, so only a hierarchy walk sees it.
+        block = Block()
+        ctypes.memset(block.base, CANARY, PT_PAGES * PAGE)
+        self.assertEqual(lib.pc5_pt_build_identity(block.base, SPAN), 2048,
+                         "the reintroduced defect must still report 2048, which is "
+                         "what made it invisible to a count-only test")
+
+        # Real reachability: PDPT entries 1..3 are zero.
+        for index in (1, 2, 3):
+            entry = ctypes.c_ulonglong.from_address(
+                block.base + PAGE + index * 8).value
+            self.assertEqual(entry, 0,
+                             f"PDPT[{index}] should be absent in the D1 defect")
+
+        # The shipped hierarchy test must reject it, via the library the lookup
+        # helper uses.
+        saved = _LIBRARY.get("lib")
+        _LIBRARY["lib"] = lib
+        try:
+            case = IdentityHierarchyTests(
+                "test_returned_count_is_what_the_hierarchy_actually_reaches")
+            case.setUp()
+            with self.assertRaises(
+                    AssertionError,
+                    msg="the shipped hierarchy test accepted a map that reaches "
+                        "only 1 GiB while reporting 2048"):
+                case.test_returned_count_is_what_the_hierarchy_actually_reaches()
+        finally:
+            if saved is None:
+                _LIBRARY.pop("lib", None)
+            else:
+                _LIBRARY["lib"] = saved
+
+    # 7 -------------------------------------------------------------------
+    def test_the_l1_stale_tail_defect_is_still_detected(self):
+        """Attack 7: reintroduce the stale unused PD tail."""
+        mutant_text = self.PAGETABLES.read_text(encoding="utf-8").replace(
+            MUTATION_TEST.ORIGINAL, MUTATION_TEST.MUTANT)
+        self.assertNotEqual(
+            mutant_text, self.PAGETABLES.read_text(encoding="utf-8"),
+            "the L1 mutant text is identical to the source, so it mutates nothing")
+        lib = self._build_variant(mutant_text, "l1-defect")
+        caught = self._run_shipped(
+            lib, ("test_unused_pd_entries_are_zero_for_every_short_span",
+                  "test_a_poisoned_tail_is_cleared_not_merely_ignored"))
+        self.assertEqual(
+            set(caught),
+            {"test_unused_pd_entries_are_zero_for_every_short_span",
+             "test_a_poisoned_tail_is_cleared_not_merely_ignored"},
+            "the stale-tail defect was not caught by both shipped tail tests; "
+            f"caught={sorted(caught)}")
+
+    # 8 -------------------------------------------------------------------
+    def test_a_valid_physical_address_is_not_mistaken_for_a_canary(self):
+        """The tail check must be word-level, not byte-level.
+
+        A present leaf encodes its physical address, so a block placed at an
+        address whose bytes equal the canary must not be reported as stale.
+        """
+        block = Block()
+        ctypes.memset(block.base, CANARY, PT_PAGES * PAGE)
+        lib = library()
+        total = lib.pc5_pt_build_identity(block.base, TWO_MIB)
+        self.assertEqual(total, 1)
+        for index in range(total, 2048):
+            with self.subTest(entry=index):
+                self.assertEqual(
+                    block.entry(index), 0,
+                    f"PD entry {index} reads {block.entry(index):#x} after a clean "
+                    f"build on a canary-filled block")
+        # The single live leaf must be exactly the expected entry word, which
+        # contains no canary bytes unless the physical address happens to; and
+        # its low bits must be the documented flags.
+        self.assertEqual(block.entry(0) & 0xFFF, 0x083)
 
 
 if __name__ == "__main__":

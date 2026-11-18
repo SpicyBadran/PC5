@@ -324,6 +324,22 @@ class AllocateMaxAddressTests(unittest.TestCase):
             esp_volume={"\\EFI\\BOOT\\BOOTX64.EFI": self.image,
                         "\\KERNEL64.BIN": self.kernel},
             kernel_bytes=self.kernel, **options)
+    def scratch_slot(self, machine, size=8):
+        """A pool slot for writing a UEFI pointer argument, or a clear failure.
+
+        `machine.alloc()` returns None when the pool cannot satisfy a request.
+        On a freshly built machine that cannot happen, so a None here means the
+        harness itself is wrong - not that the test should continue and write a
+        value to address 0.  Asserting keeps the failure specific and keeps an
+        allocation failure from being mistaken for a passing check.
+        """
+        address = machine.alloc(size)
+        self.assertIsNotNone(
+            address,
+            f"the stub pool could not supply {size} bytes for a test argument; "
+            f"exhaustions={machine.exhaustions}, "
+            f"next free={machine.pool_next:#x}")
+        return address
 
     # ------------------------------------------- what the loader asks for ----
     def test_the_loader_passes_a_maximum_that_can_actually_be_satisfied(self):
@@ -346,13 +362,14 @@ class AllocateMaxAddressTests(unittest.TestCase):
         machine = self.machine()
         # Ask the stub itself, with a zero bound, and require refusal.
         status = machine.svc_allocate_pages(
-            self.module.EFI_ALLOCATE_MAX_ADDRESS, 2, 1, machine.alloc(8))
+            self.module.EFI_ALLOCATE_MAX_ADDRESS, 2, 1,
+            self.scratch_slot(machine))
         self.assertEqual(status, self.module.EFI_OUT_OF_RESOURCES,
                          "a zero AllocateMaxAddress bound must not allocate")
 
     def test_a_maximum_below_the_page_count_cannot_succeed(self):
         machine = self.machine()
-        slot = machine.alloc(8)
+        slot = self.scratch_slot(machine)
         machine.write_u64(slot, 0x2000)          # 8 KiB bound, 3 pages requested
         status = machine.svc_allocate_pages(
             self.module.EFI_ALLOCATE_MAX_ADDRESS, 2, 3, slot)
@@ -410,7 +427,7 @@ class AllocateMaxAddressTests(unittest.TestCase):
         test_a_failed_allocation_stops_the_boot_before_the_handover.
         """
         machine = self.machine(allocation_limit=0x2000)
-        slot = machine.alloc(8)
+        slot = self.scratch_slot(machine)
         machine.write_u64(slot, (1 << 32) - 1)   # an honest, generous bound
         status = machine.svc_allocate_pages(
             self.module.EFI_ALLOCATE_MAX_ADDRESS, 2, 4, slot)
@@ -450,6 +467,22 @@ class PoolExhaustionTests(unittest.TestCase):
             esp_volume={"\\EFI\\BOOT\\BOOTX64.EFI": self.image,
                         "\\KERNEL64.BIN": self.kernel},
             kernel_bytes=self.kernel, **options)
+    def scratch_slot(self, machine, size=8):
+        """A pool slot for writing a UEFI pointer argument, or a clear failure.
+
+        `machine.alloc()` returns None when the pool cannot satisfy a request.
+        On a freshly built machine that cannot happen, so a None here means the
+        harness itself is wrong - not that the test should continue and write a
+        value to address 0.  Asserting keeps the failure specific and keeps an
+        allocation failure from being mistaken for a passing check.
+        """
+        address = machine.alloc(size)
+        self.assertIsNotNone(
+            address,
+            f"the stub pool could not supply {size} bytes for a test argument; "
+            f"exhaustions={machine.exhaustions}, "
+            f"next free={machine.pool_next:#x}")
+        return address
 
     def starved(self, reserve=0, **options):
         """A machine whose firmware has `reserve` bytes left for the loader.

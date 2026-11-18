@@ -304,8 +304,12 @@ class StubFirmware:
         EFI_OUT_OF_RESOURCES and the caller is expected to survive it.  Raising
         here turned a status the loader is supposed to handle into a Python
         exception, so a test could pass without the loader's own failure path ever
-        running.  Callers bind the result with alloc_pages_or_status(); a `None`
-        return means "this firmware has no memory to give".
+        running.  A `None` return means "this firmware has no memory to give",
+        and each caller must translate it: the two real services
+        (svc_allocate_pages, svc_allocate_pool) return EFI_OUT_OF_RESOURCES,
+        while harness scaffolding uses alloc_or_raise(), which turns the same
+        None into a StubError because a mis-sized harness is a test bug rather
+        than something the loader should be asked to survive.
         """
         limit = POOL_END if ceiling is None else ceiling
         address = (self.pool_next + align - 1) & ~(align - 1)
