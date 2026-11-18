@@ -665,7 +665,7 @@ say so, and it did.
 | `docs/a%00b.md` | **CRASH** `ValueError: embedded null byte` |
 | `docs/a%00b.md#frag` | **CRASH** |
 | `docs/%zz.md`, `docs/a%2`, `a%2Fb.md`, `%ed%a0%80`, `%b0` | reported as missing (already safe) |
-| `docs/%2e%2e/etc/passwd` | reported as missing (no file there; nothing escapes) |
+| `docs/%2e%2e/etc/passwd` | reported as missing (no file there, so nothing resolves) |
 
 ### 12.2 Scope: which of the three checkers actually crashed
 
@@ -698,7 +698,7 @@ No diagnostic was weakened, re-verified after the fix:
 | real valid link + anchor | still passes |
 | missing `make` target | still caught |
 | malformed escapes (`%zz`, `%2`, `%2F`) | still reported |
-| `%2e%2e` traversal | still reported; still contained |
+| `%2e%2e` traversal | still reported when the target does not exist; **not contained** - see §14 |
 
 ### 12.4 Regression tests
 
@@ -744,3 +744,68 @@ cleanup on their case, so none is affected today; this is a latent constraint.
 evidence retained in the safe order, removed in the hazardous one - because only
 the pair shows that ordering is what decides. It deliberately does **not** claim
 evidence is always retained.
+
+## 14. Correction: link traversal is not confined to the repository
+
+Dated 2026-11-16, after §13. This corrects a claim in §12; it does not change any
+behaviour. Flagged by independent review, and reproduced here before being
+written down.
+
+### 14.1 What was wrong
+
+§12.3's table asserted that `%2e%2e` traversal was "still reported; still
+contained", and §12.1's parenthetical said "nothing escapes". **The containment
+half of both statements is false.** Measured on this checkout:
+
+| Link target | Target exists? | `docs_check` result |
+|---|---|---|
+| `docs/%2e%2e/README.md` | yes, one directory above `docs/` | **`[]` — accepted** |
+| `docs/%2e%2e/etc/passwd` | no | reported as missing |
+
+The first row is the point: a link that climbs out of the directory it is written
+in resolves and passes. Only links whose target does not exist are reported, which
+is why the second row looked like containment and is not.
+
+### 14.2 What is and is not new
+
+The distinction matters, and it is the reason this is a documentation defect
+rather than a regression:
+
+* **Plain, unencoded relative traversal already resolved before PR #28.** At
+  `main` (`8aab6d3`), a link such as `../../…/etc/hostname` was accepted when the
+  target existed. Encoding was not required.
+* **The `%2e%2e` decoding behaviour was introduced earlier in PR #28's history**,
+  by the percent-decoding change in `c34988c` that made the checkers follow links
+  the way GitHub does. Before it, `docs/%2e%2e/README.md` was reported as missing
+  because the literal encoded string did not exist.
+* **The H1/M2 remediation (§12-§13, commits `07337c2` and `3b47f9e`) introduced no
+  new traversal capability.** It changed how malformed links are reported, not
+  which paths resolve.
+
+So the accurate statement is: relative-path traversal is not confined to the
+repository, and the encoded form became reachable earlier in this branch. Neither
+is caused by the fix in §12.
+
+### 14.3 Status
+
+**This is not fixed, and this document does not claim it is.** The documentation
+checkers resolve links against the filesystem and do not confine them to the
+repository. Adding containment would be a behaviour change to `tools/docs_check.py`
+and `tools/presentation.py` — new restrictions on which links a document may use —
+and is outside this correction, which is deliberately wording-only.
+
+Practical impact is low: the checkers run over this repository's own tracked
+Markdown, links are written by the project's own contributors, and a link that
+climbs out of the tree is a documentation error rather than an attack surface.
+That is an assessment of exposure, not a containment guarantee, and it should not
+be cited as one.
+
+### 14.4 Wording changes made
+
+| Section | Before | After |
+|---|---|---|
+| §12.1 | reported as missing (no file there; nothing escapes) | reported as missing (no file there, so nothing resolves) |
+| §12.3 | still reported; still contained | still reported when the target does not exist; **not contained** - see §14 |
+
+Two phrases changed. No measurement, test, count or other finding in §12 or §13
+was altered, and no behaviour or test was changed by this commit.
