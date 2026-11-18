@@ -211,6 +211,19 @@ class CheckTest(unittest.TestCase):
         problems = self.check()
         self.assertTrue(any("missing.svg" in problem for problem in problems), problems)
 
+    def test_a_percent_encoded_nul_link_is_caught_not_raised(self):
+        """`a%00b.md` decodes to a path with an embedded NUL.
+
+        `Path.resolve()` raises `ValueError` for it. A link check must report the
+        broken target rather than die on it - `link_problems` is the whole reason
+        the presentation gate exists.
+        """
+        path = self.tmp / "README.md"
+        path.write_text(path.read_text() + "\nSee [nul](docs/a%00b.md).\n")
+        problems = self.check()
+        self.assertTrue(any("link target missing" in problem for problem in problems),
+                        problems)
+
     def test_an_image_without_alt_text_is_caught(self):
         path = self.tmp / "README.md"
         text = path.read_text()

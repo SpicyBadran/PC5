@@ -928,11 +928,24 @@ def _label(path: Path) -> str:
         return str(path)
 
 
+def _resolves_to_a_file(parent: Path, target: str) -> bool:
+    """Whether ``parent / target`` names something on disk.
+
+    ``Path.resolve()`` raises ``ValueError("embedded null byte")`` for a target
+    containing NUL, which ``urllib.parse.unquote("a%00b.md")`` produces.  A link
+    check must report that as a broken target, not stop with a traceback.  Only
+    these two exceptions are caught.
+    """
+    try:
+        return (parent / target).resolve().exists()
+    except (ValueError, OSError):
+        return False
+
+
 def link_problems(path: Path, text: str) -> list:
     problems = []
     for target in local_links(text):
-        candidate = (path.parent / target).resolve()
-        if not candidate.exists():
+        if not _resolves_to_a_file(path.parent, target):
             problems.append(f"{_label(path)}: link target missing: {target}")
     for match in IMAGE.finditer(text):
         alt, target = match.group(1).strip(), match.group(2)
