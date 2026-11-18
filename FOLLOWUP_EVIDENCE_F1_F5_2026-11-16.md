@@ -510,3 +510,125 @@ scratch root remains after either exits.
   them, at process exit.
 * §9.4's "14 new" tests: the two cleanup tests among them were vacuous (they
   tested a fake outcome). They are replaced by §10.4.
+
+## 11. Addendum: unexpected successes, and what a cleanup can actually know
+
+Dated 2026-11-16, after §10. §10 stands as written with one correction, stated at
+the end of this section. This one is subtler than §10: §10's fix was right about
+`failures` and `errors` and wrong about one of the three lists it consulted.
+
+### 11.1 The defect
+
+`case_failed()` consulted `result.unexpectedSuccesses`. Inside a cleanup that list
+is **always empty**, because `TestCase.run` calls `doCleanups()` *before* it
+records the outcome:
+
+    self.doCleanups()
+
+    if outcome.success:
+        if expecting_failure:
+            ... self._addUnexpectedSuccess(result)   # <-- after cleanups
+        else:
+            result.addSuccess(self)
+
+So the clause could never fire. Worse, the other two `@expectedFailure` signals
+that a cleanup *can* see both point the wrong way: `outcome.expecting_failure` has
+already been reset to `False` at that point in `run()`, and `outcome.success` is
+`True`. An unexpected success therefore looked exactly like a pass to
+`case_failed()`, and its case directory was deleted.
+
+That is the wrong direction: `unittest` counts an unexpected success as a
+**failure** - the run exits non-zero - so it is precisely the case where the
+images are the only record of what happened.
+
+Measured on the project interpreter (Python 3.11.2), with a real `TestCase`
+decorated `@unittest.expectedFailure` whose body returns normally, driven through
+`TextTestRunner`, observed from a cleanup registered in `setUp`:
+
+| Case | `expecting_marker` | `outcome.expectedFailure` set | already in result lists | `len(unexpectedSuccesses)` | Outcome |
+|---|---|---|---|---|---|
+| ordinary pass | False | False | False | 0 | pass |
+| failure | False | False | True | 0 | fail |
+| error | False | False | True | 0 | error |
+| failing `subTest` | False | False | True | 0 | fail |
+| **unexpected success** | **True** | **False** | **False** | **0** | **unexpected success** |
+| genuine expected failure | True | True | False | 0 | expected failure |
+
+The last two rows are the discriminating pair: same marker, same empty result
+lists, and the only difference available to a cleanup is whether
+`outcome.expectedFailure` was set - which `testPartExecutor` does only when an
+`@expectedFailure` case actually raises.
+
+Before the correction, measured end-to-end: one unexpected success, and **0**
+directories surviving at the moment the runner returned. After: 1 directory,
+holding the case's images.
+
+### 11.2 The fix, and why `outcome.success` is usable here
+
+`_unexpected_success()` returns true when the case carries the expected-failure
+marker, `outcome.expectedFailure` is unset, and `outcome.success` is true.
+
+Using `outcome.success` here does not contradict §10.2, and the distinction
+matters: `testPartExecutor` sets `success = True` on entry, but on exit it does
+`self.success = self.success and old_success`, restoring the value from before the
+cleanup function ran. In §10.2 the observation was made *inside* a cleanup body -
+where `success` is indeed always true - and that remains correct. What is read
+here is the same attribute *after* the test body's executor has exited and *before*
+any cleanup runs, where it holds the test's own outcome and `expecting_failure`
+has already been cleared. Both statements are measured; they are about two
+different instants.
+
+`case_failed()` now reads `failures`, `errors` and `unexpectedSuccesses` from the
+result (the first two are appended before `doCleanups`, the third matters only for
+custom results that record it early), and falls back to `_unexpected_success()`
+for the one case the standard result cannot yet describe. Non-standard results, a
+missing `_outcome` or a missing `result` still keep the tree.
+
+Policy, stated so implementation and tests agree: **a case retains its artifacts
+iff the suite counts the run as failed** - failure, error, or unexpected success.
+A met expectation is a pass and keeps nothing. That is a deliberate choice, not an
+accident of the mechanism: an unexpected success means the test is no longer
+testing what it claims, and the images are the evidence of what it did instead.
+
+### 11.3 Regression tests, and proof that they discriminate
+
+`tests/test_scratch_isolation.py` gains four real-lifecycle tests (23 -> 27):
+
+| Test | Asserts |
+|---|---|
+| `test_unexpected_success_keeps_its_directory` | the runner reports an unexpected success, `wasSuccessful()` is False, and the case directory survives while the class tree does not |
+| `test_a_genuine_expected_failure_removes_its_directory` | the inverse: a met expectation is a pass and leaves nothing |
+| `test_keep_env_keeps_an_unexpected_success_too` | `PC5_KEEP_TEST_SCRATCH=1` retains it |
+| `test_unexpected_success_does_not_retain_an_ordinary_pass` | attribution stays per case |
+
+The genuine-expected-failure test exists so that over-retention fails too. Without
+it, `return True` for every marked case would satisfy the retention test while
+reintroducing the bug this module was fixed for.
+
+Both directions were checked by running the tests against implementations that get
+it wrong:
+
+| Implementation under test | Result |
+|---|---|
+| `201a96f` (`unexpectedSuccesses` only) | **27 tests, FAILED (failures=2)** - `test_unexpected_success_keeps_its_directory`, `test_unexpected_success_does_not_retain_an_ordinary_pass` |
+| mutation: retain *every* `@expectedFailure` case | **27 tests, FAILED (failures=1)** - `test_a_genuine_expected_failure_removes_its_directory` |
+| current implementation | **27 tests, OK** |
+
+So the tests are not vacuous in either direction: they fail for the exact defect a
+reviewer would reintroduce, and they fail for its mirror image.
+
+### 11.4 Correction to §10
+
+§10.2 and §10.3 state that `case_failed()` "scans `result.failures` /
+`.errors` / `.unexpectedSuccesses`" and present that as the complete answer. The
+first two are right. The third was inert at cleanup time, as §11.1 measures. §10's
+measurements, tables and the `success`-inside-cleanups finding are unaffected and
+are not rewritten here.
+
+### 11.5 What did not regress
+
+Per-process roots, per-class driver isolation, per-case image isolation, cleanup of
+passing cases, retention of failing artifacts, and the per-case attribution from
+§10.3 are all still bound by the suite - the 23 tests §10 left behind still pass,
+and this section adds 4 more. Full-suite and concurrency results are recorded in
+the commit message and summarised in the PR, not duplicated here.

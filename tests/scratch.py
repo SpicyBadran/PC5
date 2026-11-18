@@ -28,10 +28,13 @@ Three kinds of artifact live in a FAT32 test class, and they need different scop
    future refactor would).  So each class gets its own directory inside the
    per-process root, and each *case* gets its own directory inside that.
 
-3. **Diagnostic artifacts on failure.**  If a case fails, the images are the only
-   way to see what happened.  Deleting them eagerly would destroy the evidence, so
-   a failing case keeps its own directory and a passing case removes it.  Setting
-   ``PC5_KEEP_TEST_SCRATCH=1`` keeps everything unconditionally.
+3. **Diagnostic artifacts on failure.**  If a case did not do what it claimed,
+   the images are the only way to see what happened.  Deleting them eagerly would
+   destroy the evidence, so such a case keeps its own directory and a case that
+   passed removes it.  "Did not do what it claimed" covers a failure, an error and
+   an unexpected success - the three outcomes ``unittest`` counts as a failing
+   run.  An ``@expectedFailure`` case that failed *as promised* is a pass and keeps
+   nothing.  Setting ``PC5_KEEP_TEST_SCRATCH=1`` keeps everything unconditionally.
 
 Nothing here touches the repository working tree, so a stray directory can never be
 committed, and no test can be affected by another checkout's leftovers.
@@ -47,8 +50,14 @@ Whether a case *failed* has to be read from the ``TestResult``, not from
 ``_Outcome.success``: ``doCleanups`` re-enters ``testPartExecutor`` for every
 cleanup function, and that context manager resets ``success`` to ``True`` on
 entry, so ``success`` is always ``True`` while a cleanup body executes.  Measured
-on the project interpreter — see the addendum in
-``FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md``.
+on the project interpreter — see the addenda in
+``FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md`` (§10 and §11).
+
+One outcome cannot be read from the result at all: ``TestCase.run`` calls
+``doCleanups()`` *before* it appends an unexpected success to
+``unexpectedSuccesses``, so that list is empty in every cleanup.  It is
+reconstructed instead, from the expected-failure marker and the absence of a
+recorded expected failure.  Also measured on the project interpreter.
 
 A process that is ``SIGKILL``ed leaves its directory behind by design (nothing can
 clean up after a kill); those directories are named ``pc5-tests-<pid>-*`` under
@@ -129,37 +138,93 @@ def _outcome_owner(test):
     return getattr(test, "test_case", test)
 
 
+def _expecting_failure(case) -> bool:
+    """Whether ``case`` declares that it is expected to fail.
+
+    Mirrors how ``TestCase.run`` computes it: a marker on the instance or on the
+    test method function.  Read from the attributes ``unittest`` itself sets, so
+    no inspection of user code is involved.
+    """
+    if getattr(case, "__unittest_expecting_failure__", False):
+        return True
+    method = getattr(case, getattr(case, "_testMethodName", ""), None)
+    return bool(getattr(method, "__unittest_expecting_failure__", False))
+
+
+def _unexpected_success(case, outcome) -> bool:
+    """Whether ``case`` is an ``@expectedFailure`` case that ran without failing.
+
+    This has to be reconstructed, because ``TestResult.unexpectedSuccesses``
+    cannot answer the question at cleanup time.  ``TestCase.run`` calls
+    ``doCleanups()`` *before* it calls ``_addUnexpectedSuccess(result)``:
+
+        self.doCleanups()
+        if outcome.success:
+            if expecting_failure:
+                ... self._addUnexpectedSuccess(result)
+            else:
+                result.addSuccess(self)
+
+    so inside a cleanup ``unexpectedSuccesses`` is still empty and
+    ``outcome.expecting_failure`` has already been reset to ``False``.  Checking
+    that list here would therefore never fire, and the case directory would be
+    deleted for an outcome the suite reports as a failure.
+
+    The visible signals are: the case carries the expected-failure marker, it did
+    not fail (``outcome.expectedFailure`` is unset - ``testPartExecutor`` sets it
+    only when an ``@expectedFailure`` case actually raises), and ``outcome.success``
+    is true.  ``success`` is reliable *here* because ``testPartExecutor`` restores
+    it to its pre-test value on exit (``self.success = self.success and old_success``),
+    so by cleanup time it holds the outcome of the test body rather than that of a
+    cleanup function.
+    """
+    if not _expecting_failure(case):
+        return False
+    if getattr(outcome, "expectedFailure", None) is not None:
+        return False
+    return bool(getattr(outcome, "success", True))
+
+
 def case_failed(case) -> bool:
-    """Whether ``case`` is recorded as failed, errored or unexpectedly successful.
+    """Whether ``case`` is failed, errored or an unexpected success.
+
+    "Unusable" is the question, not "did an assertion raise": all three outcomes
+    mean the case did not do what it claimed, and all three are worth keeping the
+    images for.  The suite counts an unexpected success as a failure - it exits
+    non-zero - so retaining its artifacts follows the same policy.
 
     Read from the ``TestResult`` that ``unittest`` attached to the case as
-    ``_outcome.result``.  This is the only signal that is both correct at cleanup
-    time and visible there:
+    ``_outcome.result``, plus one judgement the result cannot supply yet:
 
     * ``_Outcome.success`` is **always** ``True`` inside a cleanup body, because
       ``doCleanups`` wraps each cleanup in ``testPartExecutor``, which sets
       ``success = True`` on entry.  Measured, not assumed.
     * ``_Outcome`` has no ``errors``/``failures`` attributes at all.
+    * ``unexpectedSuccesses`` is populated only *after* ``doCleanups`` runs; see
+      ``_unexpected_success``.
 
-    The result lists are appended to *before* ``doCleanups`` runs, so scanning
-    them is correct at every point a cleanup can observe.  Anything unusual — no
-    ``_outcome``, no ``result``, a result that is not the standard one — keeps the
-    tree, because losing a diagnostic artifact is worse than leaving a directory.
+    The failure and error lists are appended to *before* ``doCleanups`` runs, so
+    scanning them is correct at every point a cleanup can observe.  Anything
+    unusual - no ``_outcome``, no ``result``, a result that is not the standard
+    one - keeps the tree, because losing a diagnostic artifact is worse than
+    leaving a directory behind.
     """
     outcome = getattr(case, "_outcome", None)
-    result = getattr(outcome, "result", None) if outcome is not None else None
+    if outcome is None:
+        return True
+    result = getattr(outcome, "result", None)
     if result is None:
         return True
-    for attribute in ("failures", "errors", "unexpectedSuccesses"):
-        try:
+    try:
+        for attribute in ("failures", "errors", "unexpectedSuccesses"):
             entries = getattr(result, attribute) or ()
-        except Exception:  # a non-standard result object: keep the evidence
-            return True
-        for entry in entries:
-            test = entry[0] if isinstance(entry, tuple) and entry else entry
-            if _outcome_owner(test) is case:
-                return True
-    return False
+            for entry in entries:
+                test = entry[0] if isinstance(entry, tuple) and entry else entry
+                if _outcome_owner(test) is case:
+                    return True
+        return _unexpected_success(case, outcome)
+    except Exception:  # a non-standard result object: keep the evidence
+        return True
 
 
 def register_cleanup(case, path: str, *, keep_on_failure: bool = True) -> None:

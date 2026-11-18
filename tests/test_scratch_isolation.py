@@ -270,6 +270,108 @@ class CleanupLifecycleTest(unittest.TestCase):
                          f"behind: {remaining}")
         self.assertFalse(os.path.exists(case.tree))
 
+    def _make_expected_failure_case(self):
+        """Cases whose expected-failure *claim* itself has an outcome.
+
+        ``test_g_unexpected_success`` carries ``@expectedFailure`` and returns
+        normally, which ``unittest`` reports as an unexpected success: a failing
+        run.  ``test_h_genuine_expected_failure`` carries the same marker and does
+        fail, which is a pass.  Keeping both makes the retention decision
+        falsifiable in both directions - a predicate that simply keeps everything
+        with the marker set fails the second test.
+        """
+
+        class _Case(unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                cls.tree = scratch.directory("lifecycle", cls.__name__)
+                pathlib.Path(cls.tree, "driver").write_bytes(b"bin")
+                cls.addClassCleanup(scratch.drop_class_tree, cls.tree)
+
+            def _work(self):
+                where = scratch.directory("lifecycle", type(self).__name__,
+                                          self._testMethodName)
+                pathlib.Path(where, "in.img").write_bytes(b"payload")
+                scratch.register_cleanup(self, where)
+                return where
+
+            @unittest.expectedFailure
+            def test_g_unexpected_success(self):
+                self._work()
+
+            @unittest.expectedFailure
+            def test_h_genuine_expected_failure(self):
+                self._work()
+                self.fail("this failure was expected")
+
+        return _Case
+
+    def test_unexpected_success_keeps_its_directory(self):
+        """A clean exit is not a pass when the case promised to fail.
+
+        ``TestCase.run`` appends to ``TestResult.unexpectedSuccesses`` only
+        *after* ``doCleanups()``, so a cleanup that consults that list sees it
+        empty and deletes the directory for what the suite reports as a failure.
+        See ``FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md`` §11.
+        """
+        case = self._make_expected_failure_case()
+        result, _, remaining = self._run(
+            unittest.TestSuite([case("test_g_unexpected_success")]))
+        self.assertEqual(result.testsRun, 1)
+        self.assertEqual(len(result.unexpectedSuccesses), 1,
+                         "the runner must report this as an unexpected success")
+        self.assertEqual(result.wasSuccessful(), False,
+                         "an unexpected success must fail the run, or the "
+                         "retention policy below has no basis")
+        self.assertTrue(any("test_g_unexpected_success" in p for p in remaining),
+                        "an unexpected success is a failing run, so its case "
+                        f"directory must be kept: {remaining}")
+        self.assertFalse(os.path.exists(case.tree),
+                         "the class tree must still be removed at the class "
+                         "boundary")
+
+    def test_a_genuine_expected_failure_removes_its_directory(self):
+        """The inverse: a met expectation is a pass and keeps nothing.
+
+        Without this, a predicate that retained every ``@expectedFailure`` case
+        would satisfy the test above while quietly reintroducing the retention
+        bug this module exists to fix.
+        """
+        case = self._make_expected_failure_case()
+        result, _, remaining = self._run(
+            unittest.TestSuite([case("test_h_genuine_expected_failure")]))
+        self.assertEqual(len(result.expectedFailures), 1,
+                         "the runner must report this as an expected failure")
+        self.assertTrue(result.wasSuccessful())
+        self.assertEqual(remaining, [],
+                         "a met expectation is a pass and must leave no scratch "
+                         f"behind: {remaining}")
+        self.assertFalse(os.path.exists(case.tree))
+
+    def test_keep_env_keeps_an_unexpected_success_too(self):
+        case = self._make_expected_failure_case()
+        with unittest.mock.patch.dict(os.environ, {scratch.KEEP_ENV: "1"}):
+            result, _, remaining = self._run(
+                unittest.TestSuite([case("test_g_unexpected_success")]))
+        self.assertEqual(len(result.unexpectedSuccesses), 1)
+        self.assertTrue(any("test_g_unexpected_success" in p for p in remaining),
+                        "PC5_KEEP_TEST_SCRATCH=1 must keep an unexpected "
+                        f"success's directory: {remaining}")
+        self.assertTrue(os.path.exists(case.tree))
+
+    def test_unexpected_success_does_not_retain_an_ordinary_pass(self):
+        """Attribution stays per case; the new clause must not leak across cases."""
+        case = self._make_expected_failure_case()
+        plain = self._make_case()
+        suite = unittest.TestSuite([case("test_g_unexpected_success"),
+                                    plain("test_a_pass")])
+        result, _, remaining = self._run(suite)
+        self.assertEqual(len(result.unexpectedSuccesses), 1)
+        self.assertTrue(any("test_g_unexpected_success" in p for p in remaining))
+        self.assertFalse(any("test_a_pass" in p for p in remaining),
+                         "an unexpected success must not retain an unrelated "
+                         f"passing case's directory: {remaining}")
+
     def test_keep_env_keeps_everything(self):
         case = self._make_case()
         with unittest.mock.patch.dict(os.environ, {scratch.KEEP_ENV: "1"}):

@@ -139,7 +139,14 @@ either - `doCleanups` re-enters `testPartExecutor`, which resets it to `True`
 before every cleanup, so it reads `True` even after a failure.
 `scratch.case_failed()` now scans `result.failures` / `.errors` /
 `.unexpectedSuccesses` (unwrapping `_SubTest.test_case`) and attributes failures
-per case, and the process-wide `note_failure()` flag is gone. Measured after the
+per case, and the process-wide `note_failure()` flag is gone. **Further
+correction (report §11):** the `.unexpectedSuccesses` half of that scan is inert
+at cleanup time - `TestCase.run` calls `doCleanups()` before it records the
+outcome - so an unexpected success deleted its own directory. It is now
+reconstructed from the expected-failure marker, and four real-lifecycle tests
+bind it in both directions (retain an unexpected success, remove a met
+expectation). `test_scratch_isolation` is now **27** tests; the two failures the
+old implementation produces are listed in §11.3. Measured after the
 fix, with the same passing 88 tests: **0** case directories, **0** class trees,
 **0** files. With one failure injected into a 17-case class, exactly that case's
 directory survives (3 files).
