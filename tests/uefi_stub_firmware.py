@@ -181,6 +181,9 @@ class StubFirmware:
         self.iso_has_kernel = iso_volume_has_kernel
         self.trace = trace or Trace()
         self.pool_next = POOL_BASE
+        # (size, limit, pool_next) for every request the pool could not satisfy;
+        # a test can assert the loader failed for the right reason.
+        self.exhaustions = []
         self.objects = {}                    # address -> dict for file handles
         self.file_table = {}
         self.services = []                   # [(name, callable)]
@@ -275,16 +278,42 @@ class StubFirmware:
         return self.pool_next
 
     def alloc(self, size, align=16, ceiling=None):
+        """Carve `size` bytes out of the pool, or report that it cannot.
+
+        Exhaustion is returned, not raised: real firmware answers
+        EFI_OUT_OF_RESOURCES and the caller is expected to survive it.  Raising
+        here turned a status the loader is supposed to handle into a Python
+        exception, so a test could pass without the loader's own failure path ever
+        running.  Callers bind the result with alloc_pages_or_status(); a `None`
+        return means "this firmware has no memory to give".
+        """
         limit = POOL_END if ceiling is None else ceiling
         address = (self.pool_next + align - 1) & ~(align - 1)
         if size < 0 or address + size > limit:
-            raise StubError("stub pool exhausted")
+            self.exhaustions.append((size, limit, self.pool_next))
+            return None
         self.pool_next = address + size
         self.write(address, bytes(size))
         return address
 
+    def alloc_or_raise(self, size, align=16, ceiling=None):
+        """alloc() for the stub's own fixed structures, where failure is a bug.
+
+        The system table, the ESP file records and similar scaffolding are not
+        UEFI services and have no status to return.  If the pool cannot hold them
+        the harness itself is mis-sized, which is a test bug rather than
+        something the loader should be asked to survive.
+        """
+        address = self.alloc(size, align=align, ceiling=ceiling)
+        if address is None:
+            size_wanted, limit, next_free = self.exhaustions[-1]
+            raise StubError(
+                f"stub pool exhausted building the harness itself: wanted "
+                f"{size_wanted} bytes, limit {limit:#x}, next free {next_free:#x}")
+        return address
+
     def alloc_utf16(self, text):
-        address = self.alloc(len(text) * 2 + 2)
+        address = self.alloc_or_raise(len(text) * 2 + 2)
         self.write(address, text.encode("utf-16-le") + b"\0\0")
         return address
 
@@ -426,7 +455,7 @@ class StubFirmware:
         the next one's memory, so the unit conversion lives here and nowhere
         else.
         """
-        return self.alloc(8 * slots)
+        return self.alloc_or_raise(8 * slots)
 
     def _build_tables(self):
         # --- Simple Text Output (11 entries; output_string at +8)
@@ -435,7 +464,7 @@ class StubFirmware:
                        self.add_service("output_string", self.svc_output_string))
 
         # --- Graphics Output Protocol (4 entries; *Mode at +24)
-        info = self.alloc(0x40)
+        info = self.alloc_or_raise(0x40)
         # EFI_GRAPHICS_PIXEL_FORMAT: 0 = RedGreenBlueReserved8BitPerColor,
         # 1 = BlueGreenRedReserved8BitPerColor.  The loader writes 0x00RRGGBB
         # and accepts either, so report the BGR layout that the framebuffer in
@@ -450,7 +479,7 @@ class StubFirmware:
         self.write(info, struct.pack("<IIII", 1, gop_width, gop_height, gop_format))
         self.write(info + 0x10, struct.pack("<IIII", 0, 0, 0, 0))
         self.write(info + 0x20, struct.pack("<I", gop_pixels))
-        mode = self.alloc(0x28)
+        mode = self.alloc_or_raise(0x28)
         self.write(mode, struct.pack("<IIQQQQ", 1, 0, info, 0x40, gop_base, gop_size))
         self.gop = self._table(4)
         self.write_u64(self.gop + 24, mode)
@@ -483,7 +512,7 @@ class StubFirmware:
                                        0x48, 0, 0))
 
         # --- System Table
-        self.sys_table = self.alloc(0x78)
+        self.sys_table = self.alloc_or_raise(0x78)
         self.write(self.sys_table,
                    struct.pack("<QIIII", 0x5453595320494249, 0x00020000, 0x78, 0, 0))
         self.write_u64(self.sys_table + 24, self.alloc_utf16("PC5 stub firmware"))
@@ -491,7 +520,7 @@ class StubFirmware:
         self.write_u64(self.sys_table + 56, 0xE5F0)      # console_out_handle
         self.write_u64(self.sys_table + 64, self.con_out)
         self.write_u64(self.sys_table + 96, self.bs)
-        self.write_u64(self.sys_table + 104, self.alloc(0x40))   # runtime services
+        self.write_u64(self.sys_table + 104, self.alloc_or_raise(0x40))   # runtime services
 
         # --- Volumes: the ESP the loader was booted from, and one with the kernel
         self.volumes = {
@@ -754,8 +783,12 @@ class StubFirmware:
             if size > ceiling:
                 return EFI_OUT_OF_RESOURCES
             base = self.alloc(size, align=4096, ceiling=ceiling)
+            if base is None:
+                return EFI_OUT_OF_RESOURCES        # pool cannot reach below the bound
         else:
             base = self.alloc(size, align=4096)
+            if base is None:
+                return EFI_OUT_OF_RESOURCES        # pool exhausted
 
         self.allocations.append((alloc_type, pages, base))
         self.write_u64(memory_ptr, base)
@@ -853,7 +886,16 @@ class StubFirmware:
         return EFI_SUCCESS
 
     def svc_allocate_pool(self, pool_type, size, buffer_ptr):
-        self.write_u64(buffer_ptr, self.alloc(size))
+        """EFI_BOOT_SERVICES.AllocatePool.  Returns a status, never raises.
+
+        This is a real service: firmware that cannot satisfy the request answers
+        EFI_OUT_OF_RESOURCES and the caller decides what to do.  Raising would
+        hide whether the loader handles that answer.
+        """
+        address = self.alloc(size)
+        if address is None:
+            return EFI_OUT_OF_RESOURCES
+        self.write_u64(buffer_ptr, address)
         self.map_generation += 1
         return EFI_SUCCESS
 
@@ -883,7 +925,7 @@ class StubFirmware:
             if self.image_protocol:
                 self.write_u64(interface_ptr, self.image_protocol)
                 return EFI_SUCCESS
-            image = self.alloc(96)
+            image = self.alloc_or_raise(96)
             self.image_protocol = image
             self.write_u64(image + 16, self.sys_table)
             self.write_u64(image + 24, 0xE5F00000)               # device we came from
@@ -899,7 +941,7 @@ class StubFirmware:
         if kind == "device_path":
             node = struct.pack("<BBH", 0x04, 0x01, 42) + bytes(38)
             end = struct.pack("<BBH", 0x7F, 0xFF, 4)
-            address = self.alloc(len(node) + len(end))
+            address = self.alloc_or_raise(len(node) + len(end))
             self.write(address, node + end)
             self.write_u64(interface_ptr, address)
             return EFI_SUCCESS
@@ -918,7 +960,7 @@ class StubFirmware:
     }
 
     def alloc_file_path(self, text):
-        address = self.alloc(16 + len(text) * 2 + 2)
+        address = self.alloc_or_raise(16 + len(text) * 2 + 2)
         self.write(address + 16, text.encode("utf-16-le") + b"\0\0")
         return address
 
@@ -960,7 +1002,7 @@ class StubFirmware:
         # A File Protocol object is 13 pointers wide (revision + 12 methods);
         # allocating less and copying the table into it would scribble over
         # whatever the pool allocator handed out next.
-        address = self.alloc(0x80)
+        address = self.alloc_or_raise(0x80)
         self.objects[address] = dict(volume=volume, path=path, is_dir=is_dir,
                                      data=data if data is not None else b"", pos=0)
         self.write_u64(address, 0)

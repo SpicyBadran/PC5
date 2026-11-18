@@ -427,3 +427,103 @@ class AllocateMaxAddressTests(unittest.TestCase):
                       "allocations just below the caller's bound must be accepted")
         used = [a for a in machine.allocations if a[2] >= 0x0FF00000]
         self.assertTrue(used, "the high window should have been used")
+
+
+class PoolExhaustionTests(unittest.TestCase):
+    """A firmware that runs out of memory must answer, not raise.
+
+    Real firmware returns EFI_OUT_OF_RESOURCES.  The stub used to raise
+    StubError("stub pool exhausted") from alloc(), so a loader that mishandled
+    that status would still have failed the test - but for the harness's reason
+    rather than the loader's, and the loader's own failure path never ran.  These
+    tests drive genuine exhaustion through both allocation services and require
+    the loader to take its own path.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import boot64_stub
+        cls.module = boot64_stub
+        cls.image, cls.kernel = artifacts()
+
+    def machine(self, **options):
+        return self.module.StubFirmware64(
+            image=self.image,
+            esp_volume={"\\EFI\\BOOT\\BOOTX64.EFI": self.image,
+                        "\\KERNEL64.BIN": self.kernel},
+            kernel_bytes=self.kernel, **options)
+
+    def starved(self, reserve=0, **options):
+        """A machine whose firmware has `reserve` bytes left for the loader.
+
+        `reserve=0` models conforming firmware with no memory to give.  The
+        reserve is applied after firmware builds its own structures, so this
+        models the loader's situation rather than breaking the harness.
+        """
+        return self.machine(pool_reserve=reserve, **options)
+
+    def test_allocate_pages_returns_out_of_resources_when_the_pool_is_empty(self):
+        """The service answer is a status, and it is the documented one."""
+        machine = self.starved()
+        slot = machine.alloc_or_raise(8)      # scratch slot, before starvation
+        machine.pool_next = machine.pool_ceiling()   # firmware has given it all
+        machine.write_u64(slot, (1 << 32) - 1)
+        status = machine.svc_allocate_pages(
+            self.module.EFI_ALLOCATE_ANY_PAGES, 2, 1, slot)
+        self.assertEqual(
+            status, self.module.EFI_OUT_OF_RESOURCES,
+            "an exhausted pool must answer EFI_OUT_OF_RESOURCES, not raise")
+        self.assertTrue(machine.exhaustions,
+                        "the stub must record why it could not satisfy the request")
+
+    def test_allocate_pool_returns_out_of_resources_when_the_pool_is_empty(self):
+        machine = self.machine()
+        slot = machine.alloc_or_raise(8)
+        machine.pool_next = machine.pool_ceiling()
+        status = machine.svc_allocate_pool(2, 4096, slot)
+        self.assertEqual(status, self.module.EFI_OUT_OF_RESOURCES,
+                         "AllocatePool must report exhaustion as a status")
+
+    def test_the_loader_takes_its_own_failure_path_under_real_exhaustion(self):
+        """The point of the fix: the loader's die() path actually runs.
+
+        No allocate_return override is used - the firmware is honest and simply
+        has no memory, exactly as a real one would.  The loader must name the
+        allocation that failed rather than the harness dying first.
+        """
+        machine = self.starved(reserve=0)
+        trace = machine.run()
+        self.assertNotIn(MARKER, trace.serial,
+                         "the boot must not reach the kernel entry")
+        self.assertNotIn("PC5-64BIT-KERNEL-ENTRY", trace.serial)
+        failures = [line.strip() for line in trace.serial.splitlines()
+                    if "PC5-64-LOADER-FAIL=" in line]
+        self.assertTrue(
+            failures,
+            "the loader must report its own failure, not die inside the harness")
+        self.assertIn(
+            "PC5-64-LOADER-FAIL=bootinfo-allocate", failures,
+            f"expected the first allocation to be the one that fails; saw {failures}")
+        self.assertTrue(machine.exhaustions,
+                        "the stub must have recorded an exhaustion, not a lie")
+
+    def test_exhaustion_is_reported_as_a_status_not_an_exception(self):
+        """Guard against a regression to StubError on the service path."""
+        machine = self.machine()
+        slot = machine.alloc_or_raise(8)
+        machine.pool_next = machine.pool_ceiling()
+        machine.write_u64(slot, (1 << 32) - 1)
+        for service, args in (
+            (machine.svc_allocate_pages,
+             (self.module.EFI_ALLOCATE_ANY_PAGES, 2, 4, slot)),
+            (machine.svc_allocate_pool, (2, 65536, slot)),
+        ):
+            with self.subTest(service=service.__name__):
+                try:
+                    status = service(*args)
+                except Exception as exc:            # noqa: BLE001 - the assertion
+                    self.fail(f"{service.__name__} raised {exc!r} on exhaustion; "
+                              f"firmware returns a status")
+                self.assertNotEqual(status, 0,
+                                    f"{service.__name__} reported success while "
+                                    f"the pool was empty")

@@ -486,6 +486,15 @@ class ShortSpanInitialisationTests(unittest.TestCase):
         (2 << 20) + 0x1000,           # rounds down to a single 2 MiB page
         (4 << 30) - 0x1000,           # rounds down to 2047 entries, not 2048
     )
+    # What each span above must exercise, so the collection cannot be thinned out
+    # without a failure.  Keyed by span; the value is the number of unused PD
+    # entries the span leaves behind, which is the quantity these tests exist for.
+    EXPECTED_UNUSED = {
+        1 << 30: 1536,
+        3 << 30: 512,
+        (2 << 20) + 0x1000: 2047,     # rounds down to ONE 2 MiB entry
+        (4 << 30) - 0x1000: 1,
+    }
 
     def setUp(self):
         self.lib = library()
@@ -779,12 +788,112 @@ class UnusedPdTailMutationTests(unittest.TestCase):
                     f"span {span:#x}: expected the poisoned value to survive at "
                     f"PD entry {stale[0]}")
 
-        # And the assertion the suite relies on really does reject it.
-        span = 1 << 30
-        total = span // TWO_MIB
-        block = Block()
-        ctypes.memset(block.base, CANARY, PT_PAGES * PAGE)
-        lib.pc5_pt_build_identity(block.base, span)
-        with self.assertRaises(AssertionError):
-            for index in range(total, 2048):
-                self.assertEqual(block.entry(index), 0)
+    def test_the_shipped_short_span_tests_reject_the_mutant(self):
+        """The real shipped test must fail on the mutant - not a copy of it.
+
+        test_stale_pd_tail_is_detected above asserts that the mutant leaves a
+        stale tail.  That is a fact about the mutant, not about the suite.  This
+        test runs the *actual* shipped test method against the mutant and
+        requires it to fail, so the discrimination belongs to the shipped
+        assertion rather than to a re-implementation of it.
+        """
+        import tempfile
+
+        directory = pathlib.Path(tempfile.mkdtemp(prefix="pc5-mutant-shipped-"))
+        mutant = directory / "pagetables.c"
+        source = SOURCE.read_text(encoding="utf-8")
+        mutant.write_text(source.replace(self.ORIGINAL, self.MUTANT), encoding="utf-8")
+        library_path = directory / "libpagetables_mutant_shipped.so"
+        build = subprocess.run(
+            ["gcc", "-std=gnu11", "-O2", "-fPIC", "-shared", "-Wall", "-Wextra",
+             "-Werror", "-I", str(SOURCE.parent), str(mutant), "-o", str(library_path)],
+            capture_output=True, text=True)
+        self.assertEqual(build.returncode, 0, f"mutant did not compile:\n{build.stderr}")
+
+        mutant_lib = ctypes.CDLL(str(library_path))
+        mutant_lib.pc5_pt_build_identity.restype = ctypes.c_ulong
+        mutant_lib.pc5_pt_build_identity.argtypes = [ctypes.c_ulonglong] * 2
+
+        # Bind the shipped test class to the mutant library and run its methods.
+        shipped = ShortSpanInitialisationTests
+        saved = _LIBRARY.get("lib")
+        _LIBRARY["lib"] = mutant_lib
+        try:
+            for name in ("test_unused_pd_entries_are_zero_for_every_short_span",
+                         "test_a_poisoned_tail_is_cleared_not_merely_ignored"):
+                with self.subTest(shipped_test=name):
+                    case = shipped(name)
+                    case.setUp()
+                    with self.assertRaises(AssertionError,
+                                           msg=f"the shipped test {name} passed "
+                                               f"against the mutant, so it does not "
+                                               f"actually guard the stale tail"):
+                        getattr(case, name)()
+        finally:
+            if saved is None:
+                _LIBRARY.pop("lib", None)
+            else:
+                _LIBRARY["lib"] = saved
+
+
+class ShortSpanCoverageIntegrityTests(unittest.TestCase):
+    """The short-span coverage must not be able to disappear quietly.
+
+    Emptying or thinning ShortSpanInitialisationTests.SPANS previously left the
+    suite green: every short-span test iterates that tuple, so an empty tuple
+    made them all vacuously pass, and the mutation test's per-span loop stopped
+    exercising anything.  These tests pin the collection's contents and prove
+    that losing them is detected rather than tolerated.
+    """
+
+    def setUp(self):
+        self.spans = ShortSpanInitialisationTests.SPANS
+        self.expected = ShortSpanInitialisationTests.EXPECTED_UNUSED
+
+    def test_the_span_collection_contains_the_cases_that_matter(self):
+        self.assertTrue(self.spans, "SPANS is empty: the short-span tests would all "
+                                    "pass without executing an assertion")
+        self.assertEqual(
+            set(self.spans), set(self.expected),
+            f"SPANS changed: {sorted(map(hex, self.spans))} vs expected "
+            f"{sorted(map(hex, self.expected))}. A span was added or removed, so "
+            f"EXPECTED_UNUSED must be updated deliberately.")
+
+    def test_every_span_leaves_a_non_empty_tail_to_check(self):
+        """A span that consumes all 2048 entries cannot test the tail at all."""
+        for span in self.spans:
+            with self.subTest(span=hex(span)):
+                total = span // TWO_MIB
+                unused = (PT_PAGES - 2) * 512 - total
+                self.assertEqual(
+                    unused, self.expected[span],
+                    f"span {span:#x} leaves {unused} unused PD entries, expected "
+                    f"{self.expected[span]}")
+                self.assertGreater(
+                    unused, 0,
+                    f"span {span:#x} leaves no unused PD entries, so it cannot "
+                    f"exercise the stale-tail property these tests exist for")
+
+    def test_the_collection_covers_more_than_one_gigabyte(self):
+        regions = sorted({span // (1 << 30) for span in self.spans})
+        self.assertGreaterEqual(
+            len(regions), 3,
+            f"the span collection only exercises {regions} GiB regions; it must "
+            f"cross several PDPT entries to be meaningful")
+
+    def test_empty_spans_would_be_detected(self):
+        """The negative case: prove the guard fails when the coverage is removed."""
+        saved = ShortSpanInitialisationTests.SPANS
+        saved_expected = ShortSpanInitialisationTests.EXPECTED_UNUSED
+        try:
+            ShortSpanInitialisationTests.SPANS = ()
+            ShortSpanInitialisationTests.EXPECTED_UNUSED = {}
+            case = ShortSpanCoverageIntegrityTests(
+                "test_the_span_collection_contains_the_cases_that_matter")
+            case.setUp()          # bind self.spans/self.expected from the empties
+            with self.assertRaises(AssertionError,
+                                   msg="emptying SPANS must be detected"):
+                case.test_the_span_collection_contains_the_cases_that_matter()
+        finally:
+            ShortSpanInitialisationTests.SPANS = saved
+            ShortSpanInitialisationTests.EXPECTED_UNUSED = saved_expected

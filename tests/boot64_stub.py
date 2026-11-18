@@ -95,13 +95,16 @@ class StubFirmware64(fw.StubFirmware):
     LIMIT_WINDOW = (0x0FFFFFF000, 0x2000)
 
     def __init__(self, *args, high_allocations=False, allocations_at_limit=False,
-                 **options):
+                 pool_reserve=None, **options):
         # Set before the base constructor maps memory and loads the image.
         self.high_allocations = high_allocations
         self.high_next = self.HIGH_WINDOW[0]
         # When set, MaxAddress requests are served from the top of the span and the
         # pool starts there, so a multi-page request necessarily crosses 4 GiB.
         self.allocations_at_limit = allocations_at_limit
+        # Bytes to leave for the loader once firmware structures exist.
+        # None means the whole pool; 0 models a firmware with no memory.
+        self.pool_reserve = pool_reserve
         super().__init__(*args, **options)
 
     def _map(self):
@@ -197,7 +200,7 @@ class StubFirmware64(fw.StubFirmware):
     def _build_tables(self):
         super()._build_tables()
         # --- ACPI configuration table: one entry pointing at a real RSDP.
-        rsdp = self.alloc(36)
+        rsdp = self.alloc_or_raise(36)
         self.write(rsdp, b"RSD PTR ")                 # signature
         self.write(rsdp + 8, b"\x02")                 # revision 2 (ACPI 2.0+)
         self.write(rsdp + 9, b"PC5STB")               # OEM id, 6 bytes
@@ -205,7 +208,7 @@ class StubFirmware64(fw.StubFirmware):
         self.write(rsdp + 24, struct.pack("<I", 1))   # OEM revision
         self.write(rsdp + 28, b"PC5 ")
         self.write(rsdp + 32, struct.pack("<I", 1))   # creator revision
-        entry = self.alloc(24)
+        entry = self.alloc_or_raise(24)
         self.write(entry, ACPI2_GUID)
         self.write_u64(entry + 16, rsdp)
         self.write_u64(self.sys_table + 104, 1)       # NumberOfTableEntries
@@ -222,6 +225,11 @@ class StubFirmware64(fw.StubFirmware):
                      uc.reg_read(UC_X86_REG_CR0) | CR0_PG | CR0_PE)
         uc.reg_write(UC_X86_REG_CR4, uc.reg_read(UC_X86_REG_CR4) | CR4_PAE)
         uc.reg_write(UC_X86_REG_CR3, self._install_firmware_paging())
+        # Firmware's own structures are built by now, so a test may restrict what
+        # is left for the loader.  Until this ran, exhausting the pool would have
+        # broken the harness rather than modelling a firmware without memory.
+        if self.pool_reserve is not None:
+            self.pool_next = max(self.pool_next, self.pool_ceiling() - self.pool_reserve)
         uc.reg_write(UC_X86_REG_CS, 0x33)
         uc.reg_write(UC_X86_REG_SS, 0x2B)
         # Firmware calls the entry point with a return address already on the
@@ -263,7 +271,7 @@ class StubFirmware64(fw.StubFirmware):
         that table: an address PC5 did not map faults, and that fault is evidence
         about PC5's map rather than about this harness.
         """
-        base = self.alloc(6 * 4096, align=4096)
+        base = self.alloc_or_raise(6 * 4096, align=4096)
         pml4 = base        # one PDPT (pre-allocated) plus a PD per 1 GiB chunk
         pdpts = {}
         tables = 0
@@ -275,9 +283,9 @@ class StubFirmware64(fw.StubFirmware):
                 pml4_index = (cursor >> 39) & 0x1FF
                 pdpt_index = (cursor >> 30) & 0x1FF
                 if pml4_index not in pdpts:
-                    pdpts[pml4_index] = self.alloc(4096, align=4096)
+                    pdpts[pml4_index] = self.alloc_or_raise(4096, align=4096)
                     self.write_u64(pml4 + pml4_index * 8, pdpts[pml4_index] | 0x3)
-                pd = self.alloc(4096, align=4096)
+                pd = self.alloc_or_raise(4096, align=4096)
                 self.write_u64(pdpts[pml4_index] + pdpt_index * 8, pd | 0x3)
                 entries = [((cursor + index * 0x200000) | 0x83) for index in range(chunk)]
                 self.write(pd, struct.pack("<%dQ" % chunk, *entries))
