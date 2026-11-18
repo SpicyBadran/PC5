@@ -337,6 +337,162 @@ class ContainmentTest(unittest.TestCase):
             shutil.rmtree(outside, ignore_errors=True)
 
 
+class DescriptorRelativeCreationTest(unittest.TestCase):
+    """E1: the create-time race, exercised deterministically rather than by timing.
+
+    The vulnerable shape was ``check -> create-by-path``, so a component replaced
+    *between* the two made the create land outside the root.  These tests drive the
+    creation boundary through a hook, so they fail against that shape every time and
+    pass against descriptor-relative creation every time.  Nothing here sleeps or
+    races threads: a probabilistic test would prove nothing and flake.
+    """
+
+    def setUp(self):
+        self.root = pathlib.Path(scratch.root()).resolve()
+        self.outside = self.root.parent / f"{self.root.name}-e1-target"
+        self.outside.mkdir(exist_ok=True)
+        self.addCleanup(shutil.rmtree, self.outside, True)
+
+    def _swap_component(self, name="owner"):
+        """Replace a scratch component with a symlink to the outside target."""
+        victim = self.root / name
+        if victim.is_symlink() or victim.is_file():
+            victim.unlink()
+        elif victim.is_dir():
+            shutil.rmtree(victim)
+        os.symlink(self.outside, victim)
+
+    def _remove_component(self, name):
+        """Remove a component whether it is a symlink, a file or a directory."""
+        victim = self.root / name
+        if victim.is_symlink() or victim.is_file():
+            victim.unlink()
+        elif victim.is_dir():
+            shutil.rmtree(victim, ignore_errors=True)
+
+    def test_support_probe_is_true_here(self):
+        """The premise of every test below: this platform can do it safely."""
+        self.assertTrue(
+            scratch._secure_creation_supported(),
+            "descriptor-relative creation is reported unavailable on this platform")
+
+    def test_support_probe_survives_a_patched_os_mkdir(self):
+        """The probe must answer about the platform, not about a test double.
+
+        ``os.supports_dir_fd`` compares function objects by identity, so a naive
+        probe reports "unsupported" as soon as ``os.mkdir`` is replaced - which
+        would silently disable the containment path inside these very tests.
+        """
+        original = os.mkdir
+        try:
+            os.mkdir = lambda *a, **k: original(*a, **k)
+            self.assertTrue(scratch._secure_creation_supported())
+        finally:
+            os.mkdir = original
+
+    def test_a_component_swapped_at_the_creation_boundary_cannot_escape(self):
+        """E1: swap the parent at the leaf ``mkdir``, which is the exact window."""
+        original = os.mkdir
+        fired = []
+
+        def hook(path, mode=0o777, *, dir_fd=None):
+            if dir_fd is not None and str(path).startswith("case-") and not fired:
+                fired.append(path)
+                self._swap_component("owner")
+            return original(path, mode, dir_fd=dir_fd)
+
+        os.mkdir = hook
+        try:
+            with self.assertRaises((OSError, ValueError)):
+                scratch.directory("owner")
+        finally:
+            os.mkdir = original
+
+        self.assertTrue(fired, "the hook never reached the creation boundary")
+        self.assertEqual(
+            list(self.outside.iterdir()), [],
+            "E1: a directory was created outside the scratch root")
+
+    def test_a_component_swapped_before_the_walk_is_refused(self):
+        """A symlinked component is refused, and the outside target stays empty."""
+        self._swap_component("owner")
+        with self.assertRaises(ValueError, msg="a symlinked component was followed"):
+            scratch.directory("owner")
+        self.assertEqual(list(self.outside.iterdir()), [])
+
+    def test_a_symlinked_component_is_refused_for_nested_parts_too(self):
+        (self.root / "a").mkdir(exist_ok=True)
+        self._swap_component("a")
+        with self.assertRaises(ValueError):
+            scratch.directory("a", "b", "c")
+        self.assertEqual(list(self.outside.iterdir()), [])
+
+    def test_normal_nested_creation_still_works(self):
+        path = scratch.directory("drt", "Nested", "case", prefix="nested-")
+        self.assertTrue(os.path.isdir(path))
+        self.assertTrue(pathlib.Path(path).name.startswith("nested-"))
+        self.assertEqual(
+            pathlib.Path(path).parent.resolve(),
+            (self.root / "drt" / "Nested" / "case").resolve())
+
+    def test_repeated_creation_under_one_owner_is_distinct(self):
+        first = scratch.directory("drt", "Same")
+        second = scratch.directory("drt", "Same")
+        self.assertNotEqual(first, second)
+        self.assertTrue(os.path.isdir(first) and os.path.isdir(second))
+
+    def test_descriptors_are_not_leaked(self):
+        """A rejected call must close what it opened (``finally`` on every path).
+
+        Runs in its own owner name and removes the injected symlink afterwards, so a
+        failure here cannot poison the shared scratch root for later cases.
+        """
+        if not os.path.isdir("/proc/self/fd"):
+            self.skipTest("no /proc/self/fd on this platform")
+        owner = "leak-probe"
+        before = len(os.listdir("/proc/self/fd"))
+        for _ in range(20):
+            scratch.directory(owner, "ok")
+        self._swap_component(owner)
+        self.addCleanup(self._remove_component, owner)
+        for _ in range(20):
+            with self.assertRaises(ValueError):
+                scratch.directory(owner)
+        after = len(os.listdir("/proc/self/fd"))
+        self.assertLessEqual(
+            after, before + 4,
+            f"descriptor count grew from {before} to {after}: a descriptor leaked")
+
+    def test_unexpected_errors_are_not_masked_as_containment_rejections(self):
+        """``PermissionError`` is a real problem and must surface as itself.
+
+        Translating every ``OSError`` into ``ValueError`` would hide an unwritable
+        scratch root behind a message about symlinks.
+        """
+        target = self.root / "unwritable"
+        target.mkdir(exist_ok=True)
+        os.chmod(target, 0o500)
+        self.addCleanup(os.chmod, target, 0o700)
+        if os.geteuid() == 0:
+            self.skipTest("root bypasses permission bits")
+        with self.assertRaises(PermissionError, msg="an OS error was masked"):
+            scratch.directory("unwritable", "child")
+
+    def test_the_refusal_message_names_the_missing_capability(self):
+        """If the platform cannot do this safely, it says so instead of degrading."""
+        original = scratch._secure_creation_supported
+        scratch._secure_creation_supported = lambda: False
+        try:
+            with self.assertRaises(RuntimeError) as caught:
+                scratch.directory("anything")
+        finally:
+            scratch._secure_creation_supported = original
+        self.assertIn("descriptor-relative", str(caught.exception))
+        self.assertFalse(
+            (self.root / "anything").exists(),
+            "a refused call created a directory anyway")
+
+
 class CleanupLifecycleTest(unittest.TestCase):
     """Cleanup behaviour observed through a real runner, not a fake outcome.
 
