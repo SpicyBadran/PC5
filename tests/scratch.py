@@ -39,6 +39,35 @@ Three kinds of artifact live in a FAT32 test class, and they need different scop
 Nothing here touches the repository working tree, so a stray directory can never be
 committed, and no test can be affected by another checkout's leftovers.
 
+Containment, and what it does not protect against
+------------------------------------------------
+:func:`directory` validates every path component it is given, and then checks the
+*resolved* path before creating each level.  That defends against the failures this
+module actually exists to prevent: accidental traversal (``directory("..", "x")``), a
+malformed ``prefix``, and ordinary collision between test processes -- one process
+or one class cannot write into another's tree, and a rejected argument creates
+nothing at all.
+
+It is not a security boundary against a hostile process running as the same OS user.
+Two limits are worth stating plainly, because the code reads stronger than it is:
+
+* **The checks are not atomic with the creation.**  ``Path.resolve()`` followed by
+  ``os.makedirs`` or ``tempfile.mkdtemp`` is a time-of-check/time-of-use sequence.
+  A process that swapped a component for a symlink between the check and the create
+  could make a directory land outside the root *before* the following check noticed
+  it -- the later check would report the escape, but the directory would already
+  exist.  This is a real limitation, and it is deliberately not fixed here: closing
+  it needs ``O_NOFOLLOW``-style openat/``dir_fd`` traversal, which is a different
+  piece of work.
+* **Exposure is limited, not eliminated, by permissions.**  The per-process root is
+  created by ``tempfile.mkdtemp`` and is therefore owner-only (``0700``), so another
+  *user* cannot reach into it at all.  The same-user case remains open by
+  construction, since a process running as this user can already write anything this
+  user can write.
+
+So the guarantee this module offers is "no accidental or colliding writes", not "no
+possible write".  Treat it as a test-isolation helper, not as a sandbox.
+
 Cleanup reliability
 -------------------
 ``addClassCleanup`` runs even when ``setUpClass`` raises part-way through, and it
@@ -131,8 +160,8 @@ def directory(*parts: str, prefix: str = "") -> str:
     directory says what produced it.  The returned directory is unique, so callers
     may use fixed filenames inside it without colliding with anything else.
 
-    Every part and the ``prefix`` are single path components, and the result is
-    guaranteed to be inside :func:`root`.  Without that, ``directory("..",
+    Every part and the ``prefix`` are single path components, and every check is
+    made to keep the result inside :func:`root`.  Without that, ``directory("..",
     "elsewhere")`` built a path outside the root, and because cleanup and ``atexit``
     remove only the root, the escaped directory survived the run: a leak that no test
     would report and that ``PC5_KEEP_TEST_SCRATCH`` could not account for.
@@ -146,7 +175,12 @@ def directory(*parts: str, prefix: str = "") -> str:
     and ``mkdtemp`` creates it.  Checking containment afterwards would then report
     the escape while leaving the escaped directory on disk -- the check would
     describe the damage instead of preventing it.  Validating first is what makes
-    the guarantee hold; the post-creation checks below are defence in depth.
+    the ordinary cases hold; the post-creation checks below are defence in depth.
+
+    These checks are validation, not an atomic sandbox: see "Containment, and what
+    it does not protect against" in the module docstring.  A same-user process that
+    changes the filesystem between a check and the following create can still cause
+    a directory to appear outside the root before the next check reports it.
     """
     base = root()
     safe = [_component(part, "part") for part in parts]
@@ -160,7 +194,10 @@ def directory(*parts: str, prefix: str = "") -> str:
     # pointing out of the root, and makedirs must not be allowed to follow it.
     _require_within(base, parent)
     os.makedirs(parent, exist_ok=True)
-    # Again after creation, so a component created concurrently cannot slip past.
+    # Again after creation.  This catches a component that changed between the
+    # check above and ``makedirs``, but only after the directory exists: it reports
+    # the escape rather than preventing it, and neither check is atomic with the
+    # create.  See the module docstring on same-user processes.
     _require_within(base, parent)
 
     path = tempfile.mkdtemp(prefix=safe_prefix or "case-", dir=parent)

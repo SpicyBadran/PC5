@@ -29,6 +29,20 @@ look like object ids:
     rule is therefore an exemption that must be *earned*: a digit-only token is
     dropped only when Git cannot hand it back, and a digit-only token that does
     resolve is checked like any other.
+
+    **Known limitation: a dead all-digit object id is not reported.**  The two
+    cases are genuinely indistinguishable from the token alone -- a build timestamp
+    and an abbreviated id that no longer resolves look identical -- so the exemption
+    has to resolve one way and this is the direction chosen.  The consequence is
+    that writing a *dead* all-digit abbreviation (``1234567``) in a document does
+    not produce a failure, while writing a dead non-digit one (``deadbee``) does.
+    Skipping is not evidence that a digit-only token is a timestamp; it means only
+    that Git could not resolve it.  Catching this case would need a second signal
+    -- for example a register of known timestamp shapes, or a rule that only
+    ``docs/TEST_RESULTS.md`` may contain digit-only tokens -- and neither is
+    attempted here, because either would narrow what a document may legitimately
+    cite.  The gap is bounded: it makes the guard less sensitive, never less
+    correct about the citations it does check.
   * **Any object type is accepted, not only commits.** Several documents cite tree
     hashes on purpose -- "`merge(PR26, PR27)` = `5b452e2...` = `141f91f^{tree}`" --
     and a tree hash is as much evidence as a commit hash.
@@ -50,10 +64,12 @@ Exit status
        document matched, or no citation was found in any of them
 
 Status 2 exists because "I checked and it passed" and "I could not check" must not
-print the same thing. A gate whose document globbing has quietly stopped matching
-anything would otherwise report success forever, and the protection it was written to
-provide would be absent exactly when it was needed. Neither condition is a
-documentation defect, so neither is reported as one; both simply fail.
+print the same thing.  Status 0 means every citation *that was examined* resolved;
+it does not mean every digit-only token was examined, for the reason above.  A gate
+whose document globbing has quietly stopped matching anything would otherwise report
+success forever, and the protection it was written to provide would be absent exactly
+when it was needed. Neither condition is a documentation defect, so neither is
+reported as one; both simply fail.
 
     python3 tools/commit_citations.py            # exit 1 dead, 2 uncheckable
 """
@@ -100,6 +116,12 @@ def citations(text: str, *, resolves=None):
     object id can be all digits. Without the callback the exemption cannot be
     applied safely, so digit-only tokens are yielded and the caller checks them --
     the cost of a spurious ``cat-file`` is one subprocess call.
+
+    With ``resolves`` supplied, a digit-only token that does *not* resolve is
+    therefore skipped, which also skips a dead all-digit object id.  That is the
+    documented limitation described in the module docstring: the two are
+    indistinguishable from the token, and this function resolves the ambiguity in
+    favour of "timestamp".
     """
     for number, line in enumerate(text.splitlines(), start=1):
         for match in CITATION.finditer(line):
