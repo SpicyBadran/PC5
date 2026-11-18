@@ -15,7 +15,7 @@ follow-up work: the commit that adds this file; the parent it applies to is
 
 | # | Document | Purpose | Tested SHA | Evidence type | Historical? |
 |---|---|---|---|---|---|
-| 1 | `AUDIT_PR26_PR27_2026-11-16.md` | The pre-merge audit. Original verdict REQUEST CHANGES / two critical findings (D1, D2). §11 records remediation; §12 is a dated forward pointer to the L1 fix. | `d0be617` (audited), §11–§12 reference `de9c6a3`/`ec16c65`/`141f91f` | **Author-reported**, re-derived from source | **Yes** — describes a defect state that no longer exists. Deliberately preserved. |
+| 1 | `AUDIT_PR26_PR27_2026-11-16.md` | The pre-merge audit. Original verdict REQUEST CHANGES / two critical findings (D1, D2). §11 records remediation; §12 is a dated forward pointer to the L1 fix. | `d0be617` (audited), §11–§12 reference `ed9c6a3`/`ec16c65`/`141f91f` | **Author-reported**, re-derived from source | **Yes** — describes a defect state that no longer exists. Deliberately preserved. |
 | 2 | `REVIEW_PACKAGE_PR26_PR27_2026-11-16.md` | Reading guide for a human reviewer: what changed, what to look at, what not to sign off. | `141f91f`, with later sections on `0a7eaa0` | **Implementer-assembled** | Partly |
 | 3 | `REMEDIATION_REPORT_F1_F5_2026-11-16.md` | What F1–F5 were, how each was closed, the regression table. | `0a7eaa0` | **Implementer-reported**, each result re-derived | Yes — predates the F2 integrity rewrite |
 | 4 | `AUDIT_PR26_PR27_INDEPENDENT_2026-11-16.md` | Post-remediation audit of the stack. **Filename retains "INDEPENDENT"; the claim in its title has been withdrawn** — see the note at its head. | `170e611`, `141f91f` | **Author-reproduced** | Yes |
@@ -23,7 +23,7 @@ follow-up work: the commit that adds this file; the parent it applies to is
 | 6 | `FINAL_REVIEW_PR26_PR27_2026-11-16.md` | The review that produced verdict `DO NOT APPROVE — TECHNICAL FINDINGS REMAIN` and drove this follow-up. Self-discloses non-independence at its head. | `0a7eaa0` | **Author-reproduced** | Yes — its findings are what this branch addresses |
 | 7 | `LANDING_STRATEGY_D_READINESS_2026-11-16.md` | Landing readiness: Strategy D ordering, blockers, repository settings. | `170e611` | **Implementer-assessed** | Yes |
 | 8 | `EVIDENCE_INDEX_2026-11-16.md` | This file. | the follow-up commit | Implementer-assembled | No |
-| 9 | `FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md` | The follow-up: F2 coverage redesign, F1 doc corrections, F4/F5 delivery, cold-start investigation, **and (§9) the shared-scratch-path races**. | follow-up commits; §9 describes `995730d` and its successor | **Implementer-reported**, reproduced on demand | No |
+| 9 | `FOLLOWUP_EVIDENCE_F1_F5_2026-11-16.md` | The follow-up: F2 coverage redesign, F1 doc corrections, F4/F5 delivery, cold-start investigation, **and (§9) the shared-scratch-path races**. | follow-up commits; §9 describes `59d83cf` and its successor | **Implementer-reported**, reproduced on demand | No |
 
 **Every one of documents 1–7 was written by the same author as the code it describes.**
 A reviewer should read them as a map of what to check, not as a verdict. The repository has

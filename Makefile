@@ -48,7 +48,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: ovmf-setup ovmf-check all iso uefi kernel64 uefi64 stubtest64 check docs-check presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record brand brand-check
+.PHONY: ovmf-setup ovmf-check all iso uefi kernel64 uefi64 stubtest64 check docs-check citations-check presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record brand brand-check
 
 all: iso
 
@@ -298,7 +298,7 @@ psm:
 psm-render:
 	python3 -m psm.render --write
 
-check: unit psm docs-check presentation-check brand-check
+check: unit psm docs-check citations-check presentation-check brand-check
 	python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 # The README's figures and status table are generated from the milestone graph.
@@ -310,6 +310,14 @@ presentation:
 
 presentation-check:
 	python3 tools/presentation.py check
+
+# A citation is only evidence while Git can hand the object back, and a rebase
+# rewrites commit ids silently.  `docs-check` validates links, anchors and make
+# targets and cannot see this, so a rewrite used to be able to rot the whole
+# evidence trail while every gate stayed green.  `citations-check` resolves each
+# backticked object reference in the dated evidence documents.
+citations-check:
+	python3 tools/commit_citations.py
 
 # The logo and its variants are generated from tools/brand.py, so a hand edit to
 # brand/*.svg is a stale edit.  `brand` writes; `brand-check` reads.

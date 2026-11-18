@@ -72,7 +72,7 @@ None of these four appear in `main..PR26` (each has count 0 there). **The remedi
 What that file actually is, stated plainly, because calling it "an analysis document" understates it:
 
 - It is a **historical, pre-remediation audit.** It was performed at `d0be617` and its headline verdict is **REQUEST CHANGES on both PRs** — *"NEITHER is mergeable while the 4 GiB identity map is a 1 GiB map."* The header says so and has not been edited.
-- It records **two critical findings** (D1, the 1 GiB identity map; D2, the zero `AllocateMaxAddress` bound), both real at the SHA audited, both since fixed (`de9c6a3`, `ec16c65`).
+- It records **two critical findings** (D1, the 1 GiB identity map; D2, the zero `AllocateMaxAddress` bound), both real at the SHA audited, both since fixed (`ed9c6a3`, `ec16c65`).
 - Its **§11 remediation section supersedes the original technical status** for exactly the findings it names — it is explicit about which, and leaves R2/R4 as NOT TESTED.
 - It **predated the L1 closure** in `141f91f` when first written. §12, appended in the same pass as this correction, resolves that with a dated forward pointer rather than by rewriting §1–§11.
 

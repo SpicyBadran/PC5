@@ -218,9 +218,15 @@ in. `boot/uefi64/` and `kernel64/` are compiled and tested but are not part of t
 Appended, not rewritten. Everything above stands as written; this section records
 what was done afterwards and one correction to it.
 
-**Starting revision:** `d6f6c7ff22376fb04a9578323cf2495d708a2564`
-**Final revision:** the commit that adds this section (parent `995730d`).
+**Starting revision:** `eacba14`
+**Final revision:** the commit that adds this section (parent `03daa4a`).
 
+*Corrected 2026-11-16.* Both references above originally named the commits that
+carried them before this branch was rebased onto PR #27, and a rebase rewrites every
+commit id above it, so both had become unreadable pointers. The rewritten commits
+are cited instead: `eacba14` is still the ancestor, and the commit that adds this
+section still has its own parent, so the ordering this paragraph describes is
+unchanged. Nothing else in §9 was altered.
 ### 9.1 Correction: the skip count
 
 An earlier draft of §6 said the suite ran with **"0 real skips"** while the same
@@ -610,7 +616,7 @@ it wrong:
 
 | Implementation under test | Result |
 |---|---|
-| `201a96f` (`unexpectedSuccesses` only) | **27 tests, FAILED (failures=2)** - `test_unexpected_success_keeps_its_directory`, `test_unexpected_success_does_not_retain_an_ordinary_pass` |
+| `667afa0` (`unexpectedSuccesses` only) | **27 tests, FAILED (failures=2)** - `test_unexpected_success_keeps_its_directory`, `test_unexpected_success_does_not_retain_an_ordinary_pass` |
 | mutation: retain *every* `@expectedFailure` case | **27 tests, FAILED (failures=1)** - `test_a_genuine_expected_failure_removes_its_directory` |
 | current implementation | **27 tests, OK** |
 
@@ -702,9 +708,9 @@ No diagnostic was weakened, re-verified after the fix:
 
 ### 12.4 Regression tests
 
-Four added, each run against the original `c34988c` code and against the fix:
+Four added, each run against the original `3c4684d` code and against the fix:
 
-| Test | `c34988c` | fixed |
+| Test | `3c4684d` | fixed |
 |---|---|---|
 | `test_docs_check`: `..._nul_is_reported_not_raised` | **ERROR** (`ValueError`) | pass |
 | `test_docs_check`: `..._nul_with_a_fragment_is_reported_not_raised` | **ERROR** | pass |
@@ -775,16 +781,26 @@ rather than a regression:
   `main` (`8aab6d3`), a link such as `../../…/etc/hostname` was accepted when the
   target existed. Encoding was not required.
 * **The `%2e%2e` decoding behaviour was introduced earlier in PR #28's history**,
-  by the percent-decoding change in `c34988c` that made the checkers follow links
+  by the percent-decoding change in `3c4684d` that made the checkers follow links
   the way GitHub does. Before it, `docs/%2e%2e/README.md` was reported as missing
   because the literal encoded string did not exist.
-* **The H1/M2 remediation (§12-§13, commits `07337c2` and `3b47f9e`) introduced no
+* **The H1/M2 remediation (§12-§13, commits `ac83252` and `ef876bb`) introduced no
   new traversal capability.** It changed how malformed links are reported, not
   which paths resolve.
 
 So the accurate statement is: relative-path traversal is not confined to the
 repository, and the encoded form became reachable earlier in this branch. Neither
 is caused by the fix in §12.
+
+*Citation note, 2026-11-16.* The commit ids in this section were rewritten by the
+rebase onto PR #27 and have been replaced with the rewritten commits. For readers
+working from an earlier copy of this document, the mapping is: the percent-decoding
+commit formerly cited here as c34988c is now `3c4684d`, the malformed-link fix
+formerly cited as 07337c2 is now `ac83252`, and the LIFO commit formerly cited as
+3b47f9e is now `ef876bb`. The superseded ids are given without backticks because
+they no longer name any object and must not be read as live citations. Commit
+subjects and diffs are unchanged, so the argument above is unaffected; only the
+pointers moved.
 
 ### 14.3 Status
 

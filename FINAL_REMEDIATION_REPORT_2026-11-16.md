@@ -10,10 +10,18 @@ of the code remains the author of the remediation and of this report. See §11.
 | `main` | `8aab6d3864bb2e867a70bba28e7bfb52f43d7e35` | `git ls-remote`, `gh pr view` |
 | PR #26 head | `170e611dcdfa3fe12e9abe58c2e60ee323aa461c` | `git ls-remote`, `gh pr view` |
 | PR #27 head (start) | `0a7eaa07222df5b6182050933c650e8b74efde94` | `git ls-remote`, `gh pr view` |
-| **Follow-up head (final)** | **`28aa4bb5635f2f5c9ac2ee1420c9bda1f9ba3ef6`** | pushed, re-fetched, `git ls-remote` agrees |
+| **Follow-up head (final)** | **`cc1b997`** | pushed, re-fetched, `git ls-remote` agrees *(see note below)* |
 
-Ancestry re-proven with `git merge-base --is-ancestor`: `main → 170e611 → 0a7eaa0 → 28aa4bb`.
+Ancestry re-proven with `git merge-base --is-ancestor`: `main → 170e611 → 0a7eaa0 → cc1b997`.
 **Stack preserved; no history rewritten, no force-push, no merge, no PR comment or approval.**
+
+*Note, 2026-11-16.* The follow-up head named above was 28aa4bb when this report was
+written. The branch was rebased onto PR #27 afterwards -- a separate, later operation,
+and one that rewrote history where this report recorded that none had been -- so that
+commit no longer exists and `cc1b997` is the same work at its current id. The ancestry
+chain is unchanged in shape: `cc1b997` is still a direct descendant of `0a7eaa0`, and
+the four other SHAs in the table above were not affected because nothing in the stack
+at or below PR #27 was rewritten.
 
 ## 2. Working-tree preservation
 
@@ -203,7 +211,7 @@ that the 64-bit path is correct — it is compiled and tested but is not part of
 
 | | |
 |---|---|
-| Follow-up branch | `arena/followup-evidence-integrity` @ `28aa4bb5635f2f5c9ac2ee1420c9bda1f9ba3ef6` |
+| Follow-up branch | `arena/followup-evidence-integrity` @ `cc1b997` (was 28aa4bb before the PR #27 rebase; see §1) |
 | Remote | in sync (`git ls-remote` agrees) |
 | PR #26 | OPEN, `mergedAt: null`, head `170e611`, 0 reviews, 0 comments — **untouched** |
 | PR #27 | OPEN, `mergedAt: null`, head `0a7eaa0`, 0 reviews, 0 comments — **untouched** |

@@ -1642,6 +1642,16 @@ control to the PC5 kernel.
 
 Base: `main` `af726d2` (M1i merged). Branch `arena/473f5139-pc5`.
 
+*Note, added 2026-11-16.* `af726d2` is a real commit — "Merge pull request #16 from
+SpicyBadran/arena/3a8e35e9-pc5", 2026-11-15 — and it was `main` at the time this section
+records. It is **deliberately not repointed**, and it does not resolve in a fresh clone:
+`main` was later rewritten, so that merge is no longer an ancestor of it and a clone
+fetches only the rewritten line. It is therefore an accurate historical base, not a broken
+citation, and replacing it with a current SHA would fabricate a run that never happened
+against that revision. Two consequences follow, both recorded rather than fixed:
+`BUILD_ID=af726d2` in the commands below names that historical revision, and a reader
+cannot re-run this section exactly against a fresh clone.
+
 ### 16.1 Environment (external dependency, not part of the repository)
 
 | Item | Value |
