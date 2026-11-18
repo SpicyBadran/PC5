@@ -145,8 +145,18 @@ at cleanup time - `TestCase.run` calls `doCleanups()` before it records the
 outcome - so an unexpected success deleted its own directory. It is now
 reconstructed from the expected-failure marker, and four real-lifecycle tests
 bind it in both directions (retain an unexpected success, remove a met
-expectation). `test_scratch_isolation` is now **27** tests; the two failures the
-old implementation produces are listed in §11.3. Measured after the
+expectation). `test_scratch_isolation` is now **28** tests; the two failures the
+old implementation produces are listed in §11.3.
+
+**Correction after independent review (report §12-§13):** the percent-decoding
+added to the link tooling let `%00` reach `Path.resolve()`, which raises
+`ValueError: embedded null byte` - so a malformed link crashed the checker
+instead of being reported. Fixed in `tools/docs_check.py` and
+`tools/presentation.py` only (the third site uses `os.path.exists`, which returns
+False); four regression tests, three of which fail against the previous code.
+Separately, §13 records the documented LIFO constraint on `register_cleanup`:
+evidence is retained for failures of the test body and of earlier cleanups, not
+for an exception raised after the scratch cleanup has run. Measured after the
 fix, with the same passing 88 tests: **0** case directories, **0** class trees,
 **0** files. With one failure injected into a 17-case class, exactly that case's
 directory survives (3 files).

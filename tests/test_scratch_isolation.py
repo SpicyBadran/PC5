@@ -372,6 +372,70 @@ class CleanupLifecycleTest(unittest.TestCase):
                          "an unexpected success must not retain an unrelated "
                          f"passing case's directory: {remaining}")
 
+    def test_cleanup_ordering_decides_whether_evidence_survives(self):
+        """The LIFO hazard documented on ``register_cleanup``.
+
+        ``addCleanup`` runs functions in reverse registration order, and the
+        retention decision is taken when the scratch cleanup runs.  So the same
+        raising cleanup on the same passing test body retains evidence or
+        destroys it depending only on registration order:
+
+        * scratch cleanup registered **first** -> runs last -> sees the error the
+          other cleanup recorded -> retains;
+        * scratch cleanup registered **last** -> runs first -> sees a pass ->
+          removes, and the error is recorded afterwards.
+
+        Both halves are asserted, because only the pair shows that the ordering
+        is what decides.  This is a documentation and guard test: it does not
+        claim that evidence is always retained, it pins the requirement that
+        callers register the scratch cleanup first.
+        """
+
+        def make_case(register_scratch_first):
+            # Distinct owners per half: the first half deliberately leaves its
+            # evidence behind, and the second half must not be able to mistake it
+            # for its own.
+            owner = "safe_order" if register_scratch_first else "hazardous_order"
+
+            class _Case(unittest.TestCase):
+                def test_body_passes(self):
+                    self.work = scratch.directory("lifecycle", owner,
+                                                  "test_body_passes")
+                    pathlib.Path(self.work, "in.img").write_bytes(b"payload")
+
+                    def raising_cleanup():
+                        raise RuntimeError("cleanup boom")
+
+                    if register_scratch_first:
+                        scratch.register_cleanup(self, self.work)
+                        self.addCleanup(raising_cleanup)
+                    else:
+                        self.addCleanup(raising_cleanup)
+                        scratch.register_cleanup(self, self.work)
+
+            return _Case
+
+        # Safe order: scratch cleanup registered first, so it runs last.
+        case = make_case(True)
+        result, _, remaining = self._run(
+            unittest.TestSuite([case("test_body_passes")]))
+        self.assertEqual(len(result.errors), 1,
+                         "the raising cleanup must be recorded as an error")
+        self.assertTrue(any("safe_order" in p for p in remaining),
+                        "registered first, the scratch cleanup runs last and "
+                        f"must retain the evidence: {remaining}")
+
+        # Hazardous order: scratch cleanup registered last, so it runs first.
+        case = make_case(False)
+        result, _, remaining = self._run(
+            unittest.TestSuite([case("test_body_passes")]))
+        self.assertEqual(len(result.errors), 1,
+                         "the raising cleanup must still be recorded as an error")
+        self.assertFalse(any("hazardous_order" in p for p in remaining),
+                         "registered last, the scratch cleanup runs before the "
+                         "raising one; this test records that known limitation "
+                         f"rather than pretending it is fixed: {remaining}")
+
     def test_keep_env_keeps_everything(self):
         case = self._make_case()
         with unittest.mock.patch.dict(os.environ, {scratch.KEEP_ENV: "1"}):

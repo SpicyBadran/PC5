@@ -632,3 +632,115 @@ passing cases, retention of failing artifacts, and the per-case attribution from
 §10.3 are all still bound by the suite - the 23 tests §10 left behind still pass,
 and this section adds 4 more. Full-suite and concurrency results are recorded in
 the commit message and summarised in the PR, not duplicated here.
+
+## 12. Addendum: the link checkers must report malformed paths, not crash on them
+
+Dated 2026-11-16, after §11. This one is a defect introduced *by* §11's companion
+change (the percent-decoding in the docs tooling), found by independent review
+rather than by the suite.
+
+### 12.1 The defect (H1)
+
+Making the link checkers decode `%XX` so they follow what GitHub follows was
+correct, but it moved a malformed link out of the "does not resolve" path and
+into `Path.resolve()`, which raises on some decoded strings. `%00` is the one that
+bites:
+
+    urllib.parse.unquote("docs/a%00b.md")   -> "docs/a\0b.md"
+    (root / "docs/a\0b.md").resolve()       -> ValueError: embedded null byte
+
+Before the change the literal `docs/a%00b.md` simply did not exist and was
+reported. After it, the same link caused an uncaught traceback that stopped the
+whole documentation check. A tool whose purpose is to report bad links must never
+die on one.
+
+Measured on the project interpreter, before the fix:
+
+The targets are listed rather than written as live links, because a literal
+malformed link in this document is itself a broken link - the checker is right to
+say so, and it did.
+
+| Link target | Result |
+|---|---|
+| `docs/a%00b.md` | **CRASH** `ValueError: embedded null byte` |
+| `docs/a%00b.md#frag` | **CRASH** |
+| `docs/%zz.md`, `docs/a%2`, `a%2Fb.md`, `%ed%a0%80`, `%b0` | reported as missing (already safe) |
+| `docs/%2e%2e/etc/passwd` | reported as missing (no file there; nothing escapes) |
+
+### 12.2 Scope: which of the three checkers actually crashed
+
+Two of the three, measured individually rather than assumed. The third was left
+alone because it is not affected.
+
+| Site | Behaviour on `%00` | Action |
+|---|---|---|
+| `tools/docs_check.py` (`check`) | `ValueError` escaped | **fixed** |
+| `tools/presentation.py` (`link_problems`) | `ValueError` escaped | **fixed** |
+| `tests/test_architecture.py` (`markdown_links`) | yields the string; the caller uses `os.path.exists`, which returns `False` for NUL | unchanged |
+
+`os.path.exists`/`Path.exists` answer `False` for a NUL path rather than raising;
+only `resolve()` raises. That is why the third site needed nothing.
+
+### 12.3 The fix
+
+Both affected sites gain a tiny helper that resolves and returns "did not resolve"
+instead of propagating, catching **only** `ValueError` and `OSError` - the two
+failures a path the filesystem cannot represent can cause. Anything else is a bug
+in the checker and still propagates. The `%00` case becomes an ordinary
+`link target missing` problem, carrying the link as written.
+
+No diagnostic was weakened, re-verified after the fix:
+
+| Check | Result |
+|---|---|
+| real missing file | still caught |
+| real anchor miss | still caught |
+| real valid link + anchor | still passes |
+| missing `make` target | still caught |
+| malformed escapes (`%zz`, `%2`, `%2F`) | still reported |
+| `%2e%2e` traversal | still reported; still contained |
+
+### 12.4 Regression tests
+
+Four added, each run against the original `c34988c` code and against the fix:
+
+| Test | `c34988c` | fixed |
+|---|---|---|
+| `test_docs_check`: `..._nul_is_reported_not_raised` | **ERROR** (`ValueError`) | pass |
+| `test_docs_check`: `..._nul_with_a_fragment_is_reported_not_raised` | **ERROR** | pass |
+| `test_docs_check`: `other_malformed_escapes_are_still_reported` | pass | pass |
+| `test_presentation`: `..._nul_link_is_caught_not_raised` | **ERROR** | pass |
+
+The third test is the guard against over-correcting: it asserts that escapes
+which were *already* reported stay reported, so "make it not crash" cannot be
+satisfied by reporting nothing.
+
+## 13. Addendum: cleanup ordering (M2), documented and pinned
+
+Independent review noted that a scratch directory can be deleted before a later
+cleanup raises, so a failing run can lose its evidence. Inspected, reproduced, and
+recorded as a constraint rather than redesigned.
+
+`addCleanup` runs functions in **reverse registration order**, and the retention
+decision is taken when the scratch cleanup runs. So the same raising cleanup on
+the same passing test body behaves differently depending only on registration
+order - measured, five repeats each, deterministic:
+
+| Registration order | Observed sequence | Errors | Evidence |
+|---|---|---|---|
+| scratch cleanup **first** | `boom` then scratch | 1 | **kept** |
+| scratch cleanup **last** | scratch then `boom` | 1 | **removed** |
+
+The rule, now in `register_cleanup`'s docstring and in the module overview: call
+`register_cleanup` before adding any other cleanup that could raise. Registered
+first, it runs last and observes everything.
+
+It cannot be fixed inside the module: at the earlier instant the failure has not
+happened yet, so there is nothing to read. All four current call sites
+(`test_fat32_expand`, `test_fat32_write`, `test_iso_manifest` ×2) are the only
+cleanup on their case, so none is affected today; this is a latent constraint.
+
+`test_cleanup_ordering_decides_whether_evidence_survives` asserts both halves -
+evidence retained in the safe order, removed in the hazardous one - because only
+the pair shows that ordering is what decides. It deliberately does **not** claim
+evidence is always retained.

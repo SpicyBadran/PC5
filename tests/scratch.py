@@ -59,6 +59,12 @@ One outcome cannot be read from the result at all: ``TestCase.run`` calls
 reconstructed instead, from the expected-failure marker and the absence of a
 recorded expected failure.  Also measured on the project interpreter.
 
+The decision is made at cleanup time, so it cannot see a failure that a *later*
+cleanup will cause.  Cleanups run LIFO, so ``register_cleanup`` must be called
+before any other cleanup that might raise - see its docstring.  Retention of
+evidence is therefore guaranteed for failures of the test body and of earlier
+cleanups, not for an exception raised after this cleanup has run.
+
 A process that is ``SIGKILL``ed leaves its directory behind by design (nothing can
 clean up after a kill); those directories are named ``pc5-tests-<pid>-*`` under
 the system temp dir and are harmless, and ``atexit`` handles the ordinary exit
@@ -236,6 +242,25 @@ def register_cleanup(case, path: str, *, keep_on_failure: bool = True) -> None:
     With ``keep_on_failure`` the directory survives when *this* case did not pass,
     because the images are the diagnostic artifact.  Only this case's own result
     counts, so one failing test never retains another test's directory.
+
+    Cleanup ordering (LIFO) and its one hazard
+    ------------------------------------------
+    ``addCleanup`` functions run in **reverse registration order**, and the
+    decision above is taken when *this* cleanup runs.  A cleanup function that
+    raises is recorded by ``unittest`` as an error of the same case.  Therefore:
+
+    * if this cleanup runs **after** the raising one, the error is already in the
+      result and the directory is correctly kept;
+    * if this cleanup runs **before** it, ``case_failed()`` still sees a pass,
+      the directory is removed, and the error is recorded a moment later - the
+      test failed and its evidence is already gone.
+
+    So call this *before* adding any other cleanup that could raise: registered
+    first, it runs last, and it observes everything.  All current call sites do
+    that (they are the only cleanup on the case), which is why this is a stated
+    constraint rather than an observed defect.  It cannot be fixed from inside
+    this module: at the earlier instant the failure genuinely has not happened
+    yet, so there is nothing to read.
     """
     def _cleanup():
         if keep_on_failure and case_failed(case):
