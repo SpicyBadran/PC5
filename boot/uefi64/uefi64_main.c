@@ -40,7 +40,12 @@
 static u16 KERNEL_NAME[] = {'\\', 'K', 'E', 'R', 'N', 'E', 'L',
                                    '6', '4', '.', 'B', 'I', 'N', 0};
 #define MEMMAP_BUFFER_PAGES 8ull   /* 32 KiB: hundreds of descriptors */
+#define MEMMAP_BUFFER_PAGES_MAX 64ull /* growth stops here: 256 KiB */
 #define MEMMAP_ENTRIES_MAX 1024ull
+/* The only value UEFI 2.x defines for EFI_MEMORY_DESCRIPTOR.Version.  The 64-bit
+ * loader replaces firmware's descriptors with pc5_memdesc64 anyway, so this says
+ * which firmware *input* format was accepted, not how the output is encoded. */
+#define MEMMAP_DESCRIPTOR_VERSION 1u
 #define KERNEL_STACK_PAGES 4ull
 #define EXIT_RETRIES 8
 
@@ -497,32 +502,71 @@ static struct pc5_memdesc64 *memmap_and_exit(efi_handle image, u64 *out_entries)
     void *buffer = alloc_below_4g(buffer_pages, 0);
     if (!buffer)
         die("memmap-allocate");
+    /* Where `buffer` actually came from.  Growing the map has to release it, and
+     * FreePages needs the address the firmware returned, not an address derived
+     * from a pointer this program could not otherwise convert back. */
+    u64 buffer_physical = (u64)(unsigned long)buffer;
     u64 out_pages = (MEMMAP_ENTRIES_MAX * sizeof(struct pc5_memdesc64) + 4095) / 4096;
     u64 out_physical = 0;
     struct pc5_memdesc64 *out = alloc_below_4g(out_pages, &out_physical);
     if (!out)
         die("memmap-copy-allocate");
 
+    /* Once ExitBootServices has been called, boot services no longer exist: the
+     * map this loop converts is the map the kernel will be given, and releasing
+     * any part of it afterwards would mean calling a service that is gone and
+     * describing memory that is no longer ours.  The stale-key retry therefore
+     * re-reads into the *same* buffer and never allocates or frees. */
+    int boot_services_gone = 0;
+
     for (unsigned attempt = 0; attempt < EXIT_RETRIES; attempt++) {
         u64 size = buffer_pages * 4096;
         u64 key = 0;
         u64 descriptor_size = 0;
         u32 descriptor_version = 0;
+        /* Re-reading here is what makes the key fresh on every attempt: whatever
+         * the previous iteration allocated, freed, or watched firmware allocate
+         * itself has already advanced the map, and this key describes this copy. */
         efi_status status = g_bs->get_memory_map(&size, buffer, &key,
                                                 &descriptor_size, &descriptor_version);
         if (status == EFI_BUFFER_TOO_SMALL) {
-            if (buffer_pages >= 64)
+            if (buffer_pages >= MEMMAP_BUFFER_PAGES_MAX)
                 die("memmap-too-large");
-            buffer_pages *= 2;
-            buffer = alloc_below_4g(buffer_pages, 0);
-            if (!buffer)
+            /* Growing means allocating and freeing, and neither is legal once
+             * ExitBootServices has been attempted.  This cannot be reached in a
+             * correct boot - the map only grows while firmware is still running -
+             * so refusing here keeps a violated assumption loud. */
+            if (boot_services_gone)
+                die("memmap-grow-after-exit");
+            void *grown = alloc_below_4g(buffer_pages * 2, 0);
+            if (!grown)
                 die("memmap-grow");
+            /* Release the old buffer *after* the new one exists, so a failure to
+             * grow cannot leave the loop with nothing to read into.  Freeing
+             * changes the map, which is why the next pass calls GetMemoryMap for a
+             * new key instead of reusing the one from the rejected call. */
+            if (g_bs->free_pages) {
+                status = g_bs->free_pages(buffer_physical, buffer_pages);
+                if (EFI_ERROR(status))
+                    die("memmap-free");
+            }
+            /* Firmware whose boot-services table predates FreePages reports it as
+             * a null entry.  The bounded growth (8 -> 64 pages) is then the only
+             * path, and the abandoned buffer stays described as loader data. */
+            buffer = grown;
+            buffer_physical = (u64)(unsigned long)grown;
+            buffer_pages *= 2;
             continue;
         }
         if (EFI_ERROR(status))
             die("get-memory-map");
         if (descriptor_size < 40 || descriptor_size > 4096)
             die("memory-descriptor-size");
+        /* UEFI 2.x defines exactly one descriptor version.  An unknown value means
+         * the layout of the descriptor this loop is about to read is not the layout
+         * it was compiled against, so it refuses the map rather than guessing. */
+        if (descriptor_version != MEMMAP_DESCRIPTOR_VERSION)
+            die("memory-descriptor-version");
 
         u64 entries = size / descriptor_size;
         if (entries > MEMMAP_ENTRIES_MAX)
@@ -555,6 +599,10 @@ static struct pc5_memdesc64 *memmap_and_exit(efi_handle image, u64 *out_entries)
         if (!pc5_map_validate(out, kept))
             die("memory-map-overlap");
 
+        /* From here on the services may already be gone, whether or not
+         * this call succeeded: a failed attempt is still not a licence to
+         * free or allocate, because firmware may have torn them down. */
+        boot_services_gone = 1;
         status = g_bs->exit_boot_services(image, key);
         if (status == EFI_SUCCESS) {
             *out_entries = kept;
@@ -648,7 +696,7 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
     boot_info->memmap_addr = (u64)(unsigned long)memmap;
     boot_info->memmap_bytes = entries * sizeof(struct pc5_memdesc64);
     boot_info->memmap_desc_size = sizeof(struct pc5_memdesc64);
-    boot_info->memmap_desc_version = 1;
+    boot_info->memmap_desc_version = MEMMAP_DESCRIPTOR_VERSION;
     boot_info->pagetable_addr = pt_physical;
     boot_info->pagetable_pages = PC5_PT_PAGES;
     boot_info->identity_span = PC5_PT_SPAN;

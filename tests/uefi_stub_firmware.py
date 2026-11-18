@@ -156,7 +156,9 @@ class StubFirmware:
                  overflow_memory_map=False, watchdog_refused=False,
                  image_load=None, gop=None,
                  ignore_max_address=False, allocate_return=None,
-                 allocation_limit=None):
+                 allocation_limit=None, map_small_buffer_calls=0,
+                 free_pages_available=True, fail_allocate_pages_pages=None,
+                 describe_version=1):
         if not HAVE_UNICORN:
             raise StubError("the 'unicorn' module is not installed "
                             "(pip install unicorn)")
@@ -172,9 +174,27 @@ class StubFirmware:
         #                        itself had before it modelled the contract
         #   allocate_return      force a specific EFI_STATUS from allocate_pages
         #   allocation_limit     highest address this firmware will hand out
+        #   map_small_buffer_calls  answer this many GetMemoryMap calls with
+        #                        EFI_BUFFER_TOO_SMALL whatever the buffer size,
+        #                        so a caller's growth-and-retry loop runs for real
+        #   free_pages_available when False, the BootServices table has no
+        #                        FreePages entry (null), as an older firmware's
+        #                        table may legitimately have
         self.ignore_max_address = ignore_max_address
         self.allocate_return = allocate_return
         self.allocation_limit = allocation_limit
+        self.map_small_buffer_calls = int(map_small_buffer_calls or 0)
+        self.free_pages_available = free_pages_available
+        # Page counts this firmware refuses with EFI_OUT_OF_RESOURCES even though
+        # the pool could satisfy them.  Growth asks for 16 pages while the first
+        # pass asked for 8, so this targets the growth step alone.
+        self.fail_allocate_pages_pages = set(fail_allocate_pages_pages or ())
+        # The EFI_MEMORY_DESCRIPTOR.Version this firmware reports.  UEFI 2.x
+        # defines only 1; any other value means the descriptor layout a caller
+        # compiled against is not the one being handed to it.
+        self.describe_version = describe_version
+        self.map_small_buffer_forced = 0     # how many were actually forced
+        self.free_pages_calls = []           # (address, pages) the loader freed
         self.allocations = []                # (type, pages, base) for the harness
         self.esp_files = esp_volume          # {"\\EFI\\BOOT\\BOOTX64.EFI": data}
         self.kernel = kernel_bytes
@@ -500,6 +520,14 @@ class StubFirmware:
             256: ("set_watchdog_timer", self.svc_set_watchdog_timer),
         }
         for offset, (name, function) in services.items():
+            # A boot-services table may legitimately leave an entry null when the
+            # firmware does not implement it - FreePages predates nothing in the
+            # spec but is absent from some tables, and a caller must test the
+            # pointer before calling.  `free_pages_available=False` models that so
+            # the loader's capability check is exercised instead of assumed.
+            if name == "free_pages" and not self.free_pages_available:
+                self.write_u64(self.bs + offset, 0)
+                continue
             # Every boot service is wrapped: after a successful
             # ExitBootServices firmware memory is not the loader's to use, so a
             # call through this table would be a real bug on real firmware.
@@ -767,6 +795,10 @@ class StubFirmware:
             return EFI_INVALID_PARAMETER
         if pages == 0 or pages > (1 << 32):
             return EFI_INVALID_PARAMETER
+        if pages in self.fail_allocate_pages_pages:
+            self.exhaustions.append((pages * 4096, self.pool_ceiling(),
+                                     self.pool_next))
+            return EFI_OUT_OF_RESOURCES
 
         requested = self.read_u64(memory_ptr)
         size = pages * 4096
@@ -801,7 +833,15 @@ class StubFirmware:
             return self.allocation_limit
         return POOL_END
 
-    def svc_free_pages(self, *_):
+    def svc_free_pages(self, address, pages, *_):
+        """FreePages.  Records the release and advances the map generation.
+
+        Returning the memory to the pool is what real firmware does, and the
+        generation bump is what invalidates any map key taken before the free -
+        which is precisely why the loader must call GetMemoryMap again rather
+        than reuse a key across a growth step.
+        """
+        self.free_pages_calls.append((address, pages))
         self.map_generation += 1
         return EFI_SUCCESS
 
@@ -858,7 +898,15 @@ class StubFirmware:
         # what a real firmware would report at the same point.
         self.write_u64(size_ptr, needed)
         self.write_u64(desc_ptr, entry)
-        self.write_u32(ver_ptr, 1)
+        self.write_u32(ver_ptr, self.describe_version)
+        # A firmware that answers a "sufficient" buffer with BUFFER_TOO_SMALL
+        # despite reporting the same required size is exactly the situation the
+        # loader's growth loop exists for.  Forcing it here is the only way to
+        # execute that loop: the stub's pool is contiguous, so its natural map
+        # never outgrows the 32 KiB first-pass buffer.
+        if self.map_small_buffer_forced < self.map_small_buffer_calls:
+            self.map_small_buffer_forced += 1
+            return EFI_BUFFER_TOO_SMALL
         if not map_ptr or size < needed:
             return EFI_BUFFER_TOO_SMALL
         for index, (kind, phys, _virt, pages) in enumerate(descriptors):

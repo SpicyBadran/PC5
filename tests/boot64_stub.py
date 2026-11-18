@@ -73,6 +73,10 @@ CR4_PAE = 1 << 5
 # after its reason has been printed.
 STOP_MARKERS = ("PC5-64-DONE", "PC5-64BIT-FAIL=", "PC5-64-LOADER-FAIL=")
 
+# Size of the revision-2 RSDP this stub publishes: the 36-byte header the ACPI
+# specification defines, with the extended checksum at offset 32.
+RSDP_BYTES = 36
+
 
 class StubFirmware64(fw.StubFirmware):
     """A long-mode UEFI machine that can execute the 64-bit loader and kernel."""
@@ -200,14 +204,27 @@ class StubFirmware64(fw.StubFirmware):
     def _build_tables(self):
         super()._build_tables()
         # --- ACPI configuration table: one entry pointing at a real RSDP.
-        rsdp = self.alloc_or_raise(36)
-        self.write(rsdp, b"RSD PTR ")                 # signature
-        self.write(rsdp + 8, b"\x02")                 # revision 2 (ACPI 2.0+)
-        self.write(rsdp + 9, b"PC5STB")               # OEM id, 6 bytes
-        self.write(rsdp + 15, b"\x00" * 3 + b"PC5STUBT")
-        self.write(rsdp + 24, struct.pack("<I", 1))   # OEM revision
-        self.write(rsdp + 28, b"PC5 ")
-        self.write(rsdp + 32, struct.pack("<I", 1))   # creator revision
+        # A genuinely well-formed revision-2 RSDP, not merely a signature.  The
+        # kernel validates both checksums and the declared length, so a stub that
+        # only wrote "RSD PTR " would be modelling a corrupt table - and the old
+        # version of this code did exactly that: it put 0x02 in the checksum byte
+        # (offset 8) and left revision 0 at offset 15 with no length field, so the
+        # "valid" RSDP the loader handed over could not have passed a real check.
+        #
+        # Offsets: 0 signature, 8 checksum, 9 OEMID(6), 15 revision, 16 RSDT,
+        #          20 length, 24 XSDT, 32 extended checksum, 33.. reserved.
+        rsdp = self.alloc_or_raise(RSDP_BYTES)
+        table = bytearray(b"\x00" * RSDP_BYTES)
+        table[0:8] = b"RSD PTR "
+        table[9:15] = b"PC5STB"                         # OEMID
+        table[15] = 2                                   # revision 2 (ACPI 2.0+)
+        table[20:24] = struct.pack("<I", RSDP_BYTES)    # length of this structure
+        table[32] = 0                                   # extended checksum, fixed below
+        # Every byte of the first 20 summed into byte 8 must be zero, and likewise
+        # every byte of the declared length summed into byte 32.
+        table[8] = (-sum(table[0:20])) & 0xFF
+        table[32] = (-sum(table[0:RSDP_BYTES])) & 0xFF
+        self.write(rsdp, bytes(table))
         entry = self.alloc_or_raise(24)
         self.write(entry, ACPI2_GUID)
         self.write_u64(entry + 16, rsdp)

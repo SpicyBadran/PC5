@@ -106,8 +106,44 @@ def pack_memmap(descriptors):
                     for start, pages, kind in descriptors)
 
 
+def build_rsdp(revision=2, length=36, legacy_checksum=None, extended_checksum=None,
+               signature=RSDP_SIGNATURE):
+    """A well-formed RSDP, with each field overridable to make one thing wrong.
+
+    The default is a revision-2 table of exactly 36 bytes with both checksums
+    correct, which is the shape a conforming firmware publishes.  Setting
+    `length` to 20 makes it a revision-0 style table with no length field at all;
+    the checksums are then computed over whatever prefix the caller asked for.
+
+    Both checksums are defaults of "compute the correct value", so a test that
+    wants a bad checksum passes an explicit number (usually 0, or a deliberately
+    wrong one) rather than relying on an accident of the bytes it wrote.
+    """
+    size = max(int(length), 36)
+    table = bytearray(bytes(size))
+    table[0:8] = signature[:8].ljust(8, b"\x00")
+    table[9:15] = b"PC5K64"                      # OEMID
+    table[15] = revision & 0xFF
+    if revision >= 2:
+        table[20:24] = struct.pack("<I", length)
+    # Legacy checksum covers the first 20 bytes; the extended checksum covers the
+    # declared length.  A revision-0 table has neither a length nor an extended
+    # checksum, and bytes past 20 are not part of it.
+    lo = (sum(table[0:20])) & 0xFF
+    table[8] = ((legacy_checksum if legacy_checksum is not None
+                 else (-sum(table[0:8]) - sum(table[9:20]))) & 0xFF)
+    if revision >= 2:
+        covered = max(int(length), 20)
+        table[32] = ((extended_checksum if extended_checksum is not None
+                      else (-(sum(table[0:32]) + sum(table[33:covered])))
+                      & 0xFF))
+    assert lo is not None
+    return bytes(table)
+
+
 class Machine:
-    def __init__(self, kernel, rsdp_signature=RSDP_SIGNATURE, cpuid=None):
+    def __init__(self, kernel, rsdp_signature=RSDP_SIGNATURE, cpuid=None,
+                 rsdp_bytes=None, rsdp_address=None):
         from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
             UC_HOOK_INSN
         from unicorn.x86_const import UC_X86_INS_IN, UC_X86_INS_OUT, \
@@ -119,11 +155,31 @@ class Machine:
         # the kernel's leaf gating and address-width validation can be driven with
         # controlled results instead of whatever the host CPU happens to report.
         self.cpuid = cpuid
+        # Where the table is published.  A test that needs the declared length to
+        # run past the end of the memory map moves the RSDP to the end of its
+        # page; the map is page-granular, so that is the only way to express a
+        # range that the map cannot cover.
+        self.rsdp_address = RSDP if rsdp_address is None else rsdp_address
         self.uc.mem_map(*KERNEL_WINDOW)
         self.uc.mem_map(*BOOT_AREA)
         self.uc.mem_map(*TABLE_AREA)
-        self.uc.mem_map(FB_BASE, 0x2000)          # RSDP page; nothing else is read
-        self.uc.mem_write(RSDP, rsdp_signature[:8].ljust(8, b" ") + bytes(28))
+        # The RSDP page and the one after it.  Only the RSDP page is ever meant to
+        # be read; the second is mapped so that a test which places the table at
+        # the end of its page can prove the kernel stops at the map boundary
+        # instead of faulting on the *emulator's* boundary, which would be a
+        # different failure wearing the same clothes.
+        self.uc.mem_map(FB_BASE, 0x3000)
+        # `rsdp_bytes` is a complete table when a test needs control over the
+        # revision, declared length or checksums.  `rsdp_signature` keeps the
+        # original behaviour: a table with only the first eight bytes chosen.
+        if rsdp_bytes is None:
+            self.uc.mem_write(self.rsdp_address,
+                              rsdp_signature[:8].ljust(8, b" ") + bytes(28))
+        else:
+            self.uc.mem_write(self.rsdp_address, bytes(rsdp_bytes))
+            if len(rsdp_bytes) < 36:
+                self.uc.mem_write(self.rsdp_address + len(rsdp_bytes),
+                                  bytes(36 - len(rsdp_bytes)))
         self.uc.mem_write(KERNEL_BASE, bytes(kernel))
         self.serial = ""
         self.stop_markers = ("PC5-64-DONE", "PC5-64BIT-FAIL=")
@@ -222,8 +278,9 @@ class Machine:
 
 
 def run_kernel(kernel, memmap=None, paging=True, rsdp_signature=RSDP_SIGNATURE,
-               cpuid=None, **overrides):
-    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid)
+               cpuid=None, rsdp_bytes=None, rsdp_address=None, **overrides):
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+                      rsdp_bytes=rsdp_bytes, rsdp_address=rsdp_address)
     if memmap is not None:
         overrides.setdefault("memmap_bytes", DESC_SIZE * len(memmap))
     result = machine.run(pack_boot_info(**overrides), paging=paging,

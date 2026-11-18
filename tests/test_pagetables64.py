@@ -251,8 +251,6 @@ class UncachedBoundaryTests(unittest.TestCase):
         self.assertEqual(set(self.block.bytes_after_block()), {CANARY})
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class IdentityHierarchyTests(unittest.TestCase):
@@ -897,3 +895,7 @@ class ShortSpanCoverageIntegrityTests(unittest.TestCase):
         finally:
             ShortSpanInitialisationTests.SPANS = saved
             ShortSpanInitialisationTests.EXPECTED_UNUSED = saved_expected
+
+
+if __name__ == "__main__":
+    unittest.main()

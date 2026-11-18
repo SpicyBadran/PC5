@@ -296,8 +296,6 @@ class StubFirmware64Tests(unittest.TestCase):
         self.assert_full_boot(trace)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class AllocateMaxAddressTests(unittest.TestCase):
@@ -527,3 +525,213 @@ class PoolExhaustionTests(unittest.TestCase):
                 self.assertNotEqual(status, 0,
                                     f"{service.__name__} reported success while "
                                     f"the pool was empty")
+
+class MemoryMapGrowthTests(unittest.TestCase):
+    """The GetMemoryMap growth loop: what it frees, and which key it uses.
+
+    `EFI_BUFFER_TOO_SMALL` is answered by allocating a larger buffer and asking
+    again.  The previous buffer is dead at that moment, and leaving it allocated
+    is a leak on a path that can run three times.  Releasing it changes the memory
+    map, so the loop must take a *fresh* key for every ExitBootServices attempt
+    and must never reuse the key from the call that was rejected.
+
+    Limitation stated rather than papered over: the stub's pool is contiguous, so
+    its natural map (a few hundred bytes of descriptors) always fits the 32 KiB
+    first-pass buffer and BUFFER_TOO_SMALL is otherwise unreachable here.
+    `map_small_buffer_calls` forces it, which exercises the loader's growth loop
+    but cannot reproduce a real firmware's particular descriptor count.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import boot64_stub
+        cls.module = boot64_stub
+        cls.image, cls.kernel = artifacts()
+
+    def run_once(self, **options):
+        machine = self.module.StubFirmware64(
+            image=self.image,
+            esp_volume={"\\EFI\\BOOT\\BOOTX64.EFI": self.image,
+                        "\\KERNEL64.BIN": self.kernel},
+            kernel_bytes=self.kernel, **options)
+        return machine, machine.run()
+
+    # ------------------------------------------------ 1. buffer sufficient ----
+    def test_a_sufficient_buffer_never_grows_and_never_frees(self):
+        machine, trace = self.run_once()
+        self.assertEqual(machine.free_pages_calls, [],
+                         "the first buffer was sufficient; nothing should be freed")
+        self.assertEqual(machine.map_small_buffer_forced, 0)
+        self.assertIn("exit-boot-services=ok attempts=1", trace.serial)
+        self.assertIn(MARKER, trace.serial)
+
+    # --------------------------------------------- 2. one growth retry --------
+    def test_one_buffer_too_small_grows_once_and_frees_the_old_buffer(self):
+        machine, trace = self.run_once(map_small_buffer_calls=1)
+        self.assertEqual(machine.map_small_buffer_forced, 1,
+                         "the forced growth must have happened exactly once")
+        self.assertEqual(len(machine.free_pages_calls), 1,
+                         "the abandoned buffer must be released exactly once")
+        address, pages = machine.free_pages_calls[0]
+        self.assertEqual(pages, 8,
+                         "the released buffer is the 8-page first-pass buffer")
+        self.assertEqual(address % 4096, 0, "freed addresses are page-aligned")
+        self.assertIn("exit-boot-services=ok attempts=2", trace.serial)
+        self.assertIn(MARKER, trace.serial)
+
+    # ------------------------------------------ 3. several growth retries -----
+    def test_three_buffer_too_small_answers_free_each_abandoned_buffer(self):
+        machine, trace = self.run_once(map_small_buffer_calls=3)
+        self.assertEqual(machine.map_small_buffer_forced, 3)
+        self.assertEqual([pages for _address, pages in machine.free_pages_calls],
+                         [8, 16, 32],
+                         "each growth step must release the buffer it replaced")
+        addresses = [address for address, _pages in machine.free_pages_calls]
+        self.assertEqual(len(set(addresses)), 3,
+                         "the freed buffers must be three distinct allocations")
+        for address in addresses:
+            self.assertEqual(address % 4096, 0)
+        # Three growth steps occupy attempts 1-3, so the exit succeeds on the fourth.
+        self.assertIn("exit-boot-services=ok attempts=4", trace.serial)
+        self.assertIn(MARKER, trace.serial)
+
+    # ------------------------------------------- 4. allocation failure -------
+    def test_a_failed_growth_allocation_stops_the_boot_and_frees_nothing(self):
+        """Growth fails before the old buffer is released.
+
+        Order matters: the replacement is allocated first, so a firmware that has
+        no memory left leaves the loop with a valid buffer to read into rather
+        than freeing the only one it has and then failing.  The boot must stop
+        with the loader's own reason, before any handover.
+        """
+        # Only the 16-page request fails: the first pass asks for 8 pages and
+        # succeeds, the growth asks for 16.  This isolates the growth step instead
+        # of starving the loader before it starts.
+        machine, trace = self.run_once(map_small_buffer_calls=1,
+                                       fail_allocate_pages_pages={16})
+        self.assertIn("PC5-64-LOADER-FAIL=memmap-grow", trace.serial,
+                      trace.serial)
+        self.assertNotIn(MARKER, trace.serial)
+        self.assertEqual(machine.free_pages_calls, [],
+                         "the old buffer must not be freed if the new one failed")
+
+    def test_a_firmware_without_free_pages_still_completes_the_growth(self):
+        """An older boot-services table may leave FreePages null.
+
+        The loader must test the pointer rather than calling through it.  The
+        growth still succeeds; the abandoned buffer simply stays loader-owned,
+        which is the bounded cost the protocol already tolerates.
+        """
+        machine, trace = self.run_once(map_small_buffer_calls=1,
+                                       free_pages_available=False)
+        self.assertEqual(machine.free_pages_calls, [])
+        self.assertEqual(machine.map_small_buffer_forced, 1)
+        self.assertIn("exit-boot-services=ok attempts=2", trace.serial)
+        self.assertIn(MARKER, trace.serial)
+
+    # ------------------------------------- 5. a fresh key for every attempt ---
+    def test_every_exit_attempt_uses_the_key_from_its_own_get_memory_map(self):
+        """No ExitBootServices may be given a key that a free has invalidated.
+
+        The stub advances the map generation on every allocation, every free and
+        every ExitBootServices mismatch, and GetMemoryMap reports the current
+        generation.  So if the loader reused a key across a growth step, the key
+        it passed would be *below* the generation the free created, and the call
+        would be rejected as stale.  A single growth plus a single successful exit
+        therefore proves the key was re-read: the free happened between the two.
+        """
+        machine, trace = self.run_once(map_small_buffer_calls=1)
+        self.assertEqual(len(machine.free_pages_calls), 1)
+        exits = [event for event in machine.trace.events
+                 if event["event"] == "exit_boot_services"]
+        stale = [event for event in machine.trace.events
+                 if event["event"] == "exit_boot_services_stale_key"]
+        self.assertEqual(len(exits), 1,
+                         "one successful ExitBootServices and no rejected retry")
+        self.assertEqual(stale, [],
+                         "a key invalidated by the free must never be passed")
+        self.assertIn("exit-boot-services=ok attempts=2", trace.serial)
+
+    def test_growth_then_a_stale_key_retries_with_another_fresh_key(self):
+        """Growth and a firmware-side key race in the same boot.
+
+        The retry after a stale key must re-read the map, and it must not
+        allocate or free anything: boot services may already be gone.
+        """
+        machine, trace = self.run_once(map_small_buffer_calls=1, race_map_key=1)
+        self.assertEqual(len(machine.free_pages_calls), 1,
+                         "only the growth step frees; the stale-key retry must not")
+        # Attempt 1 was consumed by the rejected growth call, so the stale key
+        # is retried on attempt 2 and the exit succeeds on attempt 3.
+        self.assertIn("exit-boot-services=stale-key retry=2", trace.serial)
+        self.assertIn("exit-boot-services=ok attempts=3", trace.serial)
+        self.assertEqual(machine.boot_service_calls_after_exit, [])
+        self.assertIn(MARKER, trace.serial)
+
+class DescriptorVersionTests(unittest.TestCase):
+    """What memmap_desc_version means, and what the loader does with it.
+
+    UEFI 2.x defines exactly one EFI_MEMORY_DESCRIPTOR.Version, 1.  The field in
+    the boot info is that firmware-reported value - provenance for the input the
+    loader accepted - not a version of the pc5_memdesc64 array it writes instead.
+    An unknown value means the descriptor layout the loader is reading is not the
+    one it was built against, so the map is refused rather than reinterpreted.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import boot64_stub
+        cls.module = boot64_stub
+        cls.image, cls.kernel = artifacts()
+
+    def run_once(self, **options):
+        machine = self.module.StubFirmware64(
+            image=self.image,
+            esp_volume={"\\EFI\\BOOT\\BOOTX64.EFI": self.image,
+                        "\\KERNEL64.BIN": self.kernel},
+            kernel_bytes=self.kernel, **options)
+        return machine, machine.run()
+
+    def boot_info_desc_version(self, machine):
+        """Read memmap_desc_version out of the boot info the loader built."""
+        marker = "PC5-64-LOADER-JUMP entry="
+        line = next((l for l in machine.trace.serial.splitlines()
+                     if marker in l), None)
+        self.assertIsNotNone(line, "loader never reached the handover")
+        token = next(t for t in line.split() if t.startswith("bootinfo="))
+        boot_info = int(token.split("=", 1)[1], 16)
+        # Offset 36 in struct pc5_boot64: magic=0, version=4, size=8, flags=12,
+        # memmap_addr=16, memmap_bytes=24, memmap_desc_size=32,
+        # memmap_desc_version=36, framebuffer_addr=40.  The kernel pins 16 and 40
+        # with _Static_assert, so reading between them is safe by construction.
+        return machine.read_u32(boot_info + 36)
+
+    def test_supported_descriptor_version_is_accepted_and_recorded(self):
+        machine, trace = self.run_once()
+        self.assertIn(MARKER, trace.serial)
+        self.assertEqual(self.boot_info_desc_version(machine), 1,
+                         "the accepted firmware version must be recorded, not invented")
+
+    def test_an_unsupported_descriptor_version_stops_the_boot(self):
+        machine, trace = self.run_once(describe_version=2)
+        self.assertIn("PC5-64-LOADER-FAIL=memory-descriptor-version", trace.serial)
+        self.assertNotIn(MARKER, trace.serial)
+        self.assertNotIn("PC5-64-LOADER-JUMP", trace.serial)
+
+    def test_a_zero_descriptor_version_is_also_refused(self):
+        # Zero is not "unset" in this protocol: it is simply not version 1.
+        machine, trace = self.run_once(describe_version=0)
+        self.assertIn("PC5-64-LOADER-FAIL=memory-descriptor-version", trace.serial)
+        self.assertNotIn(MARKER, trace.serial)
+
+    def test_the_refusal_happens_before_exit_boot_services(self):
+        # A refused map must not leave firmware's services already gone: the
+        # decision is made while there is still something to report to.
+        machine, trace = self.run_once(describe_version=2)
+        self.assertFalse(trace.exited,
+                         "the loader must not call ExitBootServices on a map it refused")
+        self.assertEqual(machine.boot_service_calls_after_exit, [])
+
+
+if __name__ == "__main__":
+    unittest.main()
