@@ -8,7 +8,9 @@ they never quietly pass.
 from __future__ import annotations
 
 import pathlib
+import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -23,6 +25,32 @@ except ImportError:
     HAVE_UNICORN = False
 
 import test_kernel64  # noqa: E402  (build helper, reused so both run once)
+
+
+def _header_constant(name):
+    """Evaluate a `#define` from the real kernel header by compiling it.
+
+    The tests already reach for the genuine header this way (`test_map64`,
+    `test_kernel64`) rather than restating constants in Python.  Keeping that
+    convention means a change to `pc5_boot64.h` cannot leave a test asserting a
+    value the firmware no longer uses.
+    """
+    header = ROOT / "kernel64" / "include"
+    source = ('#include "pc5_boot64.h"\n'
+              "#include <stdio.h>\n"
+              f"int main(void){{printf(\"%llu\\n\", (unsigned long long)({name}));}}\n")
+    with tempfile.TemporaryDirectory() as directory:
+        path = pathlib.Path(directory) / "probe.c"
+        path.write_text(source)
+        binary = pathlib.Path(directory) / "probe"
+        compiled = subprocess.run(
+            ["gcc", "-std=gnu11", "-O1", "-Wall", "-Wextra", "-Werror",
+             "-I", str(header), str(path), "-o", str(binary)],
+            capture_output=True, text=True)
+        assert compiled.returncode == 0, compiled.stderr
+        done = subprocess.run([str(binary)], capture_output=True, text=True)
+        assert done.returncode == 0, done.stderr
+    return int(done.stdout.strip())
 
 
 def artifacts():
@@ -355,6 +383,55 @@ class AllocateMaxAddressTests(unittest.TestCase):
             self.assertNotEqual(base, 0)
             self.assertLess(base + pages * 4096, 1 << 32,
                             "allocation must end below the 4 GiB identity limit")
+
+    def test_every_maximum_request_carries_the_identity_limit_as_its_bound(self):
+        """The bound itself, not just a plausible allocation that came back.
+
+        `test_the_loader_passes_a_maximum_that_can_actually_be_satisfied` judges the
+        *returned* base, so it pins "some usable address came back" rather than "the
+        right question was asked".  A bound that is too low still yields a base below
+        it; a bound above the span still yields a base the loader's own post-checks
+        accept or reject.  Neither is the contract.
+
+        The contract is the value written into the Memory cell *before* the call:
+        UEFI 2.9A 7.2.1 makes that the inclusive uppermost address the allocation may
+        reach, so the loader must ask for exactly PC5_IDENTITY_LIMIT - 1 - the last
+        byte that the identity map it builds above actually covers.
+
+        The expected value is taken from the real header rather than repeated here.
+        A duplicated constant would let `PC5_IDENTITY_LIMIT` move while this test
+        stayed green, which is the same class of blindness this test exists to end.
+        """
+        expected = _header_constant("PC5_IDENTITY_LIMIT") - 1
+
+        machine = self.machine()
+        trace = machine.run()
+        self.assertIn(MARKER, trace.serial)
+        self.assertGreaterEqual(len(machine.max_request_bounds), 3,
+                                "expected boot info, page tables and stack")
+        for bound in machine.max_request_bounds:
+            self.assertEqual(
+                bound, expected,
+                f"loader asked for a maximum of {bound:#x}; the identity map it "
+                f"builds covers [0, {expected + 1:#x}), whose last address is "
+                f"{expected:#x}")
+
+    def test_the_high_allocation_path_also_reports_the_same_bound(self):
+        """The bound is recorded on the branch that honours it, not just the default.
+
+        `high_allocations` refuses any request whose range would exceed the caller's
+        bound, so it is the one path where a wrong bound changes behaviour.  If the
+        harness only observed the default path, a regression there would be silent.
+        """
+        expected = _header_constant("PC5_IDENTITY_LIMIT") - 1
+
+        machine = self.machine(high_allocations=True)
+        trace = machine.run()
+        self.assertIn(MARKER, trace.serial)
+        self.assertTrue(machine.max_request_bounds,
+                        "the high-allocation path recorded no MaxAddress bound")
+        for bound in machine.max_request_bounds:
+            self.assertEqual(bound, expected)
 
     def test_a_zero_maximum_verifies_as_unsatisfiable(self):
         """The contract the old code violated, asserted directly on the stub."""
