@@ -49,24 +49,54 @@ or one class cannot write into another's tree, and a rejected argument creates
 nothing at all.
 
 It is not a security boundary against a hostile process running as the same OS user.
-Two limits are worth stating plainly, because the code reads stronger than it is:
+Three things were open in the previous implementation; they are now in different
+states, and the difference is the point of this section:
 
-* **The checks are not atomic with the creation.**  ``Path.resolve()`` followed by
-  ``os.makedirs`` or ``tempfile.mkdtemp`` is a time-of-check/time-of-use sequence.
-  A process that swapped a component for a symlink between the check and the create
-  could make a directory land outside the root *before* the following check noticed
-  it -- the later check would report the escape, but the directory would already
-  exist.  This is a real limitation, and it is deliberately not fixed here: closing
-  it needs ``O_NOFOLLOW``-style openat/``dir_fd`` traversal, which is a different
-  piece of work.
+* **``E1``, the symlink-mediated create-time race: closed.**  Creation is
+  descriptor-relative.  Each component is created with ``os.mkdir(...,
+  dir_fd=...)`` and opened with ``O_NOFOLLOW`` relative to its parent's descriptor,
+  and the leaf is created the same way, so no syscall re-traverses a path string that
+  could have been replaced in between.  A component swapped for a symlink at any
+  point in the walk is refused (``ELOOP``/``ENOTDIR`` become ``ValueError`` against a
+  component, or a plain ``OSError`` at the leaf) rather than followed, and no
+  directory then appears inside the symlink's target.  The previous implementation
+  checked resolved paths and then created by path, so a swap in that window produced
+  a directory outside the root *before* the next check reported it.
+* **``E1'``, relocation of a verified component: open, and not fixable here.**
+  Descriptor-relative operations pin a directory's **identity** -- which inode the
+  call acts on -- and deliberately *not* its pathname or its location.  That is what
+  makes them safe against a path being rewritten, and it is also the limit: renaming
+  a component requires write permission on its *parent*, not on the component, so a
+  process that can write to the scratch root can move an already-verified directory
+  out of the root between two calls and have the leaf created inside the moved
+  directory.  The leaf is then outside the root in pathname terms, and the path
+  :func:`directory` returns no longer exists.  Nothing follows an attacker-controlled
+  symlink here, and the moved directory is one the caller had already caused to be
+  created, so this is a relocation of our own tree rather than a redirect into
+  someone else's.  No ``dir_fd``-relative API can prevent it: the rename is performed
+  by another process on a name we do not control.  The test
+  ``test_relocating_a_component_is_a_documented_limitation`` records the current
+  behaviour.  Mounting a filesystem over a component has the same
+  shape.  This is the residual create-time limitation; it is strictly smaller than
+  ``E1`` and it was present before this change too.
+* **``E2``, the use-time race: open, and not fixable here.**  :func:`directory`
+  returns a *path string*.  A caller stores it and writes to it later, which is what
+  every FAT32 and ISO-manifest test does.  If a component of that path is replaced
+  after the call returns, those later writes follow it, including the callers'
+  ``os.unlink`` of fixed names such as ``in.img``/``out.img``.  Closing ``E2``
+  requires the *callers* to stop using returned paths -- holding a descriptor, or
+  re-validating before each use -- which is an API change, not a local fix.  It is
+  deliberately left open: no test in this file claims otherwise, and a caller that
+  needs the stronger property has to hold on to a descriptor rather than to a path.
 * **Exposure is limited, not eliminated, by permissions.**  The per-process root is
   created by ``tempfile.mkdtemp`` and is therefore owner-only (``0700``), so another
   *user* cannot reach into it at all.  The same-user case remains open by
   construction, since a process running as this user can already write anything this
   user can write.
 
-So the guarantee this module offers is "no accidental or colliding writes", not "no
-possible write".  Treat it as a test-isolation helper, not as a sandbox.
+So the guarantee this module offers is "no accidental or colliding writes, and no
+symlink-mediated create-time escape", not "no possible write" and not "a verified
+directory cannot be moved".  Treat it as a test-isolation helper, not as a sandbox.
 
 Cleanup reliability
 -------------------
@@ -114,13 +144,24 @@ fixes is about file paths and does not justify a new dependency.
 from __future__ import annotations
 
 import atexit
+import errno
 import os
+import types
 import shutil
 import tempfile
 from pathlib import Path
 
 #: Set to any non-empty value to keep scratch directories even when tests pass.
 KEEP_ENV = "PC5_KEEP_TEST_SCRATCH"
+
+#: A snapshot of the ``os`` functions before any test can replace them, so
+#: :func:`_secure_creation_supported` answers about the platform rather than about a
+#: monkeypatched attribute (``os.supports_dir_fd`` compares functions by identity).
+#: Only the functions the walk actually calls are captured: the probe must not
+#: require a capability the implementation never exercises.
+_CANONICAL_OS = types.SimpleNamespace(
+    open=os.open, mkdir=os.mkdir,
+)
 
 _ROOTS: dict[int, str] = {}
 
@@ -177,32 +218,173 @@ def directory(*parts: str, prefix: str = "") -> str:
     describe the damage instead of preventing it.  Validating first is what makes
     the ordinary cases hold; the post-creation checks below are defence in depth.
 
-    These checks are validation, not an atomic sandbox: see "Containment, and what
-    it does not protect against" in the module docstring.  A same-user process that
-    changes the filesystem between a check and the following create can still cause
-    a directory to appear outside the root before the next check reports it.
+    Creation is descriptor-relative (see :func:`_secure_creation_supported`), so the
+    ``E1`` create-time race described in the module docstring cannot redirect the
+    call through a symlink: each component is opened with ``O_NOFOLLOW`` and the leaf
+    is created with ``os.mkdir(..., dir_fd=parent_fd)``, so replacing a path
+    component with a symlink between a check and a create does not send the directory
+    to the symlink's target.  The final ``_require_within`` call is defence in depth,
+    not the protection itself.
+
+    This closes the symlink-mediated create-time race only.  Two limits remain and are
+    documented in the module docstring: ``E1'``, where a *verified* component is
+    **renamed** or **mounted over** after it was opened -- descriptor-relative calls
+    pin the directory's identity, not its location, so the leaf can be created inside
+    a tree that has been moved out of the root -- and ``E2``, where a caller keeps the
+    returned path and writes to it later, after something replaced a component.
+    Neither can be fixed from inside this function.
     """
     base = root()
     safe = [_component(part, "part") for part in parts]
-    # Rejected here, before ``os.makedirs`` and before ``mkdtemp``: an invalid
-    # prefix must not be able to create anything, anywhere.
+    # Rejected here, before any filesystem work: an invalid prefix must not be able
+    # to create anything, anywhere.
     safe_prefix = _component(prefix, "prefix") if prefix else ""
 
-    parent = os.path.join(base, *safe) if safe else base
+    if not _secure_creation_supported():
+        raise RuntimeError(_UNSECURE_PLATFORM_MESSAGE)
 
-    # Before creating anything: a component here may be a pre-existing symlink
-    # pointing out of the root, and makedirs must not be allowed to follow it.
-    _require_within(base, parent)
-    os.makedirs(parent, exist_ok=True)
-    # Again after creation.  This catches a component that changed between the
-    # check above and ``makedirs``, but only after the directory exists: it reports
-    # the escape rather than preventing it, and neither check is atomic with the
-    # create.  See the module docstring on same-user processes.
-    _require_within(base, parent)
-
-    path = tempfile.mkdtemp(prefix=safe_prefix or "case-", dir=parent)
+    path = _make_descriptor_relative(base, safe, safe_prefix or "case-")
+    # Defence in depth, and *not* the protection.  It does fire in one real case --
+    # a component replaced with a symlink after the walk opened it, where the
+    # returned path then resolves through the link -- but it is not relied on for
+    # E1: descriptor-relative creation refuses that at the syscall, and no test
+    # here fails if this line is removed.  It cannot catch relocation of an
+    # already-open directory at all; see _make_descriptor_relative and E1'.
     _require_within(base, path)
     return path
+
+
+#: Errors a descriptor-relative walk raises when a component is a symlink or is not
+#: a directory.  ``O_NOFOLLOW`` on a symlink raises ``ELOOP`` on Linux/macOS and
+#: ``ENOTDIR`` on some BSDs; ``openat`` on a non-directory raises ``ENOTDIR``.
+_NOFOLLOW_ERRORS = frozenset({errno.ELOOP, errno.ENOTDIR})
+
+#: Raised when the platform has no descriptor-relative operations.  The module
+#: refuses to fall back to path-based creation rather than silently giving up the
+#: containment property this function is relied on for.
+_UNSECURE_PLATFORM_MESSAGE = (
+    "scratch.directory() requires descriptor-relative filesystem operations "
+    "(os.open/os.mkdir with dir_fd, and O_NOFOLLOW) to keep the scratch tree "
+    "inside its root. This platform does not provide them, and falling back to "
+    "path-based creation would reintroduce the create-time race that this guard "
+    "exists to prevent, so creation is refused rather than performed unsafely."
+)
+
+
+def _secure_creation_supported() -> bool:
+    """Whether this platform can create the scratch tree without a path race.
+
+    The requirement is a *combination*, and no part of it is sufficient alone:
+    ``os.open``/``os.mkdir`` must accept ``dir_fd`` (descriptor-relative work),
+    ``os.O_NOFOLLOW`` must exist (refuse to traverse a symlink), and ``os.O_DIRECTORY``
+    must exist (open a directory and nothing else).  ``O_NOFOLLOW`` without
+    ``dir_fd`` would still re-traverse a path string; ``dir_fd`` without
+    ``O_NOFOLLOW`` would follow a symlink inserted earlier in the walk.  Only the
+    functions the walk actually calls are probed -- ``os.open`` and ``os.mkdir``.
+    ``os.stat`` was required here previously although nothing in this module calls
+    it, which refused platforms that could have run the walk; a capability the code
+    does not use must not be a precondition for it.
+
+    The ``dir_fd`` question is asked of the *canonical* functions as well as the
+    current ``os`` attributes.  ``os.supports_dir_fd`` is a set of function objects
+    compared by identity, so a test that replaces ``os.mkdir`` -- to observe the
+    creation boundary deterministically -- would otherwise make this probe report
+    "unsupported" and mask the behaviour under test.  Consulting the canonical
+    function keeps the answer about the platform rather than about a test double.
+    """
+    if not (hasattr(os, "O_NOFOLLOW") and hasattr(os, "O_DIRECTORY")):
+        return False
+    for name in ("open", "mkdir"):
+        current = getattr(os, name, None)
+        canonical = getattr(_CANONICAL_OS, name, None)
+        if current is None and canonical is None:
+            return False
+        if current in os.supports_dir_fd:
+            continue
+        if canonical is None or canonical not in os.supports_dir_fd:
+            return False
+    return True
+
+
+def _open_component(directory_fd: int, name: str) -> int:
+    """Open ``name`` inside ``directory_fd``, refusing to follow a symlink.
+
+    Raises ``ValueError`` if the component is a symlink or not a directory, matching
+    the documented contract of :func:`directory` for a symlinked component.  Other
+    ``OSError``s propagate unchanged: a permission failure or an I/O error is a real
+    problem and must not be reported as a containment rejection.
+    """
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        return os.open(name, flags, dir_fd=directory_fd)
+    except OSError as error:
+        if error.errno in _NOFOLLOW_ERRORS:
+            raise ValueError(
+                f"scratch directory component must not be a symlink or a "
+                f"non-directory: {name!r}"
+            ) from error
+        raise
+
+
+def _make_descriptor_relative(base: str, parts, prefix: str) -> str:
+    """Create ``base/<parts...>/<prefix><random>`` without re-traversing a path.
+
+    Each level is opened relative to its parent's descriptor with ``O_NOFOLLOW``, so
+    a component swapped for a symlink at any point is refused rather than followed,
+    and the leaf is created with ``os.mkdir(..., dir_fd=...)`` so it lands in the
+    directory that was actually verified.  Descriptors are closed in ``finally``,
+    including on the failure paths, so a rejected call leaks nothing.
+
+    What the descriptors do and do not promise
+    ------------------------------------------
+    ``child_fd`` is opened from ``directory_fd`` and the parent descriptor is closed
+    only *after* the child open has returned, so the parent cannot be recycled under
+    us.  If the child open raises, the ``finally`` closes the parent -- the descriptor
+    still held -- and the exception propagates; there is no path where both
+    descriptors are live and unowned.
+
+    The invariant that matters for containment is **inode identity**: ``child_fd``
+    refers to the same directory that the preceding ``os.mkdir`` created or found,
+    because the lookup happens against ``directory_fd`` and ``O_NOFOLLOW`` forbids
+    the final component from being a symlink.  Consequently the leaf ``mkdir`` cannot
+    be sent to a symlink's target by a concurrently replaced path component.
+
+    Identity is not location.  A descriptor keeps working after the directory it
+    refers to has been renamed elsewhere, so this function cannot tell whether the
+    tree it is building is still inside ``base`` in *pathname* terms -- see ``E1'``
+    in the module docstring.
+
+    The ``_require_within`` call in :func:`directory` does **not** close that gap.
+    It compares *resolved paths*, and resolution is lexical when a path does not
+    exist: rename the verified component away and the returned path stops existing,
+    so ``Path.resolve()`` walks the components by name and lands back inside
+    ``base`` anyway.  The check passes and the relocated directory goes unreported.
+    Answering the question that would catch it -- *where is this descriptor now* --
+    needs a walk of parent descriptors with inode comparison, a separate and itself
+    racy mechanism, not a property of a path string.  Relocation is therefore a
+    documented limitation (``E1'``), not something this function detects.
+    """
+    directory_fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in parts:
+            try:
+                os.mkdir(part, 0o700, dir_fd=directory_fd)
+            except FileExistsError:
+                pass
+            child_fd = _open_component(directory_fd, part)
+            os.close(directory_fd)
+            directory_fd = child_fd
+
+        for _ in range(tempfile.TMP_MAX):
+            name = prefix + next(tempfile._get_candidate_names())
+            try:
+                os.mkdir(name, 0o700, dir_fd=directory_fd)
+            except FileExistsError:
+                continue
+            return os.path.join(base, *parts, name)
+        raise FileExistsError(errno.EEXIST, "No usable temporary directory name found")
+    finally:
+        os.close(directory_fd)
 
 
 def _component(part, kind: str = "part") -> str:
