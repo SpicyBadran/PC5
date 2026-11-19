@@ -145,11 +145,17 @@ class StubFirmware:
                  clamp_seek_past_end=True, race_map_key=False,
                  support_get_info=True, race_map_key_forever=False,
                  reserve_handover=False, fragment_low_memory=0,
-                 overflow_memory_map=False, watchdog_refused=False):
+                 overflow_memory_map=False, watchdog_refused=False,
+                 image_load=None):
         if not HAVE_UNICORN:
             raise StubError("the 'unicorn' module is not installed "
                             "(pip install unicorn)")
         self.image = image
+        # Where firmware places the application.  Configurable because the 64-bit
+        # loader must cope with firmware that loads it anywhere - including above
+        # the region PC5's map covers - and a harness that can only place it at one
+        # address cannot exercise that.
+        self.image_load = IMAGE_LOAD if image_load is None else image_load
         self.esp_files = esp_volume          # {"\\EFI\\BOOT\\BOOTX64.EFI": data}
         self.kernel = kernel_bytes
         self.iso_has_kernel = iso_volume_has_kernel
@@ -200,9 +206,18 @@ class StubFirmware:
         self._install_hooks()
 
     # ------------------------------------------------------------ memory
+    # Firmware's own stack has to exist wherever the image happens to be placed;
+    # when the image sits at its default base its window happens to contain the
+    # stack, so the overlap is mapped once, not twice.
+    STACK_WINDOW = (FW_STACK_TOP - 0x20000, 0x20000)
+
     def _map(self):
         uc = self.uc
-        uc.mem_map(IMAGE_LOAD, IMAGE_WINDOW)
+        uc.mem_map(self.image_load, IMAGE_WINDOW)
+        stack_base, stack_size = self.STACK_WINDOW
+        if not (self.image_load < stack_base + stack_size
+                and stack_base < self.image_load + IMAGE_WINDOW):
+            uc.mem_map(stack_base, stack_size)
         uc.mem_map(STUB_BASE, STUB_SIZE)
         uc.mem_map(POOL_BASE, POOL_END - POOL_BASE)
         uc.mem_map(SCRATCH, SCRATCH_SIZE)
@@ -268,14 +283,14 @@ class StubFirmware:
             self.sections[name] = dict(vsize=vsize, vaddr=vaddr,
                                        raw_size=raw_size, raw_ptr=raw_ptr)
 
-        self.delta = IMAGE_LOAD - self.preferred_base
-        self.write(IMAGE_LOAD, image[:size_of_headers])
+        self.delta = self.image_load - self.preferred_base
+        self.write(self.image_load, image[:size_of_headers])
         for name, sec in self.sections.items():
             if sec["raw_size"]:
-                self.write(IMAGE_LOAD + sec["vaddr"],
+                self.write(self.image_load + sec["vaddr"],
                            image[sec["raw_ptr"]:sec["raw_ptr"] + sec["raw_size"]])
             elif sec["vsize"]:
-                self.write(IMAGE_LOAD + sec["vaddr"], bytes(sec["vsize"]))
+                self.write(self.image_load + sec["vaddr"], bytes(sec["vsize"]))
 
         self.relocations = 0
         offset = self._file_offset(reloc_rva)
@@ -289,7 +304,7 @@ class StubFirmware:
                 kind, target = entry >> 12, page + (entry & 0xFFF)
                 if kind == 0:
                     continue
-                address = IMAGE_LOAD + target
+                address = self.image_load + target
                 if kind == 10:
                     self.write_u64(address, self.read_u64(address) + self.delta)
                 elif kind == 3:
@@ -306,16 +321,41 @@ class StubFirmware:
         data = self.sections.get(".data")
         if not data:
             raise StubError("no .data section")
-        descriptor = self.read(IMAGE_LOAD + data["vaddr"], 24)
-        if descriptor[0:8] != b"PC5HND01":
+        # 40 bytes covers both records: PC5HND01 is 24 bytes (bridge + far jump),
+        # PC5HND02 adds the protocol, boot-info size, page-table pages and span.
+        descriptor = self.read(self.image_load + data["vaddr"], 40)
+        if descriptor[0:8] not in (b"PC5HND01", b"PC5HND02"):
             raise StubError("handover descriptor missing from the start of .data")
-        self.bridge_entry = struct.unpack_from("<Q", descriptor, 8)[0]
-        self.kernel_jump = struct.unpack_from("<Q", descriptor, 16)[0]
-        self.entry = IMAGE_LOAD + self.entry_rva
-        self.trace.note("image_loaded", at=hex(IMAGE_LOAD),
+        if descriptor[0:8] == b"PC5HND01":
+            # 32-bit loader: a bridge that switches mode, then a far jump.
+            self.bridge_entry = struct.unpack_from("<Q", descriptor, 8)[0]
+            self.kernel_jump = struct.unpack_from("<Q", descriptor, 16)[0]
+        else:
+            # 64-bit loader (`PC5HND02`): no mode switch, so there is no bridge
+            # and no 32-bit far jump to decode.  The record states the protocol
+            # it hands over instead; the harness keeps it for the checks.
+            self.handover64 = dict(
+                protocol=struct.unpack_from("<Q", descriptor, 8)[0],
+                boot_info_size=struct.unpack_from("<Q", descriptor, 16)[0],
+                page_table_pages=struct.unpack_from("<Q", descriptor, 24)[0],
+                identity_span=struct.unpack_from("<Q", descriptor, 32)[0])
+            self.bridge_entry = 0
+            self.kernel_jump = 0
+        self.entry = self.image_load + self.entry_rva
+        # What firmware reports as the image's base and size: the loaded sections,
+        # not the file size.  Real firmware page-aligns the size, so this does too.
+        span = size_of_headers
+        for sec in self.sections.values():
+            span = max(span, sec["vaddr"] + max(sec["vsize"], sec["raw_size"]))
+        self.image_base = self.image_load
+        self.image_size = (span + 0xFFF) & ~0xFFF
+        self.image_extent = self.image_size
+        self.trace.note("image_loaded", at=hex(self.image_load), size=self.image_size,
                         preferred=hex(self.preferred_base),
                         relocations=self.relocations,
                         bridge=hex(self.bridge_entry))
+        if self.bridge_entry == 0 and self.kernel_jump == 0:
+            self.trace.note("handover64", **self.handover64)
 
     def _file_offset(self, rva):
         # PE places sections at section alignment, so the virtual span of a
@@ -687,7 +727,9 @@ class StubFirmware:
             (7, 0x100000, 0x0, 0x100),        # conventional
             (2, FB_BASE, 0x0, FB_SIZE // 4096),
             (2, POOL_BASE, 0x0, (POOL_END - POOL_BASE) // 4096),
-            (2, IMAGE_LOAD, 0x0, IMAGE_WINDOW // 4096),
+            # Where firmware actually placed this application: the map must
+            # describe the image where it is, not where it would like to be.
+            (1, self.image_load, 0x0, self.image_extent // 4096),
             (7, 0x100000000, 0x0, 0x100),     # above 4 GiB: must be truncated
         ])
         return descriptors
@@ -767,6 +809,12 @@ class StubFirmware:
             self.write_u64(image + 16, self.sys_table)
             self.write_u64(image + 24, 0xE5F00000)               # device we came from
             self.write_u64(image + 32, self.alloc_file_path(r"\EFI\BOOT\BOOTX64.EFI"))
+            # Offsets 64/72 are image_base/image_size in struct efi_loaded_image.
+            # They used to be left zero, which meant the stub answered a question
+            # about the application's placement with "nowhere" - a real firmware
+            # always knows where it loaded the image.
+            self.write_u64(image + 64, self.image_base)
+            self.write_u64(image + 72, self.image_size)
             self.write_u64(interface_ptr, image)
             return EFI_SUCCESS
         if kind == "device_path":

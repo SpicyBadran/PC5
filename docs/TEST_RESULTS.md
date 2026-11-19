@@ -2643,3 +2643,220 @@ commands.
 Nothing about hardware, firmware or Sony software. It establishes that the page's numbers
 can be traced to a command that ran, at a named commit, on a named date — and that they
 will change when the underlying data changes rather than when somebody remembers.
+
+## 25. The 64-bit foundation: long mode, PC5-owned paging, and a marker that means what it says
+
+Section 24 closed the dashboard. This section is the first work in the repository
+that runs **64-bit kernel code** — and the first that has to be careful about what
+"64-bit" is allowed to mean.
+
+### 25.1 What was wrong before
+
+Verified from the tree, not from a summary: `boot/uefi/bootx64.S` leaves long mode
+with a far return into a 32-bit compatibility segment, clears `CR0.PG`, and enters
+a flat 32-bit kernel with `EBX` pointing at `struct pc5_boot_info`. The existing
+"64-bit" part of the boot path is firmware's, not PC5's: once the loader hands
+over, nothing is in long mode. A `-m64` flag on that kernel would produce an image
+that cannot run, which is why this phase added a path instead of flipping flags.
+
+### 25.2 What was built
+
+| Piece | File | Purpose |
+|---|---|---|
+| 64-bit EFI loader | `boot/uefi64/bootx64.S`, `boot/uefi64/uefi64_main.c` | stays in long mode, reads `KERNEL64.BIN` from the ESP, builds PC5 page tables, `ExitBootServices` with retry, jumps to the kernel |
+| page tables | `boot/uefi64/pagetables.c/.h` | identity map below 4 GiB, 2 MiB pages, 6 pages total, uncached framebuffer marking, lookup helper |
+| boot protocol | `kernel64/include/pc5_boot64.h` | `struct pc5_boot64`, version 1, 112 bytes, magic + size + flags, physical pointers below 4 GiB |
+| 64-bit kernel | `kernel64/start.S`, `kernel64/main.c`, `serial64.c`, `cpu64.c`, `kernel64.ld` | proves its own execution environment, reports CPU features, prints the marker last |
+| handover record | `boot/uefi64/handover64.h` | `PC5HND02`: protocol version, boot-info size, page-table pages, identity span |
+| tests | `tests/test_kernel64.py`, `tests/test_boot64_stub.py`, `tests/test_roadmap_dependencies.py`, `tests/kernel64_machine.py`, `tests/boot64_stub.py`, `tests/boot64_stubtest.py` | build, ABI, page tables, kernel contract, stub-firmware run, roadmap order and version discipline |
+
+The kernel prints `PC5-64BIT-LONG-MODE-OK` **only** after it has checked: a valid
+boot-info structure, `CR0.PG`, `CR4.PAE`, a page-aligned non-zero `CR3`, 64-bit
+operand size (a value that cannot survive 32-bit truncation), a 16-byte aligned
+stack that came from the boot info, and a CPUID long-mode report. The loader never
+prints the marker; the kernel never trusts the loader's word for any of it.
+
+### 25.3 Measured results (2026-11-16, this branch)
+
+| Gate | Command | Result | Level |
+|---|---|---|---|
+| 64-bit kernel build | `make kernel64` | **PASS** — `KERNEL64 OK: 40960 bytes at 0x100000`, ELF64 `ET_EXEC`, no unresolved symbols | BUILD VERIFIED |
+| 64-bit loader build | `make uefi64` | **PASS** — `UEFI64 OK: 1474560 bytes sha256=9913b7ea…`; `tools/eficheck.py` 22/22 checks | BUILD VERIFIED |
+| page tables | `make check` (`tests/test_kernel64.py::PageTableTests`) | **PASS** — 2048 × 2 MiB entries, present/writable/PS, uncached marking touches only the framebuffer page, bad arguments refused | UNIT TESTED |
+| boot-info ABI | `make check` (`BootInfoAbiTests`) | **PASS** — host build of the same header: size 112, offsets 16/40/64/72/88/96/104 | UNIT TESTED |
+| kernel contract | `make check` (`KernelContractTests`) | **PASS** — valid handover boots; 12 invalid handovers each print their reason and **no** marker | UNIT TESTED |
+| stub firmware, end to end | `make stubtest64` | **PASS — 16/16 checks**; serial order: loader banner → kernel read → page tables → `ExitBootServices` → CR3 → jump → kernel checks → marker → `PC5-64-DONE` | STUB FIRMWARE TESTED |
+| stale map key | `make check` (`test_a_stale_memory_map_key_is_retried_not_fatal`) | **PASS** — `stale-key retry=1` then `ok attempts=2` | STUB FIRMWARE TESTED |
+| permanently stale key | `make check` (`test_a_permanently_stale_key_stops_the_boot_without_the_marker`) | **PASS** — eight retries, then `PC5-64-LOADER-FAIL=exit-boot-services`, no marker | STUB FIRMWARE TESTED |
+| whole host suite | `make check` | **PASS — 571 tests, OK (2 skipped)**; 523 before this phase, 48 added | UNIT TESTED |
+| real firmware | `make ovmf-test` | **NOT TESTED** — exit 3: no TianoCore OVMF and no `qemu-system-x86_64` on this machine | NOT TESTED |
+| physical hardware | — | **NOT TESTED** — no machine booted this image | NOT TESTED |
+
+The exact serial output of the stub run starts with the loader and ends with the
+kernel's own verdict:
+
+```
+PC5-64-LOADER-BANNER 64-bit UEFI path (experimental)
+PC5-64-LOADER kernel at=0x100000 bytes=40960
+PC5-64-LOADER pagetables=0x2009000 pages=6 mapped_2mib=2048 span=0x100000000
+PC5-64-LOADER exit-boot-services=ok attempts=1 descriptors=6
+PC5-64-LOADER cr3=0x2009000 cr0=0x80000011 cr4=0x50220 long-mode=1
+PC5-64-LOADER-JUMP entry=0x100000 bootinfo=0x2007000
+PC5-64BIT-KERNEL-ENTRY
+PC5-64-PAGING enabled=1 root=0x2009000 kernel=0x100000-0x10a000 loaded=0x100000
+PC5-64-REGS wide-operands=ok arithmetic=ok
+PC5-64-STACK rsp=0x2012f70 top=0x2013000 aligned=16
+PC5-64-BOOTINFO magic=ok version=1 size=112 memdesc=32 entries=6 flags=0xf
+PC5-64-CPU vendor=GenuineIntel
+PC5-64BIT-LONG-MODE-OK
+PC5-64-DONE
+```
+
+### 25.4 What this does not establish
+
+- It is not an OVMF run and not a hardware run. The emulator's firmware is
+  `tests/boot64_stub.py`, a Python model: it enforces `ExitBootServices` map keys
+  and walks PC5's page tables, but it is not firmware.
+- It is not process protection. There is one address space, no user mode, no
+  guard pages and no NX use; `M2b`'s acceptance criteria are untouched.
+- It is not a hypervisor. CPUID's SVM bit is reported as *advertised*, nothing more;
+  the SVM ladder is at level 1 of 6 and `M2a` remains `not_started`.
+- It is not a change to the release artifact. `make iso`, the release ESP, the
+  32-bit kernel and the 32-bit UEFI loader are untouched, and
+  `ReleaseIsolationTests` fails if `make -n all` starts to build 64-bit work.
+
+### 25.5 Two defects the tests found while being written
+
+1. **The kernel was being loaded at a firmware-chosen address.** A flat,
+   non-relocatable image linked at `0x100000` must be loaded there; the first
+   version let `AllocatePages` pick an address and the kernel faulted on its first
+   string literal (`0x101010` was a link-time address, not a runtime one). The
+   loader now requires exactly the link address, and both sides assert
+   `PC5_KERNEL64_LINK_BASE`.
+2. **The spare memory descriptor was reaching the kernel.** Firmware sizes the map
+   with one extra zeroed descriptor; the loader copied it, and the kernel refused
+   the handover exactly as designed. The loader drops zero-length descriptors now,
+   and the kernel's strictness stays: a zero-page descriptor inside the declared
+   map is still refused, as `bootinfo-memmap-descriptor` (§26 renames the reason to
+   say what it checks).
+
+## 26. The 64-bit handover audited: placement, bounds, and a contract that is checked
+
+Recorded 2026-11-16. Start of this work: `7d5ef2e` (the head of PR #26). The gates
+below were run by `make record-validation` in a clean worktree; each record in
+`docs/evidence/validation/` names the commit it ran at, with `dirty: false` and
+`code_revision` equal to that commit. The work was an audit of the 64-bit path, so
+this section records what was *rejected* as well as what was confirmed: several of
+the claims checked against the source did not survive contact with it.
+
+### 26.1 Findings
+
+| # | Claim | Verdict | What the source actually said |
+|---|---|---|---|
+| 1 | `pc5_pt_mark_uncached()` can write outside the six-page block | **confirmed** | `first`/`last` came from the raw address with no `last <= 2047` check, so a framebuffer at or above 4 GiB wrote page-directory entries into whatever followed the block |
+| 2 | The boot-info contract claimed validation the kernel never did | **confirmed** | the v1 header documented that every pointer is validated; `kernel64/main.c` checked magic, version, size and stride, then dereferenced the memory map, the stack, the page tables, the framebuffer and the RSDP |
+| 3 | The loader assumed firmware placed the application below 4 GiB | **confirmed** | nothing asked `EFI_LOADED_IMAGE_PROTOCOL`; the loader switched `CR3` and continued executing code it had not verified was mapped |
+| 4 | A high framebuffer/RSDP address could be passed over as usable | **confirmed** | the address was copied into the boot info regardless of whether the map covered it |
+| 5 | The stub harness contradicted itself about page-table walking | **confirmed** | the module docstring said the harness "does not walk the page tables"; the paging builder said Unicorn walks them whenever `CR0.PG` is set. Both could not be true, and the second is |
+| 6 | Validation records named the wrong commit | **confirmed** | all 11 records said `commit=e69d2a6, dirty=true` while head was `7d5ef2e`: `HEAD` was recorded without checking the tree matched it |
+| 7 | The kernel trusted `stack_top` before validating it | **confirmed while writing the tests** | `kernel64/start.S` loaded `RSP` from the unvalidated boot info, so a bad stack faulted on the next `push` and the check that would have reported it never ran |
+| 8 | `make kernel64` from a clean tree was broken | **confirmed while running the gates** | the link rule passed `$^` to `ld`, which includes the linker script already named by `-T`: `ld: error: linker script file 'kernel64/kernel64.ld' appears multiple times` |
+| 9 | `PC5_PT_PAGES` is 6, or the `total`/`pd_pages` bounds in `build_identity` are wrong | **disproven** | 1 PML4 + 1 PDPT + 4 PD = 6 pages, 2048 × 2 MiB = 4 GiB, which is exactly representable in the walk |
+| 10 | The 4 GiB span cannot be described by the map | **disproven** | `(pages − 2) × 512 × 2 MiB` = 4 GiB exactly for 6 pages; the kernel now recomputes this and refuses a boot info whose `identity_span` disagrees |
+
+### 26.2 What changed, and why
+
+- **Page tables** (`boot/uefi64/pagetables.c`): bounded walk, `pc5_pt_range_supported()`
+  for an overflow-free "can this be mapped at all", clipping with an explicit count
+  of entries changed, `PC5_PT_MAX_INDEX`, no 1 GiB leaves in the lookup. A resource
+  that cannot be mapped is now *represented* as unmapped rather than silently
+  ignored.
+- **Boot protocol 2** (160 bytes, `kernel64/include/pc5_boot64.h`): adds
+  `stack_size`, `pagetable_addr`, `pagetable_pages`, `identity_span`,
+  `loader_image_addr`, `loader_image_size`, plus `PC5_BOOT64_F_UNMAPPED_FRAMEBUFFER`
+  and `..._RSDP`. Offsets are asserted in both translation units because
+  `bootx64.S` loads `stack_top` from offset 88.
+- **Loader** (`boot/uefi64/uefi64_main.c`, `bootx64.S`): placement validated from
+  the loaded-image protocol before `CR3`; every allocation asserted inside the span;
+  the switch itself moved into assembly that masks interrupts, verifies the write,
+  restores firmware's root on failure and is the only code between the two worlds.
+- **Kernel** (`kernel64/main.c`, `start.S`): staged validation (structure, header,
+  memory map, mandatory ranges, environment, optional resources), shared arithmetic
+  in `kernel64/include/pc5_map.h` so both sides apply one rule, and boot on the
+  image's own stack until the loader's stack has been validated.
+- **Harness** (`tests/uefi_stub_firmware.py`, `tests/boot64_stub.py`): honest
+  loaded-image reporting, configurable placement, firmware page tables for whatever
+  it placed, and a docstring that says what the emulation does and does not prove.
+- **Evidence** (`tools/validation.py`): the dirty state is measured before each gate
+  and recorded; a record that passed on a dirty tree is now a verification failure.
+
+### 26.3 Commands and results
+
+Every gate below was run by `make record-validation` in a clean worktree, and the
+exit code and summary in each record is that run's output.
+`ovmf-test` is **not tested**: TianoCore and `qemu-system-x86_64` are absent here,
+so the harness exits 2 and the record says `not-tested` with that reason. No
+hardware run, and no OVMF run, is claimed anywhere in this section.
+
+| Gate | Command | Result | Exit | Evidence |
+|---|---|---|---|---|
+| unit + integration | `make check` | passed | 0 | 612/612 tests |
+| artifact | `make verify` | passed | 0 | `MANIFEST VALID: build/pc5.iso matches …` |
+| emulated BIOS boot | `make boot-test` | passed | 0 | boot evidence written |
+| 32-bit stub firmware | `make stubtest` | passed | 0 | 58/58 checks |
+| 64-bit kernel | `make kernel64` | passed | 0 | flat image, no unresolved symbols |
+| 64-bit ESP | `make uefi64` | passed | 0 | PE32+ passes `tools/eficheck.py` |
+| 64-bit stub firmware | `make stubtest64` | passed | 0 | 22/22 checks |
+| documentation | `make docs-check` | passed | 0 | 44 Markdown files, links and anchors resolve |
+| presentation | `make presentation-check` | passed | 0 | 6 figures, 5 blocks, 13 status rows |
+| roadmap | `make roadmap` | passed | 0 | 35 milestones, document in sync |
+| records | `make validation` | passed | 0 | `records: OK` |
+| real firmware | `make ovmf-test` | **not tested** | 2 | TianoCore and `qemu-system-x86_64` not installed |
+
+Test counts, exactly: 46 tests added and 5 removed, so the suite went from 571 to
+612. The 46 are 19 in the new `tests/test_pagetables64.py`, 24 in
+`tests/test_kernel64.py` (25 → 49: version-2 contract cases plus the
+`PlacementPolicyTests` class) and 3 placement runs in `tests/test_boot64_stub.py`
+(5 → 8). The 5 removed were the duplicated `PageTableTests` class in
+`tests/test_kernel64.py`; the same properties are covered in the new file, which
+adds canary pages either side of the page-table block. `tests/boot64_stubtest.py`
+also grew from 16 to 22 checks without changing the test count.
+
+### 26.4 What the placement runs actually show
+
+The stub firmware now places the application itself, so these are executions, not
+simulations of an intention:
+
+```
+image at the top of the map      PC5-64-LOADER image=0xfe00000-0xfe03000 below-span=1
+                                 PC5-64-PAGING enabled=1 root=0x200e000 …
+                                 PC5-64-LOADER image=0xfe00000 size=0x3000 range=ok
+handoff regions at the top       PC5-64-LOADER pagetables=0xff01000 pages=6 …
+                                 bootinfo=0xff00000 stack=0xff0b000
+                                 PC5-64-STACK rsp=0xff0af20 … aligned=16 range=ok
+```
+
+Both runs finish with `PC5-64BIT-LONG-MODE-OK` and `PC5-64-DONE`, and Unicorn
+translates every fetch after the switch through PC5's tables, so a region the map
+missed would fault instead of passing.
+
+The one case that cannot be executed faithfully is an application placed *above*
+4 GiB: `BOOTX64.EFI` carries 88 32-bit base relocations, so above 4 GiB the
+emulated code would no longer be the code under test. That side is covered by
+evaluating the loader's own rule on the host (`PlacementPolicyTests`): a range
+ending exactly at 4 GiB is accepted, one starting at or crossing it is refused, and
+empty, wrapped and above-the-limit ranges are refused.
+
+### 26.5 What this does not establish
+
+- No OVMF, no hardware: the marker is evidence about PC5's code, not about
+  firmware compliance, and not about the MMU's treatment of cache attributes, PAT,
+  `CR0.WP`, TLB invalidation or memory types.
+- The map still stops at 4 GiB. Resources above it are now *represented* as
+  unusable rather than silently passed over; widening the map is future work.
+- The 64-bit kernel is still minimal: no interrupts (it boots with them masked and
+  installs no IDT), no APIC, no timer, no SMP, no allocator, no protection. `M2a`
+  remains `not_started`.
+- The 32-bit release path is unchanged: `git diff --stat 8aab6d3…196f504 -- boot/uefi
+  boot/loader.asm kernel kernel/include` is empty, and `ReleaseIsolationTests`
+  fails if `make -n all` starts to build any 64-bit work.

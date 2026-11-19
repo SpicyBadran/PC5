@@ -43,7 +43,8 @@ def base_graph():
     """A minimal graph that passes validation, for mutation in the tests."""
     return {
         "schema": "pc5.roadmap/2",
-        "version": "test",
+        "document_version": "test",
+        "product_version_source": "Makefile VERSION",
         "updated": "2026-11-15",
         "authority": "docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md",
         "product": {

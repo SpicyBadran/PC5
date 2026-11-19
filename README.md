@@ -52,7 +52,8 @@ explains what running the system software would require.
 <!-- pc5:stats:begin -->
 | | |
 |---|---|
-| Roadmap | `0.4.0-dev`, updated 2026-11-16 |
+| Product version | `0.2.0` (single source: `Makefile VERSION`) |
+| Roadmap document | `0.4.0-dev`, updated 2026-11-16 |
 | Milestones | 35 in 14 workstreams |
 | Complete | 9 |
 | In progress | 2 |
@@ -60,8 +61,8 @@ explains what running the system software would require.
 | Not started | 18 |
 | Destination | `M19` — Genuine system software boots on PC5 (DESTINATION) |
 | Destination state | **BLOCKED** |
-| Last recorded ISO verification | passed @ 6d8ed5b |
-| Last recorded test run | passed 523/523 @ 6d8ed5b |
+| Last recorded ISO verification | passed @ ef06475 |
+| Last recorded test run | passed 612/612 @ ef06475 |
 | Physical boot evidence | **none filed** |
 | Genuine Sony software execution | **BLOCKED — nothing executed** |
 
@@ -160,11 +161,11 @@ a screenshot. See also [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
 <!-- pc5:evidence:begin -->
 | Evidence | Gate | Result | Recorded at | Date |
 |---|---|---|---|---|
-| Host and kernel tests | `make check` | **passed**, 523/523 | `6d8ed5b` | 2026-11-16 |
-| ISO structure and manifest | `make verify` | **passed** | `6d8ed5b` | 2026-11-16 |
-| Emulator execution (v86) | `make boot-test` | **passed** | `6d8ed5b` | 2026-11-16 |
-| Stub firmware (unicorn) | `make stubtest` | **passed**, 58/58 | `6d8ed5b` | 2026-11-16 |
-| Real OVMF firmware | `make ovmf-test` | **not-tested** | `6d8ed5b` | 2026-11-16 |
+| Host and kernel tests | `make check` | **passed**, 612/612 | `ef06475` | 2026-11-16 |
+| ISO structure and manifest | `make verify` | **passed** | `ef06475` | 2026-11-16 |
+| Emulator execution (v86) | `make boot-test` | **passed** | `ef06475` | 2026-11-16 |
+| Stub firmware (unicorn) | `make stubtest` | **passed**, 58/58 | `ef06475` | 2026-11-16 |
+| Real OVMF firmware | `make ovmf-test` | **not-tested** | `ef06475` | 2026-11-16 |
 | Physical PC boot (UEFI/BIOS) | `tools/hw_record.py` | **NOT TESTED** — no record filed | — | — |
 | Genuine Sony system software | — | **BLOCKED** — not present, not executed | — | — |
 

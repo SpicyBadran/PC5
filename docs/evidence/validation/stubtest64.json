@@ -1,0 +1,16 @@
+{
+  "code_revision": "ef064756047dbaf4beadc5cdd0ebb21b30c5a802",
+  "command": "make stubtest64",
+  "commit": "ef064756047dbaf4beadc5cdd0ebb21b30c5a802",
+  "date": "2026-11-16",
+  "dirty": false,
+  "exit_code": 0,
+  "gate": "stubtest64",
+  "level": "stub-firmware execution (64-bit)",
+  "notes": "the 64-bit loader and kernel in long-mode emulation",
+  "result": "passed",
+  "schema": "pc5.validation/1",
+  "source_date_epoch": 1763251200,
+  "summary": "64-BIT STUB FIRMWARE OK: 22/22 checks passed",
+  "tool": "tools/validation.py"
+}
