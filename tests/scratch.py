@@ -244,8 +244,12 @@ def directory(*parts: str, prefix: str = "") -> str:
         raise RuntimeError(_UNSECURE_PLATFORM_MESSAGE)
 
     path = _make_descriptor_relative(base, safe, safe_prefix or "case-")
-    # Defence in depth.  With descriptor-relative creation this cannot fail; it is
-    # kept so that a future change to the walk does not silently lose containment.
+    # Defence in depth, and *not* the protection.  It does fire in one real case --
+    # a component replaced with a symlink after the walk opened it, where the
+    # returned path then resolves through the link -- but it is not relied on for
+    # E1: descriptor-relative creation refuses that at the syscall, and no test
+    # here fails if this line is removed.  It cannot catch relocation of an
+    # already-open directory at all; see _make_descriptor_relative and E1'.
     _require_within(base, path)
     return path
 
@@ -348,8 +352,17 @@ def _make_descriptor_relative(base: str, parts, prefix: str) -> str:
     Identity is not location.  A descriptor keeps working after the directory it
     refers to has been renamed elsewhere, so this function cannot tell whether the
     tree it is building is still inside ``base`` in *pathname* terms -- see ``E1'``
-    in the module docstring.  The ``_require_within`` call in :func:`directory` runs
-    after the fact and can only report that case.
+    in the module docstring.
+
+    The ``_require_within`` call in :func:`directory` does **not** close that gap.
+    It compares *resolved paths*, and resolution is lexical when a path does not
+    exist: rename the verified component away and the returned path stops existing,
+    so ``Path.resolve()`` walks the components by name and lands back inside
+    ``base`` anyway.  The check passes and the relocated directory goes unreported.
+    Answering the question that would catch it -- *where is this descriptor now* --
+    needs a walk of parent descriptors with inode comparison, a separate and itself
+    racy mechanism, not a property of a path string.  Relocation is therefore a
+    documented limitation (``E1'``), not something this function detects.
     """
     directory_fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
