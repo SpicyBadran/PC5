@@ -156,6 +156,7 @@ class StubFirmware64(fw.StubFirmware):
                 return fw.EFI_OUT_OF_RESOURCES
             self.high_next = address + size
             self.uc.mem_write(address, bytes(size))
+            self.max_request_bounds.append(bound)
             self.allocations.append((alloc_type, pages, address))
             self.write_u64(memory_ptr, address)
             self.map_generation += 1

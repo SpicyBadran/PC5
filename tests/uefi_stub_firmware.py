@@ -196,6 +196,12 @@ class StubFirmware:
         self.map_small_buffer_forced = 0     # how many were actually forced
         self.free_pages_calls = []           # (address, pages) the loader freed
         self.allocations = []                # (type, pages, base) for the harness
+        # The *input* bound of every MaxAddress request, kept beside the record of
+        # what was returned.  (type, pages, base) cannot answer "what did the loader
+        # ask for?": it records the answer, not the question, so a wrong bound that
+        # still yields a plausible base is invisible to the harness.  This list holds
+        # the requested maximum address so a test can pin the exact value.
+        self.max_request_bounds = []
         self.esp_files = esp_volume          # {"\\EFI\\BOOT\\BOOTX64.EFI": data}
         self.kernel = kernel_bytes
         self.iso_has_kernel = iso_volume_has_kernel
@@ -825,6 +831,9 @@ class StubFirmware:
             base = self.alloc(size, align=4096)
             if base is None:
                 return EFI_OUT_OF_RESOURCES        # pool exhausted
+
+        if alloc_type == EFI_ALLOCATE_MAX_ADDRESS:
+            self.max_request_bounds.append(requested)
 
         self.allocations.append((alloc_type, pages, base))
         self.write_u64(memory_ptr, base)
