@@ -347,11 +347,20 @@ class DescriptorRelativeCreationTest(unittest.TestCase):
     races threads: a probabilistic test would prove nothing and flake.
     """
 
+    #: Components this class may leave in the shared per-process root.  Removed in
+    #: reverse registration order, after the outside target, so a failed case never
+    #: leaves a symlink behind for a later case to trip over.
+    ARTIFACTS = ("owner", "a", "drt", "unwritable")
+
     def setUp(self):
         self.root = pathlib.Path(scratch.root()).resolve()
         self.outside = self.root.parent / f"{self.root.name}-e1-target"
         self.outside.mkdir(exist_ok=True)
         self.addCleanup(shutil.rmtree, self.outside, True)
+        # Registered after the outside target's cleanup, so these run *first*:
+        # the symlink into the target is gone before the target itself is removed.
+        for name in self.ARTIFACTS:
+            self.addCleanup(self._remove_component, name)
 
     def _swap_component(self, name="owner"):
         """Replace a scratch component with a symlink to the outside target."""
@@ -491,6 +500,61 @@ class DescriptorRelativeCreationTest(unittest.TestCase):
         self.assertFalse(
             (self.root / "anything").exists(),
             "a refused call created a directory anyway")
+
+    def test_relocating_a_component_is_a_documented_limitation(self):
+        """``E1'``: a *renamed* component is not a symlink, and is not prevented.
+
+        Descriptor-relative calls pin the directory's **identity**, not its location,
+        so moving an already-verified directory out of the root between two calls
+        still lets the leaf be created inside the moved tree.  This is not the E1
+        bug -- nothing follows an attacker-controlled symlink, and the directory is
+        one this module created -- but it is the residual create-time limitation and
+        the module docstring says so.
+
+        The test asserts the *current* behaviour rather than a guarantee, so it stays
+        honest in both directions: if the limitation is ever removed, this fails and
+        the docstring must be updated with it.  It is deterministic because the move
+        happens inside the leaf ``mkdir`` hook, not by racing a thread.
+        """
+        original = os.mkdir
+        moved = []
+        destination = self.outside / "relocated"
+
+        def hook(path, mode=0o777, *, dir_fd=None):
+            if dir_fd is not None and str(path).startswith("case-") and not moved:
+                victim = self.root / "owner"
+                if victim.is_dir():
+                    os.rename(victim, destination)
+                    moved.append(victim)
+            return original(path, mode, dir_fd=dir_fd)
+
+        os.mkdir = hook
+        try:
+            try:
+                path = scratch.directory("owner")
+            except (OSError, ValueError):
+                # A future implementation that detects this is an improvement, and
+                # the docstring's E1' paragraph would then have to be rewritten.
+                self.fail(
+                    "the relocation limitation appears to have been removed; "
+                    "update the E1' paragraph in tests/scratch.py")
+        finally:
+            os.mkdir = original
+
+        self.assertTrue(moved, "the hook never reached the creation boundary")
+        self.assertTrue(
+            os.path.isdir(destination), "the component was not actually relocated")
+        # The documented outcome: a directory was created inside the relocated tree,
+        # and the returned path does not exist in the root any more.
+        self.assertTrue(
+            list(destination.iterdir()),
+            "no directory was created inside the relocated tree")
+        self.assertFalse(
+            os.path.exists(path),
+            "the returned path unexpectedly still exists")
+
+        # Remove the relocated tree so the next case starts from a clean root.
+        shutil.rmtree(destination, ignore_errors=True)
 
 
 class CleanupLifecycleTest(unittest.TestCase):
