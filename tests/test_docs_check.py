@@ -50,6 +50,43 @@ class DetectionTest(Fixture):
         self.write("README.md", "See [gone](docs/gone.md).\n")
         self.assertTrue(any("link target missing" in p for p in self.problems()))
 
+    def test_a_percent_encoded_path_resolves(self):
+        """GitHub follows `[x](a%20b.md)` to the file `a b.md`; so must this."""
+        self.write("docs/a b.md", "# Spaced\n\nText.\n")
+        self.write("README.md", "See [spaced](docs/a%20b.md) and "
+                                 "[its anchor](docs/a%20b.md#spaced).\n")
+        self.assertEqual(self.problems(), [])
+
+    def test_a_percent_encoded_path_to_nowhere_is_still_caught(self):
+        self.write("README.md", "See [gone](docs/no%20such%20file.md).\n")
+        self.assertTrue(any("link target missing" in p for p in self.problems()))
+
+    def test_a_percent_encoded_nul_is_reported_not_raised(self):
+        """`a%00b.md` decodes to a path with an embedded NUL.
+
+        `Path.resolve()` raises `ValueError: embedded null byte` for that, which
+        used to escape as a traceback and stop the whole check - turning a
+        diagnostic tool into a crash on exactly the malformed input it exists to
+        report. It must be an ordinary "link target missing".
+        """
+        self.write("README.md", "See [nul](docs/a%00b.md).\n")
+        problems = self.problems()
+        self.assertTrue(any("link target missing" in p for p in problems), problems)
+
+    def test_a_percent_encoded_nul_with_a_fragment_is_reported_not_raised(self):
+        self.write("README.md", "See [nul](docs/a%00b.md#frag).\n")
+        problems = self.problems()
+        self.assertTrue(any("link target missing" in p for p in problems), problems)
+
+    def test_other_malformed_escapes_are_still_reported(self):
+        """The fix must not have widened into "anything odd is silently fine"."""
+        for target in ("docs/%zz.md", "docs/a%2", "docs/a%2Fb.md"):
+            with self.subTest(target=target):
+                self.write("README.md", f"See [bad]({target}).\n")
+                problems = self.problems()
+                self.assertTrue(any("link target missing" in p for p in problems),
+                                (target, problems))
+
     def test_a_renamed_heading_is_caught(self):
         self.write("README.md", "See [the target](docs/target.md#old-heading).\n")
         problems = self.problems()

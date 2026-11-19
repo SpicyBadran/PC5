@@ -27,6 +27,8 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 sys.path.insert(0, str(REPO / "tests"))
 
+import scratch  # noqa: E402  (sibling helper, after sys.path)
+
 import iso_manifest  # noqa: E402
 import mbr_fixture  # noqa: E402
 import mkiso  # noqa: E402
@@ -111,11 +113,24 @@ class ManifestContentTest(unittest.TestCase):
 
 
 class ManifestVerificationTest(unittest.TestCase):
+    """Verifies the manifest reader against manifests it writes itself.
+
+    The manifest and the CLI output are *mutable* files, so they are written to a
+    directory private to this process and this case rather than to a fixed name
+    under build/.  Two suite processes previously wrote build/manifest-test.json
+    and build/manifest-cli.json at the same time; the bytes happen to be equal so
+    the collision was silent, but a silent shared write is still a hazard: any
+    change that made the two runs differ would have turned it into a flaky
+    failure in a test that has nothing to do with manifests.
+    """
+
     def setUp(self):
         self.image = build()
         self.path = _write_temp(self.image)
-        self.manifest = REPO / "build" / "manifest-test.json"
-        self.manifest.parent.mkdir(exist_ok=True)
+        self.work = Path(scratch.directory("iso_manifest", type(self).__name__,
+                                           self._testMethodName))
+        scratch.register_cleanup(self, str(self.work))
+        self.manifest = self.work / "manifest-test.json"
         self.manifest.write_text(json.dumps(iso_manifest.manifest(self.image),
                                             indent=2, sort_keys=True))
 
@@ -205,8 +220,10 @@ class IndependenceTest(unittest.TestCase):
 
     def test_the_cli_writes_and_checks_a_manifest(self):
         image = _write_temp(build())
-        out = REPO / "build" / "manifest-cli.json"
-        out.parent.mkdir(exist_ok=True)
+        work = Path(scratch.directory("iso_manifest", type(self).__name__,
+                                      self._testMethodName))
+        scratch.register_cleanup(self, str(work))
+        out = work / "manifest-cli.json"
         for args in ([str(image), "--output", str(out), "-q"],
                      [str(image), "--verify", str(out)]):
             result = subprocess.run([sys.executable, str(REPO / "tools/iso_manifest.py")]

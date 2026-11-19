@@ -1642,6 +1642,16 @@ control to the PC5 kernel.
 
 Base: `main` `af726d2` (M1i merged). Branch `arena/473f5139-pc5`.
 
+*Note, added 2026-11-16.* `af726d2` is a real commit — "Merge pull request #16 from
+SpicyBadran/arena/3a8e35e9-pc5", 2026-11-15 — and it was `main` at the time this section
+records. It is **deliberately not repointed**, and it does not resolve in a fresh clone:
+`main` was later rewritten, so that merge is no longer an ancestor of it and a clone
+fetches only the rewritten line. It is therefore an accurate historical base, not a broken
+citation, and replacing it with a current SHA would fabricate a run that never happened
+against that revision. Two consequences follow, both recorded rather than fixed:
+`BUILD_ID=af726d2` in the commands below names that historical revision, and a reader
+cannot re-run this section exactly against a fresh clone.
+
 ### 16.1 Environment (external dependency, not part of the repository)
 
 | Item | Value |
@@ -2664,7 +2674,7 @@ that cannot run, which is why this phase added a path instead of flipping flags.
 | Piece | File | Purpose |
 |---|---|---|
 | 64-bit EFI loader | `boot/uefi64/bootx64.S`, `boot/uefi64/uefi64_main.c` | stays in long mode, reads `KERNEL64.BIN` from the ESP, builds PC5 page tables, `ExitBootServices` with retry, jumps to the kernel |
-| page tables | `boot/uefi64/pagetables.c/.h` | identity map below 4 GiB, 2 MiB pages, 6 pages total, uncached framebuffer marking, lookup helper *(this row described the intent; the map covered only the first 1 GiB until `de9c6a3` — see §27)* |
+| page tables | `boot/uefi64/pagetables.c/.h` | identity map below 4 GiB, 2 MiB pages, 6 pages total, uncached framebuffer marking, lookup helper *(this row described the intent; the map covered only the first 1 GiB until `ed9c6a3` — see §27)* |
 | boot protocol | `kernel64/include/pc5_boot64.h` | `struct pc5_boot64`, version 1, 112 bytes, magic + size + flags, physical pointers below 4 GiB |
 | 64-bit kernel | `kernel64/start.S`, `kernel64/main.c`, `serial64.c`, `cpu64.c`, `kernel64.ld` | proves its own execution environment, reports CPU features, prints the marker last |
 | handover record | `boot/uefi64/handover64.h` | `PC5HND02`: protocol version, boot-info size, page-table pages, identity span |
@@ -2916,7 +2926,7 @@ on the first write to an unmapped framebuffer.
 
 ### 27.3 The correction
 
-Fixed in `de9c6a3` on `arena/17f0c4f8-pc5`:
+Fixed in `ed9c6a3` on `arena/17f0c4f8-pc5`:
 
 - one PDPT entry per gigabyte, each pointing at its own PD page, with the count
   derived from the span so a shorter map installs fewer entries and every

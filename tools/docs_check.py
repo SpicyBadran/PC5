@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import urllib.parse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -88,6 +89,23 @@ def make_targets(root: Path = ROOT) -> set:
     return targets
 
 
+def _resolve(parent: Path, path_part: str) -> Path | None:
+    """``(parent / path_part)`` resolved, or ``None`` if resolving raised.
+
+    ``Path.resolve()`` raises ``ValueError("embedded null byte")`` for a path
+    containing NUL, which ``urllib.parse.unquote("a%00b.md")`` produces.  A
+    checker whose job is to report malformed links must not die on one, so that
+    narrow failure is turned into ``None`` and reported as a missing target.  A
+    path that simply does not exist still resolves normally and is returned; the
+    caller's ``exists()`` handles it.  Only these two exceptions are caught;
+    anything else is a bug here and should still propagate.
+    """
+    try:
+        return (parent / path_part).resolve()
+    except (ValueError, OSError):
+        return None
+
+
 def check(root: Path = ROOT) -> list:
     problems = []
     files = markdown_files(root)
@@ -105,7 +123,19 @@ def check(root: Path = ROOT) -> list:
                 destination, fragment = path, target[1:]
             else:
                 path_part, _, fragment = target.partition("#")
-                destination = (path.parent / path_part).resolve()
+                # GitHub renders `[x](a%20b.md)` as the file `a b.md`, so a path
+                # containing a space has to be percent-encoded to resolve there.
+                # Decode before touching the filesystem, or the checker rejects a
+                # link that GitHub follows.
+                path_part = urllib.parse.unquote(path_part)
+                destination = _resolve(path.parent, path_part)
+                if destination is None:
+                    # A decoded path the filesystem cannot even represent (an
+                    # embedded NUL), or one naming no file.  Either way the link
+                    # does not resolve, and that is a problem to report rather
+                    # than an exception that stops the whole check.
+                    problems.append(f"{rel}: link target missing: {target}")
+                    continue
                 if not path_part:
                     destination = path
                 elif not destination.exists():

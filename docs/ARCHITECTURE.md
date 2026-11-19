@@ -269,7 +269,7 @@ page-directory *pointer*, and one page directory holds 512 entries of 2 MiB — 
 gigabyte — so the span needs **four** PDPT entries, one per PD page, not one. An
 earlier version installed only `PDPT[0]`, which mapped the first gigabyte and left
 the other three PD pages unreachable while the builder still reported 2048 mapped
-entries (corrected in `de9c6a3`; see `TEST_RESULTS.md` §27). All six pages are
+entries (corrected in `ed9c6a3`; see `TEST_RESULTS.md` §27). All six pages are
 zeroed before use, so no firmware value survives inside an active structure.
 
 2 MiB pages are used because every x86-64 CPU that can enter long mode supports

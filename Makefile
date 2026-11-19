@@ -48,7 +48,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: ovmf-setup ovmf-check all iso uefi kernel64 uefi64 stubtest64 check docs-check presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record brand brand-check
+.PHONY: ovmf-setup ovmf-check all iso uefi kernel64 uefi64 stubtest64 check docs-check citations-check presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record brand brand-check
 
 all: iso
 
@@ -262,12 +262,24 @@ $(ISO): $(BUILD)/loader.bin $(BUILD)/mbr.bin $(BUILD)/kernel.bin $(BUILD)/efi.im
 	  --output $(ISO) \
 	  --info $(BUILD)/build-info.json
 
+# The unit binary is written to a path private to this invocation and to this
+# process.  A single shared name under build/ made two concurrent `make check`
+# runs collide: one links the binary while the other executes it, which Linux
+# refuses with ETXTBSY ("Text file busy") and make reports as exit 127.  The
+# binary is therefore created under a name nothing else holds and removed by a
+# trap, so no other target or run can observe a half-written or in-use file.
+#
+# `mktemp` rather than a $$-based name: the shell's PID is not visible to make
+# for expansion, and a name derived at parse time is shared by every invocation
+# of that make process.  mktemp guarantees a name nothing else holds.
 unit: | $(BUILD)
-	$(CC) -std=gnu11 -O1 -Wall -Wextra -Wno-unused-parameter -ffreestanding \
-	  -fno-builtin -fno-stack-protector -DPC5_HOST_TEST -Ikernel/include \
-	  -o $(BUILD)/kernel-unit tests/kernel_unit.c kernel/lib.c kernel/mem.c kernel/chain.c \
-	  kernel/block.c kernel/sha256.c kernel/part.c kernel/fat32.c
-	$(BUILD)/kernel-unit
+	@unit_bin=$$(mktemp $(BUILD)/kernel-unit.XXXXXXXX); \
+	 trap 'rm -f "$$unit_bin"' EXIT; \
+	 $(CC) -std=gnu11 -O1 -Wall -Wextra -Wno-unused-parameter -ffreestanding \
+	   -fno-builtin -fno-stack-protector -DPC5_HOST_TEST -Ikernel/include \
+	   -o "$$unit_bin" tests/kernel_unit.c kernel/lib.c kernel/mem.c kernel/chain.c \
+	   kernel/block.c kernel/sha256.c kernel/part.c kernel/fat32.c && \
+	 "$$unit_bin"
 
 roadmap:
 	python3 tools/roadmap.py check
@@ -286,7 +298,7 @@ psm:
 psm-render:
 	python3 -m psm.render --write
 
-check: unit psm docs-check presentation-check brand-check
+check: unit psm docs-check citations-check presentation-check brand-check
 	python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 # The README's figures and status table are generated from the milestone graph.
@@ -298,6 +310,14 @@ presentation:
 
 presentation-check:
 	python3 tools/presentation.py check
+
+# A citation is only evidence while Git can hand the object back, and a rebase
+# rewrites commit ids silently.  `docs-check` validates links, anchors and make
+# targets and cannot see this, so a rewrite used to be able to rot the whole
+# evidence trail while every gate stayed green.  `citations-check` resolves each
+# backticked object reference in the dated evidence documents.
+citations-check:
+	python3 tools/commit_citations.py
 
 # The logo and its variants are generated from tools/brand.py, so a hand edit to
 # brand/*.svg is a stale edit.  `brand` writes; `brand-check` reads.

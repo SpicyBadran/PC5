@@ -37,6 +37,8 @@ def read(path):
         return fh.read()
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 
+import scratch  # noqa: E402  (sibling helper, after sys.path)
+
 import fat32_images  # noqa: E402
 
 SOURCES = ["tests/fat32_write_check.c", "kernel/fat32.c", "kernel/sha256.c",
@@ -151,13 +153,21 @@ def classify(before: bytes, after: bytes, name: str, part_lba: int = PART_LBA) -
 
 
 class WriteDriver(unittest.TestCase):
-    """Builds the host driver once; every test gets a fresh copy of an image."""
+    """Builds the host driver once; every test gets a fresh copy of an image.
+
+    Isolation model: the compiled driver and the mutable run files (in.img,
+    out.img, lba.txt) live under a directory unique to this process and class.
+    The driver is immutable and safe to execute concurrently, but rebuilding it
+    while another process executes it fails with ETXTBSY, so it must be per
+    process.  See tests/scratch.py.
+    """
 
     @classmethod
     def setUpClass(cls):
         if not shutil.which("gcc"):
             raise unittest.SkipTest("gcc is required to build the host driver")
-        cls.tmp = tempfile.mkdtemp(prefix="pc5-fat32w-")
+        cls.tmp = scratch.directory("fat32_write", cls.__name__)
+        cls.addClassCleanup(scratch.drop_class_tree, cls.tmp)
         cls.binary = os.path.join(cls.tmp, "fat32-write-check")
         cmd = ["gcc", "-std=gnu11", "-O1", "-Wall", "-Wextra",
                "-Wno-unused-parameter", "-ffreestanding", "-fno-builtin",
@@ -166,18 +176,21 @@ class WriteDriver(unittest.TestCase):
                "-o", cls.binary] + [os.path.join(ROOT, s) for s in SOURCES]
         cls.build = subprocess.run(cmd, capture_output=True, text=True)
 
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def create(self, image, name="NEW.TXT", size=0, payload=(), options=(),
                part_sectors=PART_SECTORS):
         """Run one create and return (fields, after_image, stdout, returncode)."""
         if not os.path.exists(self.binary):
             self.fail("driver was not built:\n" + self.build.stderr[-3000:])
-        src = os.path.join(self.tmp, "in.img")
-        dst = os.path.join(self.tmp, "out.img")
-        lba_log = os.path.join(self.tmp, "lba.txt")
+        work = getattr(self, "_work", None)
+        if work is None:
+            work = scratch.directory("fat32_write", type(self).__name__,
+                                     self._testMethodName)
+            self._work = work
+            scratch.register_cleanup(self, work)
+        src = os.path.join(work, "in.img")
+        dst = os.path.join(work, "out.img")
+        lba_log = os.path.join(work, "lba.txt")
         for path in (dst, lba_log):
             if os.path.exists(path):
                 os.unlink(path)
