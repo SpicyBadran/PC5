@@ -40,7 +40,12 @@
 static u16 KERNEL_NAME[] = {'\\', 'K', 'E', 'R', 'N', 'E', 'L',
                                    '6', '4', '.', 'B', 'I', 'N', 0};
 #define MEMMAP_BUFFER_PAGES 8ull   /* 32 KiB: hundreds of descriptors */
+#define MEMMAP_BUFFER_PAGES_MAX 64ull /* growth stops here: 256 KiB */
 #define MEMMAP_ENTRIES_MAX 1024ull
+/* The only value UEFI 2.x defines for EFI_MEMORY_DESCRIPTOR.Version.  The 64-bit
+ * loader replaces firmware's descriptors with pc5_memdesc64 anyway, so this says
+ * which firmware *input* format was accepted, not how the output is encoded. */
+#define MEMMAP_DESCRIPTOR_VERSION 1u
 #define KERNEL_STACK_PAGES 4ull
 #define EXIT_RETRIES 8
 
@@ -229,14 +234,42 @@ static void validate_loader_placement(efi_handle image, struct pc5_boot64 *boot_
     serial_write(" below-span=1\n");
 }
 
-/* --------------------------------------------------------------- helpers */
+/* Allocate `pages` pages that are entirely usable by the identity map this loader
+ * builds.  The map covers [0, PC5_IDENTITY_LIMIT), so the request has to be the
+ * highest address a mapped byte can occupy.
+ *
+ * UEFI 2.9A 7.2.1: for AllocateMaxAddress the EFI_PHYSICAL_ADDRESS pointed to by
+ * Memory is an *in* parameter - "allocate any available range of pages whose
+ * uppermost address is less than or equal to the address pointed to by Memory on
+ * input".  Passing 0 therefore describes a range that ends at or below zero, which
+ * no page allocation can satisfy; edk2's CoreInternalAllocatePages does exactly
+ * `Start = *Memory` and then searches below it.  So the bound is written before the
+ * call, and the value is the last *mapaeable byte*, not the span length.
+ *
+ * The contract is checked again on the way out rather than trusted: firmware (or a
+ * stub) that returns a range crossing the limit, wrapping, or not honouring the
+ * bound must stop the boot, not hand the kernel a pointer it cannot dereference.
+ * `pages` is validated first, because `pages * 4096` is itself a wrap site. */
 static void *alloc_below_4g(u64 pages, u64 *physical)
 {
-    u64 address = 0;
+    if (pages == 0 || pages > (PC5_IDENTITY_LIMIT / 4096ull))
+        return 0;
+
+    u64 address = PC5_IDENTITY_LIMIT - 1ull;      /* input: uppermost allowed byte */
     efi_status status = g_bs->allocate_pages(EFI_ALLOCATE_MAX_ADDRESS,
                                             EFI_LOADER_DATA, pages, &address);
-    if (EFI_ERROR(status) || address == 0 || address > LOAD_LIMIT)
+    if (EFI_ERROR(status) || address == 0)
         return 0;
+
+    /* The bound is inclusive off the end of the range, so the last byte is
+     * address + pages*4096 - 1 and must stay strictly below the limit.  Comparing
+     * in page units keeps the arithmetic free of any multiply that could wrap. */
+    u64 last_page = address / 4096ull + pages - 1ull;
+    if ((address & 0xFFFull) != 0 || last_page >= PC5_IDENTITY_LIMIT / 4096ull)
+        return 0;
+    if (address > LOAD_LIMIT)
+        return 0;
+
     if (physical)
         *physical = address;
     return (void *)(unsigned long)address;
@@ -355,15 +388,43 @@ static void collect_framebuffer(struct pc5_boot64 *boot_info, u64 *fb_end)
         return;
 
     struct efi_gop_mode_info *info = gop->mode->info;
-    if (!gop->mode->frame_buffer_base || !info->pixels_per_scan_line)
+    /* A zero base means firmware did not report a linear framebuffer at all, so
+     * there is nothing to record.  A zero pixel count, a zero dimension or an
+     * unrepresentable pitch is different: the firmware *did* offer one, and it is
+     * classified unusable rather than silently dropped. */
+    if (!gop->mode->frame_buffer_base)
         return;
 
     u64 base = gop->mode->frame_buffer_base;
-    u64 pitch = (u64)info->pixels_per_scan_line * 4ull;
+    /* The geometry is validated before it is stored.  A pitch that does not fit
+     * the protocol's 32-bit field, a byte count that wraps, or a zero dimension
+     * would otherwise be truncated or wrapped into a plausible-looking number and
+     * handed to the kernel as usable. */
+    u32 pitch = 0;
     u64 bytes = 0;
-    if (pc5_add_overflows(pitch, 0, &bytes) ||
-        pc5_add_overflows(pitch * info->vertical_resolution, 0, &bytes) ||
-        !pc5_range_within(base, bytes, PC5_PT_SPAN)) {
+    if (!pc5_framebuffer_line(info->pixels_per_scan_line, &pitch) ||
+        !pc5_framebuffer_bytes(info->horizontal_resolution,
+                               info->vertical_resolution, pitch, &bytes)) {
+        serial_write("PC5-64-LOADER framebuffer=");
+        serial_hex(base);
+        serial_write(" unusable=invalid-geometry\n");
+        boot_info->framebuffer_addr = 0;
+        boot_info->flags |= PC5_BOOT64_F_UNMAPPED_FRAMEBUFFER;
+        return;
+    }
+    /* Only the two direct-colour layouts are interpretable from the boot info.
+     * A bit-mask format needs masks the structure does not carry and PixelBltOnly
+     * has no linear buffer, so both are classified unusable rather than trusted. */
+    if (!pc5_pixel_format_supported(info->pixel_format)) {
+        serial_write("PC5-64-LOADER framebuffer=");
+        serial_hex(base);
+        serial_write(" unusable=unsupported-format\n");
+        boot_info->framebuffer_addr = 0;
+        boot_info->flags |= PC5_BOOT64_F_FRAMEBUFFER_UNSUPPORTED;
+        return;
+    }
+    u64 end = 0;
+    if (pc5_add_overflows(base, bytes, &end) || end > PC5_PT_SPAN) {
         /* Firmware offered a framebuffer outside the single region version 2 can
          * map.  Say so, zero the address, and let the kernel record it as
          * unsupported: a 64-bit address that cannot be dereferenced must never be
@@ -378,10 +439,10 @@ static void collect_framebuffer(struct pc5_boot64 *boot_info, u64 *fb_end)
     boot_info->framebuffer_addr = base;
     boot_info->framebuffer_width = info->horizontal_resolution;
     boot_info->framebuffer_height = info->vertical_resolution;
-    boot_info->framebuffer_pitch = (u32)pitch;
+    boot_info->framebuffer_pitch = pitch;
     boot_info->framebuffer_format = info->pixel_format;
     boot_info->flags |= PC5_BOOT64_F_FRAMEBUFFER;
-    *fb_end = base + bytes;
+    *fb_end = end;
     serial_write("PC5-64-LOADER framebuffer=");
     serial_hex(boot_info->framebuffer_addr);
     serial_write(" ");
@@ -441,32 +502,71 @@ static struct pc5_memdesc64 *memmap_and_exit(efi_handle image, u64 *out_entries)
     void *buffer = alloc_below_4g(buffer_pages, 0);
     if (!buffer)
         die("memmap-allocate");
+    /* Where `buffer` actually came from.  Growing the map has to release it, and
+     * FreePages needs the address the firmware returned, not an address derived
+     * from a pointer this program could not otherwise convert back. */
+    u64 buffer_physical = (u64)(unsigned long)buffer;
     u64 out_pages = (MEMMAP_ENTRIES_MAX * sizeof(struct pc5_memdesc64) + 4095) / 4096;
     u64 out_physical = 0;
     struct pc5_memdesc64 *out = alloc_below_4g(out_pages, &out_physical);
     if (!out)
         die("memmap-copy-allocate");
 
+    /* Once ExitBootServices has been called, boot services no longer exist: the
+     * map this loop converts is the map the kernel will be given, and releasing
+     * any part of it afterwards would mean calling a service that is gone and
+     * describing memory that is no longer ours.  The stale-key retry therefore
+     * re-reads into the *same* buffer and never allocates or frees. */
+    int boot_services_gone = 0;
+
     for (unsigned attempt = 0; attempt < EXIT_RETRIES; attempt++) {
         u64 size = buffer_pages * 4096;
         u64 key = 0;
         u64 descriptor_size = 0;
         u32 descriptor_version = 0;
+        /* Re-reading here is what makes the key fresh on every attempt: whatever
+         * the previous iteration allocated, freed, or watched firmware allocate
+         * itself has already advanced the map, and this key describes this copy. */
         efi_status status = g_bs->get_memory_map(&size, buffer, &key,
                                                 &descriptor_size, &descriptor_version);
         if (status == EFI_BUFFER_TOO_SMALL) {
-            if (buffer_pages >= 64)
+            if (buffer_pages >= MEMMAP_BUFFER_PAGES_MAX)
                 die("memmap-too-large");
-            buffer_pages *= 2;
-            buffer = alloc_below_4g(buffer_pages, 0);
-            if (!buffer)
+            /* Growing means allocating and freeing, and neither is legal once
+             * ExitBootServices has been attempted.  This cannot be reached in a
+             * correct boot - the map only grows while firmware is still running -
+             * so refusing here keeps a violated assumption loud. */
+            if (boot_services_gone)
+                die("memmap-grow-after-exit");
+            void *grown = alloc_below_4g(buffer_pages * 2, 0);
+            if (!grown)
                 die("memmap-grow");
+            /* Release the old buffer *after* the new one exists, so a failure to
+             * grow cannot leave the loop with nothing to read into.  Freeing
+             * changes the map, which is why the next pass calls GetMemoryMap for a
+             * new key instead of reusing the one from the rejected call. */
+            if (g_bs->free_pages) {
+                status = g_bs->free_pages(buffer_physical, buffer_pages);
+                if (EFI_ERROR(status))
+                    die("memmap-free");
+            }
+            /* Firmware whose boot-services table predates FreePages reports it as
+             * a null entry.  The bounded growth (8 -> 64 pages) is then the only
+             * path, and the abandoned buffer stays described as loader data. */
+            buffer = grown;
+            buffer_physical = (u64)(unsigned long)grown;
+            buffer_pages *= 2;
             continue;
         }
         if (EFI_ERROR(status))
             die("get-memory-map");
         if (descriptor_size < 40 || descriptor_size > 4096)
             die("memory-descriptor-size");
+        /* UEFI 2.x defines exactly one descriptor version.  An unknown value means
+         * the layout of the descriptor this loop is about to read is not the layout
+         * it was compiled against, so it refuses the map rather than guessing. */
+        if (descriptor_version != MEMMAP_DESCRIPTOR_VERSION)
+            die("memory-descriptor-version");
 
         u64 entries = size / descriptor_size;
         if (entries > MEMMAP_ENTRIES_MAX)
@@ -490,7 +590,19 @@ static struct pc5_memdesc64 *memmap_and_exit(efi_handle image, u64 *out_entries)
             out[kept].reserved = 0;
             kept++;
         }
+        /* The map is validated as a set before it is handed over, not only entry by
+         * entry.  Two firmware descriptors that claim the same physical bytes would
+         * make the kernel's coverage decisions ambiguous, so the loader refuses the
+         * map rather than passing a contradiction on. */
+        if (kept == 0)
+            die("memory-map-empty");
+        if (!pc5_map_validate(out, kept))
+            die("memory-map-overlap");
 
+        /* From here on the services may already be gone, whether or not
+         * this call succeeded: a failed attempt is still not a licence to
+         * free or allocate, because firmware may have torn them down. */
+        boot_services_gone = 1;
         status = g_bs->exit_boot_services(image, key);
         if (status == EFI_SUCCESS) {
             *out_entries = kept;
@@ -584,7 +696,7 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
     boot_info->memmap_addr = (u64)(unsigned long)memmap;
     boot_info->memmap_bytes = entries * sizeof(struct pc5_memdesc64);
     boot_info->memmap_desc_size = sizeof(struct pc5_memdesc64);
-    boot_info->memmap_desc_version = 1;
+    boot_info->memmap_desc_version = MEMMAP_DESCRIPTOR_VERSION;
     boot_info->pagetable_addr = pt_physical;
     boot_info->pagetable_pages = PC5_PT_PAGES;
     boot_info->identity_span = PC5_PT_SPAN;

@@ -2664,7 +2664,7 @@ that cannot run, which is why this phase added a path instead of flipping flags.
 | Piece | File | Purpose |
 |---|---|---|
 | 64-bit EFI loader | `boot/uefi64/bootx64.S`, `boot/uefi64/uefi64_main.c` | stays in long mode, reads `KERNEL64.BIN` from the ESP, builds PC5 page tables, `ExitBootServices` with retry, jumps to the kernel |
-| page tables | `boot/uefi64/pagetables.c/.h` | identity map below 4 GiB, 2 MiB pages, 6 pages total, uncached framebuffer marking, lookup helper |
+| page tables | `boot/uefi64/pagetables.c/.h` | identity map below 4 GiB, 2 MiB pages, 6 pages total, uncached framebuffer marking, lookup helper *(this row described the intent; the map covered only the first 1 GiB until `de9c6a3` — see §27)* |
 | boot protocol | `kernel64/include/pc5_boot64.h` | `struct pc5_boot64`, version 1, 112 bytes, magic + size + flags, physical pointers below 4 GiB |
 | 64-bit kernel | `kernel64/start.S`, `kernel64/main.c`, `serial64.c`, `cpu64.c`, `kernel64.ld` | proves its own execution environment, reports CPU features, prints the marker last |
 | handover record | `boot/uefi64/handover64.h` | `PC5HND02`: protocol version, boot-info size, page-table pages, identity span |
@@ -2761,8 +2761,8 @@ the claims checked against the source did not survive contact with it.
 | 6 | Validation records named the wrong commit | **confirmed** | all 11 records said `commit=e69d2a6, dirty=true` while head was `7d5ef2e`: `HEAD` was recorded without checking the tree matched it |
 | 7 | The kernel trusted `stack_top` before validating it | **confirmed while writing the tests** | `kernel64/start.S` loaded `RSP` from the unvalidated boot info, so a bad stack faulted on the next `push` and the check that would have reported it never ran |
 | 8 | `make kernel64` from a clean tree was broken | **confirmed while running the gates** | the link rule passed `$^` to `ld`, which includes the linker script already named by `-T`: `ld: error: linker script file 'kernel64/kernel64.ld' appears multiple times` |
-| 9 | `PC5_PT_PAGES` is 6, or the `total`/`pd_pages` bounds in `build_identity` are wrong | **disproven** | 1 PML4 + 1 PDPT + 4 PD = 6 pages, 2048 × 2 MiB = 4 GiB, which is exactly representable in the walk |
-| 10 | The 4 GiB span cannot be described by the map | **disproven** | `(pages − 2) × 512 × 2 MiB` = 4 GiB exactly for 6 pages; the kernel now recomputes this and refuses a boot info whose `identity_span` disagrees |
+| 9 | `PC5_PT_PAGES` is 6, or the `total`/`pd_pages` bounds in `build_identity` are wrong | **disproven** — see §27 | 1 PML4 + 1 PDPT + 4 PD = 6 pages, 2048 × 2 MiB = 4 GiB, which is exactly representable in the walk |
+| 10 | The 4 GiB span cannot be described by the map | **disproven — SUPERSEDED, see §27** | `(pages − 2) × 512 × 2 MiB` = 4 GiB exactly for 6 pages; the kernel now recomputes this and refuses a boot info whose `identity_span` disagrees |
 
 ### 26.2 What changed, and why
 
@@ -2860,3 +2860,111 @@ empty, wrapped and above-the-limit ranges are refused.
 - The 32-bit release path is unchanged: `git diff --stat 8aab6d3…196f504 -- boot/uefi
   boot/loader.asm kernel kernel/include` is empty, and `ReleaseIsolationTests`
   fails if `make -n all` starts to build any 64-bit work.
+
+## 27. Correction to §26: the identity map did not cover 4 GiB
+
+Recorded 2026-11-16. This section **supersedes rows 9 and 10 of §26.1** and is
+appended rather than merged into it: §26 is a dated record of what that audit
+concluded, and rewriting it would erase the evidence of how the wrong conclusion
+was reached. Nothing above this line has been deleted or reworded apart from the
+two row labels pointing here.
+
+### 27.1 What §26 got wrong
+
+Rows 9 and 10 asked the right question and answered it wrongly. Both computed the
+map size from the **page-directory** entries:
+
+> `(pages − 2) × 512 × 2 MiB` = 4 GiB exactly for 6 pages
+
+That arithmetic is correct as far as it goes, and the conclusion drawn from it —
+"the 4 GiB span cannot be described by the map: **disproven**" — does not follow.
+It counts the capacity of the four PD pages while ignoring what makes those pages
+*reachable*. A PDPT entry is consumed by a page-directory pointer, and one page
+directory covers exactly 1 GiB when its leaves are 2 MiB pages. Four PD pages
+therefore require **four** PDPT entries. The code installed one.
+
+So the question §26 tested was "is there room for 2048 leaf entries?" (yes), when
+the question that mattered was "does the installed hierarchy reach them?" (no).
+`pc5_pt_build_identity()` wrote all 2048 leaves and returned 2048, and
+`pc5_pt_lookup()` — the function that performs the real walk — would have shown the
+gap immediately at any address ≥ 1 GiB. No test asked it to.
+
+### 27.2 The defect, exactly
+
+`boot/uefi64/pagetables.c` stored only `PDPT[0]`:
+
+```c
+store(pc5_pt_pdpt(pt), pc5_pt_pd_base(pt) | 1ull | 2ull);   /* entry 0 only */
+```
+
+**Impact.** Only `[0, 1 GiB)` translated. The outer three quarters of the "4 GiB
+map" was unreachable while the function reported success and the loader's own
+`mapped != PC5_PT_SPAN / PC5_PT_2MIB` check passed. Concretely:
+
+- a framebuffer anywhere in `[1 GiB, 4 GiB)` passed `pc5_range_within()` against
+  `identity_span`, passed `pc5_map_covers()` against the descriptor set, and was
+  reported `usability=ok` with no mapping behind it;
+- `pc5_pt_mark_uncached()` reported entries changed while writing PWT|PCD into PD
+  pages that no PDPT entry referenced — the marking was applied to memory the MMU
+  never consulted;
+- `PDPT[1..3]` were never initialised, so stale firmware values survived inside an
+  active paging structure.
+
+This was a **false report**, not an immediate fault: `kernel64` prints framebuffer
+usability but does not yet dereference `framebuffer_addr`. It becomes a hard fault
+on the first write to an unmapped framebuffer.
+
+### 27.3 The correction
+
+Fixed in `de9c6a3` on `arena/17f0c4f8-pc5`:
+
+- one PDPT entry per gigabyte, each pointing at its own PD page, with the count
+  derived from the span so a shorter map installs fewer entries and every
+  installed entry still references a PD inside the six-page block;
+- all six pages zeroed before use, including the whole PDPT, so no firmware value
+  can survive as a phantom mapping;
+- `PC5_PT_TABLE_FLAGS` (present|writable, no page-size bit) distinguishes a table
+  pointer from a 2 MiB leaf, where the byte would be a reserved-bit violation;
+- the span is validated before anything is written, so a refused call cannot leave
+  a half-built hierarchy active.
+
+A second defect in the same path, `ec16c65`: `alloc_below_4g()` passed `0` as the
+*input* maximum address to `EFI_ALLOCATE_MAX_ADDRESS`. UEFI 2.9A §7.2.1 defines
+that input as the highest address the returned range may occupy, so zero describes
+a range that cannot exist. It was invisible because the stub firmware ignored the
+allocation type entirely. The bound is now `PC5_IDENTITY_LIMIT - 1`, the result is
+checked rather than trusted, and the stub implements all three `EFI_ALLOCATE_TYPE`
+modes.
+
+### 27.4 What the tests now prove, and at what level
+
+`tests/test_pagetables64.py` (`IdentityHierarchyTests`) compiles the real
+`pagetables.c` on the host with the loader's own flags and walks the installed
+hierarchy:
+
+- the returned count equals the number of 2 MiB pages the walk actually reaches —
+  **2048 vs 512** against the previous implementation, which is the defect in one
+  assertion;
+- all four PDPT entries point at their own PD page, with the correct flags and no
+  page-size bit;
+- translation succeeds immediately below, at and above each 1 GiB boundary and at
+  the last 2 MiB page of the span, and fails at the 4 GiB exclusive edge;
+- removing one PDPT link by hand makes `pc5_pt_lookup()` stop translating even
+  though the leaf is still populated — the exact false positive that was shipped;
+- `pc5_pt_mark_uncached()` reaches a leaf in **every** 1 GiB region and does not
+  leak to neighbours;
+- `PML4[1..511]`, `PDPT[4..511]` and the unused PD entries are zero.
+
+`tests/test_boot64_stub.py` (`AllocateMaxAddressTests`) drives the real
+`BOOTX64.EFI` and `KERNEL64.BIN` under the stub and asserts that the loader sends a
+satisfiable bound, that every allocation lands inside the limit, that firmware
+which ignores the bound or returns a straddling range stops the boot, and that the
+handover structures translate through the hierarchy that was installed.
+
+**Evidence level.** This remains host-and-stub execution: the real production C,
+the real loader PE32+ and the real kernel binary, under emulation. It is **not**
+OVMF, not physical hardware, and not Sony execution. `make ovmf-test` still reports
+NOT TESTED on this machine. The claim this section supports is that the page-table
+hierarchy the loader installs covers the span it advertises and that the
+allocations it requests are satisfiable under the UEFI contract — nothing about
+real firmware.

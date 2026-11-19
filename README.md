@@ -2,8 +2,9 @@
 
 # PC5
 
-**An independent operating-system project for PC hardware, built toward genuine Sony
-PlayStation 5 system software.**
+**An independent engineering project that builds PC-side boot, hardware and
+compatibility infrastructure toward running genuine Sony PlayStation 5 system
+software on compatible PC hardware.**
 
 PC5 is an independent engineering project whose destination is to run the
 **genuine Sony PlayStation 5 system software** on compatible PC hardware. It is not a Linux
@@ -39,11 +40,25 @@ The three things that are often confused, kept apart:
 |---|---|
 | The Sony PUP input (`PS5UPDATE.PUP`) | Git LFS pointer; payload **absent**; package type and version **unverified** |
 | The PC5 bootable ISO (`build/pc5.iso`) | Built and structurally **verified**; boots PC5's own loader and kernel |
-| Genuine Sony system-software execution | **BLOCKED** — no lawful path exists, and nothing has been executed |
+| Genuine Sony system-software execution | **BLOCKED** — no lawful route has been established yet, and nothing has been executed |
 
 A PUP inside an ISO, a rename, a PC5 kernel boot or a PS5-shaped screen does not
 establish the third row. [`docs/PS5_SYSTEM_SOFTWARE_TARGET.md`](docs/PS5_SYSTEM_SOFTWARE_TARGET.md)
 explains what running the system software would require.
+
+**Which operating system is whose.** This distinction is the project, so it is
+stated rather than left to inference:
+
+| Role | What it is |
+|---|---|
+| **The operating system** | The genuine Sony PS5 system software — its kernel, services, shell, setup and first-boot experience. That is the destination, and PC5 substitutes nothing for it. |
+| **PC5** | The PC-side boot, hardware and compatibility infrastructure: loader, kernel, drivers, device models and platform contract. It exists to run the software above. |
+| **PC5's own screens** | A diagnostic and recovery environment, clearly labelled as PC5. Supporting tooling for engineers — never presented as the PS5 system software or its interface. |
+
+PC5-authored payloads, device models and conformance fixtures are engineering
+test scaffolding. A PC5 kernel boot is evidence about PC5, never evidence that
+Sony's software executed. [`docs/BRAND.md`](docs/BRAND.md) governs the PC5 marks
+and forbids placing them on anything that depicts Sony's software.
 
 ## Dashboard
 
@@ -61,8 +76,8 @@ explains what running the system software would require.
 | Not started | 18 |
 | Destination | `M19` — Genuine system software boots on PC5 (DESTINATION) |
 | Destination state | **BLOCKED** |
-| Last recorded ISO verification | passed @ ef06475 |
-| Last recorded test run | passed 612/612 @ ef06475 |
+| Last recorded ISO verification | passed @ a9b383d |
+| Last recorded test run | passed 676/676 @ a9b383d |
 | Physical boot evidence | **none filed** |
 | Genuine Sony software execution | **BLOCKED — nothing executed** |
 
@@ -161,11 +176,11 @@ a screenshot. See also [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
 <!-- pc5:evidence:begin -->
 | Evidence | Gate | Result | Recorded at | Date |
 |---|---|---|---|---|
-| Host and kernel tests | `make check` | **passed**, 612/612 | `ef06475` | 2026-11-16 |
-| ISO structure and manifest | `make verify` | **passed** | `ef06475` | 2026-11-16 |
-| Emulator execution (v86) | `make boot-test` | **passed** | `ef06475` | 2026-11-16 |
-| Stub firmware (unicorn) | `make stubtest` | **passed**, 58/58 | `ef06475` | 2026-11-16 |
-| Real OVMF firmware | `make ovmf-test` | **not-tested** | `ef06475` | 2026-11-16 |
+| Host and kernel tests | `make check` | **passed**, 676/676 | `a9b383d` | 2026-11-16 |
+| ISO structure and manifest | `make verify` | **passed** | `a9b383d` | 2026-11-16 |
+| Emulator execution (v86) | `make boot-test` | **passed** | `a9b383d` | 2026-11-16 |
+| Stub firmware (unicorn) | `make stubtest` | **passed**, 58/58 | `a9b383d` | 2026-11-16 |
+| Real OVMF firmware | `make ovmf-test` | **not-tested** | `a9b383d` | 2026-11-16 |
 | Physical PC boot (UEFI/BIOS) | `tools/hw_record.py` | **NOT TESTED** — no record filed | — | — |
 | Genuine Sony system software | — | **BLOCKED** — not present, not executed | — | — |
 
@@ -319,6 +334,15 @@ records · [`docs/PRESENTATION.md`](docs/PRESENTATION.md): how this page is gene
 [`docs/FIRMWARE_ANALYSIS.md`](docs/FIRMWARE_ANALYSIS.md) ·
 [`docs/TECHNICAL_DECISIONS.md`](docs/TECHNICAL_DECISIONS.md) ·
 [`docs/UPDATE_SYSTEM.md`](docs/UPDATE_SYSTEM.md)
+
+**Brand** — [`docs/BRAND.md`](docs/BRAND.md): the PC5 logo, its monochrome and boot
+variants, the colours and type it is drawn with, clear space, and the minimum
+sizes · [`brand/`](brand): the generated SVG assets themselves, written by
+`tools/brand.py` and checked by `make brand-check`
+
+<p align="center">
+  <img src="brand/pc5-logo-boot.svg" alt="PC5 logo: the PC monogram followed by the PC5 wordmark, in white on black" width="420">
+</p>
 
 **Contributing and audit** — [`CONTRIBUTING.md`](CONTRIBUTING.md), which also states
 which document is authoritative for what ·

@@ -21,22 +21,50 @@ static int block_ok(u64 pt)
            pt <= ~0ull - (u64)PC5_PT_PAGES * PC5_PT_PAGE;
 }
 
+/* One PDPT entry is consumed by a *page-directory pointer*, and one page directory
+ * holds 512 entries of 2 MiB: exactly 1 GiB.  Four PD pages therefore need four
+ * PDPT entries, not one.  Installing only PDPT[0] maps the first gigabyte and leaves
+ * the other three PD pages unreachable while this function still reports 2048
+ * mapped entries - the defect this layout exists to make impossible.
+ *
+ * Every page of the six-page block is zeroed first, so no active structure can carry
+ * a value firmware left in that memory.  The PDPT is wiped whole, including the
+ * entries beyond the span, so a stale present bit can never turn into a phantom
+ * mapping above the map.
+ */
 unsigned long pc5_pt_build_identity(u64 pt, u64 span)
 {
     if (!block_ok(pt) || span == 0 || span > PC5_PT_SPAN)
         return 0;
 
-    store(pc5_pt_pml4(pt), 0);
-    store(pc5_pt_pdpt(pt), 0);
-    for (unsigned i = 0; i < PC5_PT_PD_PAGES * PC5_PT_ENTRIES_PER_PAGE; i++)
-        store(pc5_pt_pd_base(pt) + (u64)i * 8ull, 0);
-
-    store(pc5_pt_pml4(pt), pc5_pt_pdpt(pt) | 1ull | 2ull);   /* present, writable */
-    store(pc5_pt_pdpt(pt), pc5_pt_pd_base(pt) | 1ull | 2ull);
-
+    /* Round down to whole 2 MiB pages and reject a span the block cannot hold
+     * *before* writing anything: a half-built hierarchy must never be left active. */
     unsigned long total = (unsigned long)(span / PC5_PT_2MIB);
     if (total == 0 || total > (unsigned long)PC5_PT_MAX_INDEX + 1ul)
         return 0;
+
+    /* Clear all six pages: PML4, the whole PDPT, and every PD entry. */
+    for (unsigned i = 0; i < PC5_PT_PAGES * PC5_PT_ENTRIES_PER_PAGE; i++)
+        store(pt + (u64)i * 8ull, 0);
+
+    /* PML4[0] -> PDPT.  A 4-level walk with this PML4 and PDPT only ever reaches
+     * the low 512 GiB, which is all an identity map below 4 GiB can use. */
+    store(pc5_pt_pml4(pt), pc5_pt_pdpt(pt) | PC5_PT_TABLE_FLAGS);
+
+    /* One PDPT entry per gigabyte, each pointing at its own page directory.  The
+     * number of PD pages is derived from the span, so a shorter map installs fewer
+     * PDPT entries and still leaves every one of them pointing at a PD that exists
+     * inside the block. */
+    unsigned long pdpt_used =
+        (total + PC5_PT_ENTRIES_PER_PAGE - 1) / PC5_PT_ENTRIES_PER_PAGE;
+    for (unsigned long g = 0; g < pdpt_used; g++) {
+        store(pc5_pt_pdpt(pt) + g * 8ull,
+              (pc5_pt_pd_base(pt) + g * PC5_PT_PAGE) | PC5_PT_TABLE_FLAGS);
+    }
+
+    /* The 2 MiB leaves themselves.  Entry `index` lives in PD page
+     * `index / 512` at offset `index % 512`, which is the same page the PDPT
+     * entry above points at, so every leaf written here is reachable. */
     for (unsigned long index = 0; index < total; index++) {
         store(pc5_pt_pd_base(pt) + index * 8ul,
               (index * PC5_PT_2MIB) | PC5_PT_FLAGS);

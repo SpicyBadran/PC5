@@ -562,7 +562,7 @@ def render(data):
         lines.append("")
 
     path = destination_path(data)
-    lines.append("DESTINATION PATH (the critical path of the product):")
+    lines.append("DESTINATION PATH (longest dependency chain that ends at the destination):")
     lines.append("  " + (" -> ".join(path) if path else "(none)"))
     blocked = sorted(
         (m["id"] for m in milestones(data) if m.get("state") == "blocked"),

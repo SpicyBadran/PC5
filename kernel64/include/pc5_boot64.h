@@ -107,6 +107,11 @@ typedef unsigned long long u64;
  * kernel must not invent one: it reports the resource as unsupported. */
 #define PC5_BOOT64_F_UNMAPPED_FRAMEBUFFER (1u << 4)
 #define PC5_BOOT64_F_UNMAPPED_RSDP (1u << 5)
+/* The firmware offered a framebuffer whose pixel format the protocol cannot
+ * describe (a bit-mask layout, or PixelBltOnly with no linear buffer).  The
+ * address is zero and the kernel reports the resource as unsupported rather than
+ * interpreting a layout it was never given. */
+#define PC5_BOOT64_F_FRAMEBUFFER_UNSUPPORTED (1u << 6)
 
 /* Memory-map descriptor types.  These are the firmware's own EFI_MEMORY_TYPE values,
  * copied verbatim on purpose: a translation table is one more place for the loader and
@@ -162,7 +167,13 @@ struct pc5_boot64 {
     u64 memmap_addr;                 /* physical address of struct pc5_memdesc64[] */
     u64 memmap_bytes;                /* total bytes of the descriptor array */
     u32 memmap_desc_size;            /* sizeof(struct pc5_memdesc64) */
-    u32 memmap_desc_version;         /* UEFI descriptor version, informational */
+    /* The EFI_MEMORY_DESCRIPTOR.Version the loader accepted from firmware, not a
+     * version of the pc5_memdesc64 array above.  The array itself is always
+     * pc5_memdesc64 (memmap_desc_size says so), so this is provenance for the
+     * firmware input: UEFI 2.x defines only version 1, and the loader refuses a
+     * map that reports anything else.  Informational, and no consumer branches on
+     * it - it exists so a log can state what was accepted. */
+    u32 memmap_desc_version;
 
     u64 framebuffer_addr;            /* 0 unless PC5_BOOT64_F_FRAMEBUFFER is set */
     u32 framebuffer_width;

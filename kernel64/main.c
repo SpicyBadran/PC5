@@ -30,6 +30,24 @@
 #define MEMMAP_MAX_ENTRIES 1024ULL
 #define RSDP_SIGNATURE "RSD PTR "
 
+/* ------------------------------------------------------------- ACPI RSDP ----
+ * The two structures the specification defines, and nothing beyond them:
+ *
+ *   revision 0  struct acpi_rsdp_legacy  20 bytes, one checksum over all 20
+ *   revision 2+ struct acpi_rsdp_v2      the legacy 20 plus a pointer to the
+ *                                        XSDT, with its own checksum over the
+ *                                        *declared* length (>= 36)
+ *
+ * A revision-0 table has no `length` field and its bytes 20..35 belong to
+ * whatever follows it, so they are never read or summed.  `length` in a
+ * revision-2 table is the only thing that says how much of that structure is
+ * real, so it is validated before a single byte past offset 36 is touched.
+ */
+#define RSDP_LEGACY_BYTES 20u
+#define RSDP_V2_MIN_BYTES 36u
+#define RSDP_MAX_BYTES 4096u          /* a structure this large is not an RSDP */
+#define RSDP_REVISION_V2 2u
+
 _Static_assert(sizeof(struct pc5_boot64) == 160, "pc5_boot64 abi");
 _Static_assert(sizeof(struct pc5_memdesc64) == 32, "pc5_memdesc64 abi");
 _Static_assert(__builtin_offsetof(struct pc5_boot64, memmap_addr) == 16, "boot64 abi");
@@ -118,6 +136,13 @@ static struct pc5_map_view validate_memmap(const struct pc5_boot64 *bi)
     }
     if (conventional_pages == 0)
         fail("bootinfo-no-conventional-memory");
+    /* Every descriptor is self-consistent at this point; what is left is the
+     * property of the set.  Two descriptors that claim the same physical bytes
+     * would make every later coverage answer ambiguous, so the whole set is
+     * validated before any range - kernel, stack, page tables, framebuffer, RSDP -
+     * is checked against it. */
+    if (!pc5_map_validate(map.descriptors, map.entries))
+        fail("bootinfo-memmap-overlap");
 
     serial64_write("PC5-64-MAP entries=");
     serial64_dec(map.entries);
@@ -198,6 +223,73 @@ static void validate_mandatory_ranges(const struct pc5_boot64 *bi,
         fail("bootinfo-loader-range");
 }
 
+/* Sum `length` bytes and report whether they add up to zero, which is what the
+ * ACPI checksum rule asks for.  The bytes are read only after the caller has
+ * proven the whole range is inside the identity span and covered by
+ * firmware-owned memory: this function dereferences, so it does not decide. */
+static int rsdp_checksum_holds(u64 address, u32 length)
+{
+    const unsigned char *bytes = (const unsigned char *)(unsigned long)address;
+    u8 sum = 0;
+    for (u32 i = 0; i < length; i++)
+        sum = (u8)(sum + bytes[i]);
+    return sum == 0;
+}
+
+/* Why an RSDP is not usable, as a stable token for the log.  `0` means every
+ * check this kernel implements passed - nothing here implies the referenced
+ * XSDT, its tables, or their checksums were validated. */
+static const char *rsdp_reject_reason(u64 address, u64 span,
+                                      const struct pc5_map_view *map)
+{
+    if (address == 0)
+        return "null";
+
+    /* The legacy header is the smallest thing that can be checked, so it is the
+     * first range validated - and no field beyond it is read before this passes. */
+    if (!pc5_range_within(address, RSDP_LEGACY_BYTES, span))
+        return "outside-span";
+    if (!pc5_map_covers(map, address, RSDP_LEGACY_BYTES, PC5_MMAP_FIRMWARE_DATA_TYPES))
+        return "not-firmware-memory";
+
+    const unsigned char *base = (const unsigned char *)(unsigned long)address;
+    for (unsigned i = 0; i < 8; i++) {
+        if (base[i] != (unsigned char)RSDP_SIGNATURE[i])
+            return "signature";
+    }
+    if (!rsdp_checksum_holds(address, RSDP_LEGACY_BYTES))
+        return "legacy-checksum";
+
+    u8 revision = base[15];
+    /* Exactly two revisions are defined: 0 (ACPI 1.0) and 2 (ACPI 2.0 and later).
+     * Revision 1 is not one of them, and a revision above 2 describes a layout
+     * this kernel has not been told about - treating either as "probably like
+     * revision 2" would be guessing at the size of a structure being summed. */
+    if (revision == 0)
+        return 0;                   /* legacy: 20 bytes, both already checked */
+    if (revision != RSDP_REVISION_V2)
+        return "revision";
+
+    /* Revision 2 and later.  `length` is the only claim about how many bytes the
+     * structure occupies, so it is validated before offset 20 is read at all. */
+    u32 length = 0;
+    for (unsigned i = 0; i < 4; i++)
+        length |= (u32)base[20 + i] << (8 * i);
+    if (length < RSDP_V2_MIN_BYTES)
+        return "length";            /* too short to contain its own checksum */
+    if (length > RSDP_MAX_BYTES)
+        return "length";
+    /* The whole declared structure, not merely its header, must be mapped and
+     * firmware-owned before the extended checksum reads all of it. */
+    if (!pc5_range_within(address, length, span))
+        return "outside-span";
+    if (!pc5_map_covers(map, address, length, PC5_MMAP_FIRMWARE_DATA_TYPES))
+        return "not-firmware-memory";
+    if (!rsdp_checksum_holds(address, length))
+        return "extended-checksum";
+    return 0;
+}
+
 /* Stage 4: optional resources are validated too, but a failure here is recorded
  * rather than fatal: the kernel simply must not report an unusable resource as
  * usable.  Neither is dereferenced before it passes. */
@@ -206,17 +298,17 @@ static void report_optional_resources(const struct pc5_boot64 *bi,
 {
     if (bi->flags & PC5_BOOT64_F_FRAMEBUFFER) {
         const char *reason = 0;
-        u64 pixels = 0, bytes = 0;
+        u64 bytes = 0;
         if (bi->framebuffer_addr == 0)
             reason = "null";
+        else if (!pc5_pixel_format_supported(bi->framebuffer_format))
+            reason = "unsupported-format";
         else if (bi->framebuffer_width == 0 || bi->framebuffer_height == 0)
             reason = "empty";
-        else if (pc5_add_overflows((u64)bi->framebuffer_width * 4ull, 0, &pixels))
-            reason = "width-overflow";
-        else if (bi->framebuffer_pitch < pixels)
+        else if (bi->framebuffer_pitch < (u64)bi->framebuffer_width * 4ull)
             reason = "pitch-too-small";
-        else if (pc5_add_overflows((u64)bi->framebuffer_pitch * bi->framebuffer_height,
-                               0, &bytes))
+        else if (!pc5_framebuffer_bytes(bi->framebuffer_width, bi->framebuffer_height,
+                                        bi->framebuffer_pitch, &bytes))
             reason = "size-overflow";
         else if (!pc5_range_within(bi->framebuffer_addr, bytes, bi->identity_span))
             reason = "outside-span";
@@ -238,6 +330,8 @@ static void report_optional_resources(const struct pc5_boot64 *bi,
         } else {
             serial64_write(" usability=ok\n");
         }
+    } else if (bi->flags & PC5_BOOT64_F_FRAMEBUFFER_UNSUPPORTED) {
+        serial64_write("PC5-64-FB usability=unsupported reason=unsupported-by-loader\n");
     } else {
         serial64_write(bi->flags & PC5_BOOT64_F_UNMAPPED_FRAMEBUFFER
                            ? "PC5-64-FB usability=unsupported reason=unmapped-by-loader\n"
@@ -245,30 +339,24 @@ static void report_optional_resources(const struct pc5_boot64 *bi,
     }
 
     if (bi->flags & PC5_BOOT64_F_RSDP) {
-        const char *reason = 0;
-        if (bi->acpi_rsdp == 0)
-            reason = "null";
-        else if (!pc5_range_within(bi->acpi_rsdp, 36, bi->identity_span))
-            reason = "outside-span";
-        else if (!pc5_map_covers(map, bi->acpi_rsdp, 36, PC5_MMAP_FIRMWARE_DATA_TYPES))
-            reason = "not-firmware-memory";
-        else {
-            const char *signature = (const char *)(unsigned long)bi->acpi_rsdp;
-            for (unsigned i = 0; i < 8; i++) {
-                if (signature[i] != RSDP_SIGNATURE[i]) {
-                    reason = "signature";
-                    break;
-                }
-            }
-        }
+        /* An RSDP that fails is *invalid*, not merely unsupported: `ok` here means
+         * the signature and both checksums this kernel implements held.  It still
+         * says nothing about the XSDT or any table it points at. */
+        const char *reason = rsdp_reject_reason(bi->acpi_rsdp, bi->identity_span,
+                                                map);
         serial64_write("PC5-64-RSDP addr=");
         serial64_hex(bi->acpi_rsdp);
         if (reason) {
-            serial64_write(" usability=unsupported reason=");
+            serial64_write(" usability=invalid reason=");
             serial64_write(reason);
-            serial64_write("\n");
+            serial64_write(" checks=none-passed\n");
         } else {
-            serial64_write(" usability=ok\n");
+            serial64_write(" usability=ok checks=");
+            serial64_write("signature,legacy-checksum");
+            if (*(const unsigned char *)(unsigned long)(bi->acpi_rsdp + 15)
+                >= RSDP_REVISION_V2)
+                serial64_write(",length,extended-checksum");
+            serial64_write(" tables=not-validated\n");
         }
     } else {
         serial64_write(bi->flags & PC5_BOOT64_F_UNMAPPED_RSDP
@@ -363,17 +451,24 @@ static void report_environment(const struct pc5_boot64 *bi, u32 physical_bits)
     serial64_write(" range=ok\n");
 
     /* Physical address width, when CPUID reports it: a pointer that does not fit
-     * the CPU's physical address is not a pointer, whatever the map says. */
-    if (physical_bits >= 32 && physical_bits <= 52) {
-        u64 limit = 1ull << physical_bits;
+     * the CPU's physical address is not a pointer, whatever the map says.  A zero
+     * or missing CPUID result is *not* read as "every address fits": the kernel
+     * says the check did not run, so the log cannot be mistaken for a validation
+     * that never happened. */
+    if (pc5_physical_width_reported(physical_bits)) {
         const u64 checked[] = {bi->kernel_base, bi->kernel_base + bi->kernel_size,
                                bi->stack_top, bi->pagetable_addr,
                                bi->loader_image_addr + bi->loader_image_size,
                                bi->memmap_addr + bi->memmap_bytes};
         for (unsigned i = 0; i < sizeof(checked) / sizeof(checked[0]); i++) {
-            if (checked[i] > limit)
+            if (!pc5_address_fits_width(checked[i], physical_bits))
                 fail("address-width");
         }
+        serial64_write("PC5-64-ENV physical-address-width=");
+        serial64_dec(physical_bits);
+        serial64_write(" checked=1\n");
+    } else {
+        serial64_write("PC5-64-ENV physical-address-width=not-reported checked=0\n");
     }
 }
 

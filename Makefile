@@ -48,7 +48,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: ovmf-setup ovmf-check all iso uefi kernel64 uefi64 stubtest64 check docs-check presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record
+.PHONY: ovmf-setup ovmf-check all iso uefi kernel64 uefi64 stubtest64 check docs-check presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record brand brand-check
 
 all: iso
 
@@ -286,7 +286,7 @@ psm:
 psm-render:
 	python3 -m psm.render --write
 
-check: unit psm docs-check presentation-check
+check: unit psm docs-check presentation-check brand-check
 	python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 # The README's figures and status table are generated from the milestone graph.
@@ -298,6 +298,14 @@ presentation:
 
 presentation-check:
 	python3 tools/presentation.py check
+
+# The logo and its variants are generated from tools/brand.py, so a hand edit to
+# brand/*.svg is a stale edit.  `brand` writes; `brand-check` reads.
+brand:
+	python3 tools/brand.py sync
+
+brand-check:
+	python3 tools/brand.py check
 
 # What the gates actually reported, as committed records: command, exit code, commit,
 # date. `list` only reads; `record-validation` runs the gates and rewrites the records

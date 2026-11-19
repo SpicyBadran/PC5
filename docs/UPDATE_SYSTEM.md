@@ -8,7 +8,7 @@
 | Source | this project's releases | Sony |
 | Format | PC5 release artifact (ISO + signed manifest) | `PS5UPDATE.PUP` (proprietary) |
 | Implemented | design only (below) | not applicable: PC5 does not install or update Sony software |
-| Roadmap | `M8`, `M1b` (WS12) | `M21` — blocked on `M17` and `M18` |
+| Roadmap | `M8` (WS12, `not_started`); `M1b` is CI and release publication, not an updater | `M21` — blocked on `M17` and `M18` |
 
 Applying a Sony PUP is something only a PS5 console does, through its own
 updater with its own signature checks. PC5 does not reproduce that, and ADR-022

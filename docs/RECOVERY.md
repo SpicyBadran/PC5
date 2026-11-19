@@ -59,8 +59,15 @@ If `make boot-test` cannot find the emulator: `npm install v86-system` (or set
 ## 5. Planned recovery environment
 
 A dedicated recovery entry (separate boot option, minimal kernel, disk tools,
-update rollback) is `M1b` in the roadmap — blocked on `M8` (installation), which
-is blocked in turn on the installer and a real disk. The storage primitives it
-needs now exist (`M1d`–`M1i`); what is missing is an installer that writes a
-system, and physical hardware to prove it. Recovery without disk access would be
-a menu of buttons that do nothing, so it is not scheduled before then.
+update rollback) belongs to `M8` — *Release-quality PC5: installer, updates,
+rollback* — which is `not_started` and depends on `M1`, `M4` and `M7`. The
+storage primitives it needs already exist (`M1d`–`M1i`); what is missing is an
+installer that writes a system, and physical hardware to prove it. Recovery
+without disk access would be a menu of buttons that do nothing, so it is not
+scheduled before then.
+
+`M1b` is **not** the recovery milestone. It is *Automated CI and release
+publication*, depends only on `M0`, and is `blocked` for an unrelated reason: the
+GitHub token available to this environment lacks the `workflows` permission, so
+`ci/build.yml` cannot be activated. Earlier revisions of this page conflated the
+two; the roadmap data is authoritative.

@@ -264,10 +264,18 @@ does not carry it, and `make -n all` shows no 64-bit work.
 ### 7.2 Page tables
 
 `boot/uefi64/pagetables.c` builds an identity map below 4 GiB from 2 MiB pages:
-one PML4, one PDPT and four PDs, six pages in all. 2 MiB pages are used because
-every x86-64 CPU that can enter long mode supports them; 1 GiB pages are only
-reported by CPUID, not required. The framebuffer's pages are marked PWT|PCD so
-they are uncached. Firmware's tables are abandoned with firmware's stack.
+one PML4, one PDPT and four PDs, six pages in all. A PDPT entry is consumed by a
+page-directory *pointer*, and one page directory holds 512 entries of 2 MiB — one
+gigabyte — so the span needs **four** PDPT entries, one per PD page, not one. An
+earlier version installed only `PDPT[0]`, which mapped the first gigabyte and left
+the other three PD pages unreachable while the builder still reported 2048 mapped
+entries (corrected in `de9c6a3`; see `TEST_RESULTS.md` §27). All six pages are
+zeroed before use, so no firmware value survives inside an active structure.
+
+2 MiB pages are used because every x86-64 CPU that can enter long mode supports
+them; 1 GiB pages are only reported by CPUID, not required. The framebuffer's
+pages are marked PWT|PCD so they are uncached. Firmware's tables are abandoned
+with firmware's stack.
 
 `PC5-64-PAGING enabled=1 root=0x…` is printed by the *kernel*, from its own
 `CR3`, and the kernel fails the boot when that value differs from the page-table
@@ -294,6 +302,14 @@ ending exactly at 4 GiB, crossing it, entirely above, unaligned starts and ends,
 empty and inverted ranges, ranges that overflow 64-bit arithmetic, and an invalid
 page-table base.
 
+It also walks the installed hierarchy rather than reading the leaf array, because
+those are not the same question: `IdentityHierarchyTests` asserts that the
+returned count equals what the PML4 → PDPT → PD walk actually reaches, that every
+PDPT entry points at its own PD page, that translation succeeds immediately below,
+at and above each 1 GiB boundary and fails at the 4 GiB exclusive edge, and that
+removing one PDPT link makes `pc5_pt_lookup()` stop translating even though the
+leaf is still populated.
+
 ### 7.3 Boot protocol, version 2
 
 `struct pc5_boot64` (`kernel64/include/pc5_boot64.h`) is **160 bytes**, with
@@ -318,10 +334,10 @@ What the kernel establishes before using anything (in this order):
 | Stage | Established |
 |---|---|
 | structure | the structure's own address does not wrap, is 8-byte aligned, lies inside the identity span and passes the header's magic/version/size/stride checks |
-| memory map | the map is non-empty, its byte count is a multiple of the stride, fits in `MEMMAP_MAX_BYTES`, and every descriptor is self-consistent: nonzero page count, no wrap at `physical_start + page_count·4096`, a known type |
+| memory map | the map is non-empty, its byte count is a multiple of the stride, fits in `MEMMAP_MAX_BYTES`, every descriptor is self-consistent (nonzero page count, no wrap at `physical_start + page_count·4096`, a known type), **and the set is validated as a set**: no two descriptors may claim the same physical bytes. Overlap — partial, nested, duplicate, or across conflicting types — is refused (`bootinfo-memmap-overlap`) rather than resolved by picking whichever descriptor is convenient, and this happens before any range is checked against the map |
 | mandatory ranges | kernel image (exactly the linked size, at the link address), stack (page-aligned top, sane size, no underflow), page tables (aligned, 3…514 pages, no overflow, and `identity_span == (pages − 2)·512·2 MiB`), the loader's own image, and the memory-map buffer are each inside the span **and** covered by memory of an acceptable type |
 | environment | `CR0.PG`, `CR4.PAE`, `CR3` equals `pagetable_addr`, 64-bit operand size and arithmetic really work, `RSP` is inside the declared stack and 16-byte aligned, and CPUID reports long mode; the CPU's physical address width is checked when CPUID reports one |
-| optional resources | framebuffer and RSDP are validated (geometry, no overflow, inside the span, memory type, `"RSD PTR "` signature for the RSDP). A resource that fails is reported as `usability=unsupported reason=…`; it is **never** dereferenced and never called usable |
+| optional resources | framebuffer and RSDP are validated (geometry, no overflow, inside the span, memory type, `"RSD PTR "` signature for the RSDP). The framebuffer's pixel format must be one of the two direct-colour layouts the protocol can describe; a bit-mask layout or `PixelBltOnly` is classified unusable rather than interpreted. A resource that fails is reported as `usability=unsupported reason=…`; it is **never** dereferenced and never called usable |
 
 Memory types are a contract, not a guess: the loader's own ranges accept
 LoaderCode/LoaderData/BootServicesCode/BootServicesData/RuntimeServicesData **and
@@ -384,9 +400,13 @@ Widening the map is future work, not a silent behaviour.
 `kernel64/cpu64.c` reports vendor, family/model/stepping, physical and virtual
 address widths, long mode, NX, 1 GiB pages, APIC, x2APIC, maximum APIC IDs and
 the SVM bits (advertised, nested paging, ASIDs) plus whether the CPU is already
-a guest. Reporting SVM is not a hypervisor claim. The six evidence levels are:
-advertised (CPUID), firmware-enabled, permitted, PC5-initialised, guest executed,
-VM-exit tested. This work reaches **level 1 only**, and only in emulation.
+a guest. Every extended leaf is gated on the **saved** maximum extended leaf, not
+on whatever a previous `CPUID` left in `EAX`: the address-width leaf is read only
+when the CPU advertised it, and the invariant-TSC leaf only when that leaf is
+within range. A width the CPU does not report is reported as `not-reported`, never
+as "every address fits". Reporting SVM is not a hypervisor claim. The six evidence
+levels are: advertised (CPUID), firmware-enabled, permitted, PC5-initialised, guest
+executed, VM-exit tested. This work reaches **level 1 only**, and only in emulation.
 
 ### 7.7 Release isolation
 

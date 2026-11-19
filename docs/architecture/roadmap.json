@@ -6,7 +6,7 @@
   "authority": "docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md",
   "product": {
     "name": "PC5",
-    "identity": "An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.",
+    "identity": "An independent engineering project that builds PC-side boot, hardware and compatibility infrastructure toward running genuine Sony PlayStation 5 system software on compatible PC hardware.",
     "mission": "PC5 is an independent engineering project whose destination is to run the genuine Sony PlayStation 5 system software on compatible PC hardware, and to deliver the authentic PS5 platform and gaming experience there.",
     "destination": {
       "statement": "Genuine Sony PlayStation 5 system software executing on compatible PC hardware, through PC5's own platform.",
@@ -164,7 +164,7 @@
         "evidence_class": "per-title records with frame-time measurements, and a runtime log of the genuine system where the level-5 path is the one in use"
       }
     ],
-    "identity_note": "PC5 is not a Sony product and contains no Sony software: the identity states the project's own platform and the destination it is built toward, not an achieved capability."
+    "identity_note": "PC5 is not a Sony product and contains no Sony software. The identity names the infrastructure this project builds and the destination it is built toward, not an achieved capability: the genuine Sony PS5 system software is the operating system and the user experience, and PC5 is the PC-side boot, hardware and compatibility infrastructure that exists to run it. PC5 does not build a replacement operating system, shell, setup experience or interface to stand in for Sony's, and a PC5 diagnostic or recovery environment is supporting tooling, never the product."
   },
   "workstreams": [
     {

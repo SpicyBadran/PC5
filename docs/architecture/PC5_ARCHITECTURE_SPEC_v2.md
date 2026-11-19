@@ -5,7 +5,7 @@
 | Status | **Accepted. Replaces `PC5_ARCHITECTURE_SPEC_v1.md` as the architecture authority.** |
 | Date | 2026-11-15 |
 | Supersedes | `PC5_ARCHITECTURE_SPEC_v1.md` (two tracks, Linux-as-product); ADR-009, ADR-010 |
-| Decision records | ADR-019 (this architecture), ADR-020 (Linux role), ADR-021 (release isolation), ADR-022 (PS5 package handling); ADR-001 … ADR-018 remain in force |
+| Decision records | ADR-019 (this architecture), ADR-020 (Linux role), ADR-021 (release isolation), ADR-022 (PS5 package handling), ADR-023 (loader validation), ADR-024 (contract registry), ADR-025 (no vendored archive); ADR-001 … ADR-018 remain in force except ADR-009 and ADR-010, which ADR-019/ADR-020/ADR-021 supersede |
 | Machine-checked parts | `docs/architecture/roadmap.json`, `tools/roadmap.py`, `tests/test_architecture.py`, `tests/test_product_identity.py` |
 | Investigation this replaces | `ARCHITECTURE_DISCREPANCY_REPORT.md` |
 
@@ -18,7 +18,7 @@ what is measured is in `docs/TEST_RESULTS.md`; what is implemented is in
 
 ## 1. Product identity
 
-> **PC5 — An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.**
+> **PC5 — An independent engineering project that builds PC-side boot, hardware and compatibility infrastructure toward running genuine Sony PlayStation 5 system software on compatible PC hardware.**
 >
 > PC5 is an independent engineering project whose destination is to run the
 > genuine Sony PlayStation 5 system software on compatible PC hardware, and to
@@ -64,7 +64,7 @@ Four things are kept distinct at all times, in every document:
 
 ---
 
-## 3. One platform, thirteen workstreams
+## 3. One platform, fourteen workstreams
 
 There are no independent tracks. There is one product, cut into workstreams that
 each state which part of the destination they serve. Workstream membership is a
@@ -124,9 +124,9 @@ WS10 is the only workstream whose milestones are on the destination path. The
 other workstreams exist because WS10 needs them: a platform model needs an
 execution environment (WS2), a memory manager (WS4), a storage model (WS5), and
 a system-services surface (WS9). The roadmap's rendered **destination path**
-shows this explicitly, and it is the longest chain in the graph — which is the
-architectural statement that the destination, not a lookalike desktop, is the
-critical path.
+shows this explicitly, and it is the longest chain the graph has that ends at
+the destination (`M20` extends it by one) — which is the architectural statement
+that the destination, not a lookalike desktop, is the critical path.
 
 ---
 
@@ -173,8 +173,9 @@ emulator screenshot of a menu PC5 drew itself.
 
 The destination workstream in engineering terms; the device contracts themselves
 are written out in [`PS5_PLATFORM_CONTRACT.md`](PS5_PLATFORM_CONTRACT.md), with
-their PC5-authored test doubles in `psm/` (`M10`, complete: 38 claims over four
-sources, ten interfaces, 261 conformance checks). No device model exists yet:
+their PC5-authored test doubles in `psm/` (`M10`, acceptance met and still
+`in_progress`: 38 claims over four sources, ten interfaces, 261 conformance
+checks). No device model exists yet:
 `M11`–`M16` are unstarted, and the doubles are Python objects, not a PS5.
 
 ```

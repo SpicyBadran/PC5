@@ -44,13 +44,19 @@ typedef unsigned long long u64;
 
 /* Present | writable | page-size (2 MiB leaf). */
 #define PC5_PT_FLAGS (1ull | 2ull | (1ull << 7))
+/* Present | writable: a pointer to the next level of the walk (PML4 -> PDPT ->
+ * PD).  Deliberately *without* the page-size bit, which on a non-leaf entry is a
+ * reserved-bit violation rather than a hint. */
+#define PC5_PT_TABLE_FLAGS (1ull | 2ull)
 /* PWT | PCD: strong uncached, which is what a framebuffer needs. */
 #define PC5_PT_UC ((1ull << 3) | (1ull << 4))
 
-/* Build the identity map.  `pt` must point at PC5_PT_PAGES contiguous, zeroed,
- * 4 KiB-aligned pages.  `span` is rounded down to a whole number of 2 MiB pages.
- * Returns the number of 2 MiB pages mapped, or 0 when an argument is invalid:
- * null or unaligned base, zero span, or a span the table block cannot hold. */
+/* Build the identity map.  `pt` must point at PC5_PT_PAGES contiguous, 4 KiB-aligned
+ * pages; every page of the block is zeroed by this function, so caller-supplied
+ * contents are not trusted.  `span` is rounded down to a whole number of 2 MiB
+ * pages.  Returns the number of 2 MiB pages reachable through the installed
+ * hierarchy, or 0 when an argument is invalid: null or unaligned base, zero span,
+ * or a span the table block cannot hold. */
 unsigned long pc5_pt_build_identity(u64 pt, u64 span);
 
 /* 1 when [start, start + size) is non-empty, free of 64-bit overflow, and lies

@@ -1,10 +1,13 @@
 # PS5 compatibility status
 
-**PC5 — An independent operating-system project for PC hardware, built toward genuine Sony PlayStation 5 system software.** This page is
+**PC5 — An independent engineering project that builds PC-side boot, hardware and compatibility infrastructure toward running genuine Sony PlayStation 5 system software on compatible PC hardware.** This page is
 the per-level account of the destination workstream. Every `NO` below is a
 measurement, not a mood.
 
-Build under test: PC5 `0.2.0` at `main` (M2 merged), gates run 2026-11-15.
+Build under test: PC5 `0.2.0` at `main` (`8aab6d3`) plus the unmerged PR #26
+branch; recorded gates are the ones in `docs/evidence/validation/`. `M2` is
+**not** complete — it is `not_started` in `roadmap.json`, and this page does
+not claim otherwise.
 Architecture authority: [`architecture/PC5_ARCHITECTURE_SPEC_v2.md`](architecture/PC5_ARCHITECTURE_SPEC_v2.md).
 Evidence: [`TEST_RESULTS.md`](TEST_RESULTS.md) §16 and §17.
 
@@ -17,7 +20,7 @@ Evidence: [`TEST_RESULTS.md`](TEST_RESULTS.md) §16 and §17.
 | 1 | PC5 boots on qualified PC hardware | **NO for physical hardware** — emulated only (SeaBIOS + real OVMF) | `TEST_RESULTS.md` §16 |
 | 2 | PC5 controls the required hardware through its own architecture | **PARTIAL** — firmware tables, PCI/ACPI, ATA PIO, PS/2, FAT32; no APIC, NVMe, USB | `make boot-test` 119/119 (emulated) |
 | 3 | Core platform services work | **NO** | `M3`, `M2c`, `M2d`, `M7` not started |
-| 4 | PS5 execution interfaces exist and are validated | **PARTIAL** — the contract, its evidence registry and ten PC5-authored interfaces exist and pass 261 conformance checks; no console-side behaviour is modelled and no Sony software has run | `PS5_PLATFORM_CONTRACT.md`, `psm/`, `M10` |
+| 4 | PS5 execution and system-software interfaces exist and are experimentally validated | **PARTIAL** — the contract, its evidence registry and ten PC5-authored interfaces exist and pass 261 conformance checks; no console-side behaviour is modelled and no Sony software has run | `PS5_PLATFORM_CONTRACT.md`, `psm/`, `M10` |
 | 5 | Genuine system-software compatibility | **NO — BLOCKED** | `M17`–`M21` in `roadmap.json` |
 | 6 | Platform experience | **NO** | `M4`, `M5`, `M20` |
 
@@ -43,7 +46,7 @@ Evidence: [`TEST_RESULTS.md`](TEST_RESULTS.md) §16 and §17.
 project cannot satisfy by writing code — and the graph refuses to let it be
 mistaken for progress.
 
-## 3. The twelve project levels, as the boot environment reports them
+## 3. The thirteen chain stages, as the boot environment reports them
 
 The runtime chain in `kernel/chain.c` is unchanged and still honest. Captured
 from the emulated boot:
@@ -78,7 +81,7 @@ been attempted, so nothing above stage 4 is claimed.
 | Loader (A20, E820, VBE, font, ISO probe, kernel load, PM handoff) | COMPLETE AND VERIFIED (emulated) | serial log |
 | Framebuffer console, text fallback, read-back self-test | COMPLETE AND VERIFIED (emulated) | diagnostics page |
 | CPUID / E820 / PCI / ACPI / SMBIOS inventory | IMPLEMENTED — TESTING REQUIRED | hardware page; no physical run |
-| PS/2 keyboard, serial console (16 commands) | COMPLETE AND VERIFIED (emulated) / IMPLEMENTED | boot test drives it |
+| PS/2 keyboard, serial console (19 dispatchable commands) | COMPLETE AND VERIFIED (emulated) / IMPLEMENTED | boot test drives it |
 | ATAPI PIO + ISO9660 in the kernel | COMPLETE AND VERIFIED (emulated) | `storage_mounted volume=PC5` |
 | MBR + GPT discovery (read-only) | COMPLETE AND VERIFIED (emulated disk + unit tests) | `partitions … status=ok` / `status=crc` |
 | FAT32 read, create, overwrite, mkdir, 8.3 paths | COMPLETE AND VERIFIED (emulated disk + host driver) | 50 expand tests, second-boot read-back |

@@ -28,6 +28,12 @@ struct pc5_cpu64 {
     u32 invariant_tsc;    /* CPUID.80000007H:EDX[8] */
 };
 
+/* CPUID is injected so the leaf-gating logic can be tested with controlled
+ * results.  The production entry point passes the architectural `cpuid`
+ * instruction; a test passes a table. */
+typedef void (*pc5_cpuid_fn)(u32 leaf, u32 subleaf, u32 *out);
+
+void cpu64_report_with(struct pc5_cpu64 *out, pc5_cpuid_fn cpuid_fn);
 void cpu64_report(struct pc5_cpu64 *out);
 void cpu64_print(const struct pc5_cpu64 *report);
 #endif

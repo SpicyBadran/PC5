@@ -4,9 +4,9 @@
     "skipped": 0,
     "total": 58
   },
-  "code_revision": "ef064756047dbaf4beadc5cdd0ebb21b30c5a802",
+  "code_revision": "a9b383ddf9419e4e97379b6767fe9098206fae54",
   "command": "make stubtest",
-  "commit": "ef064756047dbaf4beadc5cdd0ebb21b30c5a802",
+  "commit": "a9b383ddf9419e4e97379b6767fe9098206fae54",
   "date": "2026-11-16",
   "dirty": false,
   "exit_code": 0,

@@ -300,7 +300,7 @@ class CommandContractTest(unittest.TestCase):
                 if entry.name != "assets":
                     (tmp / "docs" / entry.name).symlink_to(
                         entry, target_is_directory=entry.is_dir())
-            for name in ("CONTRIBUTING.md", "LICENSE", "ci"):
+            for name in ("CONTRIBUTING.md", "LICENSE", "ci", "brand"):
                 (tmp / name).symlink_to(REPO / name,
                                         target_is_directory=(REPO / name).is_dir())
             (tmp / "docs/assets").mkdir(parents=True)

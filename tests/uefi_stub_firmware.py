@@ -93,6 +93,14 @@ EFI_UNSUPPORTED = 0x8000000000000003
 EFI_BUFFER_TOO_SMALL = 0x8000000000000005
 EFI_NOT_FOUND = 0x800000000000000E
 EFI_ABORTED = 0x8000000000000015
+EFI_OUT_OF_RESOURCES = 0x8000000000000009
+
+# EFI_ALLOCATE_TYPE (UEFI 2.9A 7.2.1).  The stub models the three real modes,
+# because a harness that ignores the type cannot exercise the contract the loader
+# depends on - that is how a zero AllocateMaxAddress bound stayed invisible.
+EFI_ALLOCATE_ANY_PAGES = 0
+EFI_ALLOCATE_MAX_ADDRESS = 1
+EFI_ALLOCATE_ADDRESS = 2
 
 SYSV_SLOTS = (UC_X86_REG_RDI, UC_X86_REG_RSI, UC_X86_REG_RDX,
               UC_X86_REG_RCX, UC_X86_REG_R8, UC_X86_REG_R9)
@@ -146,7 +154,11 @@ class StubFirmware:
                  support_get_info=True, race_map_key_forever=False,
                  reserve_handover=False, fragment_low_memory=0,
                  overflow_memory_map=False, watchdog_refused=False,
-                 image_load=None):
+                 image_load=None, gop=None,
+                 ignore_max_address=False, allocate_return=None,
+                 allocation_limit=None, map_small_buffer_calls=0,
+                 free_pages_available=True, fail_allocate_pages_pages=None,
+                 describe_version=1):
         if not HAVE_UNICORN:
             raise StubError("the 'unicorn' module is not installed "
                             "(pip install unicorn)")
@@ -156,11 +168,42 @@ class StubFirmware:
         # the region PC5's map covers - and a harness that can only place it at one
         # address cannot exercise that.
         self.image_load = IMAGE_LOAD if image_load is None else image_load
+        #   ignore_max_address   firmware ignores the AllocateMaxAddress input bound
+        #                        and allocates anywhere it likes - the behaviour the
+        #                        loader must survive, and the behaviour this stub
+        #                        itself had before it modelled the contract
+        #   allocate_return      force a specific EFI_STATUS from allocate_pages
+        #   allocation_limit     highest address this firmware will hand out
+        #   map_small_buffer_calls  answer this many GetMemoryMap calls with
+        #                        EFI_BUFFER_TOO_SMALL whatever the buffer size,
+        #                        so a caller's growth-and-retry loop runs for real
+        #   free_pages_available when False, the BootServices table has no
+        #                        FreePages entry (null), as an older firmware's
+        #                        table may legitimately have
+        self.ignore_max_address = ignore_max_address
+        self.allocate_return = allocate_return
+        self.allocation_limit = allocation_limit
+        self.map_small_buffer_calls = int(map_small_buffer_calls or 0)
+        self.free_pages_available = free_pages_available
+        # Page counts this firmware refuses with EFI_OUT_OF_RESOURCES even though
+        # the pool could satisfy them.  Growth asks for 16 pages while the first
+        # pass asked for 8, so this targets the growth step alone.
+        self.fail_allocate_pages_pages = set(fail_allocate_pages_pages or ())
+        # The EFI_MEMORY_DESCRIPTOR.Version this firmware reports.  UEFI 2.x
+        # defines only 1; any other value means the descriptor layout a caller
+        # compiled against is not the one being handed to it.
+        self.describe_version = describe_version
+        self.map_small_buffer_forced = 0     # how many were actually forced
+        self.free_pages_calls = []           # (address, pages) the loader freed
+        self.allocations = []                # (type, pages, base) for the harness
         self.esp_files = esp_volume          # {"\\EFI\\BOOT\\BOOTX64.EFI": data}
         self.kernel = kernel_bytes
         self.iso_has_kernel = iso_volume_has_kernel
         self.trace = trace or Trace()
         self.pool_next = POOL_BASE
+        # (size, limit, pool_next) for every request the pool could not satisfy;
+        # a test can assert the loader failed for the right reason.
+        self.exhaustions = []
         self.objects = {}                    # address -> dict for file handles
         self.file_table = {}
         self.services = []                   # [(name, callable)]
@@ -194,6 +237,12 @@ class StubFirmware:
         self.overflow_memory_map = overflow_memory_map
         self.watchdog_refused = watchdog_refused
         self.support_get_info = support_get_info
+        # GOP mode overrides, so a test can make firmware report a framebuffer the
+        # loader must reject: extreme timing geometry, a pitch that does not fit
+        # the protocol field, a format the protocol cannot describe, or a base at
+        # the top of the identity span.  Defaults are the ordinary 1024x768 BGRx
+        # mode the other tests boot with.
+        self.gop_options = dict(gop or {})
         self.boot_service_calls_after_exit = []
         self.watchdog_calls = []
         self.map_generation = 1
@@ -248,16 +297,43 @@ class StubFirmware:
         """First free byte of the stub pool after every allocation so far."""
         return self.pool_next
 
-    def alloc(self, size, align=16):
+    def alloc(self, size, align=16, ceiling=None):
+        """Carve `size` bytes out of the pool, or report that it cannot.
+
+        Exhaustion is returned, not raised: real firmware answers
+        EFI_OUT_OF_RESOURCES and the caller is expected to survive it.  Raising
+        here turned a status the loader is supposed to handle into a Python
+        exception, so a test could pass without the loader's own failure path ever
+        running.  Callers bind the result with alloc_pages_or_status(); a `None`
+        return means "this firmware has no memory to give".
+        """
+        limit = POOL_END if ceiling is None else ceiling
         address = (self.pool_next + align - 1) & ~(align - 1)
-        if address + size > POOL_END:
-            raise StubError("stub pool exhausted")
+        if size < 0 or address + size > limit:
+            self.exhaustions.append((size, limit, self.pool_next))
+            return None
         self.pool_next = address + size
         self.write(address, bytes(size))
         return address
 
+    def alloc_or_raise(self, size, align=16, ceiling=None):
+        """alloc() for the stub's own fixed structures, where failure is a bug.
+
+        The system table, the ESP file records and similar scaffolding are not
+        UEFI services and have no status to return.  If the pool cannot hold them
+        the harness itself is mis-sized, which is a test bug rather than
+        something the loader should be asked to survive.
+        """
+        address = self.alloc(size, align=align, ceiling=ceiling)
+        if address is None:
+            size_wanted, limit, next_free = self.exhaustions[-1]
+            raise StubError(
+                f"stub pool exhausted building the harness itself: wanted "
+                f"{size_wanted} bytes, limit {limit:#x}, next free {next_free:#x}")
+        return address
+
     def alloc_utf16(self, text):
-        address = self.alloc(len(text) * 2 + 2)
+        address = self.alloc_or_raise(len(text) * 2 + 2)
         self.write(address, text.encode("utf-16-le") + b"\0\0")
         return address
 
@@ -399,7 +475,7 @@ class StubFirmware:
         the next one's memory, so the unit conversion lives here and nowhere
         else.
         """
-        return self.alloc(8 * slots)
+        return self.alloc_or_raise(8 * slots)
 
     def _build_tables(self):
         # --- Simple Text Output (11 entries; output_string at +8)
@@ -408,16 +484,23 @@ class StubFirmware:
                        self.add_service("output_string", self.svc_output_string))
 
         # --- Graphics Output Protocol (4 entries; *Mode at +24)
-        info = self.alloc(0x40)
+        info = self.alloc_or_raise(0x40)
         # EFI_GRAPHICS_PIXEL_FORMAT: 0 = RedGreenBlueReserved8BitPerColor,
         # 1 = BlueGreenRedReserved8BitPerColor.  The loader writes 0x00RRGGBB
         # and accepts either, so report the BGR layout that the framebuffer in
-        # this harness is actually filled with.
-        self.write(info, struct.pack("<IIII", 1, FB_WIDTH, FB_HEIGHT, 1))  # BGRx
+        # this harness is actually filled with.  Every field is overridable so the
+        # loader's geometry and format validation can be driven at its boundaries.
+        gop_width = self.gop_options.get("width", FB_WIDTH)
+        gop_height = self.gop_options.get("height", FB_HEIGHT)
+        gop_pixels = self.gop_options.get("pixels_per_scan_line", gop_width)
+        gop_format = self.gop_options.get("format", 1)
+        gop_base = self.gop_options.get("base", FB_BASE)
+        gop_size = self.gop_options.get("size", FB_SIZE)
+        self.write(info, struct.pack("<IIII", 1, gop_width, gop_height, gop_format))
         self.write(info + 0x10, struct.pack("<IIII", 0, 0, 0, 0))
-        self.write(info + 0x20, struct.pack("<I", FB_WIDTH))
-        mode = self.alloc(0x28)
-        self.write(mode, struct.pack("<IIQQQQ", 1, 0, info, 0x40, FB_BASE, FB_SIZE))
+        self.write(info + 0x20, struct.pack("<I", gop_pixels))
+        mode = self.alloc_or_raise(0x28)
+        self.write(mode, struct.pack("<IIQQQQ", 1, 0, info, 0x40, gop_base, gop_size))
         self.gop = self._table(4)
         self.write_u64(self.gop + 24, mode)
 
@@ -437,6 +520,14 @@ class StubFirmware:
             256: ("set_watchdog_timer", self.svc_set_watchdog_timer),
         }
         for offset, (name, function) in services.items():
+            # A boot-services table may legitimately leave an entry null when the
+            # firmware does not implement it - FreePages predates nothing in the
+            # spec but is absent from some tables, and a caller must test the
+            # pointer before calling.  `free_pages_available=False` models that so
+            # the loader's capability check is exercised instead of assumed.
+            if name == "free_pages" and not self.free_pages_available:
+                self.write_u64(self.bs + offset, 0)
+                continue
             # Every boot service is wrapped: after a successful
             # ExitBootServices firmware memory is not the loader's to use, so a
             # call through this table would be a real bug on real firmware.
@@ -449,7 +540,7 @@ class StubFirmware:
                                        0x48, 0, 0))
 
         # --- System Table
-        self.sys_table = self.alloc(0x78)
+        self.sys_table = self.alloc_or_raise(0x78)
         self.write(self.sys_table,
                    struct.pack("<QIIII", 0x5453595320494249, 0x00020000, 0x78, 0, 0))
         self.write_u64(self.sys_table + 24, self.alloc_utf16("PC5 stub firmware"))
@@ -457,7 +548,7 @@ class StubFirmware:
         self.write_u64(self.sys_table + 56, 0xE5F0)      # console_out_handle
         self.write_u64(self.sys_table + 64, self.con_out)
         self.write_u64(self.sys_table + 96, self.bs)
-        self.write_u64(self.sys_table + 104, self.alloc(0x40))   # runtime services
+        self.write_u64(self.sys_table + 104, self.alloc_or_raise(0x40))   # runtime services
 
         # --- Volumes: the ESP the loader was booted from, and one with the kernel
         self.volumes = {
@@ -685,11 +776,72 @@ class StubFirmware:
         return EFI_SUCCESS
 
     def svc_allocate_pages(self, alloc_type, memory_type, pages, memory_ptr, *_):
-        self.write_u64(memory_ptr, self.alloc(pages * 4096, align=4096))
+        """AllocatePages, honouring the UEFI 2.9A 7.2.1 contract for all three modes.
+
+        *Memory is an in/out EFI_PHYSICAL_ADDRESS:
+          AllocateAnyPages     input ignored
+          AllocateMaxAddress   the range's uppermost address must be <= the input
+          AllocateAddress      the exact base, or EFI_NOT_FOUND
+
+        The loader's correctness depends on the MaxAddress branch: a caller that
+        supplies 0 is asking for memory ending at or below zero, and a faithful
+        firmware returns EFI_OUT_OF_RESOURCES.  This stub did not implement the
+        branch at all, so it accepted a request no real firmware can satisfy.
+        """
+        if self.allocate_return is not None:
+            return self.allocate_return
+        if alloc_type not in (EFI_ALLOCATE_ANY_PAGES, EFI_ALLOCATE_MAX_ADDRESS,
+                              EFI_ALLOCATE_ADDRESS):
+            return EFI_INVALID_PARAMETER
+        if pages == 0 or pages > (1 << 32):
+            return EFI_INVALID_PARAMETER
+        if pages in self.fail_allocate_pages_pages:
+            self.exhaustions.append((pages * 4096, self.pool_ceiling(),
+                                     self.pool_next))
+            return EFI_OUT_OF_RESOURCES
+
+        requested = self.read_u64(memory_ptr)
+        size = pages * 4096
+
+        if alloc_type == EFI_ALLOCATE_ADDRESS:
+            if requested % 4096 or requested + size > self.pool_ceiling():
+                return EFI_NOT_FOUND
+            base = requested
+            self.uc.mem_write(base, bytes(size))
+        elif alloc_type == EFI_ALLOCATE_MAX_ADDRESS and not self.ignore_max_address:
+            if requested == 0:
+                return EFI_OUT_OF_RESOURCES        # nothing can end at or below 0
+            ceiling = min(requested + 1, self.pool_ceiling())
+            if size > ceiling:
+                return EFI_OUT_OF_RESOURCES
+            base = self.alloc(size, align=4096, ceiling=ceiling)
+            if base is None:
+                return EFI_OUT_OF_RESOURCES        # pool cannot reach below the bound
+        else:
+            base = self.alloc(size, align=4096)
+            if base is None:
+                return EFI_OUT_OF_RESOURCES        # pool exhausted
+
+        self.allocations.append((alloc_type, pages, base))
+        self.write_u64(memory_ptr, base)
         self.map_generation += 1
         return EFI_SUCCESS
 
-    def svc_free_pages(self, *_):
+    def pool_ceiling(self):
+        """Highest address (exclusive) this firmware will hand out."""
+        if self.allocation_limit is not None:
+            return self.allocation_limit
+        return POOL_END
+
+    def svc_free_pages(self, address, pages, *_):
+        """FreePages.  Records the release and advances the map generation.
+
+        Returning the memory to the pool is what real firmware does, and the
+        generation bump is what invalidates any map key taken before the free -
+        which is precisely why the loader must call GetMemoryMap again rather
+        than reuse a key across a growth step.
+        """
+        self.free_pages_calls.append((address, pages))
         self.map_generation += 1
         return EFI_SUCCESS
 
@@ -746,7 +898,15 @@ class StubFirmware:
         # what a real firmware would report at the same point.
         self.write_u64(size_ptr, needed)
         self.write_u64(desc_ptr, entry)
-        self.write_u32(ver_ptr, 1)
+        self.write_u32(ver_ptr, self.describe_version)
+        # A firmware that answers a "sufficient" buffer with BUFFER_TOO_SMALL
+        # despite reporting the same required size is exactly the situation the
+        # loader's growth loop exists for.  Forcing it here is the only way to
+        # execute that loop: the stub's pool is contiguous, so its natural map
+        # never outgrows the 32 KiB first-pass buffer.
+        if self.map_small_buffer_forced < self.map_small_buffer_calls:
+            self.map_small_buffer_forced += 1
+            return EFI_BUFFER_TOO_SMALL
         if not map_ptr or size < needed:
             return EFI_BUFFER_TOO_SMALL
         for index, (kind, phys, _virt, pages) in enumerate(descriptors):
@@ -774,7 +934,16 @@ class StubFirmware:
         return EFI_SUCCESS
 
     def svc_allocate_pool(self, pool_type, size, buffer_ptr):
-        self.write_u64(buffer_ptr, self.alloc(size))
+        """EFI_BOOT_SERVICES.AllocatePool.  Returns a status, never raises.
+
+        This is a real service: firmware that cannot satisfy the request answers
+        EFI_OUT_OF_RESOURCES and the caller decides what to do.  Raising would
+        hide whether the loader handles that answer.
+        """
+        address = self.alloc(size)
+        if address is None:
+            return EFI_OUT_OF_RESOURCES
+        self.write_u64(buffer_ptr, address)
         self.map_generation += 1
         return EFI_SUCCESS
 
@@ -804,7 +973,7 @@ class StubFirmware:
             if self.image_protocol:
                 self.write_u64(interface_ptr, self.image_protocol)
                 return EFI_SUCCESS
-            image = self.alloc(96)
+            image = self.alloc_or_raise(96)
             self.image_protocol = image
             self.write_u64(image + 16, self.sys_table)
             self.write_u64(image + 24, 0xE5F00000)               # device we came from
@@ -820,7 +989,7 @@ class StubFirmware:
         if kind == "device_path":
             node = struct.pack("<BBH", 0x04, 0x01, 42) + bytes(38)
             end = struct.pack("<BBH", 0x7F, 0xFF, 4)
-            address = self.alloc(len(node) + len(end))
+            address = self.alloc_or_raise(len(node) + len(end))
             self.write(address, node + end)
             self.write_u64(interface_ptr, address)
             return EFI_SUCCESS
@@ -839,7 +1008,7 @@ class StubFirmware:
     }
 
     def alloc_file_path(self, text):
-        address = self.alloc(16 + len(text) * 2 + 2)
+        address = self.alloc_or_raise(16 + len(text) * 2 + 2)
         self.write(address + 16, text.encode("utf-16-le") + b"\0\0")
         return address
 
@@ -881,7 +1050,7 @@ class StubFirmware:
         # A File Protocol object is 13 pointers wide (revision + 12 methods);
         # allocating less and copying the table into it would scribble over
         # whatever the pool allocator handed out next.
-        address = self.alloc(0x80)
+        address = self.alloc_or_raise(0x80)
         self.objects[address] = dict(volume=volume, path=path, is_dir=is_dir,
                                      data=data if data is not None else b"", pos=0)
         self.write_u64(address, 0)
