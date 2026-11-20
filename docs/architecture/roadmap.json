@@ -275,7 +275,8 @@
         "kernel64: a freestanding kernel that proves long mode, paging, its CR3 root, its stack and its boot info before printing PC5-64BIT-LONG-MODE-OK"
       ],
       "does_not_complete": [
-        "M2a still requires APIC, a high-resolution timer, a second CPU and per-machine SVM records",
+        "M2a still requires interrupt delivery, a second CPU brought up, and per-machine SVM records",
+        "APIC bring-up, exception capture, a PIT-calibrated TSC and MADT CPU enumeration exist (7737d89, 094a03e, 43ab4af, 547ebd5), but nothing takes an interrupt",
         "no OVMF run and no physical machine has executed this path",
         "no interrupts, no SMP, no process separation, no SVM initialisation"
       ],
