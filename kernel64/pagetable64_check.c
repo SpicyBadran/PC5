@@ -58,15 +58,27 @@ int pc5_report_identity_span(pc5_read_u64_fn read_u64, u64 root, u64 limit)
 {
     static const u64 probes[] = {
         0ull,               /* start of the range */
-        0x3FFFFFull,        /* last byte below the first 1 GiB boundary */
+        /* The four bytes around each 1 GiB boundary.  The "below" values are
+         * boundary - 1, which is the last mappable byte of the lower region and
+         * the last byte of its final 2 MiB leaf.
+         *
+         * These were 0x3FFFFF, 0x7FFFFF and 0xBFFFFF - a short `F` each - which
+         * put them 1020, 2040 and 3060 MiB away from the boundary they claimed to
+         * test, back inside the *first* MiB of the lower region.  Three of the
+         * four regions' last 2 MiB leaves were therefore never probed at all, so
+         * a per-GiB loop that under-filled the top leaf of every region would
+         * have passed this check with failed=0.  That is the same class of defect
+         * the walk exists to catch, and it was found only by deriving the
+         * addresses from the source instead of trusting the marker's name. */
+        0x3FFFFFFFull,      /* last byte below the first 1 GiB boundary */
         0x40000000ull,      /* the boundary itself */
         0x40000001ull,      /* first byte above it */
         0x50000000ull,      /* inside region 1 */
-        0x7FFFFFull,        /* last byte below 2 GiB */
+        0x7FFFFFFFull,      /* last byte below 2 GiB */
         0x80000000ull,      /* 2 GiB boundary */
         0x80000001ull,
         0x90000000ull,      /* inside region 2 */
-        0xBFFFFFull,        /* last byte below 3 GiB */
+        0xBFFFFFFFull,      /* last byte below 3 GiB */
         0xC0000000ull,      /* 3 GiB boundary */
         0xC0000001ull,
         0xD0000000ull,      /* inside region 3 */

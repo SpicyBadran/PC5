@@ -74,6 +74,56 @@ def alloc_line(name):
     raise AssertionError("no alloc line named %r" % name)
 
 
+class TheProbeAddressesAreTheOnesClaimed(unittest.TestCase):
+    """The D1 marker names must match the addresses actually probed.
+
+    This exists because they did not.  The "last byte below N GiB" probes were
+    0x3FFFFF/0x7FFFFF/0xBFFFFF - one `F` short - which placed them 1020/2040/3060
+    MiB away from the boundary, inside the first MiB of the *lower* region.  Every
+    region's final 2 MiB leaf went unexamined, so a per-GiB loop that under-filled
+    its top leaf would have reported failed=0.  Deriving the addresses from the
+    source, rather than trusting the label, is what caught it.
+    """
+
+    def _probe_table(self):
+        import re
+        source = (ROOT / "kernel64" / "pagetable64_check.c").read_text()
+        block = source[source.index("static const u64 probes[]"):
+                       source.index("};", source.index("static const u64 probes[]"))]
+        # `0ull` has no 0x prefix; catch both spellings.
+        return [int(value, 16) for value in
+                re.findall(r"\b(0x[0-9A-Fa-f]+|0)ull", block)]
+
+    def test_every_boundary_is_probed_from_immediately_below(self):
+        probes = self._probe_table()
+        for boundary in (0x40000000, 0x80000000, 0xC0000000):
+            self.assertIn(boundary - 1, probes,
+                          "0x%x: the last byte below the boundary is not probed"
+                          % boundary)
+
+    def test_every_boundary_is_probed_at_and_above(self):
+        probes = self._probe_table()
+        for boundary in (0x40000000, 0x80000000, 0xC0000000):
+            self.assertIn(boundary, probes)
+            self.assertIn(boundary + 1, probes)
+
+    def test_the_final_2mib_leaf_of_every_region_is_probed(self):
+        # The specific gap: region N's last 2 MiB leaf is [edge-2MiB, edge).
+        probes = self._probe_table()
+        for edge in (0x40000000, 0x80000000, 0xC0000000):
+            inside = [a for a in probes if edge - 0x200000 <= a < edge]
+            self.assertTrue(inside,
+                            "no probe in the final 2 MiB leaf below 0x%x" % edge)
+
+    def test_the_probe_count_is_fourteen(self):
+        # 13 static + the derived upper end of the span.
+        self.assertEqual(len(self._probe_table()), 13)
+
+    def test_no_probe_is_duplicated(self):
+        probes = self._probe_table()
+        self.assertEqual(len(probes), len(set(probes)))
+
+
 class TheWalkerCompilesAsTheKernelDoes(unittest.TestCase):
     def test_it_builds_with_werror(self):
         # A warning in the walker is a bug in the walker; the kernel build uses
