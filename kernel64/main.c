@@ -20,6 +20,7 @@
 #include "cpu64.h"
 #include "apic64.h"
 #include "idt64.h"
+#include "timer64.h"
 #include "serial64.h"
 
 #define CR0_PG (1ULL << 31)
@@ -579,6 +580,21 @@ static void report_local_apic(void)
     apic64_print(&apic);
 }
 
+/* Time, calibrated once against the PIT and then measured as TSC deltas. Reported
+ * rather than required: a machine whose PIT does not answer still boots, and the log
+ * says the clock is uncalibrated instead of presenting a zero rate as a working one. */
+static void report_timer(void)
+{
+    struct pc5_timer64 timer;
+
+    timer64_init(&timer);
+    timer64_print(&timer);
+    if (!timer.calibrated) {
+        serial64_write("PC5-64-TIMER not-calibrated reason=\"the PIT did not "
+                       "measure a TSC rate\"\n");
+    }
+}
+
 static void continue_on_handed_stack(void *argument)
 {
     const struct pc5_boot64 *bi = (const struct pc5_boot64 *)argument;
@@ -592,6 +608,7 @@ static void continue_on_handed_stack(void *argument)
     report_optional_resources(bi, &g_map);
     cpu64_print(&cpu);
     report_local_apic();
+    report_timer();
 
     /* Every mandatory check passed; only now is the marker emitted. */
     serial64_write("PC5-64BIT-LONG-MODE-OK\n");

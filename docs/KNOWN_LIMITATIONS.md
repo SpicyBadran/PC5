@@ -161,8 +161,12 @@ Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
     read back - but nothing is routed through it. Bring-up is attempted only when
     firmware's memory map reports an MMIO range covering the architectural APIC base,
     because an unbacked MMIO read raises a fault rather than returning a value; a
-    machine with no such range logs `not-attempted` and boots on. There is no timer,
-    no SMP bring-up, no scheduler, no syscalls and no process separation. Its identity map stops at 4 GiB, it does not use NX
+    machine with no such range logs `not-attempted` and boots on. Timekeeping is a
+    PIT-calibrated TSC: the PIT is polled once at boot to measure the TSC rate, every
+    later reading is a TSC delta, and a PIT that does not answer leaves the clock
+    reported as uncalibrated rather than presenting a zero rate as a working one. It
+    is **not** an interrupt-driven timer and nothing is preempted. There is no SMP
+    bring-up, no scheduler, no syscalls and no process separation. Its identity map stops at 4 GiB, it does not use NX
     (CPUID reports it; EFER.NXE is not set), there are no guard pages, and there
     is no physical-memory allocator. Nothing in it is a protection mechanism yet.
 22c. **The 64-bit path is not part of the release image.** It is built by its own

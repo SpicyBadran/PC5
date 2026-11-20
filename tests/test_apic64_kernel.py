@@ -65,6 +65,11 @@ class ApicIntegrationTests(unittest.TestCase):
     def _run(self, memmap, back_apic=False):
         """Boot the real kernel; optionally back the APIC page with registers.
 
+        The instruction budget is generous because the timer now calibrates against
+        the PIT at boot, and an emulated PIT that never answers costs its full poll
+        budget. A tighter cap stops the kernel mid-calibration and looks like a boot
+        failure.
+
         `run_kernel` maps only the memory the boot info describes, so an MMIO
         descriptor alone leaves the window mapped but *unbacked*, which is what an
         emulator does for a device it has no model for.  Backing it is therefore a
@@ -77,7 +82,7 @@ class ApicIntegrationTests(unittest.TestCase):
                 machine.uc.mem_write(APIC_BASE + offset, value.to_bytes(4, "little"))
         overrides = {"memmap_bytes": self.machine.DESC_SIZE * len(memmap)}
         result = machine.run(self.machine.pack_boot_info(**overrides),
-                            memmap=memmap, max_instructions=400_000)
+                            memmap=memmap, max_instructions=8_000_000)
         result["machine"] = machine
         return result
 

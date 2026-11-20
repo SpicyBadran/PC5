@@ -20,7 +20,7 @@ evidence path exists.
 | Level | Statement | State today |
 |---|---|---|
 | 1 | PC5 boots on qualified PC hardware | **emulated only** — SeaBIOS and real OVMF firmware; no physical machine yet (`M1`) |
-| 2 | PC5 controls the required hardware through its own architecture | partial: PCI/ACPI inventory, ATA PIO, PS/2, FAT32; local APIC xAPIC bring-up only (no interrupt delivery, timer or SMP); no NVMe, USB (`M2`, `M2a`, `M2b`) |
+| 2 | PC5 controls the required hardware through its own architecture | partial: PCI/ACPI inventory, ATA PIO, PS/2, FAT32; 64-bit local APIC xAPIC bring-up, exception capture and a PIT-calibrated TSC (no interrupt delivery, no preemption, no SMP); no NVMe, USB (`M2`, `M2a`, `M2b`) |
 | 3 | Core platform services work | not started (`M3`, `M2c`, `M2d`, `M7`) |
 | 4 | PS5 execution and system-software interfaces exist and are experimentally validated | **partial** — the platform contract, evidence registry and ten PC5-authored interfaces exist and pass 261 conformance checks (`M10`, acceptance met); no console-side behaviour is modelled yet (`M11`–`M16`) |
 | 5 | Genuine system-software compatibility | **blocked** — the authenticity boundary (`M17`) and a lawful input (`M18`) |
