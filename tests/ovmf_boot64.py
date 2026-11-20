@@ -651,6 +651,19 @@ def main(argv=None):
                            "data_dir": args.qemu_data_dir or None}
     report.data["firmware"] = describe_firmware(code)
 
+    # Remove the previous run's log before anything else happens - including the
+    # early return for a missing QEMU or OVMF.  The verdict is safe without this,
+    # because it is computed from the bytes this run captures and never read back
+    # from the file; but a leftover complete-looking log beside a failed run is a
+    # trap for whoever reads the directory afterwards, and the report names
+    # serial_path as the evidence location.
+    os.makedirs(args.serial_dir, exist_ok=True)
+    serial_path = os.path.join(args.serial_dir, "efi64-serial.log")
+    try:
+        os.unlink(serial_path)
+    except OSError:
+        pass
+
     if missing:
         # Not a failure and emphatically not a pass: nothing was tested.
         for reason in missing:
@@ -713,7 +726,6 @@ def main(argv=None):
     seen = observe(run["serial"])
     evaluate(report, seen, run)
 
-    code_out = 0
     if report.count(FAIL):
         # A failed runtime assertion is distinguished from an ordinary stage
         # failure so a caller can tell "the boot did not happen" from "the boot
@@ -721,6 +733,14 @@ def main(argv=None):
         runtime = [c for c in report.checks
                    if c["state"] == FAIL and ("[D1]" in c["name"] or "[D2]" in c["name"])]
         code_out = 2 if runtime else 1
+    elif report.count(UNAVAILABLE) or report.count(NOT_TESTED):
+        # Exit 0 has to mean "every check ran and passed".  Anything left
+        # unrun or unavailable is a third outcome, and returning 0 for it lets a
+        # caller that only checks the status treat an unattested run as a pass -
+        # exactly the failure this driver exists to prevent, one level up.
+        code_out = 3
+    else:
+        code_out = 0
     return finish(report, args, code=code_out)
 
 

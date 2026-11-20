@@ -546,5 +546,117 @@ class FirmwarePairDiscoveryTests(unittest.TestCase):
         self.assertIsNone(ovmf_boot64.sibling_vars(code))
 
 
+
+class KernelEntryIsProvenByOwnershipOfTheMarker(unittest.TestCase):
+    """The loader must not be able to pronounce a kernel-only marker.
+
+    "Kernel entry" rests on a string appearing in the serial log.  That is only
+    evidence if the binary that prints it is the kernel: if the loader also
+    contained the string, a loader bug could emit it without ever transferring
+    control, and the gate would pass on a boot that never got there.  These read
+    the built artifacts and require the marker strings to be absent from the
+    loader and present in the kernel.
+    """
+
+    KERNEL_ONLY = (b"PC5-64BIT-KERNEL-ENTRY", b"PC5-64-DONE",
+                   b"PC5-64BIT-LONG-MODE-OK", b"PC5-64-PTWALK")
+
+    def _loader(self):
+        path = ROOT / "build" / "uefi64" / "BOOTX64.EFI"
+        if not path.exists():
+            self.skipTest("build/uefi64/BOOTX64.EFI not built")
+        return path.read_bytes()
+
+    def _kernel(self):
+        path = ROOT / "build" / "kernel64" / "KERNEL64.BIN"
+        if not path.exists():
+            self.skipTest("build/kernel64/KERNEL64.BIN not built")
+        return path.read_bytes()
+
+    def test_the_loader_cannot_print_a_kernel_marker(self):
+        loader = self._loader()
+        for marker in self.KERNEL_ONLY:
+            self.assertNotIn(marker, loader,
+                             "%s is in the loader: it could fake kernel entry"
+                             % marker.decode())
+
+    def test_the_kernel_really_owns_the_entry_and_terminal_markers(self):
+        kernel = self._kernel()
+        for marker in (b"PC5-64BIT-KERNEL-ENTRY", b"PC5-64-DONE"):
+            self.assertIn(marker, kernel,
+                          "%s is not in the kernel; the markers prove nothing"
+                          % marker.decode())
+
+    def test_the_loader_marker_is_absent_from_the_kernel(self):
+        """The handoff is two binaries naming two different stages."""
+        kernel = self._kernel()
+        self.assertNotIn(b"PC5-64-LOADER-JUMP", kernel,
+                         "the kernel carries a loader marker")
+
+
+
+class AStaleLogCanNeverBeTheVerdict(unittest.TestCase):
+    """§5: no pass on stale output.
+
+    A serial log is written to a fixed path, so whatever a previous run left there
+    is the first thing a careless driver would read.  The guard is that the log is
+    truncated before QEMU starts and the verdict comes from the bytes this run
+    produced, never from the file.  Both directions are checked: a fake emulator
+    that prints nothing must FAIL even with a complete passing log already on disk,
+    and a driver reading the file would do the opposite.
+    """
+
+    def test_a_silent_emulator_fails_despite_a_passing_log_on_disk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = pathlib.Path(tmp)
+            serial_dir = tmpdir / "ovmf64"
+            serial_dir.mkdir()
+            # Seed the exact log a real passing run produced.
+            (serial_dir / "efi64-serial.log").write_text(full_log(), encoding="latin-1")
+            shim = tmpdir / "silent-qemu.sh"
+            shim.write_text("#!/bin/sh\nexit 0\n")
+            shim.chmod(0o755)
+            out = tmpdir / "report.json"
+            proc = subprocess.run(
+                [sys.executable, str(ROOT / "tests" / "ovmf_boot64.py"),
+                 "--no-build", "--qemu", str(shim),
+                 "--ovmf-code", "/tmp/none-code.fd" if False else str(ROOT / "Makefile"),
+                 "--ovmf-vars", str(ROOT / "Makefile"),
+                 "--serial-dir", str(serial_dir),
+                 "--json-out", str(out)],
+                capture_output=True, text=True)
+            data = json.loads(out.read_text())
+            self.assertNotEqual(proc.returncode, 0,
+                                "a silent emulator must not exit 0")
+            # The decisive one: the kernel must not be claimed to have run.
+            for check in data["checks"]:
+                if check["name"] in ("the kernel executed",
+                                     "the kernel reached its final marker",
+                                     "the 64-bit loader was entered"):
+                    self.assertNotEqual(check["state"], PASS,
+                                        "verdict came from the stale file: %s" % check)
+
+    def test_qemu_that_never_starts_overwrites_the_old_log(self):
+        """Startup failure must not leave the previous run's bytes behind."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = pathlib.Path(tmp)
+            serial_dir = tmpdir / "ovmf64"
+            serial_dir.mkdir()
+            log = serial_dir / "efi64-serial.log"
+            log.write_text(full_log(), encoding="latin-1")
+            subprocess.run(
+                [sys.executable, str(ROOT / "tests" / "ovmf_boot64.py"),
+                 "--no-build", "--qemu", "/nonexistent/qemu",
+                 "--ovmf-code", str(ROOT / "Makefile"),
+                 "--ovmf-vars", str(ROOT / "Makefile"),
+                 "--serial-dir", str(serial_dir),
+                 "--json-out", str(tmpdir / "report.json")],
+                capture_output=True, text=True)
+            # Either the file is gone or it no longer claims a completed boot.
+            if log.exists():
+                self.assertNotIn("PC5-64-DONE", log.read_text(encoding="latin-1"),
+                                 "a stale log survived a failed run")
+
+
 if __name__ == "__main__":
     unittest.main()
