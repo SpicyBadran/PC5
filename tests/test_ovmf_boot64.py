@@ -91,11 +91,13 @@ def walk_line(addr, note="probe", path="PPP-", size="2m", identity=1):
             % (va, path, size, pa, identity, note))
 
 
-def walk_ok(count=14, summary=14, addresses=None, failed=0):
+def walk_ok(count=14, summary=14, addresses=None, failed=0, include_summary=True):
     """A passing walk with `count` genuine records and a matching summary."""
     addrs = list(addresses if addresses is not None else _D1_ADDRS)
     notes = list(_D1_NOTES) + ["extra"] * len(addrs)
     body = "".join(walk_line(a, notes[i]) for i, a in enumerate(addrs[:count]))
+    if not include_summary:
+        return body
     return "PC5-64-PTWALK span probes=%d failed=%d\n%s" % (summary, failed, body)
 
 
@@ -533,13 +535,19 @@ class TheD1TerminusRuleTests(unittest.TestCase):
         seen = ovmf_boot64.observe("")
         seen["walk_probes"] = 14
         seen["walk_failed"] = 0
+        seen["walk_summary_count"] = 1
+        seen["walk_summaries"] = [{"line": 1, "probes": 14, "failed": 0}]
         # A full, correct address set, so the coverage check is satisfied and
-        # these tests isolate the terminus rule they are about.
+        # these tests isolate the terminus rule they are about.  `pa` must equal
+        # `va` and the identity flag must agree with that: D1 now recomputes
+        # identity from the addresses instead of trusting the flag, so a fixture
+        # that left pa at 0 would fail for a reason unrelated to the terminus.
         seen["walk_samples"] = [
             {"va": "0" if a == 0 else "0x%x" % a, "va_value": a,
              "path": path if a == 0 else "PPP-",
              "size": size if a == 0 else "2m",
-             "pa": "0x0", "identity": True, "note": "n"}
+             "pa": "0x0" if a == 0 else "0x%x" % a, "pa_value": a,
+             "identity": size != "none", "note": "n"}
             for a in ovmf_boot64.D1_EXPECTED_ADDRESSES]
         ovmf_boot64.evaluate(report, seen, run)
         verdict = [c for c in report.checks if c["name"].startswith("[D1] every probe reached")]
@@ -1134,6 +1142,159 @@ class EveryRawMarkerMustParse(unittest.TestCase):
         self.assertTrue(checks["[D2] every allocation asked for at least one page"]["state"]
                         == PASS)
         self.assertEqual(report.data["d2_allocations"]["raw_markers"], 5)
+
+
+
+class D1RecomputesIdentityFromTheAddresses(unittest.TestCase):
+    """F1-A: identity is a property of va and pa, not of the kernel's flag.
+
+    The driver used to accept `identity=1` as proof.  A record claiming
+    `pa=0x1000` for `va=0x50000000` therefore passed, and the flag it trusted is
+    precisely the field that would be wrong when the mapping is broken.  Each
+    test below keeps all 14 addresses, the exact coverage set and a single valid
+    summary, so nothing but the address comparison can reject the log.
+    """
+
+    NAME = "[D1] every probed address translated to itself"
+
+    def _checks(self, walk):
+        report = judge(full_log(walk=walk))
+        return {c["name"]: c for c in report.checks}, report
+
+    def _swap(self, addr, replacement):
+        """Replace exactly one genuine record, keeping coverage complete.
+
+        Matched on the record prefix rather than on a regenerated line, because
+        walk_ok() gives each probe its real note and walk_line()'s default would
+        not equal it.  A silent no-op here would leave the log valid and make
+        these tests pass for the wrong reason, so the substitution is asserted.
+        """
+        full = walk_ok()
+        original = [line for line in full.splitlines()
+                    if line.startswith("PC5-64-PTWALK va=%s "
+                                       % ("0" if addr == 0 else "0x%x" % addr))]
+        self.assertEqual(len(original), 1, "expected exactly one record for that address")
+        swapped = full.replace(original[0] + "\n", replacement)
+        self.assertNotEqual(swapped, full, "the substitution did not apply")
+        return swapped
+
+    def test_pa_differing_from_va_fails_even_when_the_flag_claims_identity(self):
+        walk = self._swap(0x50000000,
+                          "PC5-64-PTWALK va=0x50000000 path=PPP- size=2m"
+                          " pa=0x1000 identity=1 note=in-1gib\n")
+        checks, _ = self._checks(walk)
+        self.assertEqual(checks[self.NAME]["state"], FAIL)
+        self.assertIn("did not translate to their own address",
+                      checks[self.NAME]["detail"])
+
+    def test_the_address_comparison_alone_causes_the_rejection(self):
+        # Prove the failure is not a count, marker or coverage problem: those
+        # checks must all still pass while this one fails.
+        walk = self._swap(0x50000000,
+                          "PC5-64-PTWALK va=0x50000000 path=PPP- size=2m"
+                          " pa=0x1000 identity=1 note=in-1gib\n")
+        checks, _ = self._checks(walk)
+        self.assertEqual(checks[self.NAME]["state"], FAIL)
+        self.assertEqual(checks["[D1] the walk covered all required addresses"]["state"], PASS)
+        self.assertEqual(checks["[D1] exactly one span summary was reported"]["state"], PASS)
+        self.assertEqual(checks["[D1] every identity probe resolved"]["state"], PASS)
+        self.assertEqual(checks["[D1] every probe reached a terminal mapping with no gap"]["state"], PASS)
+
+    def test_an_identity_flag_that_denies_a_real_mapping_fails(self):
+        walk = self._swap(0x50000000,
+                          "PC5-64-PTWALK va=0x50000000 path=PPP- size=2m"
+                          " pa=0x50000000 identity=0 note=in-1gib\n")
+        checks, _ = self._checks(walk)
+        self.assertEqual(checks[self.NAME]["state"], FAIL)
+        self.assertIn("contradicts", checks[self.NAME]["detail"])
+
+    def test_a_corrupted_physical_address_fails(self):
+        # One wrong hex digit, with everything else untouched.
+        walk = walk_ok().replace("pa=0x40000000", "pa=0x4000000b")
+        checks, _ = self._checks(walk)
+        self.assertEqual(checks[self.NAME]["state"], FAIL)
+
+    def test_pa_none_never_counts_as_identity(self):
+        walk = self._swap(0x50000000,
+                          "PC5-64-PTWALK va=0x50000000 path=P--- size=none"
+                          " pa=none identity=0 note=in-1gib\n")
+        checks, _ = self._checks(walk)
+        self.assertEqual(checks[self.NAME]["state"], FAIL)
+
+    def test_all_fourteen_consistent_probes_pass(self):
+        checks, report = self._checks(walk_ok())
+        self.assertEqual(checks[self.NAME]["state"], PASS)
+        pairs = report.data["d1_addresses"]["identity_pairs"]
+        self.assertEqual(len(pairs), 14)
+        self.assertTrue(all(p["pa_equals_va"] for p in pairs))
+
+    def test_the_artifact_records_both_the_flag_and_the_recomputation(self):
+        walk = self._swap(0x50000000,
+                          "PC5-64-PTWALK va=0x50000000 path=PPP- size=2m"
+                          " pa=0x1000 identity=1 note=in-1gib\n")
+        _, report = self._checks(walk)
+        bad = [p for p in report.data["d1_addresses"]["identity_pairs"]
+               if not p["pa_equals_va"]]
+        self.assertEqual(len(bad), 1)
+        self.assertEqual(bad[0]["flag"], True,
+                         "the kernel's claim is preserved next to the refutation")
+
+
+class D1RejectsMultipleSpanSummaries(unittest.TestCase):
+    """F1-B: exactly one span summary, because two summaries are two claims.
+
+    `re.search` returned the first summary and ignored the rest, so a second
+    line claiming `failed=9` was invisible and the run passed.
+    """
+
+    NAME = "[D1] exactly one span summary was reported"
+    COVERAGE = "[D1] the walk covered all required addresses"
+
+    def _checks(self, walk):
+        report = judge(full_log(walk=walk))
+        return {c["name"]: c for c in report.checks}, report
+
+    def _body(self):
+        return walk_ok(include_summary=False)
+
+    def test_one_valid_summary_passes(self):
+        checks, _ = self._checks(self._body() + "PC5-64-PTWALK span probes=14 failed=0\n")
+        self.assertEqual(checks[self.NAME]["state"], PASS)
+
+    def test_two_identical_summaries_fail(self):
+        walk = self._body() + ("PC5-64-PTWALK span probes=14 failed=0\n"
+                               "PC5-64-PTWALK span probes=14 failed=0\n")
+        checks, _ = self._checks(walk)
+        self.assertEqual(checks[self.NAME]["state"], FAIL)
+        self.assertIn("identical duplicates", checks[self.NAME]["detail"])
+
+    def test_two_contradictory_summaries_fail(self):
+        walk = self._body() + ("PC5-64-PTWALK span probes=14 failed=0\n"
+                               "PC5-64-PTWALK span probes=14 failed=9\n")
+        checks, _ = self._checks(walk)
+        self.assertEqual(checks[self.NAME]["state"], FAIL)
+        self.assertIn("contradictory", checks[self.NAME]["detail"])
+
+    def test_a_valid_summary_followed_by_a_malformed_one_fails(self):
+        walk = self._body() + ("PC5-64-PTWALK span probes=14 failed=0\n"
+                               "PC5-64-PTWALK span probes=14 failed=0 trailing\n")
+        checks, _ = self._checks(walk)
+        self.assertEqual(checks[self.COVERAGE]["state"], FAIL)
+        self.assertIn("malformed", checks[self.COVERAGE]["detail"])
+
+    def test_a_malformed_summary_before_a_valid_one_fails(self):
+        walk = self._body() + ("PC5-64-PTWALK span probes=x failed=0\n"
+                               "PC5-64-PTWALK span probes=14 failed=0\n")
+        checks, _ = self._checks(walk)
+        self.assertEqual(checks[self.COVERAGE]["state"], FAIL)
+        self.assertIn("malformed", checks[self.COVERAGE]["detail"])
+
+    def test_an_absent_summary_is_not_tested_rather_than_failed(self):
+        # The walk never ran: that is an unexecuted stage, not a bad one.
+        report = judge(full_log(walk=walk_ok(include_summary=False)))
+        states = {c["name"]: c["state"] for c in report.checks}
+        self.assertEqual(states["[D1] the live page tables were walked"], NOT_TESTED)
+        self.assertNotIn(self.NAME, states)
 
 
 if __name__ == "__main__":

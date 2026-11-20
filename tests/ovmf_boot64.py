@@ -446,7 +446,7 @@ def _raw_markers(lines, prefix):
 def strict_records(text):
     """Parse every raw marker, or record why one could not be parsed.
 
-    Returns (walk_samples, allocs, malformed).  `malformed` holds one entry per
+    Returns (walk_samples, allocs, malformed, summaries).  `malformed` holds one entry per
     raw marker that did not match its grammar, including its line number and the
     line itself, so a fault can be reported against the line it came from rather
     than as an anonymous count.
@@ -464,23 +464,41 @@ def strict_records(text):
             malformed.append({"marker": "PTWALK", "line": i + 1,
                               "text": line.strip()[:200]})
             continue
+        # `pa` is kept numerically as well as textually.  D1 used to judge
+        # identity from the kernel's own `identity=` flag and never compared the
+        # two addresses it printed, so a record claiming `pa=0x1000` for
+        # `va=0x50000000` passed as long as the flag said 1.  "none" has no
+        # numeric value and is preserved as None so it cannot be silently
+        # treated as zero.
+        pa_text = match.group(4)
         walk_samples.append({
             "va": match.group(1), "va_value": int(match.group(1), 0),
             "path": match.group(2), "size": match.group(3),
-            "pa": match.group(4), "identity": match.group(5) == "1",
+            "pa": pa_text,
+            "pa_value": None if pa_text == "none" else int(pa_text, 0),
+            "identity": match.group(5) == "1",
             "note": match.group(6),
         })
 
     # A `PC5-64-PTWALK` line that is neither a detailed record nor the span
-    # summary is a marker nobody can interpret, so it is malformed too.
+    # summary is a marker nobody can interpret, so it is malformed too.  Every
+    # *valid* summary is collected rather than only the first: `re.search` used
+    # to return one and ignore the rest, so a second summary claiming failures
+    # was invisible.
+    summaries = []
     for i, line in enumerate(lines):
         if "PC5-64-PTWALK" not in line:
             continue
         if PTWALK_DETAIL_PREFIX in line:
             continue
-        if not PTWALK_SUMMARY_RE.match(line):
+        match = PTWALK_SUMMARY_RE.match(line)
+        if not match:
             malformed.append({"marker": "PTWALK", "line": i + 1,
                               "text": line.strip()[:200]})
+            continue
+        summaries.append({"line": i + 1,
+                          "probes": int(match.group(1)),
+                          "failed": int(match.group(2))})
 
     for i, line in enumerate(lines):
         if LOADER_ALLOC_PREFIX not in line:
@@ -502,16 +520,23 @@ def strict_records(text):
             "verdict": match.group(9),
         })
 
-    return walk_samples, allocs, malformed
+    return walk_samples, allocs, malformed, summaries
 
 
 # -------------------------------------------------------------- observation
 def observe(text):
     """Extract only what the log actually shows."""
-    walk_samples, allocs, malformed = strict_records(text)
+    walk_samples, allocs, malformed, summaries = strict_records(text)
 
-    walk = re.search(r"^\s*PC5-64-PTWALK span probes=(\d+) failed=(\d+)\s*$",
-                     text, re.MULTILINE)
+    # Exactly one span summary is valid.  Every summary has already been parsed
+    # or recorded as malformed; what remains is multiplicity.  The old
+    # `re.search` read the first and ignored the rest, so
+    # "probes=14 failed=0" followed by "probes=14 failed=9" was reported as a
+    # clean walk with zero failures.
+    # The first summary drives the count comparison; multiplicity itself is
+    # judged by the caller against `walk_summary_count`, so a contradictory
+    # second summary is reported as duplication rather than as a missing walk.
+    walk = summaries[0] if summaries else None
     # `va=0` and `pa=0` carry no 0x prefix: the loader's serial_hex() prints a
     # bare "0" for zero (kernel64/serial64.c, boot/uefi64/uefi64_main.c).  The
     # grammar accepts both spellings or the probe at address 0 is dropped -
@@ -536,8 +561,12 @@ def observe(text):
         "long_mode_ok": "PC5-64BIT-LONG-MODE-OK" in text,
         "done": "PC5-64-DONE" in text,
         "allocs": allocs,
-        "walk_probes": int(walk.group(1)) if walk else None,
-        "walk_failed": int(walk.group(2)) if walk else None,
+        "walk_probes": walk["probes"] if walk else None,
+        "walk_failed": walk["failed"] if walk else None,
+        # All summaries and their count, so the caller can name duplication and
+        # contradiction precisely instead of just saying "not exactly one".
+        "walk_summaries": summaries,
+        "walk_summary_count": len(summaries),
         "walk_samples": walk_samples,
         # Raw marker counts and every unparseable marker, so a caller can prove
         # that the parsed records account for all of them.
@@ -679,10 +708,25 @@ def evaluate(report, seen, run):
                  "the markers are present but not in stage order")
 
     # ------------------------------------------------- D1: runtime page tables
-    if seen["walk_probes"] is None:
+    # Three states, not two.  No summary at all means the walk never ran
+    # (NOT_TESTED).  More than one summary means the log is not one coherent
+    # walk, which is a failure even when the copies agree: two summaries are two
+    # claims, and the driver cannot know which describes the boot.
+    summary_count = seen["walk_summary_count"]
+    if summary_count == 0:
         report.record("[D1] the live page tables were walked", NOT_TESTED,
                       "no PC5-64-PTWALK span= summary; the walk did not run")
     else:
+        if summary_count > 1:
+            distinct = {(s["probes"], s["failed"]) for s in seen["walk_summaries"]}
+            report.check("[D1] exactly one span summary was reported", False,
+                         "%d span summaries (lines %s); %s"
+                         % (summary_count,
+                            ", ".join(str(s["line"]) for s in seen["walk_summaries"]),
+                            "identical duplicates" if len(distinct) == 1
+                            else "contradictory: %s" % sorted(distinct)))
+        else:
+            report.check("[D1] exactly one span summary was reported", True)
         report.check("[D1] every identity probe resolved",
                      seen["walk_failed"] == 0,
                      "%d of %d probes failed" % (seen["walk_failed"], seen["walk_probes"]))
@@ -743,6 +787,15 @@ def evaluate(report, seen, run):
             "summary_count": seen["walk_probes"],
             "raw_detailed_markers": seen["raw_walk_markers"],
             "malformed": [m["text"] for m in walk_malformed],
+            "summary_count": seen["walk_summary_count"],
+            # pa == va as recomputed here from the two printed addresses, with
+            # the kernel's flag alongside it so a disagreement is visible in the
+            # artifact rather than only in a pass/fail bit.
+            "identity_pairs": [{"va": s["va"], "pa": s["pa"],
+                                "flag": s["identity"],
+                                "pa_equals_va": (s["pa_value"] is not None
+                                                 and s["pa_value"] == s["va_value"])}
+                               for s in seen["walk_samples"]],
         }
         # The walk must terminate at a *mapping*, and the path must be
         # consistent with the size it claims.  "Terminal" is not "the last
@@ -765,8 +818,35 @@ def evaluate(report, seen, run):
                       % (len(inconsistent),
                          [(s["note"], s["path"], s["size"]) for s in inconsistent])
                       if inconsistent else ""))
+        # Identity is recomputed from the two addresses the kernel printed.  The
+        # previous version read the kernel's own `identity=` flag, which is a
+        # claim made by the code under test: a record saying `pa=0x1000` for
+        # `va=0x50000000` passed as long as the flag said 1, and the flag is
+        # exactly the thing that would be wrong.  Three separate defects are
+        # named here so a failure points at the right one:
+        #   - pa != va                      (not an identity translation)
+        #   - identity flag disagrees with pa == va   (self-contradictory record)
+        #   - pa is "none"                  (no translation at all)
+        not_identity = [s for s in seen["walk_samples"]
+                        if s["pa_value"] is None or s["pa_value"] != s["va_value"]]
+        lying_flag = [s for s in seen["walk_samples"]
+                      if s["pa_value"] is not None
+                      and s["identity"] != (s["pa_value"] == s["va_value"])]
+        identity_problems = []
+        if not_identity:
+            identity_problems.append(
+                "%d probe(s) did not translate to their own address: %s"
+                % (len(not_identity),
+                   [(s["note"], s["va"], s["pa"]) for s in not_identity[:6]]))
+        if lying_flag:
+            identity_problems.append(
+                "%d probe(s) whose identity flag contradicts their addresses: %s"
+                % (len(lying_flag),
+                   [(s["note"], s["va"], s["pa"], s["identity"])
+                    for s in lying_flag[:6]]))
         report.check("[D1] every probed address translated to itself",
-                     all(s["identity"] for s in seen["walk_samples"]) and bool(seen["walk_samples"]),
+                     bool(seen["walk_samples"]) and not identity_problems,
+                     "; ".join(identity_problems) if identity_problems else
                      "a probe resolved somewhere other than its own address")
 
     # -------------------------------------------------- D2: allocation bounds
