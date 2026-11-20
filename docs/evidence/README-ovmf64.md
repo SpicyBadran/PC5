@@ -33,20 +33,33 @@ all 14 identity probes and both allocation checks before printing `PC5-64-DONE`.
 
 A real OVMF run **writes into `efi64.img`**. Firmware stores variable data there,
 creating an `NVVARS` file in the image's root directory once the boot progresses
-far enough to persist its variables; subsequent boots read it back. This was
-observed directly: a freshly built image has root entries `PC5EFI`, `EFI`,
-`KERNEL64BIN`, and after one boot it also has `NVVARS`, with ~201 bytes changed
-outside the BPB and root directory.
+far enough to persist its variables; subsequent boots read it back. A freshly
+built image has root entries `PC5EFI`, `EFI`, `KERNEL64BIN`; after one boot it
+also has `NVVARS`.
+
+The two transitions cost different amounts, measured by diffing the image either
+side of a boot:
+
+| transition | bytes changed | FAT | root directory | data area |
+|---|---|---|---|---|
+| first boot (creates `NVVARS`) | ~881 | 8 | 46 | 827 |
+| later boot (updates it) | ~201 | 0 | 1 | 200 |
+
+So the mutations span the FAT, the root directory and the data area - not one
+region. The first boot is the larger change because it allocates clusters and
+writes a new directory entry; later boots rewrite the variable contents in place.
+
+These are **observed measurements from one OVMF build**, not a promised byte
+count: a different firmware version, a different variable set, or a run that
+persists more or less state will produce different numbers. What generalises is
+the direction - the image is modified on boot, and it is modified again on every
+subsequent boot.
 
 So do not assume the image is pristine after a run. The *variable-store template*
 (`--ovmf-vars`) is copied fresh per run, which keeps runs independent of each
 other, but that says nothing about the disk image: it is a mutable FAT12 volume
 that firmware may modify. Where a pristine starting state matters, rebuild it
 (`make uefi64`) rather than reusing one that has already been booted.
-
-Not every run is claimed to produce identical mutations - what firmware writes
-depends on its own variable handling, and this note records the effect that was
-observed, not a guarantee that every run writes the same bytes.
 
 What it does **not** prove: nothing about physical hardware, nothing about the
 Sony boot chain, and nothing about the 32-bit path. `make ovmf-test` is a
