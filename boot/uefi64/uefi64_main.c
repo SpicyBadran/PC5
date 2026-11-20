@@ -259,14 +259,22 @@ static void validate_loader_placement(efi_handle image, struct pc5_boot64 *boot_
  * actually wrote, and `end` is derived from those two - never from a constant
  * or from what the loader expected.  The kernel64/alloc64.c verdict logic is
  * reused verbatim so the loader's arithmetic is the arithmetic under test. */
-static void report_allocation(u64 requested_max, u64 pages, u64 returned_base)
+static void report_allocation(const char *purpose, u64 requested_max, u64 pages,
+                              u64 returned_base)
 {
     struct pc5_alloc_check check;
 
     pc5_alloc_check(&check, requested_max, pages, returned_base,
                     PC5_IDENTITY_LIMIT);
 
-    serial_write("PC5-64-LOADER-ALLOC type=max-address pages=");
+    /* The purpose names the call site.  Without it the gate can only count
+     * allocation records, not establish that the five mandatory allocations each
+     * happened: a boot that skipped the stack allocation and made an extra map
+     * buffer would still present five well-formed records.  Page counts are not
+     * a substitute - they are tuning parameters and two of them coincide. */
+    serial_write("PC5-64-LOADER-ALLOC purpose=");
+    serial_write(purpose);
+    serial_write(" type=max-address pages=");
     serial_dec(pages);
     serial_write(" requested-max=");
     serial_hex(requested_max);
@@ -287,7 +295,7 @@ static void report_allocation(u64 requested_max, u64 pages, u64 returned_base)
     serial_write("\n");
 }
 
-static void *alloc_below_4g(u64 pages, u64 *physical)
+static void *alloc_below_4g(const char *purpose, u64 pages, u64 *physical)
 {
     if (pages == 0 || pages > (PC5_IDENTITY_LIMIT / 4096ull))
         return 0;
@@ -299,7 +307,7 @@ static void *alloc_below_4g(u64 pages, u64 *physical)
 
     /* Report before deciding, so a rejected allocation still leaves evidence of
      * what firmware returned rather than only a bare failure. */
-    report_allocation(requested_max, pages, address);
+    report_allocation(purpose, requested_max, pages, address);
     if (EFI_ERROR(status) || address == 0)
         return 0;
 
@@ -639,7 +647,7 @@ static void collect_rsdp(struct pc5_boot64 *boot_info)
 static struct pc5_memdesc64 *memmap_and_exit(efi_handle image, u64 *out_entries)
 {
     u64 buffer_pages = MEMMAP_BUFFER_PAGES;
-    void *buffer = alloc_below_4g(buffer_pages, 0);
+    void *buffer = alloc_below_4g("memmap-buffer", buffer_pages, 0);
     if (!buffer)
         die("memmap-allocate");
     /* Where `buffer` actually came from.  Growing the map has to release it, and
@@ -648,7 +656,7 @@ static struct pc5_memdesc64 *memmap_and_exit(efi_handle image, u64 *out_entries)
     u64 buffer_physical = (u64)(unsigned long)buffer;
     u64 out_pages = (MEMMAP_ENTRIES_MAX * sizeof(struct pc5_memdesc64) + 4095) / 4096;
     u64 out_physical = 0;
-    struct pc5_memdesc64 *out = alloc_below_4g(out_pages, &out_physical);
+    struct pc5_memdesc64 *out = alloc_below_4g("memmap-out", out_pages, &out_physical);
     if (!out)
         die("memmap-copy-allocate");
 
@@ -678,7 +686,7 @@ static struct pc5_memdesc64 *memmap_and_exit(efi_handle image, u64 *out_entries)
              * so refusing here keeps a violated assumption loud. */
             if (boot_services_gone)
                 die("memmap-grow-after-exit");
-            void *grown = alloc_below_4g(buffer_pages * 2, 0);
+            void *grown = alloc_below_4g("memmap-grow", buffer_pages * 2, 0);
             if (!grown)
                 die("memmap-grow");
             /* Release the old buffer *after* the new one exists, so a failure to
@@ -791,7 +799,7 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
      * maps exactly one region and the kernel will validate every pointer against
      * it.  Each requirement is asserted rather than assumed. */
     u64 boot_info_physical = 0;
-    struct pc5_boot64 *boot_info = alloc_below_4g(1, &boot_info_physical);
+    struct pc5_boot64 *boot_info = alloc_below_4g("bootinfo", 1, &boot_info_physical);
     if (!boot_info)
         die("bootinfo-allocate");
     require_below_span("bootinfo", boot_info_physical, sizeof(struct pc5_boot64));
@@ -823,7 +831,7 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
     collect_rsdp(boot_info);
 
     u64 pt_physical = 0;
-    if (!alloc_below_4g(PC5_PT_PAGES, &pt_physical))
+    if (!alloc_below_4g("pagetables", PC5_PT_PAGES, &pt_physical))
         die("pagetable-allocate");
     require_below_span("pagetable", pt_physical, PC5_PT_PAGES * PC5_PT_PAGE);
     unsigned long mapped = pc5_pt_build_identity(pt_physical, PC5_PT_SPAN);
@@ -867,7 +875,7 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
     serial_write("\n");
 
     u64 stack_physical = 0;
-    if (!alloc_below_4g(KERNEL_STACK_PAGES, &stack_physical))
+    if (!alloc_below_4g("stack", KERNEL_STACK_PAGES, &stack_physical))
         die("stack-allocate");
     require_below_span("stack", stack_physical, KERNEL_STACK_PAGES * 4096);
     boot_info->stack_top = stack_physical + KERNEL_STACK_PAGES * 4096;

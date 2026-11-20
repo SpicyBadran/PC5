@@ -169,7 +169,14 @@ class StubFirmware64Tests(unittest.TestCase):
     def test_the_loader_reports_the_allocation_firmware_actually_performed(self):
         _, trace = self.run_once()
         serial = trace.serial
-        self.assertIn("PC5-64-LOADER-ALLOC type=max-address", serial)
+        # The record must name the allocation's purpose: without it a reader (and
+        # the driver) can only count allocations, not identify them.
+        self.assertIn("PC5-64-LOADER-ALLOC purpose=bootinfo type=max-address", serial)
+        for purpose in ("bootinfo", "pagetables", "stack",
+                        "memmap-buffer", "memmap-out"):
+            self.assertEqual(
+                serial.count("PC5-64-LOADER-ALLOC purpose=%s " % purpose), 1,
+                "each mandatory allocation appears exactly once: %s" % purpose)
         # The bound must be the last mappable byte of the span, not the span
         # length and not zero.
         self.assertIn("requested-max=0xffffffff", serial)

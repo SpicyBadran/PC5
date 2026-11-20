@@ -71,6 +71,35 @@ VARS_CANDIDATES = [
 
 # Firmware messages that mean the boot stopped in firmware, not in PC5 code.
 # They are not failures of ours, but they are also not evidence of a boot.
+# The 14 virtual addresses the D1 walk must visit, in the order the kernel
+# emits them: every GiB boundary from below, at, and above, plus the start of
+# the span and its inclusive upper end.  They are spelled out here rather than
+# derived from the kernel source so that a change to either side is a mismatch
+# a human has to reconcile, not something that silently tracks along.
+D1_EXPECTED_ADDRESSES = (
+    0x00000000,  # start of the range
+    0x3FFFFFFF,  # last byte below 1 GiB
+    0x40000000,  # 1 GiB boundary
+    0x40000001,  # first byte above it
+    0x50000000,  # inside region 1
+    0x7FFFFFFF,  # last byte below 2 GiB
+    0x80000000,  # 2 GiB boundary
+    0x80000001,
+    0x90000000,  # inside region 2
+    0xBFFFFFFF,  # last byte below 3 GiB
+    0xC0000000,  # 3 GiB boundary
+    0xC0000001,
+    0xD0000000,  # inside region 3
+    0xFFFFFFFF,  # inclusive upper end of the 4 GiB span
+)
+
+# Every allocation the loader must make on a normal boot, by purpose.  The
+# memory-map growth allocation is deliberately absent: it only happens when
+# firmware reports EFI_BUFFER_TOO_SMALL, and a correct boot never takes it.
+D2_MANDATORY_PURPOSES = ("bootinfo", "pagetables", "stack",
+                         "memmap-buffer", "memmap-out")
+D2_CONDITIONAL_PURPOSES = ("memmap-grow",)
+
 FIRMWARE_NO_BOOT = [
     "BdsDxe: No bootable option",
     "No bootable option or device was found",
@@ -387,24 +416,35 @@ def run_qemu(qemu, code, vars_template, image, vars_path, serial_path,
 def observe(text):
     """Extract only what the log actually shows."""
     allocs = []
+    # `purpose` is required: it names the call site, and without it the gate can
+    # only count records rather than prove the five mandatory allocations all
+    # happened.  A record missing the field is still parsed (with purpose=None)
+    # so the driver can say so, rather than silently ignoring the line.
     for match in re.finditer(
-            r"PC5-64-LOADER-ALLOC type=(\S+) pages=(\d+) requested-max=0x([0-9a-fA-F]+)"
+            r"PC5-64-LOADER-ALLOC(?: purpose=(\S+))? type=(\S+) pages=(\d+)"
+            r" requested-max=0x([0-9a-fA-F]+)"
             r" returned-base=0x([0-9a-fA-F]+) end=0x([0-9a-fA-F]+)"
             r" within-bound=(\d) within-limit=(\d) verdict=(\S+)", text):
         allocs.append({
-            "type": match.group(1),
-            "pages": int(match.group(2)),
-            "requested_max": int(match.group(3), 16),
-            "returned_base": int(match.group(4), 16),
-            "end": int(match.group(5), 16),
-            "within_bound": match.group(6) == "1",
-            "within_limit": match.group(7) == "1",
-            "verdict": match.group(8),
+            "purpose": match.group(1),
+            "type": match.group(2),
+            "pages": int(match.group(3)),
+            "requested_max": int(match.group(4), 16),
+            "returned_base": int(match.group(5), 16),
+            "end": int(match.group(6), 16),
+            "within_bound": match.group(7) == "1",
+            "within_limit": match.group(8) == "1",
+            "verdict": match.group(9),
         })
 
     walk = re.search(r"PC5-64-PTWALK span probes=(\d+) failed=(\d+)", text)
+    # `va=0` and `pa=0` carry no 0x prefix: the loader's serial_hex() prints a
+    # bare "0" for zero (kernel64/serial64.c, boot/uefi64/uefi64_main.c).  The
+    # pattern must accept both spellings or the probe at address 0 is silently
+    # dropped - which is exactly what happened: the previous `va=0x` pattern
+    # parsed 13 of the 14 real probes while the summary still said probes=14.
     walks = re.findall(
-        r"PC5-64-PTWALK va=0x([0-9a-fA-F]+) path=(\S+) size=(\S+) pa=(\S+)"
+        r"PC5-64-PTWALK va=(0x[0-9a-fA-F]+|0) path=(\S+) size=(\S+) pa=(0x[0-9a-fA-F]+|0|none)"
         r" identity=(\d) note=(\S+)", text)
 
     return {
@@ -427,7 +467,8 @@ def observe(text):
         "allocs": allocs,
         "walk_probes": int(walk.group(1)) if walk else None,
         "walk_failed": int(walk.group(2)) if walk else None,
-        "walk_samples": [{"va": w[0], "path": w[1], "size": w[2], "pa": w[3],
+        "walk_samples": [{"va": w[0], "va_value": int(w[0], 0), "path": w[1],
+                          "size": w[2], "pa": w[3],
                           "identity": w[4] == "1", "note": w[5]} for w in walks],
         "loader_failures": sorted(set(re.findall(r"PC5-64-LOADER-FAIL=(\S+)", text))),
         "loader_rejects": sorted(set(re.findall(r"PC5-64-LOADER-REJECT (\S+)", text))),
@@ -461,10 +502,20 @@ class Evidence:
 
     def record(self, name, state, detail=""):
         assert state in (PASS, FAIL, UNAVAILABLE, NOT_TESTED), state
-        self.checks.append({"name": name, "state": state, "detail": str(detail)})
+        # A PASS carries no detail.  Callers pass explanatory text that is
+        # written for the failing case ("timed out after 2.5s", "no PC5-64-DONE"),
+        # and keeping it next to a PASS produces a record that contradicts
+        # itself: the committed reports said `state: PASS` with
+        # `detail: "timed out after 2.5s with no terminal marker"`.  The console
+        # already suppressed these; the JSON did not, and the JSON is the
+        # artifact anyone reads later.  The state is authoritative, so the
+        # explanation is dropped when the state says there was no problem.
+        self.checks.append({"name": name, "state": state,
+                            "detail": "" if state == PASS else str(detail)})
 
     def check(self, name, ok, detail=""):
-        self.record(name, PASS if ok else FAIL, detail)
+        # `detail` is only meaningful for the failing branch by construction.
+        self.record(name, PASS if ok else FAIL, detail if not ok else "")
 
     def count(self, state):
         return sum(1 for c in self.checks if c["state"] == state)
@@ -487,6 +538,8 @@ def report_timeout(report, run):
     re-implemented this check would be testing itself, and a mutated driver
     would still pass it - which is exactly what a negative control found.
     """
+    # The detail is a description of the timeout, so it belongs only to the
+    # failing case; Evidence.record() drops it when the state is PASS.
     report.check("the machine was stopped on evidence, not on the clock",
                  not run["timed_out"],
                  "timed out after %ss with no terminal marker" % run["seconds"])
@@ -559,9 +612,45 @@ def evaluate(report, seen, run):
         report.check("[D1] every identity probe resolved",
                      seen["walk_failed"] == 0,
                      "%d of %d probes failed" % (seen["walk_failed"], seen["walk_probes"]))
+        # Coverage is established from the detailed records, never from the
+        # summary.  The summary is a claim by the code under test: the previous
+        # version of this check accepted `probes=14` alongside a single detail
+        # record, so a kernel that printed one probe and reported fourteen would
+        # have passed.  The count, the address set and the summary must all agree.
+        actual = [sample["va_value"] for sample in seen["walk_samples"]]
+        expected = list(D1_EXPECTED_ADDRESSES)
+        missing = [hex(a) for a in expected if a not in actual]
+        unexpected = [hex(a) for a in actual if a not in expected]
+        duplicates = sorted({hex(a) for a in actual if actual.count(a) > 1})
+        # Name every problem, not just the first: substituting one address for
+        # another is simultaneously a missing address and an unexpected one, and
+        # a detail that mentions only half of that sends the reader looking in
+        # the wrong place.
+        problems = []
+        if len(actual) != len(expected):
+            problems.append("%d detailed probe record(s), expected %d"
+                            % (len(actual), len(expected)))
+        if missing:
+            problems.append("missing address(es): %s" % ", ".join(missing))
+        if unexpected:
+            problems.append("unexpected address(es): %s" % ", ".join(unexpected))
+        if duplicates:
+            problems.append("duplicated address(es): %s" % ", ".join(duplicates))
+        if seen["walk_probes"] != len(actual):
+            problems.append("summary claims %d probes but %d detailed record(s) "
+                            "exist" % (seen["walk_probes"], len(actual)))
+        d1_detail = ("; ".join(problems) if problems else
+                     "%d probes covering every required address" % len(actual))
         report.check("[D1] the walk covered all required addresses",
-                     seen["walk_probes"] >= 14,
-                     "only %d probes" % seen["walk_probes"])
+                     (len(actual) == len(expected) and not missing
+                      and not unexpected and not duplicates
+                      and seen["walk_probes"] == len(actual)),
+                     d1_detail)
+        report.data["d1_addresses"] = {
+            "expected": [hex(a) for a in expected],
+            "observed": [hex(a) for a in actual],
+            "summary_count": seen["walk_probes"],
+        }
         # The walk must terminate at a *mapping*, and the path must be
         # consistent with the size it claims.  "Terminal" is not "the last
         # character is P": a 2 MiB page sets PDE.PS and never descends to a PT,
@@ -588,6 +677,39 @@ def evaluate(report, seen, run):
                      "a probe resolved somewhere other than its own address")
 
     # -------------------------------------------------- D2: allocation bounds
+    # Completeness first: every mandatory purpose must appear exactly once.
+    # Validating only the records that happen to be present is what let a single
+    # allocation satisfy D2, so a boot that skipped the page-table allocation
+    # would have passed as long as the allocation it did make was correct.
+    purposes = [a["purpose"] for a in seen["allocs"]]
+    missing_p = [p for p in D2_MANDATORY_PURPOSES if p not in purposes]
+    duplicated_p = sorted({p for p in purposes
+                           if p is not None and purposes.count(p) > 1})
+    unknown_p = sorted({a["purpose"] for a in seen["allocs"]
+                        if a["purpose"] is not None
+                        and a["purpose"] not in D2_MANDATORY_PURPOSES
+                        and a["purpose"] not in D2_CONDITIONAL_PURPOSES})
+    untagged = [a for a in seen["allocs"] if a["purpose"] is None]
+    problems_p = []
+    if missing_p:
+        problems_p.append("missing mandatory purpose(s): %s" % ", ".join(missing_p))
+    if duplicated_p:
+        problems_p.append("duplicated purpose(s): %s" % ", ".join(duplicated_p))
+    if unknown_p:
+        problems_p.append("unknown purpose(s): %s" % ", ".join(unknown_p))
+    if untagged:
+        problems_p.append("%d allocation record(s) carry no purpose" % len(untagged))
+    report.check("[D2] every mandatory allocation was reported exactly once",
+                 not problems_p,
+                 "; ".join(problems_p) if problems_p else
+                 "all %d mandatory purposes present" % len(D2_MANDATORY_PURPOSES))
+    report.data["d2_allocations"] = {
+        "mandatory": list(D2_MANDATORY_PURPOSES),
+        "observed": [a["purpose"] for a in seen["allocs"] if a["purpose"]],
+        "conditional_observed": [a["purpose"] for a in seen["allocs"]
+                                 if a["purpose"] in D2_CONDITIONAL_PURPOSES],
+    }
+
     if not seen["allocs"]:
         report.record("[D2] allocations stayed inside their bound", NOT_TESTED,
                       "no allocation was observed")
@@ -615,6 +737,14 @@ def evaluate(report, seen, run):
                      not over_bound, "%d allocation(s) over bound" % len(over_bound))
         report.check("[D2] no allocation ended outside the identity range",
                      not over_limit, "%d allocation(s) past the limit" % len(over_limit))
+        # The type is part of the contract: EFI_ALLOCATE_MAX_ADDRESS is the only
+        # allocation mode that bounds by address, and a record claiming a
+        # different mode would make the bound checks below meaningless.
+        wrong_type = [a for a in seen["allocs"] if a["type"] != "max-address"]
+        report.check("[D2] every allocation used EFI_ALLOCATE_MAX_ADDRESS",
+                     not wrong_type,
+                     "%d record(s) with another type: %s" %
+                     (len(wrong_type), sorted({a["type"] for a in wrong_type})))
         report.check("[D2] the requested maximum was the inclusive limit",
                      all(a["requested_max"] == (4 << 30) - 1 for a in seen["allocs"]),
                      "firmware was asked for a bound other than 0xffffffff")
@@ -696,7 +826,10 @@ def main(argv=None):
         if not os.path.exists(path):
             report.record("the %s artifact exists" % name, FAIL, "missing: %s" % path)
             return finish(report, args, code=1)
-        report.record("the %s artifact exists" % name, PASS, path)
+        # The path is context, not an explanation of a failure, so it belongs in
+        # the data section rather than in the check detail - a PASS detail is now
+        # empty by construction.
+        report.record("the %s artifact exists" % name, PASS)
 
     # The report states image_format: fat12 superfloppy.  Assert it here, from
     # the bytes, because that claim is made by this gate and a wrong image

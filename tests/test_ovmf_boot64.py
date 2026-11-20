@@ -36,16 +36,70 @@ PASS, FAIL, UNAVAILABLE, NOT_TESTED = (drv.PASS, drv.FAIL, drv.UNAVAILABLE,
 # can remove or reorder exactly one thing and show that is what changed.
 FIRMWARE = "BdsDxe: loading Boot0001 \"UEFI QEMU HARDDISK\" from PciRoot(0x0)\n"
 LOADER_BANNER = "PC5-64-LOADER-BANNER 64-bit UEFI path (experimental)\n"
-LOADER_ALLOC = ("PC5-64-LOADER-ALLOC type=max-address pages=1 requested-max=0xffffffff"
-                " returned-base=0x200c000 end=0x200cfff within-bound=1 within-limit=1"
-                " verdict=ok\n")
+def alloc_line(purpose="bootinfo", pages=1, base=0x200c000, requested_max=0xFFFFFFFF,
+               alloc_type="max-address", verdict="ok"):
+    """One ALLOC record in the loader's exact grammar."""
+    end = base + pages * 4096 - 1
+    return ("PC5-64-LOADER-ALLOC purpose=%s type=%s pages=%d requested-max=0x%x"
+            " returned-base=0x%x end=0x%x within-bound=1 within-limit=1"
+            " verdict=%s\n" % (purpose, alloc_type, pages, requested_max, base, end,
+                               verdict))
+
+
+# Every mandatory allocation, in the order the loader makes them, with the page
+# counts the loader actually uses.  A fixture with one allocation of any shape
+# would satisfy the old checks; this one exercises the completeness contract.
+ALLOC_BASES = [0x200c000, 0x2010000, 0x2014000, 0x2018000, 0x201c000]
+ALLOC_PAGES = {"bootinfo": 1, "pagetables": 6, "stack": 4,
+               "memmap-buffer": 8, "memmap-out": 8}
+
+
+def allocs_ok(omit=None, extra=""):
+    out = []
+    for i, purpose in enumerate(("bootinfo", "pagetables", "stack",
+                                 "memmap-buffer", "memmap-out")):
+        if purpose == omit:
+            continue
+        out.append(alloc_line(purpose, ALLOC_PAGES[purpose], ALLOC_BASES[i]))
+    return "".join(out) + extra
+
+
+LOADER_ALLOC = allocs_ok()
 LOADER_EBS = "PC5-64-LOADER exit-boot-services=ok attempts=1\n"
 LOADER_JUMP = "PC5-64-LOADER-JUMP entry=0x100000\n"
 KERNEL_BANNER = "PC5-64-BANNER PC5 64-bit kernel entry\n"
 KERNEL_ENV = "PC5-64-ENV cr0=0x80010033 cr3=0x201a000 cr4=0x20 efer=0xd01\n"
 KERNEL_PAGING = "PC5-64-PAGING enabled=1 root=0x201a000 pages=6 span=0x100000000\n"
-WALK_OK = ("PC5-64-PTWALK span probes=14 failed=0\n"
-           "PC5-64-PTWALK va=0x0 path=PPP- size=2m pa=0x0 identity=1 note=start\n")
+# A genuine passing walk: one detailed record per required address, spelled the
+# way the kernel spells them.  Address zero prints as a bare `0` on both sides,
+# because serial_hex() emits "0" rather than "0x0" for zero - a fixture that
+# used "0x0" would not match a real log, and the driver would then be agreeing
+# with its own fixture instead of the kernel's output.
+_D1_NOTES = ("start", "below-1gib", "at-1gib", "above-1gib", "in-1gib",
+             "below-2gib", "at-2gib", "above-2gib", "in-2gib",
+             "below-3gib", "at-3gib", "above-3gib", "in-3gib", "upper-end")
+_D1_ADDRS = (0, 0x3FFFFFFF, 0x40000000, 0x40000001, 0x50000000, 0x7FFFFFFF,
+             0x80000000, 0x80000001, 0x90000000, 0xBFFFFFFF, 0xC0000000,
+             0xC0000001, 0xD0000000, 0xFFFFFFFF)
+
+
+def walk_line(addr, note="probe", path="PPP-", size="2m", identity=1):
+    """One PTWALK record in the loader's exact grammar."""
+    va = "0" if addr == 0 else "0x%x" % addr
+    pa = "0" if addr == 0 else "0x%x" % addr
+    return ("PC5-64-PTWALK va=%s path=%s size=%s pa=%s identity=%d note=%s\n"
+            % (va, path, size, pa, identity, note))
+
+
+def walk_ok(count=14, summary=14, addresses=None, failed=0):
+    """A passing walk with `count` genuine records and a matching summary."""
+    addrs = list(addresses if addresses is not None else _D1_ADDRS)
+    notes = list(_D1_NOTES) + ["extra"] * len(addrs)
+    body = "".join(walk_line(a, notes[i]) for i, a in enumerate(addrs[:count]))
+    return "PC5-64-PTWALK span probes=%d failed=%d\n%s" % (summary, failed, body)
+
+
+WALK_OK = walk_ok()
 LONG_MODE_OK = "PC5-64BIT-LONG-MODE-OK\n"
 DONE = "PC5-64-DONE\n"
 
@@ -436,7 +490,7 @@ class FirmwareAbiContractTests(unittest.TestCase):
         flags=0xafafafed and a framebuffer address of 0xafafafafafafafaf.
         """
         source = (ROOT / "boot" / "uefi64" / "uefi64_main.c").read_text()
-        allocate = source.index("boot_info = alloc_below_4g(1")
+        allocate = source.index('alloc_below_4g("bootinfo", 1, &boot_info_physical)')
         zero = source.index("raw[offset] = 0", allocate)
         magic = source.index("boot_info->magic =", allocate)
         self.assertLess(zero, magic,
@@ -472,8 +526,14 @@ class TheD1TerminusRuleTests(unittest.TestCase):
         seen = ovmf_boot64.observe("")
         seen["walk_probes"] = 14
         seen["walk_failed"] = 0
-        seen["walk_samples"] = [{"va": "0", "path": path, "size": size,
-                                 "pa": "0x0", "identity": True, "note": "n"}]
+        # A full, correct address set, so the coverage check is satisfied and
+        # these tests isolate the terminus rule they are about.
+        seen["walk_samples"] = [
+            {"va": "0" if a == 0 else "0x%x" % a, "va_value": a,
+             "path": path if a == 0 else "PPP-",
+             "size": size if a == 0 else "2m",
+             "pa": "0x0", "identity": True, "note": "n"}
+            for a in ovmf_boot64.D1_EXPECTED_ADDRESSES]
         ovmf_boot64.evaluate(report, seen, run)
         verdict = [c for c in report.checks if c["name"].startswith("[D1] every probe reached")]
         self.assertEqual(len(verdict), 1)
@@ -752,6 +812,231 @@ class TheImageIsReallyAFat12Superfloppy(unittest.TestCase):
             ovmf_boot64.check_fat12_superfloppy(report, str(junk))
             verdict = report.checks[0]
             self.assertEqual(verdict["state"], ovmf_boot64.FAIL)
+
+
+
+class D1RequiresEveryProbeNotJustAClaim(unittest.TestCase):
+    """Coverage must come from the detail records, not from the summary count.
+
+    The defect this replaces: the driver accepted `probes=14` on the summary line
+    while only one detailed record existed, so a kernel that walked one address
+    and reported fourteen would have passed.  Each case below would have passed
+    the old check.
+    """
+
+    def _state(self, log):
+        report = judge(log)
+        return {c["name"]: c for c in report.checks}
+
+    def _coverage(self, log):
+        return self._state(log)["[D1] the walk covered all required addresses"]
+
+    def test_the_real_fourteen_record_walk_passes(self):
+        self.assertEqual(self._coverage(full_log())[ "state"], PASS)
+
+    def test_a_lone_probe_claiming_fourteen_is_rejected(self):
+        # The exact fixture the old driver accepted: 1 record, summary says 14.
+        log = full_log(walk="PC5-64-PTWALK span probes=14 failed=0\n"
+                            + walk_line(0, "start"))
+        check = self._coverage(log)
+        self.assertEqual(check["state"], FAIL)
+        self.assertIn("1 detailed probe record", check["detail"])
+
+    def test_a_missing_expected_address_is_rejected(self):
+        addrs = [a for a in ovmf_boot64.D1_EXPECTED_ADDRESSES if a != 0x50000000]
+        check = self._coverage(full_log(walk=walk_ok(addresses=addrs)))
+        self.assertEqual(check["state"], FAIL)
+        self.assertIn("missing address", check["detail"])
+        self.assertIn("0x50000000", check["detail"])
+
+    def test_a_duplicated_address_is_rejected(self):
+        addrs = list(ovmf_boot64.D1_EXPECTED_ADDRESSES)
+        addrs[4] = addrs[3]          # two records for the same address
+        check = self._coverage(full_log(walk=walk_ok(addresses=addrs)))
+        self.assertEqual(check["state"], FAIL)
+        self.assertIn("duplicated", check["detail"])
+
+    def test_an_unexpected_address_is_rejected(self):
+        addrs = list(ovmf_boot64.D1_EXPECTED_ADDRESSES)
+        addrs[4] = 0x60000000        # inside region 1 but not a required probe
+        check = self._coverage(full_log(walk=walk_ok(addresses=addrs)))
+        self.assertEqual(check["state"], FAIL)
+        self.assertIn("unexpected address", check["detail"])
+        self.assertIn("0x60000000", check["detail"])
+
+    def test_a_summary_that_disagrees_with_the_details_is_rejected(self):
+        # 14 genuine records, summary claims 15: contradictory.
+        check = self._coverage(full_log(walk=walk_ok(summary=15)))
+        self.assertEqual(check["state"], FAIL)
+        self.assertIn("summary claims 15", check["detail"])
+
+    def test_a_malformed_probe_record_is_not_counted_as_coverage(self):
+        # A truncated record cannot be parsed, so it cannot satisfy a slot.
+        bad = "PC5-64-PTWALK va=0x50000000 path=PPP\n"      # stops mid-record
+        log = full_log(walk=walk_ok() .replace(walk_line(0x50000000, "in-1gib"), bad))
+        check = self._coverage(log)
+        self.assertEqual(check["state"], FAIL)
+        self.assertIn("0x50000000", check["detail"])
+
+
+
+class D2RequiresEveryMandatoryAllocation(unittest.TestCase):
+    """Completeness, not just correctness of whatever was reported.
+
+    The defect this replaces: one well-formed allocation record satisfied D2, so
+    a boot that never allocated page tables would pass as long as the allocation
+    it did make was inside its bound.
+    """
+
+    NAME = "[D2] every mandatory allocation was reported exactly once"
+
+    def _check(self, alloc):
+        report = judge(full_log(alloc=alloc))
+        return {c["name"]: c for c in report.checks}[self.NAME]
+
+    def test_all_five_mandatory_allocations_pass(self):
+        self.assertEqual(self._check(allocs_ok())["state"], PASS)
+
+    def test_the_real_single_record_fixture_is_now_rejected(self):
+        # The exact shape the old driver accepted: one allocation, nothing else.
+        check = self._check(alloc_line("bootinfo", 1))
+        self.assertEqual(check["state"], FAIL)
+        for purpose in ("pagetables", "stack", "memmap-buffer", "memmap-out"):
+            self.assertIn(purpose, check["detail"])
+
+    def test_each_mandatory_purpose_is_required(self):
+        for purpose in ("bootinfo", "pagetables", "stack",
+                        "memmap-buffer", "memmap-out"):
+            with self.subTest(purpose=purpose):
+                check = self._check(allocs_ok(omit=purpose))
+                self.assertEqual(check["state"], FAIL)
+                self.assertIn(purpose, check["detail"])
+
+    def test_a_duplicated_purpose_is_rejected(self):
+        dup = alloc_line("stack", 4, 0x3000000)
+        check = self._check(allocs_ok(extra=dup))
+        self.assertEqual(check["state"], FAIL)
+        self.assertIn("duplicated", check["detail"])
+
+    def test_an_unknown_purpose_is_rejected(self):
+        bogus = alloc_line("mystery", 2, 0x3000000)
+        check = self._check(allocs_ok(extra=bogus))
+        self.assertEqual(check["state"], FAIL)
+        self.assertIn("unknown", check["detail"])
+
+    def test_a_record_without_a_purpose_is_rejected(self):
+        untagged = ("PC5-64-LOADER-ALLOC type=max-address pages=2 requested-max=0xffffffff"
+                    " returned-base=0x3000000 end=0x3001fff within-bound=1"
+                    " within-limit=1 verdict=ok\n")
+        check = self._check(allocs_ok(extra=untagged))
+        self.assertEqual(check["state"], FAIL)
+        self.assertIn("no purpose", check["detail"])
+
+    def test_the_conditional_growth_record_is_accepted_when_present(self):
+        grow = alloc_line("memmap-grow", 16, 0x3000000)
+        report = judge(full_log(alloc=allocs_ok(extra=grow)))
+        checks = {c["name"]: c for c in report.checks}
+        self.assertEqual(checks[self.NAME]["state"], PASS)
+        self.assertEqual(report.data["d2_allocations"]["conditional_observed"],
+                         ["memmap-grow"])
+
+    def test_growth_is_not_required(self):
+        # Absent growth must not be reported as a failure.
+        self.assertEqual(self._check(allocs_ok())["state"], PASS)
+
+    def test_a_bad_verdict_still_fails(self):
+        alloc = allocs_ok().replace("verdict=ok", "verdict=over-bound", 1)
+        report = judge(full_log(alloc=alloc))
+        checks = {c["name"]: c for c in report.checks}
+        self.assertEqual(checks["[D2] every allocation verdict was ok"]["state"], FAIL)
+
+    def test_a_wrong_allocation_type_is_rejected(self):
+        alloc = allocs_ok() + alloc_line("memmap-out", 8, 0x3000000, alloc_type="any-pages")
+        # Replace rather than add, to keep the purpose set valid.
+        alloc = allocs_ok().replace(
+            "purpose=memmap-out type=max-address",
+            "purpose=memmap-out type=any-pages")
+        report = judge(full_log(alloc=alloc))
+        checks = {c["name"]: c for c in report.checks}
+        self.assertEqual(
+            checks["[D2] every allocation used EFI_ALLOCATE_MAX_ADDRESS"]["state"], FAIL)
+
+    def test_an_over_bound_range_is_still_rejected(self):
+        # A 4-page range based at 0x2014000 ends at 0x2017fff, so asking for no
+        # more than 0x2010000 is a real contradiction between the request and the
+        # range the loader used.
+        alloc = allocs_ok().replace(
+            "purpose=stack type=max-address pages=4 requested-max=0xffffffff",
+            "purpose=stack type=max-address pages=4 requested-max=0x2010000")
+        report = judge(full_log(alloc=alloc))
+        checks = {c["name"]: c for c in report.checks}
+        self.assertEqual(
+            checks["[D2] no allocation ended above the requested maximum"]["state"], FAIL)
+
+    def test_a_range_outside_the_identity_span_is_still_rejected(self):
+        alloc = allocs_ok().replace(
+            "purpose=stack type=max-address pages=4 requested-max=0xffffffff"
+            " returned-base=0x2014000 end=0x2017fff",
+            "purpose=stack type=max-address pages=4 requested-max=0xffffffff"
+            " returned-base=0x100000000 end=0x100003fff")
+        report = judge(full_log(alloc=alloc))
+        checks = {c["name"]: c for c in report.checks}
+        self.assertEqual(
+            checks["[D2] no allocation ended outside the identity range"]["state"], FAIL)
+
+    def test_mismatched_end_arithmetic_is_still_rejected(self):
+        alloc = allocs_ok().replace("end=0x2017fff", "end=0x2017000")
+        report = judge(full_log(alloc=alloc))
+        checks = {c["name"]: c for c in report.checks}
+        self.assertEqual(
+            checks["[D2] reported ends match base + pages*4096 - 1"]["state"], FAIL)
+
+
+class APassNeverCarriesAFailureExplanation(unittest.TestCase):
+    """The JSON must not contradict itself.
+
+    The committed reports contained `state: PASS` beside
+    `detail: "timed out after 2.5s with no terminal marker"`.  The state was
+    right; the retained explanation was not, and the JSON is the artifact a
+    reader trusts later.
+    """
+
+    def test_a_passing_check_drops_its_explanation(self):
+        report = ovmf_boot64.Evidence()
+        report.check("x", True, "timed out after 2.5s with no terminal marker")
+        self.assertEqual(report.checks[0]["state"], PASS)
+        self.assertEqual(report.checks[0]["detail"], "")
+
+    def test_a_failing_check_keeps_its_explanation(self):
+        report = ovmf_boot64.Evidence()
+        report.check("x", False, "missing address(es): 0x50000000")
+        self.assertEqual(report.checks[0]["state"], FAIL)
+        self.assertIn("0x50000000", report.checks[0]["detail"])
+
+    def test_unavailable_and_not_tested_keep_their_explanations(self):
+        report = ovmf_boot64.Evidence()
+        report.record("u", UNAVAILABLE, "qemu not found")
+        report.record("n", NOT_TESTED, "stage never ran")
+        self.assertEqual(report.checks[0]["detail"], "qemu not found")
+        self.assertEqual(report.checks[1]["detail"], "stage never ran")
+
+    def test_a_successful_run_does_not_claim_it_timed_out(self):
+        # A run that ended on evidence, having lived past a shorter deadline.
+        run = {"serial": full_log(), "seconds": 2.5, "timed_out": False,
+               "stopped_on": "evidence", "returncode": 0,
+               "stderr": "", "command": ["qemu"]}
+        report = ovmf_boot64.Evidence()
+        ovmf_boot64.report_timeout(report, run)
+        check = report.checks[0]
+        self.assertEqual(check["state"], PASS)
+        self.assertEqual(check["detail"], "",
+                         "a successful run must not carry a timeout explanation")
+
+    def test_no_passing_check_in_a_full_run_carries_a_detail(self):
+        report = judge(full_log())
+        offenders = [c for c in report.checks
+                     if c["state"] == PASS and c["detail"]]
+        self.assertEqual(offenders, [])
 
 
 if __name__ == "__main__":
