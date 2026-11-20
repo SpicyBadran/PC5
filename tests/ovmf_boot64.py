@@ -100,6 +100,30 @@ def normalise_serial(text):
     return re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", text)
 
 
+def sibling_vars(code_path):
+    """The variable store installed next to a code image, if there is one.
+
+    Distribution and manual installs name the pair inconsistently, and the
+    variable store that matches a CODE image is the one installed beside it under
+    the same stem.  Pairing a 2 MiB code image with an unrelated variable store
+    yields firmware that never reaches the boot manager, so this is tried before
+    anything installed system-wide - but it returns None rather than guessing.
+    """
+    if not code_path:
+        return None
+    stem = os.path.basename(code_path)
+    directory = os.path.dirname(os.path.abspath(code_path))
+    names = []
+    if "CODE" in stem:
+        names.append(stem.replace("CODE", "VARS"))
+    names.append(stem.replace(".fd", "_VARS.fd"))
+    for name in names:
+        path = os.path.join(directory, name)
+        if os.path.exists(path):
+            return path
+    return None
+
+
 def find_first(candidates):
     for path in candidates:
         if path and os.path.exists(path):
@@ -153,7 +177,7 @@ def describe_firmware(code_path):
 
 # ---------------------------------------------------------------- QEMU run
 def run_qemu(qemu, code, vars_template, image, vars_path, serial_path,
-             timeout, memory_mb=512, device="ahci"):
+             timeout, memory_mb=512, device="ahci", data_dir=None):
     """Boot `image` once and stop the machine as soon as the log settles.
 
     The device arrangement differs from the 32-bit driver on purpose.  That one
@@ -193,6 +217,12 @@ def run_qemu(qemu, code, vars_template, image, vars_path, serial_path,
         "-drive", "if=pflash,format=raw,unit=0,readonly=on,file=%s" % code,
         "-drive", "if=pflash,format=raw,unit=1,file=%s" % vars_path,
     ] + storage + ["-serial", "stdio"]
+    # QEMU loads its VGA option ROM and other data files from a prefix
+    # directory.  A distribution build has them where it was configured to look;
+    # a relocatable or prebuilt binary does not, and then QEMU exits before ever
+    # reaching the firmware.  That failure is UNAVAILABLE, not a boot failure.
+    if data_dir:
+        command += ["-L", data_dir]
 
     started = time.time()
     process = subprocess.Popen(command, stdout=subprocess.PIPE,
@@ -431,15 +461,27 @@ def evaluate(report, seen, run):
         report.check("[D1] the walk covered all required addresses",
                      seen["walk_probes"] >= 14,
                      "only %d probes" % seen["walk_probes"])
-        # A path that stops partway ("P---", "PP--") is a disconnected span; the
-        # walk reached a table but nothing under it.  Requiring a terminal leaf
-        # is what makes "failed=0" mean translations exist rather than attempts.
-        stubby = [s for s in seen["walk_samples"] if not s["path"].endswith("P")
-                  or s["size"] == "none"]
-        report.check("[D1] every probe reached a terminal page-table entry",
-                     not stubby,
-                     "%d probe(s) stopped at a table level: %s" %
-                     (len(stubby), [s["note"] for s in stubby]))
+        # The walk must terminate at a *mapping*, and the path must be
+        # consistent with the size it claims.  "Terminal" is not "the last
+        # character is P": a 2 MiB page sets PDE.PS and never descends to a PT,
+        # so the loader prints pt_present=false and a legitimate complete walk
+        # looks exactly like "PPP-".  Judging that a stub would have failed every
+        # correct 2 MiB mapping - which is the only kind the loader makes.
+        stubby = [s for s in seen["walk_samples"] if s["size"] == "none"]
+        # A size with no matching level is a contradiction in the log, not a
+        # translation: `2m` requires the PD entry to be the terminus, `4k` and
+        # `1g` require every level above and below it to be present.
+        terminal = {"4k": "PPPP", "2m": "PPP-", "1g": "PP--"}
+        inconsistent = [s for s in seen["walk_samples"]
+                        if s["size"] != "none" and s["path"] != terminal[s["size"]]]
+        report.check("[D1] every probe reached a terminal mapping with no gap",
+                     not stubby and not inconsistent,
+                     "%d probe(s) stopped at a table level: %s%s" %
+                     (len(stubby), [s["note"] for s in stubby],
+                      "; %d with a path that does not match the reported size: %s"
+                      % (len(inconsistent),
+                         [(s["note"], s["path"], s["size"]) for s in inconsistent])
+                      if inconsistent else ""))
         report.check("[D1] every probed address translated to itself",
                      all(s["identity"] for s in seen["walk_samples"]) and bool(seen["walk_samples"]),
                      "a probe resolved somewhere other than its own address")
@@ -507,6 +549,10 @@ def main(argv=None):
     parser.add_argument("--loader", default=os.path.join(BUILD, "uefi64", "BOOTX64.EFI"))
     parser.add_argument("--kernel", default=os.path.join(BUILD, "kernel64", "KERNEL64.BIN"))
     parser.add_argument("--qemu")
+    parser.add_argument("--qemu-data-dir",
+                        default=os.environ.get("PC5_QEMU_DATA_DIR"),
+                        help="QEMU's ROM/keymap directory (-L), for builds whose "
+                             "data files are not in the default prefix")
     parser.add_argument("--ovmf-code")
     parser.add_argument("--ovmf-vars")
     parser.add_argument("--timeout", type=int, default=300)
@@ -570,6 +616,17 @@ def main(argv=None):
     qemu = args.qemu or os.environ.get("PC5_QEMU") or shutil.which("qemu-system-x86_64")
     code = args.ovmf_code or find_first(CODE_CANDIDATES)
     vars_template = args.ovmf_vars or find_first(VARS_CANDIDATES)
+    if not args.ovmf_vars:
+        # Distributions and manual installs name the pair inconsistently
+        # (`OVMF_CODE.fd`/`OVMF_VARS.fd`, `..._4M.fd`, `..._pure-efi.fd`, and
+        # `fd` vs `fd.fd`).  The variable store that belongs with a CODE image is
+        # the one installed beside it under the same stem, so try that before
+        # falling back to whatever happens to be installed system-wide: pairing a
+        # 2 MiB code image with an unrelated 128 KiB variable store produces a
+        # firmware that never gets as far as the boot manager.
+        candidate = sibling_vars(args.ovmf_code)
+        if candidate and (not vars_template or not os.path.exists(vars_template)):
+            vars_template = candidate
 
     # Existence, not truthiness: a path the caller supplied but that is not
     # there is a different situation only in the message it deserves, never in
@@ -590,7 +647,8 @@ def main(argv=None):
     elif not os.path.exists(vars_template):
         missing.append("the OVMF vars template does not exist: %s" % vars_template)
 
-    report.data["qemu"] = {"path": qemu, "version": qemu_version(qemu)}
+    report.data["qemu"] = {"path": qemu, "version": qemu_version(qemu),
+                           "data_dir": args.qemu_data_dir or None}
     report.data["firmware"] = describe_firmware(code)
 
     if missing:
@@ -626,7 +684,8 @@ def main(argv=None):
 
     try:
         run = run_qemu(qemu, code, vars_template, args.image, vars_path, serial_path,
-                       args.timeout, args.memory_mb, args.device)
+                       args.timeout, args.memory_mb, args.device,
+                       args.qemu_data_dir)
     except OSError as exc:
         # The emulator exists as a path but could not be executed.  That is an
         # environment problem: nothing about the boot was observed either way.
@@ -669,8 +728,13 @@ def finish(report, args, code):
     data = report.as_dict()
     print("=" * 68)
     for check in data["checks"]:
+        # A detail line that explains why something failed reads as nonsense next
+        # to a PASS ("no PC5-64-DONE" beside "the kernel reached its final
+        # marker - PASS"), so details are shown only where they are wanted.
+        # They stay in the JSON for every check.
+        show = check["state"] not in (PASS, NOT_TESTED)
         print("  [%-11s] %s%s" % (check["state"], check["name"],
-                                  ("  -- " + check["detail"]) if check["detail"] else ""))
+                                  ("  -- " + check["detail"]) if check["detail"] and show else ""))
     print("-" * 68)
     print("  %d passed, %d failed, %d unavailable, %d not tested"
           % (data["passed"], data["failed"], data["unavailable"], data["not_tested"]))

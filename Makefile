@@ -443,7 +443,8 @@ ovmf-test: $(ISO) $(BUILD)/efi.img
 # setting one cannot silently change the other target's invocation.
 OVMF64_ARGS ?= $(if $(PC5_OVMF_CODE),--ovmf-code $(PC5_OVMF_CODE)) \
               $(if $(PC5_OVMF_VARS),--ovmf-vars $(PC5_OVMF_VARS)) \
-              $(if $(PC5_QEMU),--qemu $(PC5_QEMU))
+              $(if $(PC5_QEMU),--qemu $(PC5_QEMU)) \
+              $(if $(PC5_QEMU_DATA_DIR),--qemu-data-dir $(PC5_QEMU_DATA_DIR))
 
 ovmf-test64: $(BUILD)/efi64.img
 	python3 tests/ovmf_boot64.py --image $(BUILD)/efi64.img \

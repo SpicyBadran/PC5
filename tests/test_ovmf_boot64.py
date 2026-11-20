@@ -18,10 +18,14 @@ import re
 import subprocess
 import sys
 import tempfile
+import os
+import shutil
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
+
+import ovmf_boot64
 
 import ovmf_boot64 as drv  # noqa: E402
 
@@ -41,7 +45,7 @@ KERNEL_BANNER = "PC5-64-BANNER PC5 64-bit kernel entry\n"
 KERNEL_ENV = "PC5-64-ENV cr0=0x80010033 cr3=0x201a000 cr4=0x20 efer=0xd01\n"
 KERNEL_PAGING = "PC5-64-PAGING enabled=1 root=0x201a000 pages=6 span=0x100000000\n"
 WALK_OK = ("PC5-64-PTWALK span probes=14 failed=0\n"
-           "PC5-64-PTWALK va=0x0 path=PPPP size=2m pa=0x0 identity=1 note=start\n")
+           "PC5-64-PTWALK va=0x0 path=PPP- size=2m pa=0x0 identity=1 note=start\n")
 LONG_MODE_OK = "PC5-64BIT-LONG-MODE-OK\n"
 DONE = "PC5-64-DONE\n"
 
@@ -194,7 +198,7 @@ class DisconnectedPageDirectoryIsDetected(unittest.TestCase):
     test_pagetable64.py, including this same defect.
     """
 
-    MUTANT_WALK = ("PC5-64-PTWALK va=0x0 path=PPPP size=2m pa=0x0 identity=1 note=start\n"
+    MUTANT_WALK = ("PC5-64-PTWALK va=0x0 path=PPP- size=2m pa=0x0 identity=1 note=start\n"
                    "PC5-64-PTWALK va=0x40000000 path=P--- size=none pa=none identity=0"
                    " note=no PDPT entry\n"
                    "PC5-64-PTWALK span probes=14 failed=3\n")
@@ -205,14 +209,14 @@ class DisconnectedPageDirectoryIsDetected(unittest.TestCase):
 
     def test_a_walk_that_covered_too_few_addresses_fails(self):
         thin = ("PC5-64-PTWALK span probes=4 failed=0\n"
-                "PC5-64-PTWALK va=0x0 path=PPPP size=2m pa=0x0 identity=1 note=start\n")
+                "PC5-64-PTWALK va=0x0 path=PPP- size=2m pa=0x0 identity=1 note=start\n")
         report = judge(full_log(walk=thin))
         self.assertIn("[D1] the walk covered all required addresses",
                       failed_names(report))
 
     def test_a_non_identity_translation_fails(self):
         wrong = ("PC5-64-PTWALK span probes=14 failed=0\n"
-                 "PC5-64-PTWALK va=0x0 path=PPPP size=2m pa=0x200000 identity=0"
+                 "PC5-64-PTWALK va=0x0 path=PPP- size=2m pa=0x200000 identity=0"
                  " note=start\n")
         report = judge(full_log(walk=wrong))
         self.assertIn("[D1] every probed address translated to itself",
@@ -222,10 +226,10 @@ class DisconnectedPageDirectoryIsDetected(unittest.TestCase):
         # "failed=0" with nothing but table entries reached would be a walk that
         # never got to a page.  The path field is what makes that visible.
         stubby = ("PC5-64-PTWALK span probes=14 failed=0\n"
-                  "PC5-64-PTWALK va=0x0 path=PP-- size=none pa=none identity=0"
+                  "PC5-64-PTWALK va=0x0 path=P--- size=none pa=none identity=0"
                   " note=below-1gib\n")
         report = judge(full_log(walk=stubby))
-        self.assertIn("[D1] every probe reached a terminal page-table entry",
+        self.assertIn("[D1] every probe reached a terminal mapping with no gap",
                       failed_names(report))
 
     def test_the_kernel_failure_marker_fails(self):
@@ -359,6 +363,187 @@ class TheDriverNeverAltersThe32BitPath(unittest.TestCase):
         self.assertFalse(bool(re.search(r"PC5-UEFI:", sixty_four)))
         self.assertFalse(bool(re.search(r"PC5-LOG ", sixty_four)))
         del old  # imported only to prove the module exists and is unchanged
+
+
+class FirmwareAbiContractTests(unittest.TestCase):
+    """Contracts that only break on real firmware, pinned so they cannot regress.
+
+    Everything here was found by running the loader under genuine OVMF, and none
+    of it was detectable from the stub, because the stub had been written to
+    match the loader rather than the specification.
+    """
+
+    def test_locate_handle_is_declared_in_spec_order(self):
+        """UEFI 2.10 7.3.6: LocateHandle(SearchType, Protocol, SearchKey, BufferSize, Buffer).
+
+        The header had BufferSize first and SearchType second, and every caller
+        matched.  Under OVMF each call returned EFI_INVALID_PARAMETER - the size
+        pointer's address arrived as a SearchType - so no volume was ever found
+        and the boot died "kernel-not-found" with the kernel on the very volume
+        it had just been loaded from.
+        """
+        header = (ROOT / "boot" / "uefi" / "efi.h").read_text()
+        declaration = header[header.index("*locate_handle)("):]
+        declaration = declaration[:declaration.index(";")]
+        self.assertLess(declaration.index("search_type"),
+                        declaration.index("buffer_size"),
+                        "SearchType must be the first parameter: " + declaration)
+        self.assertIn("protocol", declaration,
+                      "ByProtocol requires a non-NULL protocol argument")
+
+    def test_every_locate_handle_call_passes_a_protocol_for_by_protocol(self):
+        for name in ("boot/uefi/uefi_main.c", "boot/uefi64/uefi64_main.c"):
+            source = (ROOT / name).read_text()
+            for match in re.finditer(r"locate_handle\(([^;]*)\)", source, re.S):
+                call = match.group(1)
+                args = [a.strip() for a in call.split(",")]
+                if len(args) < 5:
+                    continue        # a different function or a comment
+                self.assertNotEqual(args[0], "0",
+                                    "%s: SearchType must be an enum, not 0" % name)
+                if "BY_PROTOCOL" in args[0]:
+                    self.assertNotEqual(args[1], "0",
+                                        "%s: ByProtocol with a NULL protocol is "
+                                        "EFI_INVALID_PARAMETER" % name)
+
+    def test_the_stub_enforces_the_spec_signature(self):
+        """A stub that mirrors the caller cannot catch a caller bug."""
+        stub = (ROOT / "tests" / "uefi_stub_firmware.py").read_text()
+        signature = stub[stub.index("def svc_locate_handle"):
+                         stub.index("def svc_locate_handle") + 200]
+        self.assertLess(signature.index("search_type"),
+                        signature.index("size_ptr"),
+                        "stub must take SearchType before BufferSize")
+
+    def test_the_entry_stub_preserves_the_image_handle(self):
+        """RCX carries ImageHandle; the .bss zero loop needs RCX as a counter.
+
+        The stub still booted because it reloads RCX, but on real firmware the
+        loader received NULL and every image-handle call failed with
+        EFI_INVALID_PARAMETER.
+        """
+        stub = (ROOT / "boot" / "uefi64" / "bootx64.S").read_text()
+        body = stub[stub.index("_start:"):stub.index("call efi_main64")]
+        self.assertRegex(body, r"movq\s+%rcx,\s*%r",
+                         "ImageHandle (RCX) must be saved before the .bss loop")
+        self.assertRegex(body, r"movq\s+%r\w+,\s*%rcx",
+                         "ImageHandle must be restored into RCX before the call")
+
+    def test_the_boot_info_page_is_zeroed_before_use(self):
+        """AllocatePages returns whatever was on the page.
+
+        OVMF fills freed memory with 0xAF, so an un-zeroed struct arrived with
+        flags=0xafafafed and a framebuffer address of 0xafafafafafafafaf.
+        """
+        source = (ROOT / "boot" / "uefi64" / "uefi64_main.c").read_text()
+        allocate = source.index("boot_info = alloc_below_4g(1")
+        zero = source.index("raw[offset] = 0", allocate)
+        magic = source.index("boot_info->magic =", allocate)
+        self.assertLess(zero, magic,
+                        "the structure must be cleared before its first field")
+
+    def test_an_unmappable_framebuffer_is_reported_not_fatal(self):
+        """Real firmware puts the framebuffer above a 4 GiB identity span.
+
+        OVMF under q35 hands out 0x80000000.  Dying there stopped the boot before
+        the kernel ever ran, which is why no firmware result existed at all.
+        """
+        source = (ROOT / "boot" / "uefi64" / "uefi64_main.c").read_text()
+        self.assertNotIn('die("framebuffer-outside-span")', source,
+                         "an out-of-span framebuffer must not abort the boot")
+        self.assertIn("PC5_BOOT64_F_FRAMEBUFFER_UNSUPPORTED", source)
+
+
+
+class TheD1TerminusRuleTests(unittest.TestCase):
+    """A 2 MiB page is a complete walk that never touches a PT.
+
+    The loader emits `path=PPP- size=2m` for it, because PDE.PS ends the walk at
+    the PD.  A driver that demanded a trailing "P" would fail every correct
+    mapping; one that accepted any non-empty page size would pass a log claiming
+    a 4 KiB page reached through three levels.  These pin both directions.
+    """
+
+    def _judge(self, path, size):
+        report = ovmf_boot64.Evidence()
+        run = {"serial": "", "seconds": 1.0, "timed_out": False,
+               "stopped_on": "evidence", "returncode": 0,
+               "stderr": "", "command": ["qemu"]}
+        seen = ovmf_boot64.observe("")
+        seen["walk_probes"] = 14
+        seen["walk_failed"] = 0
+        seen["walk_samples"] = [{"va": "0", "path": path, "size": size,
+                                 "pa": "0x0", "identity": True, "note": "n"}]
+        ovmf_boot64.evaluate(report, seen, run)
+        verdict = [c for c in report.checks if c["name"].startswith("[D1] every probe reached")]
+        self.assertEqual(len(verdict), 1)
+        return verdict[0]["state"]
+
+    def test_a_2mib_page_is_a_terminal_mapping(self):
+        self.assertEqual(self._judge("PPP-", "2m"), ovmf_boot64.PASS)
+
+    def test_a_4kib_page_reaching_a_pt_is_terminal(self):
+        self.assertEqual(self._judge("PPPP", "4k"), ovmf_boot64.PASS)
+
+    def test_a_1gib_page_stops_at_the_pdpt(self):
+        self.assertEqual(self._judge("PP--", "1g"), ovmf_boot64.PASS)
+
+    def test_a_probe_with_no_mapping_fails(self):
+        self.assertEqual(self._judge("P---", "none"), ovmf_boot64.FAIL)
+
+    def test_a_2mib_claim_without_a_pd_entry_fails(self):
+        # Disconnected span: it says large page but the PD was never reached.
+        self.assertEqual(self._judge("PP--", "2m"), ovmf_boot64.FAIL)
+
+    def test_a_4kib_claim_that_never_reached_a_pt_fails(self):
+        self.assertEqual(self._judge("PPP-", "4k"), ovmf_boot64.FAIL)
+
+
+
+class FirmwarePairDiscoveryTests(unittest.TestCase):
+    """The variable store must be the one that belongs with the code image.
+
+    A pair is not interchangeable across installs: sizes and layout differ, and a
+    mismatched store leaves firmware that never reaches the boot manager.  Guessing
+    is worse than refusing, so the search is limited to a sibling file and the
+    driver reports UNAVAILABLE when there is none.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+
+    def _touch(self, name):
+        path = os.path.join(self.dir, name)
+        with open(path, "wb") as handle:
+            handle.write(b"x")
+        return path
+
+    def test_the_code_stem_is_rewritten_to_vars(self):
+        self._touch("OVMF_CODE.fd")
+        code = self._touch("OVMF_VARS.fd")
+        self.assertEqual(ovmf_boot64.sibling_vars(
+            os.path.join(self.dir, "OVMF_CODE.fd")), code)
+
+    def test_a_suffixed_pair_is_matched(self):
+        self._touch("OVMF_CODE_4M.fd")
+        code = self._touch("OVMF_VARS_4M.fd")
+        self.assertEqual(ovmf_boot64.sibling_vars(
+            os.path.join(self.dir, "OVMF_CODE_4M.fd")), code)
+
+    def test_an_unrelated_neighbour_is_not_used(self):
+        self._touch("OVMF_CODE.fd")
+        self._touch("something-else.fd")
+        self.assertIsNone(ovmf_boot64.sibling_vars(
+            os.path.join(self.dir, "OVMF_CODE.fd")))
+
+    def test_no_code_path_means_no_discovery(self):
+        self.assertIsNone(ovmf_boot64.sibling_vars(None))
+
+    def test_a_missing_vars_file_is_not_reported_as_present(self):
+        """The rule the whole driver exists to keep: absent is not usable."""
+        code = self._touch("OVMF_CODE.fd")
+        self.assertIsNone(ovmf_boot64.sibling_vars(code))
 
 
 if __name__ == "__main__":
