@@ -526,6 +526,7 @@ class StubFirmware:
             72: ("free_pool", self.svc_free_pool),
             152: ("handle_protocol", self.svc_handle_protocol),
             176: ("locate_handle", self.svc_locate_handle),
+            184: ("locate_device_path", self.svc_locate_device_path),
             232: ("exit_boot_services", self.svc_exit_boot_services),
             256: ("set_watchdog_timer", self.svc_set_watchdog_timer),
         }
@@ -1025,16 +1026,55 @@ class StubFirmware:
         self.write(address + 16, text.encode("utf-16-le") + b"\0\0")
         return address
 
-    def svc_locate_handle(self, size_ptr, search_type, _key, buffer):
-        handles = list(self.volumes.keys())
+    def svc_locate_handle(self, search_type, protocol, _key, size_ptr, buffer):
+        """LocateHandle in the order UEFI 2.10 7.3.6 defines it:
+        (SearchType, Protocol, SearchKey, BufferSize, Buffer).
+
+        This parameter order matters.  The stub used to take (size_ptr,
+        search_type, key, buffer) - mirroring a bug in boot/uefi/efi.h that also
+        had BufferSize and SearchType swapped - so the stub and the loader agreed
+        with each other and with nothing else.  Under real OVMF every call
+        returned EFI_INVALID_PARAMETER and no volume was ever found.  A stub that
+        mirrors the caller instead of the specification cannot catch that.
+
+        The spec also requires Protocol to be non-NULL for ByProtocol, and
+        BufferSize to be non-NULL always; both are enforced here so a caller that
+        gets them wrong fails in the harness rather than only on real firmware.
+        """
+        if not size_ptr:
+            return EFI_INVALID_PARAMETER
+        handles = list(self.volumes.keys()) if search_type == 2 else []
+        if search_type == 2 and not protocol:
+            return EFI_INVALID_PARAMETER
         needed = len(handles) * 8
         size = self.read_u64(size_ptr)
+        if buffer and size >= needed and needed == 0:
+            self.write_u64(size_ptr, 0)
+            return EFI_NOT_FOUND
         if not buffer or size < needed:
             self.write_u64(size_ptr, needed)
             return EFI_BUFFER_TOO_SMALL
         for index, handle in enumerate(handles):
             self.write_u64(buffer + index * 8, handle)
         self.write_u64(size_ptr, needed)
+        return EFI_SUCCESS
+
+    def svc_locate_device_path(self, protocol, device_path_ptr, handle_ptr):
+        """LocateDevicePath(Protocol, DevicePath, Device).
+
+        UEFI 2.10 7.3.9.  The loader uses this to find the volume it was loaded
+        from: it takes its own device handle's device path and asks which handle
+        supports EFI_SIMPLE_FILE_SYSTEM_PROTOCOL on it.  Without this slot the
+        table entry was NULL and the loader jumped to address 0 - which is how
+        the absence showed up, as an emulation fault rather than a clean error.
+        """
+        if not protocol or not device_path_ptr or not handle_ptr:
+            return EFI_INVALID_PARAMETER
+        # The stub has exactly one volume; the image was loaded from it.
+        handle = next(iter(self.volumes.keys()), 0)
+        if not handle:
+            return EFI_NOT_FOUND
+        self.write_u64(handle_ptr, handle)
         return EFI_SUCCESS
 
     def svc_exit_boot_services(self, _image, map_key):

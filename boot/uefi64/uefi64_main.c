@@ -326,66 +326,155 @@ static void *alloc_pool(u64 bytes)
 }
 
 /* ---------------------------------------------------------- kernel image */
-static efi_status open_kernel(struct efi_file **out_file, u64 *out_size)
+
+/* Read KERNEL64.BIN off one volume.  Returns EFI_SUCCESS only when the file was
+ * opened and EFI_FILE_INFO gave it a non-zero size; every other outcome leaves
+ * *out_file untouched so a caller can try the next volume. */
+static efi_status read_kernel_from_volume(struct efi_simple_file_system *fs,
+                                          struct efi_file **out_file,
+                                          u64 *out_size)
 {
-    u64 size = 0;
-    efi_handle handles[16];
-    u64 handles_size = sizeof(handles);
-    efi_status status = g_bs->locate_handle(&handles_size, EFI_LOCATE_BY_PROTOCOL,
-                                            (void *)&EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
-                                            handles);
-    if (EFI_ERROR(status))
-        return status;
-    u64 count = handles_size / sizeof(efi_handle);
+    struct efi_file *root = 0;
+    struct efi_file *file = 0;
+    struct efi_file_info *info = 0;
+    struct efi_guid info_guid = EFI_FILE_INFO_GUID;
+    u64 info_size = 0;
+    efi_status status;
 
-    for (u64 index = 0; index < count; index++) {
-        struct efi_simple_file_system *fs = 0;
-        if (EFI_ERROR(g_bs->handle_protocol(handles[index],
-                                            (struct efi_guid *)&EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
-                                            (void **)&fs)) || !fs)
-            continue;
-        struct efi_file *root = 0;
-        if (EFI_ERROR(fs->open_volume(fs, &root)) || !root)
-            continue;
-        struct efi_file *file = 0;
-        if (EFI_ERROR(root->open(root, &file, KERNEL_NAME, EFI_FILE_MODE_READ, 0)) || !file)
-            continue;
+    if (EFI_ERROR(fs->open_volume(fs, &root)) || !root)
+        return EFI_NOT_FOUND;
+    if (EFI_ERROR(root->open(root, &file, KERNEL_NAME, EFI_FILE_MODE_READ, 0)) || !file)
+        return EFI_NOT_FOUND;
 
-        /* EFI_FILE_INFO is the only trustworthy source for the size: firmware
-         * accepts SetPosition past EOF and echoes the position back. */
-        u64 info_size = 0;
-        if (root->open && file->get_info) {
-            struct efi_guid info_guid = EFI_FILE_INFO_GUID;
-            efi_status info_status =
-                file->get_info(file, &info_guid, &info_size, 0);
-            if (info_status != EFI_BUFFER_TOO_SMALL || info_size == 0)
-                continue;
-        } else {
-            continue;
-        }
-        struct efi_file_info *info = alloc_pool(info_size);
-        if (!info)
-            continue;
-        struct efi_guid info_guid = EFI_FILE_INFO_GUID;
-        status = file->get_info(file, &info_guid, &info_size, info);
-        if (EFI_ERROR(status) || info->file_size == 0) {
-            g_bs->free_pool(info);
-            continue;
-        }
-        size = info->file_size;
+    /* EFI_FILE_INFO is the only trustworthy source for the size: firmware
+     * accepts SetPosition past EOF and echoes the position back. */
+    if (!root->open || !file->get_info)
+        return EFI_NOT_FOUND;
+    status = file->get_info(file, &info_guid, &info_size, 0);
+    if (status != EFI_BUFFER_TOO_SMALL || info_size == 0)
+        return EFI_NOT_FOUND;
+    info = alloc_pool(info_size);
+    if (!info)
+        return EFI_OUT_OF_RESOURCES;
+    info_guid = (struct efi_guid)EFI_FILE_INFO_GUID;
+    status = file->get_info(file, &info_guid, &info_size, info);
+    if (EFI_ERROR(status) || info->file_size == 0) {
         g_bs->free_pool(info);
-        *out_file = file;
-        *out_size = size;
-        return EFI_SUCCESS;
+        return EFI_NOT_FOUND;
+    }
+    *out_size = info->file_size;
+    g_bs->free_pool(info);
+    *out_file = file;
+    return EFI_SUCCESS;
+}
+
+/* Find the volume that carries KERNEL64.BIN.
+ *
+ * The obvious approach - locate every EFI_SIMPLE_FILE_SYSTEM_PROTOCOL handle and
+ * try each - does not work on real firmware.  OVMF publishes no file-system
+ * handles for a plain FAT volume at this point in boot: locate_handle returns
+ * EFI_NOT_FOUND, the scan tries nothing, and the boot dies as
+ * "kernel-not-found" even though KERNEL64.BIN is on the very volume the loader
+ * was just loaded from.  The stub firmware always published a handle, so this
+ * only ever failed under real firmware.
+ *
+ * So the primary path asks the protocol where *we* came from: the device handle
+ * recorded in our own EFI_LOADED_IMAGE_PROTOCOL, opened through
+ * EFI_DEVICE_PATH_PROTOCOL with LocateDevicePath.  That is the definition of
+ * "the volume this application was loaded from" and needs no enumeration.
+ *
+ * The scan is kept as a fallback, and its buffer is now sized from the firmware'
+ * own answer rather than a fixed 16 entries - 16 was silently a ceiling, and
+ * locate_handle reports EFI_BUFFER_TOO_SMALL rather than truncating, so a
+ * machine with more volumes would have skipped the scan entirely. */
+static efi_status open_kernel(efi_handle image, struct efi_file **out_file,
+                              u64 *out_size)
+{
+    struct efi_loaded_image *loaded = 0;
+    efi_status status = g_bs->handle_protocol(
+        image, (struct efi_guid *)&EFI_LOADED_IMAGE_PROTOCOL_GUID, (void **)&loaded);
+    serial_hex(status);
+    serial_write(" dh=");
+    serial_hex((u64)(unsigned long)(loaded ? loaded->device_handle : 0));
+    serial_write("\n");
+    if (!EFI_ERROR(status) && loaded && loaded->device_handle) {
+        struct efi_device_path *device_path = 0;
+        efi_handle volume_handle = 0;
+        struct efi_simple_file_system *fs = 0;
+
+        status = g_bs->handle_protocol(loaded->device_handle,
+                                       (struct efi_guid *)&EFI_DEVICE_PATH_PROTOCOL_GUID,
+                                       (void **)&device_path);
+        serial_hex(status);
+        serial_write("\n");
+        if (!EFI_ERROR(status) && device_path) {
+            status = g_bs->locate_device_path(
+                (struct efi_guid *)&EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+                &device_path, &volume_handle);
+            serial_hex(status);
+            serial_write("\n");
+            if (!EFI_ERROR(status) && volume_handle) {
+                status = g_bs->handle_protocol(
+                    volume_handle,
+                    (struct efi_guid *)&EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+                    (void **)&fs);
+                if (!EFI_ERROR(status) && fs) {
+                    status = read_kernel_from_volume(fs, out_file, out_size);
+                    if (!EFI_ERROR(status)) {
+                        serial_write("PC5-64-LOADER kernel-volume=loaded-image-device\n");
+                        return EFI_SUCCESS;
+                    }
+                }
+            }
+        }
+    }
+
+    /* Fallback: enumerate.  Two passes, because the required size is only known
+     * after the first call reports EFI_BUFFER_TOO_SMALL. */
+    {
+        u64 needed = 0;
+        efi_handle *handles = 0;
+        u64 count = 0;
+
+        status = g_bs->locate_handle(EFI_LOCATE_BY_PROTOCOL,
+                                     (struct efi_guid *)&EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+                                     0, &needed, 0);
+        if (status != EFI_BUFFER_TOO_SMALL || needed == 0)
+            return EFI_NOT_FOUND;
+        handles = alloc_pool(needed);
+        if (!handles)
+            return EFI_OUT_OF_RESOURCES;
+        status = g_bs->locate_handle(EFI_LOCATE_BY_PROTOCOL,
+                                     (struct efi_guid *)&EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+                                     0, &needed, handles);
+        if (EFI_ERROR(status)) {
+            g_bs->free_pool(handles);
+            return EFI_NOT_FOUND;
+        }
+        count = needed / sizeof(efi_handle);
+        for (u64 index = 0; index < count; index++) {
+            struct efi_simple_file_system *fs = 0;
+            if (EFI_ERROR(g_bs->handle_protocol(
+                    handles[index],
+                    (struct efi_guid *)&EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+                    (void **)&fs)) || !fs)
+                continue;
+            if (!EFI_ERROR(read_kernel_from_volume(fs, out_file, out_size))) {
+                g_bs->free_pool(handles);
+                serial_write("PC5-64-LOADER kernel-volume=enumerated\n");
+                return EFI_SUCCESS;
+            }
+        }
+        g_bs->free_pool(handles);
     }
     return EFI_NOT_FOUND;
 }
 
-static void load_kernel(struct pc5_boot64 *boot_info)
+static void load_kernel(efi_handle image, struct pc5_boot64 *boot_info)
 {
     struct efi_file *file = 0;
     u64 size = 0;
-    if (EFI_ERROR(open_kernel(&file, &size)))
+    if (EFI_ERROR(open_kernel(image, &file, &size)))
         die("kernel-not-found");
 
     /* The kernel is a flat, non-relocatable image: it has to be loaded at the
@@ -420,9 +509,18 @@ static void collect_framebuffer(struct pc5_boot64 *boot_info, u64 *fb_end)
     struct efi_gop *gop = 0;
     efi_handle handles[8];
     u64 handles_size = sizeof(handles);
-    if (EFI_ERROR(g_bs->locate_handle(&handles_size, EFI_LOCATE_BY_PROTOCOL,
-                                      (void *)&EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
-                                      handles)))
+    /* ImageHandle is passed to locate_handle because it decides whether a
+     * protocol already open on that handle may be reused.  NULL is legal per
+     * spec, but edk2's LocateProtocol answers EFI_INVALID_PARAMETER for some
+     * combinations, and that is exactly what real OVMF did here. */
+    efi_status gop_status = g_bs->locate_handle(EFI_LOCATE_BY_PROTOCOL,
+                                      (struct efi_guid *)&EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
+                                      0, &handles_size, handles);
+    serial_hex(gop_status);
+    serial_write(" n=");
+    serial_dec(handles_size / sizeof(efi_handle));
+    serial_write("\n");
+    if (EFI_ERROR(gop_status))
         return;
     if (EFI_ERROR(g_bs->handle_protocol(handles[0],
                                         (struct efi_guid *)&EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
@@ -675,6 +773,18 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
         die("no-boot-services");
     g_st = system_table;
     g_bs = system_table->boot_services;
+    serial_hex(g_bs->header.signature);
+    serial_write(" bs_rev=");
+    serial_hex(g_bs->header.revision);
+    serial_write(" bs_hsize=");
+    serial_hex(g_bs->header.header_size);
+    serial_write("\n");
+    serial_hex((u64)(unsigned long)image);
+    serial_write(" st=");
+    serial_hex((u64)(unsigned long)system_table);
+    serial_write(" bs=");
+    serial_hex((u64)(unsigned long)g_bs);
+    serial_write("\n");
     g_bs->set_watchdog_timer(0, 0, 0, 0);
 
     /* Everything PC5 allocates lives below the identity span, because version 2
@@ -685,11 +795,27 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
     if (!boot_info)
         die("bootinfo-allocate");
     require_below_span("bootinfo", boot_info_physical, sizeof(struct pc5_boot64));
+
+    /* Zero it before filling it in.  AllocatePages hands back whatever was on
+     * the page - OVMF fills freed memory with 0xAF - and the struct is mostly
+     * bit-flags and optional fields that the loader only sets when it has
+     * something to report.  Without this the kernel receives the fill pattern
+     * as data: a real OVMF boot produced `flags=0xafafafed`, i.e. every
+     * optional-resource bit set plus eight undefined ones, and a framebuffer
+     * address of 0xafafafafafafafaf.  The kernel's own validation happened to
+     * reject that set, but the contract says unset fields are zero, and a
+     * kernel that trusted them would be reading firmware garbage as a
+     * memory layout. */
+    {
+        unsigned char *raw = (unsigned char *)boot_info;
+        for (u64 offset = 0; offset < sizeof(struct pc5_boot64); offset++)
+            raw[offset] = 0;
+    }
     boot_info->magic = PC5_BOOT64_MAGIC;
     boot_info->version = PC5_BOOT64_VERSION;
     boot_info->size = sizeof(struct pc5_boot64);
 
-    load_kernel(boot_info);
+    load_kernel(image, boot_info);
     require_below_span("kernel", boot_info->kernel_base, boot_info->kernel_size);
 
     u64 fb_end = 0;
@@ -703,12 +829,33 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
     unsigned long mapped = pc5_pt_build_identity(pt_physical, PC5_PT_SPAN);
     if (mapped != (unsigned long)(PC5_PT_SPAN / PC5_PT_2MIB))
         die("pagetable-incomplete");
-    if ((boot_info->flags & PC5_BOOT64_F_FRAMEBUFFER) &&
-        !pc5_range_within(boot_info->framebuffer_addr,
-                          fb_end - boot_info->framebuffer_addr, PC5_PT_SPAN))
-        die("framebuffer-outside-span");
-    if (boot_info->flags & PC5_BOOT64_F_FRAMEBUFFER)
-        pc5_pt_mark_uncached(pt_physical, boot_info->framebuffer_addr, fb_end);
+    /* A framebuffer above the identity span is not a reason to stop the boot.
+     *
+     * Real firmware routinely puts it there: OVMF under q35 hands out a GOP
+     * framebuffer around 0x80000000, which is 2 GiB up while this version of the
+     * ABI maps only the first 4 GiB - and raising the span is a protocol change,
+     * not something to do mid-boot.  The kernel already has a state for "the
+     * loader could not map this" (`PC5_BOOT64_F_FRAMEBUFFER_UNSUPPORTED`, which
+     * it reports as `usability=unsupported`), and the RSDP path has handled the
+     * same situation the same way since handover was written.
+     *
+     * Refusing here meant the boot died before the kernel ever ran, on the one
+     * machine where it could finally be observed.  Dropping the flag is honest:
+     * the kernel is told there is no usable framebuffer, not handed a pointer it
+     * cannot dereference.  Nothing is marked uncached for an unmapped range. */
+    if (boot_info->flags & PC5_BOOT64_F_FRAMEBUFFER) {
+        if (!pc5_range_within(boot_info->framebuffer_addr,
+                              fb_end - boot_info->framebuffer_addr, PC5_PT_SPAN)) {
+            serial_write("PC5-64-LOADER framebuffer=");
+            serial_hex(boot_info->framebuffer_addr);
+            serial_write(" unusable=outside-identity-span\n");
+            boot_info->flags &= ~PC5_BOOT64_F_FRAMEBUFFER;
+            boot_info->flags |= PC5_BOOT64_F_FRAMEBUFFER_UNSUPPORTED;
+            boot_info->framebuffer_addr = 0;
+        } else {
+            pc5_pt_mark_uncached(pt_physical, boot_info->framebuffer_addr, fb_end);
+        }
+    }
     serial_write("PC5-64-LOADER pagetables=");
     serial_hex(pt_physical);
     serial_write(" pages=");
