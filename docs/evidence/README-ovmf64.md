@@ -1,12 +1,14 @@
 # 64-bit OVMF evidence
 
-Produced by `make ovmf-test64` on the tree at commit `71f3cbb`, by an independent
-audit of PR #31. This is **firmware-level** evidence for the 64-bit path only.
+Produced by `make ovmf-test64` on the trees at commits `71f3cbb` and `d669b7c`,
+by an independent audit of PR #31. This is **firmware-level** evidence for the 64-bit path only.
 
 | File | What it is |
 |---|---|
 | `ovmf64-serial-71f3cbb.log` | Complete serial output, 4336 bytes, nothing removed |
 | `ovmf64-report-71f3cbb.json` | The driver's machine-readable verdict |
+| `ovmf64-serial-d669b7c.log` | The same boot after the exit-status and stale-log fixes; 4336 bytes |
+| `ovmf64-report-d669b7c.json` | Verdict for that run |
 
 Environment: QEMU 10.0.0 with `edk2-x86_64-code.fd` (3,653,632 B, sha256
 `33090cc0…`), variable store sha256 `67bce200…`, `-machine q35 -m 512 -smp 1`,
