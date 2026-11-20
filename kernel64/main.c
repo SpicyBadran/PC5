@@ -18,6 +18,7 @@
 #include "pc5_map.h"
 #include "pc5_io.h"
 #include "cpu64.h"
+#include "apic64.h"
 #include "serial64.h"
 
 #define CR0_PG (1ULL << 31)
@@ -518,6 +519,60 @@ void kmain(struct pc5_boot64 *bi)
     fail("stack-adopt-returned");
 }
 
+/* The architectural local-APIC MMIO base: where the huge majority of x86-64
+ * machines decode it.  A default, not a guarantee - firmware may move it. */
+#define PC5_APIC_MMIO_BASE 0xFEE00000ULL
+#define PC5_APIC_MMIO_SIZE 0x1000ULL
+
+static u32 apic_mmio_read(void *context, u32 offset)
+{
+    (void)context;
+    return *(volatile u32 *)(PC5_APIC_MMIO_BASE + offset);
+}
+
+static void apic_mmio_write(void *context, u32 offset, u32 value)
+{
+    (void)context;
+    *(volatile u32 *)(PC5_APIC_MMIO_BASE + offset) = value;
+}
+
+/* Bring-up is *reported*, never fatal, and it is attempted only when the memory
+ * map vouches for the window.
+ *
+ * Both halves of that sentence are load-bearing.  The gate exists because an APIC
+ * MMIO read that nothing backs does not return all-ones, it raises a fault - so
+ * `apic64_bring_up()`'s own probe cannot be the thing that discovers a missing
+ * window, since it would die before it could report.  Reading only after
+ * `pc5_map_covers()` says MMIO is there is what makes the read defined behaviour.
+ *
+ * Reported rather than fatal because nothing in this kernel consumes interrupts
+ * yet: a machine that boots and says "APIC not enabled, here is why" is more useful
+ * than one that refuses to boot over a facility no code depends on.  When timer or
+ * SMP work lands, this becomes a hard requirement and the failure moves to fail().
+ */
+static void report_local_apic(void)
+{
+    struct pc5_apic64 apic;
+    const char *why;
+
+    if (!pc5_map_covers(&g_map, PC5_APIC_MMIO_BASE, PC5_APIC_MMIO_SIZE,
+                        PC5_MMAP_BIT(PC5_MMAP_MMIO))) {
+        serial64_write("PC5-64-APIC not-attempted reason=\"no MMIO range in the "
+                       "memory map covers the architectural APIC base\"\n");
+        return;
+    }
+
+    why = apic64_bring_up(&apic, apic_mmio_read, apic_mmio_write, 0);
+    if (why != 0) {
+        serial64_write("PC5-64-APIC not-brought-up reason=\"");
+        serial64_write(why);
+        serial64_write("\"\n");
+        apic64_print(&apic);
+        return;
+    }
+    apic64_print(&apic);
+}
+
 static void continue_on_handed_stack(void *argument)
 {
     const struct pc5_boot64 *bi = (const struct pc5_boot64 *)argument;
@@ -530,6 +585,7 @@ static void continue_on_handed_stack(void *argument)
     report_handover_flags(bi);
     report_optional_resources(bi, &g_map);
     cpu64_print(&cpu);
+    report_local_apic();
 
     /* Every mandatory check passed; only now is the marker emitted. */
     serial64_write("PC5-64BIT-LONG-MODE-OK\n");
