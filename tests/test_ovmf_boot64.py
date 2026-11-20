@@ -122,7 +122,14 @@ def full_log(**overrides):
     order = ["firmware", "loader_banner", "alloc", "ebs", "jump", "kernel_banner",
              "env", "paging", "walk", "long_mode", "done"]
     parts.update(overrides)
-    return "".join(parts[key] for key in order)
+    # `walk_extra` is appended immediately after the walk block, so a malformed
+    # probe lands beside the genuine ones rather than after the end marker.
+    out = []
+    for key in order:
+        out.append(parts[key])
+        if key == "walk":
+            out.append(overrides.get("walk_extra", ""))
+    return "".join(out)
 
 
 def judge(text, timed_out=False, seconds=12.0):
@@ -1037,6 +1044,96 @@ class APassNeverCarriesAFailureExplanation(unittest.TestCase):
         offenders = [c for c in report.checks
                      if c["state"] == PASS and c["detail"]]
         self.assertEqual(offenders, [])
+
+
+
+class EveryRawMarkerMustParse(unittest.TestCase):
+    """A malformed marker is a fault even beside a complete set of good ones.
+
+    The previous driver collected records with findall()/finditer(), so anything
+    that did not match simply did not exist. Fourteen good probes plus one
+    corrupt line read as fourteen good probes, and the corrupt line - emitted by
+    the code under test - was reported as nothing at all.
+    """
+
+    D1_NAME = "[D1] the walk covered all required addresses"
+    D2_NAME = "[D2] every mandatory allocation was reported exactly once"
+
+    def _checks(self, log):
+        report = judge(log)
+        return {c["name"]: c for c in report.checks}, report
+
+    # ---------------------------------------------------------------- D1
+    def test_a_malformed_extra_probe_record_fails(self):
+        junk = "PC5-64-PTWALK va=0x1234 path=PPP- size=2m\n"   # truncated
+        checks, _ = self._checks(full_log(walk_extra=junk))
+        self.assertEqual(checks[self.D1_NAME]["state"], FAIL)
+        self.assertIn("malformed", checks[self.D1_NAME]["detail"])
+
+    def test_each_kind_of_truncated_probe_record_fails(self):
+        for junk in (
+                "PC5-64-PTWALK va=0x1234 path=PPP- size=2m pa=0x1234 identity=1\n",
+                "PC5-64-PTWALK va=0xZZZZ path=PPP- size=2m pa=0x1234 identity=1 note=x\n",
+                "PC5-64-PTWALK va=0x1234 path=PPP- size=2m pa=0x1234 identity=x note=y\n",
+                "PC5-64-PTWALK\n",
+                "PC5-64-PTWALK span probes=14 failed=0 trailing-garbage\n"):
+            with self.subTest(junk=junk.strip()):
+                checks, _ = self._checks(full_log(walk_extra=junk))
+                self.assertEqual(checks[self.D1_NAME]["state"], FAIL)
+
+    def test_a_malformed_replacement_probe_record_still_fails(self):
+        # The control that already existed: one expected probe replaced by junk.
+        checks, _ = self._checks(full_log(walk_extra="PC5-64-PTWALK va=0xdead\n"))
+        self.assertEqual(checks[self.D1_NAME]["state"], FAIL)
+
+    def test_the_complete_genuine_set_still_passes(self):
+        checks, _ = self._checks(full_log())
+        self.assertEqual(checks[self.D1_NAME]["state"], PASS)
+
+    def test_raw_marker_count_is_recorded(self):
+        _, report = self._checks(full_log())
+        self.assertEqual(report.data["d1_addresses"]["raw_detailed_markers"], 14)
+        self.assertEqual(report.data["d1_addresses"]["malformed"], [])
+
+    # ---------------------------------------------------------------- D2
+    def test_a_malformed_extra_allocation_fails(self):
+        junk = alloc_line("memmap-grow", 16, 0x3000000).replace(" verdict=ok", "")
+        checks, _ = self._checks(full_log(alloc=allocs_ok(extra=junk)))
+        self.assertEqual(checks[self.D2_NAME]["state"], FAIL)
+        self.assertIn("malformed", checks[self.D2_NAME]["detail"])
+
+    def test_a_malformed_replacement_allocation_fails(self):
+        broken = "PC5-64-LOADER-ALLOC purpose=stack type=max-address pages=4\n"
+        alloc = allocs_ok(omit="stack") + broken
+        checks, _ = self._checks(full_log(alloc=alloc))
+        self.assertEqual(checks[self.D2_NAME]["state"], FAIL)
+
+    def test_a_zero_page_allocation_fails_even_when_it_claims_success(self):
+        # Every other field is internally consistent and the loader's own verdict
+        # says ok: only an independent page-count check can catch this.
+        zero = alloc_line("stack", 0, 0x2014000, verdict="ok")
+        zero = zero.replace("end=0x2013fff", "end=0x2013fff")
+        alloc = allocs_ok(omit="stack") + zero
+        checks, report = self._checks(full_log(alloc=alloc))
+        self.assertEqual(checks["[D2] every allocation asked for at least one page"]["state"],
+                         FAIL)
+        self.assertIn("pages <= 0", checks["[D2] every allocation asked for at least one page"]["detail"])
+        # And the record really did claim to have succeeded.
+        stack = [a for a in report.data["d2_allocations"]["pages"].items()]
+        self.assertIn(("stack", 0), stack)
+
+    def test_a_zero_page_allocation_is_not_quietly_dropped(self):
+        # pages=0 must remain a *parsed* record so it can be judged, not vanish.
+        zero = alloc_line("memmap-grow", 0, 0x3000000)
+        _, report = self._checks(full_log(alloc=allocs_ok(extra=zero)))
+        self.assertEqual(report.data["d2_allocations"]["pages"]["memmap-grow"], 0)
+
+    def test_the_five_genuine_allocations_still_pass(self):
+        checks, report = self._checks(full_log(alloc=allocs_ok()))
+        self.assertEqual(checks[self.D2_NAME]["state"], PASS)
+        self.assertTrue(checks["[D2] every allocation asked for at least one page"]["state"]
+                        == PASS)
+        self.assertEqual(report.data["d2_allocations"]["raw_markers"], 5)
 
 
 if __name__ == "__main__":

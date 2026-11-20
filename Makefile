@@ -121,9 +121,15 @@ $(BUILD)/mbr.bin: $(OBJ)/mbr.o
 # without its flags.
 #
 # No kernel64 include paths here.  This variable also compiles the 32-bit
-# release loader, and adding them would change that recipe - the release
-# artifact must stay byte-for-byte what it was.  The one source that needs
-# pc5_boot64.h gets the paths in its own rule instead.
+# release loader, so a kernel64 path added here would silently widen what that
+# recipe can see.  The one source that needs pc5_boot64.h gets the paths in its
+# own rule instead.
+#
+# This is a statement about include paths, not about the release artifact being
+# frozen: this branch *does* change boot/uefi/efi.h and boot/uefi/uefi_main.c,
+# so build/uefi/BOOTX64.EFI, build/efi.img and build/pc5.iso differ from main.
+# Only kernel64 additions are excluded; the 32-bit loader's own changes are the
+# point of the work and are meant to reach the release image.
 UEFI_CFLAGS := -m64 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                -ffreestanding -fno-pic -fno-stack-protector -fno-builtin \
                -mno-red-zone -fno-asynchronous-unwind-tables -fno-unwind-tables \
@@ -218,8 +224,15 @@ $(BUILD)/efi64.img: $(BUILD)/uefi64/BOOTX64.EFI $(BUILD)/kernel64/KERNEL64.BIN \
 uefi64: $(BUILD)/efi64.img
 
 # Stub firmware, not OVMF: the loader's and kernel's own code runs under a
-# long-mode emulator.  `make ovmf-test` remains the only gate that can claim
-# real firmware, and it is still not available here (see TEST_RESULTS.md).
+# long-mode emulator, so this target proves the code paths execute and agree
+# with their own model.  It is not firmware and never claims to be.
+#
+# Real firmware is reached through a separate opt-in target: `make ovmf-test64`
+# boots efi64.img under genuine TianoCore OVMF (see OVMF64_ARGS below), and
+# `make ovmf-test` does the same for the 32-bit ISO.  Neither is a dependency of
+# this target, and this target's verdict says nothing about what real firmware
+# does.  Where QEMU/OVMF are installed, ovmf-test64 exits 0 on a passing boot;
+# where they are absent it exits 3 (NOT TESTED), which is not a pass.
 stubtest64: $(BUILD)/efi64.img $(BUILD)/kernel64/KERNEL64.BIN
 	python3 tests/boot64_stubtest.py --image $(BUILD)/uefi64/BOOTX64.EFI \
 	  --kernel $(BUILD)/kernel64/KERNEL64.BIN \

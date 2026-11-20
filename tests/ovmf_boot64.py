@@ -412,19 +412,84 @@ def run_qemu(qemu, code, vars_template, image, vars_path, serial_path,
             "raw_serial": raw, "serial": normalise_serial(raw)}
 
 
-# -------------------------------------------------------------- observation
-def observe(text):
-    """Extract only what the log actually shows."""
+# ------------------------------------------------------- strict record grammar
+# Every marker is matched against a grammar anchored at the start of the line and
+# required to consume the whole line.  The previous implementation collected
+# records with finditer()/findall(), which silently skips anything that does not
+# match: a truncated or corrupt record was invisible as long as the fourteen (or
+# five) good ones were also present.  Coverage is now established by accounting
+# for every raw marker, so an unparseable record is a failure by construction
+# rather than a line that quietly did not participate.
+PTWALK_DETAIL_RE = re.compile(
+    r"^\s*PC5-64-PTWALK va=(0x[0-9a-fA-F]+|0) path=(\S+) size=(\S+)"
+    r" pa=(0x[0-9a-fA-F]+|0|none) identity=(\d) note=(\S+)\s*$")
+
+PTWALK_SUMMARY_RE = re.compile(
+    r"^\s*PC5-64-PTWALK span probes=(\d+) failed=(\d+)\s*$")
+
+LOADER_ALLOC_RE = re.compile(
+    r"^\s*PC5-64-LOADER-ALLOC(?: purpose=(\S+))? type=(\S+) pages=(\d+)"
+    r" requested-max=0x([0-9a-fA-F]+)"
+    r" returned-base=0x([0-9a-fA-F]+) end=0x([0-9a-fA-F]+)"
+    r" within-bound=(\d) within-limit=(\d) verdict=(\S+)\s*$")
+
+PTWALK_DETAIL_PREFIX = "PC5-64-PTWALK va="
+PTWALK_SUMMARY_PREFIX = "PC5-64-PTWALK span"
+LOADER_ALLOC_PREFIX = "PC5-64-LOADER-ALLOC"
+
+
+def _raw_markers(lines, prefix):
+    """Indices of every line carrying `prefix`."""
+    return [i for i, line in enumerate(lines) if prefix in line]
+
+
+def strict_records(text):
+    """Parse every raw marker, or record why one could not be parsed.
+
+    Returns (walk_samples, allocs, malformed).  `malformed` holds one entry per
+    raw marker that did not match its grammar, including its line number and the
+    line itself, so a fault can be reported against the line it came from rather
+    than as an anonymous count.
+    """
+    lines = text.splitlines()
+    malformed = []
+    walk_samples = []
     allocs = []
-    # `purpose` is required: it names the call site, and without it the gate can
-    # only count records rather than prove the five mandatory allocations all
-    # happened.  A record missing the field is still parsed (with purpose=None)
-    # so the driver can say so, rather than silently ignoring the line.
-    for match in re.finditer(
-            r"PC5-64-LOADER-ALLOC(?: purpose=(\S+))? type=(\S+) pages=(\d+)"
-            r" requested-max=0x([0-9a-fA-F]+)"
-            r" returned-base=0x([0-9a-fA-F]+) end=0x([0-9a-fA-F]+)"
-            r" within-bound=(\d) within-limit=(\d) verdict=(\S+)", text):
+
+    for i, line in enumerate(lines):
+        if PTWALK_DETAIL_PREFIX not in line:
+            continue
+        match = PTWALK_DETAIL_RE.match(line)
+        if not match:
+            malformed.append({"marker": "PTWALK", "line": i + 1,
+                              "text": line.strip()[:200]})
+            continue
+        walk_samples.append({
+            "va": match.group(1), "va_value": int(match.group(1), 0),
+            "path": match.group(2), "size": match.group(3),
+            "pa": match.group(4), "identity": match.group(5) == "1",
+            "note": match.group(6),
+        })
+
+    # A `PC5-64-PTWALK` line that is neither a detailed record nor the span
+    # summary is a marker nobody can interpret, so it is malformed too.
+    for i, line in enumerate(lines):
+        if "PC5-64-PTWALK" not in line:
+            continue
+        if PTWALK_DETAIL_PREFIX in line:
+            continue
+        if not PTWALK_SUMMARY_RE.match(line):
+            malformed.append({"marker": "PTWALK", "line": i + 1,
+                              "text": line.strip()[:200]})
+
+    for i, line in enumerate(lines):
+        if LOADER_ALLOC_PREFIX not in line:
+            continue
+        match = LOADER_ALLOC_RE.match(line)
+        if not match:
+            malformed.append({"marker": "LOADER-ALLOC", "line": i + 1,
+                              "text": line.strip()[:200]})
+            continue
         allocs.append({
             "purpose": match.group(1),
             "type": match.group(2),
@@ -437,15 +502,21 @@ def observe(text):
             "verdict": match.group(9),
         })
 
-    walk = re.search(r"PC5-64-PTWALK span probes=(\d+) failed=(\d+)", text)
+    return walk_samples, allocs, malformed
+
+
+# -------------------------------------------------------------- observation
+def observe(text):
+    """Extract only what the log actually shows."""
+    walk_samples, allocs, malformed = strict_records(text)
+
+    walk = re.search(r"^\s*PC5-64-PTWALK span probes=(\d+) failed=(\d+)\s*$",
+                     text, re.MULTILINE)
     # `va=0` and `pa=0` carry no 0x prefix: the loader's serial_hex() prints a
     # bare "0" for zero (kernel64/serial64.c, boot/uefi64/uefi64_main.c).  The
-    # pattern must accept both spellings or the probe at address 0 is silently
-    # dropped - which is exactly what happened: the previous `va=0x` pattern
-    # parsed 13 of the 14 real probes while the summary still said probes=14.
-    walks = re.findall(
-        r"PC5-64-PTWALK va=(0x[0-9a-fA-F]+|0) path=(\S+) size=(\S+) pa=(0x[0-9a-fA-F]+|0|none)"
-        r" identity=(\d) note=(\S+)", text)
+    # grammar accepts both spellings or the probe at address 0 is dropped -
+    # which is exactly what happened once: a `va=0x` pattern parsed 13 of the 14
+    # real probes while the summary still said probes=14.
 
     return {
         "firmware_banner": bool(re.search(r"BdsDxe:|TianoCore|EDK II", text)),
@@ -467,9 +538,12 @@ def observe(text):
         "allocs": allocs,
         "walk_probes": int(walk.group(1)) if walk else None,
         "walk_failed": int(walk.group(2)) if walk else None,
-        "walk_samples": [{"va": w[0], "va_value": int(w[0], 0), "path": w[1],
-                          "size": w[2], "pa": w[3],
-                          "identity": w[4] == "1", "note": w[5]} for w in walks],
+        "walk_samples": walk_samples,
+        # Raw marker counts and every unparseable marker, so a caller can prove
+        # that the parsed records account for all of them.
+        "raw_walk_markers": len(_raw_markers(text.splitlines(), PTWALK_DETAIL_PREFIX)),
+        "raw_alloc_markers": len(_raw_markers(text.splitlines(), LOADER_ALLOC_PREFIX)),
+        "malformed": malformed,
         "loader_failures": sorted(set(re.findall(r"PC5-64-LOADER-FAIL=(\S+)", text))),
         "loader_rejects": sorted(set(re.findall(r"PC5-64-LOADER-REJECT (\S+)", text))),
         "kernel_failures": sorted(set(re.findall(r"PC5-64BIT-FAIL=(\S+)", text))),
@@ -627,6 +701,21 @@ def evaluate(report, seen, run):
         # a detail that mentions only half of that sends the reader looking in
         # the wrong place.
         problems = []
+        # Every raw detailed marker must have contributed a record.  A corrupt
+        # extra record is not harmless: it is a line the code under test emitted
+        # that this driver could not interpret, and treating it as absent would
+        # let a log with 14 good probes plus a garbage one pass as clean.
+        walk_malformed = [m for m in seen["malformed"] if m["marker"] == "PTWALK"]
+        if walk_malformed:
+            problems.append(
+                "%d malformed PC5-64-PTWALK record(s): %s"
+                % (len(walk_malformed),
+                   ", ".join("line %d %r" % (m["line"], m["text"][:60])
+                             for m in walk_malformed)))
+        if seen["raw_walk_markers"] != len(actual):
+            problems.append(
+                "%d raw detailed PTWALK marker(s) but %d parsed"
+                % (seen["raw_walk_markers"], len(actual)))
         if len(actual) != len(expected):
             problems.append("%d detailed probe record(s), expected %d"
                             % (len(actual), len(expected)))
@@ -644,12 +733,16 @@ def evaluate(report, seen, run):
         report.check("[D1] the walk covered all required addresses",
                      (len(actual) == len(expected) and not missing
                       and not unexpected and not duplicates
+                      and not walk_malformed
+                      and seen["raw_walk_markers"] == len(actual)
                       and seen["walk_probes"] == len(actual)),
                      d1_detail)
         report.data["d1_addresses"] = {
             "expected": [hex(a) for a in expected],
             "observed": [hex(a) for a in actual],
             "summary_count": seen["walk_probes"],
+            "raw_detailed_markers": seen["raw_walk_markers"],
+            "malformed": [m["text"] for m in walk_malformed],
         }
         # The walk must terminate at a *mapping*, and the path must be
         # consistent with the size it claims.  "Terminal" is not "the last
@@ -691,6 +784,16 @@ def evaluate(report, seen, run):
                         and a["purpose"] not in D2_CONDITIONAL_PURPOSES})
     untagged = [a for a in seen["allocs"] if a["purpose"] is None]
     problems_p = []
+    alloc_malformed = [m for m in seen["malformed"] if m["marker"] == "LOADER-ALLOC"]
+    if alloc_malformed:
+        problems_p.append(
+            "%d malformed PC5-64-LOADER-ALLOC record(s): %s"
+            % (len(alloc_malformed),
+               ", ".join("line %d %r" % (m["line"], m["text"][:60])
+                         for m in alloc_malformed)))
+    if seen["raw_alloc_markers"] != len(seen["allocs"]):
+        problems_p.append("%d raw LOADER-ALLOC marker(s) but %d parsed"
+                          % (seen["raw_alloc_markers"], len(seen["allocs"])))
     if missing_p:
         problems_p.append("missing mandatory purpose(s): %s" % ", ".join(missing_p))
     if duplicated_p:
@@ -708,6 +811,9 @@ def evaluate(report, seen, run):
         "observed": [a["purpose"] for a in seen["allocs"] if a["purpose"]],
         "conditional_observed": [a["purpose"] for a in seen["allocs"]
                                  if a["purpose"] in D2_CONDITIONAL_PURPOSES],
+        "raw_markers": seen["raw_alloc_markers"],
+        "pages": {a["purpose"]: a["pages"] for a in seen["allocs"] if a["purpose"]},
+        "malformed": [m["text"] for m in alloc_malformed],
     }
 
     if not seen["allocs"]:
@@ -737,6 +843,17 @@ def evaluate(report, seen, run):
                      not over_bound, "%d allocation(s) over bound" % len(over_bound))
         report.check("[D2] no allocation ended outside the identity range",
                      not over_limit, "%d allocation(s) past the limit" % len(over_limit))
+        # A zero-page request is not an allocation, and the loader's own verdict
+        # must not be what establishes that: `pages` is printed by the loader and
+        # `verdict` is computed by the loader, so a record claiming pages=0 with
+        # verdict=ok is precisely the kind of self-consistent nonsense this gate
+        # exists to catch.  The bound is reinterpreted here, independently.
+        zero_pages = [a for a in seen["allocs"] if a["pages"] <= 0]
+        report.check("[D2] every allocation asked for at least one page",
+                     not zero_pages,
+                     "%d record(s) with pages <= 0: %s" %
+                     (len(zero_pages),
+                      [(a["purpose"], a["pages"]) for a in zero_pages]))
         # The type is part of the contract: EFI_ALLOCATE_MAX_ADDRESS is the only
         # allocation mode that bounds by address, and a record claiming a
         # different mode would make the bound checks below meaningless.
