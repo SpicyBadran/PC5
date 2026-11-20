@@ -41,6 +41,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import threading
@@ -81,6 +82,106 @@ STAGES = ["firmware", "loader_entry", "loader_success", "kernel_handoff",
 
 
 # --------------------------------------------------------------- utilities
+def read_fat_superfloppy(path):
+    """Parse a FAT volume's BPB and classify it, returning a dict of findings.
+
+    The 64-bit path serves efi64.img as a *superfloppy*: a FAT filesystem with no
+    partition table, which firmware reads from sector 0.  Two properties matter
+    and neither was asserted anywhere, so both mutations that break them passed
+    the whole suite:
+
+      - put an MBR partition entry at 0x1BE and the image is no longer a
+        superfloppy, yet firmware still boots it and every test still passed;
+      - ask tools/mkefiimg.py for a larger image and it builds FAT16 instead of
+        FAT12 (it picks the flavour from the cluster count, and FAT12 is only
+        valid below 4085 clusters), with nothing noticing.
+
+    The FAT flavour is decided by the data-cluster count, not by the FAT size
+    field and not by the label in a build message, so it is calculated here from
+    the BPB and compared against the thresholds from the FAT specification.
+
+    Returns None if the image is not a readable FAT volume at all.
+    """
+    with open(path, "rb") as handle:
+        head = handle.read(512)
+    if len(head) < 512:
+        return None
+    # BPB, FAT12/FAT16 layout: bytes 11..62.  Byte 0 must be a jump so firmware
+    # recognises a boot sector rather than arbitrary data.
+    jump = head[0]
+    if jump not in (0xEB, 0xE9):
+        return None
+    (bytes_per_sector, sectors_per_cluster, reserved_sectors, num_fats,
+     root_entries, total_sectors_16, _media, fat_size_16) = struct.unpack_from(
+        "<HBHBHHBH", head, 11)
+    total_sectors_32 = struct.unpack_from("<I", head, 32)[0]
+    total_sectors = total_sectors_16 or total_sectors_32
+    if bytes_per_sector == 0 or sectors_per_cluster == 0:
+        return None
+    root_dir_sectors = (root_entries * 32 + bytes_per_sector - 1) // bytes_per_sector
+    first_data_sector = (reserved_sectors + num_fats * fat_size_16 + root_dir_sectors)
+    data_sectors = total_sectors - first_data_sector
+    clusters = data_sectors // sectors_per_cluster if data_sectors > 0 else 0
+    # A FAT12 volume has at most 4084 clusters, FAT16 at most 65524.
+    if clusters < 4085:
+        flavour = "FAT12"
+    elif clusters < 65525:
+        flavour = "FAT16"
+    else:
+        flavour = "FAT32"
+    # Partition table: four 16-byte records at 0x1BE, each with a type byte at
+    # offset 4.  An all-zero table is what a superfloppy has.
+    entries = [head[0x1BE + 16 * i:0x1BE + 16 * (i + 1)] for i in range(4)]
+    partitioned = [e for e in entries if any(e)]
+    return {
+        "jump_byte": jump,
+        "bytes_per_sector": bytes_per_sector,
+        "sectors_per_cluster": sectors_per_cluster,
+        "reserved_sectors": reserved_sectors,
+        "num_fats": num_fats,
+        "root_entries": root_entries,
+        "total_sectors": total_sectors,
+        "fat_size_sectors": fat_size_16,
+        "first_data_sector": first_data_sector,
+        "clusters": clusters,
+        "flavour": flavour,
+        "partition_entries": len(partitioned),
+        "boot_signature": head[0x1FE] == 0x55 and head[0x1FF] == 0xAA,
+    }
+
+
+def check_fat12_superfloppy(report, image_path):
+    """Assert efi64.img really is the FAT12 superfloppy the driver claims.
+
+    Runs as part of the gate rather than only in the unit suite, because the
+    claim it defends - `image_format: fat12 superfloppy` in the evidence report -
+    is made by the gate.
+    """
+    findings = read_fat_superfloppy(image_path)
+    name = "the 64-bit image is a FAT12 superfloppy"
+    if findings is None:
+        report.record(name, FAIL, "%s is not a readable FAT boot sector" % image_path)
+        return None
+    report.data["fat12"] = findings
+    problems = []
+    if findings["flavour"] != "FAT12":
+        problems.append("cluster count %d classifies this as %s, not FAT12 "
+                        "(FAT12 requires fewer than 4085)" %
+                        (findings["clusters"], findings["flavour"]))
+    if findings["partition_entries"]:
+        problems.append("%d partition-table entr(ies) at 0x1BE; a superfloppy has none"
+                        % findings["partition_entries"])
+    if not findings["boot_signature"]:
+        problems.append("no 0x55AA boot signature at 0x1FE")
+    if findings["bytes_per_sector"] != 512:
+        problems.append("bytes/sector is %d, expected 512"
+                        % findings["bytes_per_sector"])
+    report.record(name, FAIL if problems else PASS,
+                  "; ".join(problems) if problems else
+                  "%d clusters, no partition table" % findings["clusters"])
+    return findings
+
+
 def sha256_file(path):
     if not path:
         return None
@@ -596,6 +697,11 @@ def main(argv=None):
             report.record("the %s artifact exists" % name, FAIL, "missing: %s" % path)
             return finish(report, args, code=1)
         report.record("the %s artifact exists" % name, PASS, path)
+
+    # The report states image_format: fat12 superfloppy.  Assert it here, from
+    # the bytes, because that claim is made by this gate and a wrong image
+    # format is the kind of defect that still boots.
+    check_fat12_superfloppy(report, args.image)
 
     report.data["artifacts"] = {
         "efi64.img": {"path": args.image, "sha256": sha256_file(args.image),

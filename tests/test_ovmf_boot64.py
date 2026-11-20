@@ -564,13 +564,19 @@ class KernelEntryIsProvenByOwnershipOfTheMarker(unittest.TestCase):
     def _loader(self):
         path = ROOT / "build" / "uefi64" / "BOOTX64.EFI"
         if not path.exists():
-            self.skipTest("build/uefi64/BOOTX64.EFI not built")
+            # Explicit, not silent: `make check` does not build 64-bit
+            # artifacts, so a plain suite run cannot have validated this.
+            self.skipTest("PREREQUISITE SKIP: build/uefi64/BOOTX64.EFI not built; "
+                          "run `make ovmf-test64`, which builds it and asserts "
+                          "this in the gate")
         return path.read_bytes()
 
     def _kernel(self):
         path = ROOT / "build" / "kernel64" / "KERNEL64.BIN"
         if not path.exists():
-            self.skipTest("build/kernel64/KERNEL64.BIN not built")
+            self.skipTest("PREREQUISITE SKIP: build/kernel64/KERNEL64.BIN not built; "
+                          "run `make ovmf-test64`, which builds it and asserts "
+                          "this in the gate")
         return path.read_bytes()
 
     def test_the_loader_cannot_print_a_kernel_marker(self):
@@ -656,6 +662,96 @@ class AStaleLogCanNeverBeTheVerdict(unittest.TestCase):
             if log.exists():
                 self.assertNotIn("PC5-64-DONE", log.read_text(encoding="latin-1"),
                                  "a stale log survived a failed run")
+
+
+
+class TheImageIsReallyAFat12Superfloppy(unittest.TestCase):
+    """The report states `image_format: fat12 superfloppy`.  Assert it from bytes.
+
+    Both mutations below were demonstrated to pass the entire suite before this
+    existed: firmware boots a partitioned image, and tools/mkefiimg.py will build
+    FAT16 for any image large enough.  The cluster thresholds are the FAT
+    specification's, and the cluster count is calculated from the BPB rather than
+    compared against the current value, so enlarging the image fails for the right
+    reason instead of pinning today's number.
+    """
+
+    def _image(self):
+        path = ROOT / "build" / "efi64.img"
+        if not path.exists():
+            self.skipTest("build/efi64.img is not built (make uefi64)")
+        return path
+
+    def test_the_bpb_describes_a_512_byte_sector_volume(self):
+        f = ovmf_boot64.read_fat_superfloppy(self._image())
+        self.assertIsNotNone(f, "not a readable FAT boot sector")
+        self.assertEqual(f["bytes_per_sector"], 512)
+        self.assertGreater(f["sectors_per_cluster"], 0)
+        self.assertGreaterEqual(f["num_fats"], 1)
+        self.assertTrue(f["boot_signature"], "no 0x55AA signature at 0x1FE")
+
+    def test_the_cluster_count_classifies_as_fat12_by_the_spec_threshold(self):
+        f = ovmf_boot64.read_fat_superfloppy(self._image())
+        self.assertIsNotNone(f)
+        # The rule, not the number: FAT12 is defined by fewer than 4085 clusters.
+        self.assertLess(f["clusters"], 4085,
+                        "%d clusters is not FAT12" % f["clusters"])
+        self.assertEqual(f["flavour"], "FAT12")
+        # The count must be consistent with the BPB it came from.
+        expected = ((f["total_sectors"] - f["first_data_sector"])
+                    // f["sectors_per_cluster"])
+        self.assertEqual(f["clusters"], expected)
+
+    def test_there_is_no_partition_table(self):
+        f = ovmf_boot64.read_fat_superfloppy(self._image())
+        self.assertEqual(f["partition_entries"], 0,
+                         "a superfloppy has no records at 0x1BE")
+
+    def test_a_partition_entry_is_rejected(self):
+        """The first demonstrated mutation."""
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = pathlib.Path(tmp) / "partitioned.img"
+            data = bytearray(self._image().read_bytes())
+            data[0x1BE:0x1BE + 16] = bytes(
+                [0x80, 0, 1, 0, 0x0C, 0xFE, 0xFF, 0xFF,
+                 1, 0, 0, 0, 0xDF, 0x0B, 0, 0])
+            bad.write_bytes(bytes(data))
+            report = ovmf_boot64.Evidence()
+            ovmf_boot64.check_fat12_superfloppy(report, str(bad))
+            verdict = [c for c in report.checks
+                       if c["name"] == "the 64-bit image is a FAT12 superfloppy"]
+            self.assertEqual(verdict[0]["state"], ovmf_boot64.FAIL)
+            self.assertIn("partition", verdict[0]["detail"])
+
+    def test_a_fat16_image_is_rejected(self):
+        """The second demonstrated mutation: a larger image becomes FAT16."""
+        # 8192 KiB is above the FAT12 cluster limit; mkefiimg.py builds FAT16.
+        with tempfile.TemporaryDirectory() as tmp:
+            big = pathlib.Path(tmp) / "big.img"
+            subprocess.run(
+                [sys.executable, str(ROOT / "tools" / "mkefiimg.py"),
+                 "--size-kb", "8192", "--volume-label", "PC5EFI",
+                 "--file", "%s=EFI/BOOT/BOOTX64.EFI" % (ROOT / "build" / "uefi64" / "BOOTX64.EFI"),
+                 "--output", str(big)],
+                capture_output=True, text=True, check=True)
+            f = ovmf_boot64.read_fat_superfloppy(str(big))
+            self.assertEqual(f["flavour"], "FAT16",
+                             "expected the larger image to be FAT16, got %s" % f["flavour"])
+            report = ovmf_boot64.Evidence()
+            ovmf_boot64.check_fat12_superfloppy(report, str(big))
+            verdict = [c for c in report.checks
+                       if c["name"] == "the 64-bit image is a FAT12 superfloppy"]
+            self.assertEqual(verdict[0]["state"], ovmf_boot64.FAIL)
+            self.assertIn("FAT12", verdict[0]["detail"])
+
+    def test_a_non_fat_image_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            junk = pathlib.Path(tmp) / "junk.img"
+            junk.write_bytes(b"\x00" * 4096)
+            report = ovmf_boot64.Evidence()
+            ovmf_boot64.check_fat12_superfloppy(report, str(junk))
+            verdict = report.checks[0]
+            self.assertEqual(verdict["state"], ovmf_boot64.FAIL)
 
 
 if __name__ == "__main__":
