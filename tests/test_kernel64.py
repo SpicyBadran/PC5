@@ -97,8 +97,25 @@ class KernelImageTests(unittest.TestCase):
                                str(KERNEL_ELF), "/dev/stdout"],
                               capture_output=True).stdout
         self.assertTrue(binary.startswith(text[:4096]))
-        self.assertEqual(len(binary), 0xC000,
-                         "text+rodata plus the 32 KiB .bss window (stack)")
+        # Derived from the linker script's own symbols, not hardcoded. It used to
+        # say 0xC000, and that number stopped being true the moment the kernel
+        # gained a 4 KiB IDT - the test then failed for a correct change, which is a
+        # defect in the test. The invariant that matters is that the flat binary
+        # spans exactly __kernel_start..__bss_end, because .bss holds the stack and
+        # must travel with the image.
+        symbols = subprocess.run(["nm", str(KERNEL_ELF)],
+                                 capture_output=True, text=True).stdout
+        addresses = {}
+        for line in symbols.splitlines():
+            fields = line.split()
+            if len(fields) == 3 and fields[2] in ("__kernel_start", "__bss_end"):
+                addresses[fields[2]] = int(fields[0], 16)
+        self.assertEqual(set(addresses), {"__kernel_start", "__bss_end"},
+                         "the linker script no longer defines the span symbols")
+        span = addresses["__bss_end"] - addresses["__kernel_start"]
+        self.assertEqual(len(binary), span,
+                         "the binary must span __kernel_start..__bss_end")
+        self.assertGreaterEqual(span, 0x8000, "the 32 KiB stack window vanished")
 
     def test_link_address_is_the_protocol_address(self):
         build()

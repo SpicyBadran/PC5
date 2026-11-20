@@ -19,6 +19,7 @@
 #include "pc5_io.h"
 #include "cpu64.h"
 #include "apic64.h"
+#include "idt64.h"
 #include "serial64.h"
 
 #define CR0_PG (1ULL << 31)
@@ -504,6 +505,11 @@ void kmain(struct pc5_boot64 *bi)
 {
     serial64_init();
     serial64_write("PC5-64BIT-KERNEL-ENTRY\n");
+
+    /* Install exception capture before anything that can fault: until this runs,
+     * a bad pointer is a silent triple-fault reset with no evidence at all. */
+    idt64_install();
+    serial64_write("PC5-64-IDT installed=256 present=32\n");
 
     validate_structure_address(bi);
     validate_header(bi);
