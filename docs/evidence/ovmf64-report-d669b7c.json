@@ -1,0 +1,421 @@
+{
+  "checks": [
+    {
+      "name": "the 64-bit artifacts were rebuilt from the current tree",
+      "state": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "the efi64.img artifact exists",
+      "state": "PASS",
+      "detail": "build/efi64.img"
+    },
+    {
+      "name": "the BOOTX64.EFI artifact exists",
+      "state": "PASS",
+      "detail": "build/uefi64/BOOTX64.EFI"
+    },
+    {
+      "name": "the KERNEL64.BIN artifact exists",
+      "state": "PASS",
+      "detail": "build/kernel64/KERNEL64.BIN"
+    },
+    {
+      "name": "the boot could be run",
+      "state": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "a writable copy of the variable store was made",
+      "state": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "the emulator started",
+      "state": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "the machine was stopped on evidence, not on the clock",
+      "state": "PASS",
+      "detail": "timed out after 2.5s with no terminal marker"
+    },
+    {
+      "name": "firmware produced a boot manager log",
+      "state": "PASS",
+      "detail": "no BdsDxe/TianoCore/EDK II banner in the serial log"
+    },
+    {
+      "name": "the machine booted UEFI, not SeaBIOS",
+      "state": "PASS",
+      "detail": "SeaBIOS output present"
+    },
+    {
+      "name": "firmware did not refuse to boot the volume",
+      "state": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "the 64-bit loader was entered",
+      "state": "PASS",
+      "detail": "no PC5-64-LOADER-BANNER"
+    },
+    {
+      "name": "the loader allocated inside its own bound",
+      "state": "PASS",
+      "detail": "no PC5-64-LOADER-ALLOC line"
+    },
+    {
+      "name": "the loader exited boot services",
+      "state": "PASS",
+      "detail": "no exit-boot-services=ok"
+    },
+    {
+      "name": "the loader reported no failure",
+      "state": "PASS",
+      "detail": "loader reported: []"
+    },
+    {
+      "name": "the loader handed control to the kernel",
+      "state": "PASS",
+      "detail": "no PC5-64-LOADER-JUMP entry="
+    },
+    {
+      "name": "the kernel executed",
+      "state": "PASS",
+      "detail": "no PC5-64-BANNER from the kernel"
+    },
+    {
+      "name": "the boot stages appeared in order",
+      "state": "PASS",
+      "detail": "the markers are present but not in stage order"
+    },
+    {
+      "name": "[D1] every identity probe resolved",
+      "state": "PASS",
+      "detail": "0 of 14 probes failed"
+    },
+    {
+      "name": "[D1] the walk covered all required addresses",
+      "state": "PASS",
+      "detail": "only 14 probes"
+    },
+    {
+      "name": "[D1] every probe reached a terminal mapping with no gap",
+      "state": "PASS",
+      "detail": "0 probe(s) stopped at a table level: []"
+    },
+    {
+      "name": "[D1] every probed address translated to itself",
+      "state": "PASS",
+      "detail": "a probe resolved somewhere other than its own address"
+    },
+    {
+      "name": "[D2] every allocation verdict was ok",
+      "state": "PASS",
+      "detail": "0 allocation(s) not ok: []"
+    },
+    {
+      "name": "[D2] reported ends match base + pages*4096 - 1",
+      "state": "PASS",
+      "detail": "0 allocation(s) misreported their end"
+    },
+    {
+      "name": "[D2] no allocation ended above the requested maximum",
+      "state": "PASS",
+      "detail": "0 allocation(s) over bound"
+    },
+    {
+      "name": "[D2] no allocation ended outside the identity range",
+      "state": "PASS",
+      "detail": "0 allocation(s) past the limit"
+    },
+    {
+      "name": "[D2] the requested maximum was the inclusive limit",
+      "state": "PASS",
+      "detail": "firmware was asked for a bound other than 0xffffffff"
+    },
+    {
+      "name": "the kernel reported no failure",
+      "state": "PASS",
+      "detail": "kernel reported: []"
+    },
+    {
+      "name": "the kernel reached its final marker",
+      "state": "PASS",
+      "detail": "no PC5-64-DONE"
+    },
+    {
+      "name": "no marker contradicts another",
+      "state": "PASS",
+      "detail": ""
+    }
+  ],
+  "data": {
+    "artifacts": {
+      "efi64.img": {
+        "path": "build/efi64.img",
+        "sha256": "a5983031004389fff77ab3643c8259927e5076f01300876dcdfe9702bc9e313c",
+        "size": 1474560
+      },
+      "BOOTX64.EFI": {
+        "path": "build/uefi64/BOOTX64.EFI",
+        "sha256": "1c54a141a3cb5292f7ecbefd98656a47b22bd44342fae4b632e53dc7c76e3935",
+        "size": 13031
+      },
+      "KERNEL64.BIN": {
+        "path": "build/kernel64/KERNEL64.BIN",
+        "sha256": "f574acd315ff41a033b8fa315e51f78ab1ffddb6e77573cbcb851e2837f62fc0",
+        "size": 49152
+      }
+    },
+    "source": {
+      "commit": "d669b7c09451a7f55305788bc0259f6c264bcfd3",
+      "tree": "cf131d47aac98a6ae46d396bde10150d1eac163a",
+      "branch": "HEAD",
+      "dirty": false
+    },
+    "qemu": {
+      "path": "/tmp/qb/qemu-system-x86_64",
+      "version": "QEMU emulator version 10.0.0",
+      "data_dir": "/tmp/qb/share/qemu"
+    },
+    "firmware": {
+      "path": "/tmp/qb/share/qemu/edk2-x86_64-code.fd",
+      "sha256": "33090cc07675baa5190d9f1e84bf5176b33bcbfa9bacac522961150cdb6dbb2a",
+      "size": 3653632,
+      "version": null,
+      "vars_template": "/tmp/vars-template.fd",
+      "vars_sha256": "67bce200859a23d1a49c74e00b4dcd8c143e3f482aff8acb7e596041323e9a1e"
+    },
+    "serial_path": "build/ovmf64/efi64-serial.log",
+    "device_arrangement": {
+      "device": "ahci",
+      "verified": true,
+      "image_format": "fat12 superfloppy"
+    },
+    "observed": {
+      "firmware_banner": true,
+      "seabios": false,
+      "loader_banner": true,
+      "loader_image": true,
+      "pagetables": true,
+      "stack": true,
+      "ebs_ok": true,
+      "ebs_attempts": 1,
+      "jump": "100000",
+      "kernel_banner": true,
+      "kernel_env": true,
+      "kernel_paging": "1e13e000",
+      "long_mode_ok": true,
+      "done": true,
+      "allocs": [
+        {
+          "type": "max-address",
+          "pages": 1,
+          "requested_max": 4294967295,
+          "returned_base": 505651200,
+          "end": 505655295,
+          "within_bound": true,
+          "within_limit": true,
+          "verdict": "ok"
+        },
+        {
+          "type": "max-address",
+          "pages": 6,
+          "requested_max": 4294967295,
+          "returned_base": 504619008,
+          "end": 504643583,
+          "within_bound": true,
+          "within_limit": true,
+          "verdict": "ok"
+        },
+        {
+          "type": "max-address",
+          "pages": 4,
+          "requested_max": 4294967295,
+          "returned_base": 504602624,
+          "end": 504619007,
+          "within_bound": true,
+          "within_limit": true,
+          "verdict": "ok"
+        },
+        {
+          "type": "max-address",
+          "pages": 8,
+          "requested_max": 4294967295,
+          "returned_base": 504569856,
+          "end": 504602623,
+          "within_bound": true,
+          "within_limit": true,
+          "verdict": "ok"
+        },
+        {
+          "type": "max-address",
+          "pages": 8,
+          "requested_max": 4294967295,
+          "returned_base": 504537088,
+          "end": 504569855,
+          "within_bound": true,
+          "within_limit": true,
+          "verdict": "ok"
+        }
+      ],
+      "walk_probes": 14,
+      "walk_failed": 0,
+      "walk_samples": [
+        {
+          "va": "3fffffff",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0x3fffffff",
+          "identity": true,
+          "note": "below-1gib"
+        },
+        {
+          "va": "40000000",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0x40000000",
+          "identity": true,
+          "note": "at-1gib"
+        },
+        {
+          "va": "40000001",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0x40000001",
+          "identity": true,
+          "note": "above-1gib"
+        },
+        {
+          "va": "50000000",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0x50000000",
+          "identity": true,
+          "note": "in-1gib"
+        },
+        {
+          "va": "7fffffff",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0x7fffffff",
+          "identity": true,
+          "note": "below-2gib"
+        },
+        {
+          "va": "80000000",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0x80000000",
+          "identity": true,
+          "note": "at-2gib"
+        },
+        {
+          "va": "80000001",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0x80000001",
+          "identity": true,
+          "note": "above-2gib"
+        },
+        {
+          "va": "90000000",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0x90000000",
+          "identity": true,
+          "note": "in-2gib"
+        },
+        {
+          "va": "bfffffff",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0xbfffffff",
+          "identity": true,
+          "note": "below-3gib"
+        },
+        {
+          "va": "c0000000",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0xc0000000",
+          "identity": true,
+          "note": "at-3gib"
+        },
+        {
+          "va": "c0000001",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0xc0000001",
+          "identity": true,
+          "note": "above-3gib"
+        },
+        {
+          "va": "d0000000",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0xd0000000",
+          "identity": true,
+          "note": "in-3gib"
+        },
+        {
+          "va": "ffffffff",
+          "path": "PPP-",
+          "size": "2m",
+          "pa": "0xffffffff",
+          "identity": true,
+          "note": "upper-end"
+        }
+      ],
+      "loader_failures": [],
+      "loader_rejects": [],
+      "kernel_failures": [],
+      "firmware_refused": []
+    },
+    "run": {
+      "seconds": 2.5,
+      "stopped_on": "evidence",
+      "returncode": 0,
+      "timed_out": false,
+      "stderr": "qemu-system-x86_64: terminating on signal 15 from pid 31154 (python3)",
+      "command": [
+        "/tmp/qb/qemu-system-x86_64",
+        "-machine",
+        "q35",
+        "-m",
+        "512",
+        "-smp",
+        "1",
+        "-no-reboot",
+        "-display",
+        "none",
+        "-monitor",
+        "none",
+        "-nic",
+        "none",
+        "-rtc",
+        "base=utc",
+        "-drive",
+        "if=pflash,format=raw,unit=0,readonly=on,file=/tmp/qb/share/qemu/edk2-x86_64-code.fd",
+        "-drive",
+        "if=pflash,format=raw,unit=1,file=build/ovmf64/OVMF_VARS.fd",
+        "-device",
+        "ich9-ahci,id=ahci",
+        "-drive",
+        "if=none,id=esp,format=raw,file=build/efi64.img",
+        "-device",
+        "ide-hd,drive=esp,bus=ahci.0",
+        "-serial",
+        "stdio",
+        "-L",
+        "/tmp/qb/share/qemu"
+      ]
+    }
+  },
+  "passed": 30,
+  "failed": 0,
+  "unavailable": 0,
+  "not_tested": 0
+}

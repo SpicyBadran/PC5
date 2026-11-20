@@ -19,6 +19,7 @@
 #include "pc5_io.h"
 #include "cpu64.h"
 #include "serial64.h"
+#include "pagetable64.h"
 
 #define CR0_PG (1ULL << 31)
 #define CR0_PE (1ULL << 0)
@@ -415,6 +416,14 @@ static void report_environment(const struct pc5_boot64 *bi, u32 physical_bits)
     serial64_write(" loaded=");
     serial64_hex(bi->kernel_base);
     serial64_write("\n");
+
+    /* D1: the checks above prove CR3 is well-formed and is the root the loader
+     * declared.  None of them visits an entry, so a table that is never linked
+     * from its PDPT still passes.  Walk the live tables now, after every
+     * mandatory register check, so a broken map is attributed to the map. */
+    if (!pc5_report_identity_span(real_read_u64, cr3 & 0x000FFFFFFFFFF000ull,
+                                  bi->identity_span))
+        halt_forever();
 
     /* A 64-bit-only proof: in 32-bit mode the upper half of this value cannot
      * survive the move, and the comparison below would fail. */

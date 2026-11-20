@@ -9,6 +9,19 @@
     .section .text
     .globl _start
 _start:
+    /* Firmware hands us ImageHandle in RCX and SystemTable in RDX (MS x64 ABI).
+     * Both have to survive until the call below, so save them first: the .bss
+     * zeroing needs RCX as the repeat counter and RDI as the destination.
+     *
+     * Getting this wrong is silent.  The stub firmware used by the host tests
+     * happens not to notice, so a stub that clobbered RCX still passed every
+     * check while every image-handle call under real firmware received NULL -
+     * LoadedImage failed with EFI_INVALID_PARAMETER and the boot died as
+     * "kernel-not-found" with the kernel sitting on the very volume it was
+     * loaded from. */
+    movq %rcx, %r8                 /* ImageHandle */
+    movq %rdx, %r9                 /* SystemTable */
+
     /* .bss is NOLOAD, so the image does not carry it and firmware will not
      * zero it: do that before any C code runs. */
     leaq __bss_start(%rip), %rdi
@@ -18,8 +31,14 @@ _start:
     xorq %rax, %rax
     rep stosq
 
+    /* Restore the arguments into their slots and call.  R8/R9 are caller-saved
+     * under the MS ABI but nothing has called out yet, so they still hold the
+     * values firmware gave us. */
+    movq %r8, %rcx                 /* ImageHandle -> first argument */
+    movq %r9, %rdx                 /* SystemTable -> second argument */
+
     /* ms_abi call: keep the stack 16-byte aligned and reserve 32 bytes of
-     * shadow space.  Arguments are already in RCX/RDX. */
+     * shadow space. */
     subq $0x28, %rsp
     call efi_main64
     addq $0x28, %rsp

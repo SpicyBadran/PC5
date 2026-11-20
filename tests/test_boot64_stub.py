@@ -133,6 +133,78 @@ class StubFirmware64Tests(unittest.TestCase):
         self.assertEqual(machine.handover64["boot_info_size"], 160)
         self.assertEqual(machine.handover64["identity_span"], 4 << 30)
 
+    # ------------------------------------------- D1 / D2 runtime assertions ----
+    # These read the markers the real kernel and the real loader emit, from a
+    # run of the real binaries.  The walk and the allocation both happen in
+    # this run; nothing here is a model of them.
+
+    def test_the_kernel_walks_the_live_page_tables_at_every_required_address(self):
+        _, trace = self.run_once()
+        serial = trace.serial
+        self.assertIn("PC5-64-PTWALK span probes=14 failed=0", serial)
+        # Beginning of the range, both sides of each 1 GiB boundary, inside each
+        # of the four regions, and the last byte of the span.
+        for note in ("start", "below-1gib", "at-1gib", "above-1gib", "in-1gib",
+                     "below-2gib", "at-2gib", "above-2gib", "in-2gib",
+                     "below-3gib", "at-3gib", "above-3gib", "in-3gib",
+                     "upper-end"):
+            self.assertIn("note=%s" % note, serial)
+        # Every probe must translate to its own address, not merely be present.
+        for line in serial.splitlines():
+            if line.startswith("PC5-64-PTWALK va="):
+                self.assertIn("identity=1", line, line)
+                self.assertNotIn("pa=none", line, line)
+
+    def test_the_walk_reports_the_page_size_it_actually_terminated_at(self):
+        # The requirement is that page size is not assumed.  The loader builds
+        # 2 MiB leaves, so that is what the walk must say - and it must never
+        # claim 4 KiB, which would mean it walked past the leaf into a table
+        # that does not exist.
+        _, trace = self.run_once()
+        sizes = {line.split("size=")[1].split()[0]
+                 for line in trace.serial.splitlines()
+                 if line.startswith("PC5-64-PTWALK va=")}
+        self.assertEqual(sizes, {"2m"}, sizes)
+
+    def test_the_loader_reports_the_allocation_firmware_actually_performed(self):
+        _, trace = self.run_once()
+        serial = trace.serial
+        # The record must name the allocation's purpose: without it a reader (and
+        # the driver) can only count allocations, not identify them.
+        self.assertIn("PC5-64-LOADER-ALLOC purpose=bootinfo type=max-address", serial)
+        for purpose in ("bootinfo", "pagetables", "stack",
+                        "memmap-buffer", "memmap-out"):
+            self.assertEqual(
+                serial.count("PC5-64-LOADER-ALLOC purpose=%s " % purpose), 1,
+                "each mandatory allocation appears exactly once: %s" % purpose)
+        # The bound must be the last mappable byte of the span, not the span
+        # length and not zero.
+        self.assertIn("requested-max=0xffffffff", serial)
+        self.assertNotIn("requested-max=0x100000000", serial)
+        self.assertNotIn("requested-max=0x0 ", serial)
+        for line in serial.splitlines():
+            if line.startswith("PC5-64-LOADER-ALLOC"):
+                self.assertIn("verdict=ok", line, line)
+                self.assertIn("within-bound=1", line, line)
+                self.assertIn("within-limit=1", line, line)
+
+    def test_every_reported_allocation_end_is_inside_the_span(self):
+        # Recomputed from the printed base and page count rather than trusting
+        # the printed end, which is the value under test.
+        _, trace = self.run_once()
+        seen = 0
+        for line in trace.serial.splitlines():
+            if not line.startswith("PC5-64-LOADER-ALLOC"):
+                continue
+            fields = dict(f.split("=", 1) for f in line.split() if "=" in f)
+            pages = int(fields["pages"])
+            base = int(fields["returned-base"], 16)
+            end = int(fields["end"], 16)
+            self.assertEqual(end, base + pages * 4096 - 1, line)
+            self.assertLess(end, 4 << 30, line)
+            seen += 1
+        self.assertGreater(seen, 0, "no allocation was reported")
+
     def test_no_boot_service_is_used_after_exit_boot_services(self):
         machine, trace = self.run_once()
         self.assertEqual(machine.boot_service_calls_after_exit, [])
@@ -165,10 +237,18 @@ class StubFirmware64Tests(unittest.TestCase):
     def test_an_application_loaded_at_the_top_of_the_map_still_hands_over(self):
         machine, trace = self.run_once(image_load=0x0FE00000)
         self.assertEqual(machine.image_base, 0x0FE00000)
-        self.assertIn("PC5-64-LOADER image=0xfe00000-0xfe03000 below-span=1",
-                      trace.serial)
-        self.assertIn("PC5-64-LOADER image=0xfe00000 size=0x3000 range=ok",
-                      trace.serial)
+        # The loader's own end and size are compared against what the stub
+        # firmware said the image was, not against a literal.  A hardcoded size
+        # would fail the moment the loader grew by a function - which is what
+        # happened when the allocation report was added - and would have taught
+        # nothing about placement, which is what this test is for.  The
+        # property under test is that the loader reports the span firmware
+        # gave it and that the span is inside the map.
+        end = 0x0FE00000 + machine.image_size
+        self.assertIn("PC5-64-LOADER image=0x%x-0x%x below-span=1"
+                      % (0x0FE00000, end), trace.serial)
+        self.assertIn("PC5-64-LOADER image=0xfe00000 size=0x%x range=ok"
+                      % machine.image_size, trace.serial)
         self.assert_full_boot(trace)
 
     def test_handoff_regions_placed_just_below_the_span_limit(self):

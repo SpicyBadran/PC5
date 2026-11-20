@@ -235,12 +235,23 @@ class Machine:
 
     # -------------------------------------------------------------- paging
     def install_identity_map(self, span=(4 << 30)):
+        """Build the identity map the loader builds: one PD per GiB.
+
+        Each of the four PD pages needs its own PDPT entry pointing at it.  A
+        map that writes all four PD pages but links only PDPT[0] looks complete
+        from the outside - every page is there, the root is right - while the
+        top three GiB are unreachable.  That is the defect the kernel's D1 walk
+        exists to catch, so the harness must not reproduce it: otherwise the
+        walk fails on the fixture and says nothing about the kernel.
+        """
         entries_per_page = 512
         pd_pages = span // (2 << 20) // entries_per_page
         pdpt = PML4 + 0x1000
         pd = PML4 + 0x2000
         self.uc.mem_write(PML4, struct.pack("<Q", pdpt | 0x3))
-        self.uc.mem_write(pdpt, struct.pack("<Q", pd | 0x3))
+        pdpt_entries = [((pd + page * 0x1000) | 0x3) for page in range(pd_pages)]
+        self.uc.mem_write(pdpt, struct.pack("<%dQ" % len(pdpt_entries),
+                                            *pdpt_entries))
         for page in range(pd_pages):
             first = page * entries_per_page
             values = [((index << 21) | 0x83) for index in range(first, first + 512)]

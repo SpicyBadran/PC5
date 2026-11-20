@@ -664,7 +664,11 @@ static efi_handle find_kernel_volume(struct efi_system_table *st, efi_handle ima
 
     /* Enumerate every handle with a file system on it. */
     u64 size = 0;
-    efi_status status = bs->locate_handle(&size, EFI_LOCATE_BY_PROTOCOL, 0, 0);
+    /* Spec order: (SearchType, Protocol, SearchKey, BufferSize, Buffer).  The
+     * protocol must be non-NULL for ByProtocol. */
+    efi_status status = bs->locate_handle(EFI_LOCATE_BY_PROTOCOL,
+                                          (struct efi_guid *)&EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+                                          0, &size, 0);
     if (status != EFI_BUFFER_TOO_SMALL || !size) {
         trace("kernel_volume=none");
         return 0;
@@ -675,7 +679,9 @@ static efi_handle find_kernel_volume(struct efi_system_table *st, efi_handle ima
         trace("kernel_volume=none");
         return 0;
     }
-    status = bs->locate_handle(&size, EFI_LOCATE_BY_PROTOCOL, 0, (efi_handle *)buffer);
+    status = bs->locate_handle(EFI_LOCATE_BY_PROTOCOL,
+                               (struct efi_guid *)&EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+                               0, &size, (efi_handle *)buffer);
     if (EFI_ERROR(status)) {
         bs->free_pool(buffer);
         trace("kernel_volume=none");

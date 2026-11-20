@@ -1,0 +1,71 @@
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01HBdsDxe: loading Boot0001 "UEFI QEMU HARDDISK QM00013 " from PciRoot(0x0)/Pci(0x2,0x0)/Sata(0x0,0xFFFF,0x0)
+BdsDxe: starting Boot0001 "UEFI QEMU HARDDISK QM00013 " from PciRoot(0x0)/Pci(0x2,0x0)/Sata(0x0,0xFFFF,0x0)
+PC5-64-LOADER-BANNER 64-bit UEFI path (experimental)
+0x56524553544f4f42 bs_rev=0x20046 bs_hsize=0x178
+0x1e651f98 st=0x1f5ec018 bs=0x1fe8afc0
+PC5-64-LOADER-ALLOC type=max-address pages=1 requested-max=0xffffffff returned-base=0x1e23a000 end=0x1e23afff within-bound=1 within-limit=1 verdict=ok
+0 dh=0x1e5ca798
+0
+0
+PC5-64-LOADER kernel-volume=loaded-image-device
+PC5-64-LOADER kernel at=0x100000 bytes=49152
+0 n=2
+PC5-64-LOADER framebuffer=0x80000000 1280x800 pitch=5120
+PC5-64-LOADER rsdp=0x1f77e000
+PC5-64-LOADER-ALLOC type=max-address pages=6 requested-max=0xffffffff returned-base=0x1e13e000 end=0x1e143fff within-bound=1 within-limit=1 verdict=ok
+PC5-64-LOADER pagetables=0x1e13e000 pages=6 mapped_2mib=2048 span=0x100000000
+PC5-64-LOADER-ALLOC type=max-address pages=4 requested-max=0xffffffff returned-base=0x1e13a000 end=0x1e13dfff within-bound=1 within-limit=1 verdict=ok
+PC5-64-LOADER stack=0x1e13a000-0x1e13e000
+PC5-64-LOADER image=0x10000000-0x10004370 below-span=1
+PC5-64-LOADER-ALLOC type=max-address pages=8 requested-max=0xffffffff returned-base=0x1e132000 end=0x1e139fff within-bound=1 within-limit=1 verdict=ok
+PC5-64-LOADER-ALLOC type=max-address pages=8 requested-max=0xffffffff returned-base=0x1e12a000 end=0x1e131fff within-bound=1 within-limit=1 verdict=ok
+PC5-64-LOADER exit-boot-services=ok attempts=1 descriptors=102
+PC5-64-LOADER cr3-plan=0x1e13e000 cr0=0x80010033 cr4=0x668 long-mode=1
+PC5-64-LOADER-JUMP entry=0x100000 bootinfo=0x1e23a000 stack=0x1e13e000
+PC5-64BIT-KERNEL-ENTRY
+PC5-64-MAP entries=102 conventional_pages=119146 bytes=0xcc0
+PC5-64-IMAGE base=0x100000 size=0xc000 range=ok
+PC5-64-BANNER PC5 64-bit kernel entry
+PC5-64-ENV cr0=0x80010033 cr3=0x1e13e000 cr4=0x668 efer=0xd00
+PC5-64-PAGING enabled=1 root=0x1e13e000 pages=6 span=0x100000000 kernel=0x100000-0x10c000 loaded=0x100000
+PC5-64-PTWALK va=0 path=PPP- size=2m pa=0 identity=1 note=start
+PC5-64-PTWALK va=0x3fffffff path=PPP- size=2m pa=0x3fffffff identity=1 note=below-1gib
+PC5-64-PTWALK va=0x40000000 path=PPP- size=2m pa=0x40000000 identity=1 note=at-1gib
+PC5-64-PTWALK va=0x40000001 path=PPP- size=2m pa=0x40000001 identity=1 note=above-1gib
+PC5-64-PTWALK va=0x50000000 path=PPP- size=2m pa=0x50000000 identity=1 note=in-1gib
+PC5-64-PTWALK va=0x7fffffff path=PPP- size=2m pa=0x7fffffff identity=1 note=below-2gib
+PC5-64-PTWALK va=0x80000000 path=PPP- size=2m pa=0x80000000 identity=1 note=at-2gib
+PC5-64-PTWALK va=0x80000001 path=PPP- size=2m pa=0x80000001 identity=1 note=above-2gib
+PC5-64-PTWALK va=0x90000000 path=PPP- size=2m pa=0x90000000 identity=1 note=in-2gib
+PC5-64-PTWALK va=0xbfffffff path=PPP- size=2m pa=0xbfffffff identity=1 note=below-3gib
+PC5-64-PTWALK va=0xc0000000 path=PPP- size=2m pa=0xc0000000 identity=1 note=at-3gib
+PC5-64-PTWALK va=0xc0000001 path=PPP- size=2m pa=0xc0000001 identity=1 note=above-3gib
+PC5-64-PTWALK va=0xd0000000 path=PPP- size=2m pa=0xd0000000 identity=1 note=in-3gib
+PC5-64-PTWALK va=0xffffffff path=PPP- size=2m pa=0xffffffff identity=1 note=upper-end
+PC5-64-PTWALK span probes=14 failed=0
+PC5-64-REGS wide-operands=ok arithmetic=ok
+PC5-64-STACK rsp=0x1e13df20 top=0x1e13e000 size=16384 aligned=16 range=ok
+PC5-64-LOADER image=0x10000000 size=0x4370 range=ok
+PC5-64-ENV physical-address-width=40 checked=1
+PC5-64-BOOTINFO magic=ok version=2 size=160 memdesc=32 flags=0xf exit_boot_services=1
+PC5-64-FB addr=0x80000000 width=1280 height=800 pitch=5120 usability=unsupported reason=not-device-memory
+PC5-64-RSDP addr=0x1f77e000 usability=ok checks=signature,legacy-checksum tables=not-validated
+PC5-64-CPU vendor=AuthenticAMD
+PC5-64-CPU family=15
+PC5-64-CPU model=107
+PC5-64-CPU stepping=1
+PC5-64-CPU phys_bits=40
+PC5-64-CPU virt_bits=48
+PC5-64-CPU long_mode=1
+PC5-64-CPU nx=1
+PC5-64-CPU pages_1g=0
+PC5-64-CPU apic=1
+PC5-64-CPU max_apic_ids=0
+PC5-64-CPU x2apic=0
+PC5-64-CPU svm_advertised=1
+PC5-64-CPU svm_npt=0
+PC5-64-CPU svm_asids=1
+PC5-64-CPU hypervisor=1
+PC5-64-CPU invariant_tsc=0
+PC5-64BIT-LONG-MODE-OK
+PC5-64-DONE
