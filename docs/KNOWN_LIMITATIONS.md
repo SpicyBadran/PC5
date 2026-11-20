@@ -165,8 +165,13 @@ Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
     PIT-calibrated TSC: the PIT is polled once at boot to measure the TSC rate, every
     later reading is a TSC delta, and a PIT that does not answer leaves the clock
     reported as uncalibrated rather than presenting a zero rate as a working one. It
-    is **not** an interrupt-driven timer and nothing is preempted. There is no SMP
-    bring-up, no scheduler, no syscalls and no process separation. Its identity map stops at 4 GiB, it does not use NX
+    is **not** an interrupt-driven timer and nothing is preempted.
+
+    CPU topology is enumerated from ACPI's MADT, so the kernel can say how many CPUs
+    exist. It starts none of them: bringing up a secondary needs an INIT-SIPI
+    sequence and a low-memory trampoline, neither of which exists here, so the log
+    reports `bringup=not-attempted` rather than implying the cores are usable. No
+    scheduler, no syscalls, no process separation. Its identity map stops at 4 GiB, it does not use NX
     (CPUID reports it; EFER.NXE is not set), there are no guard pages, and there
     is no physical-memory allocator. Nothing in it is a protection mechanism yet.
 22c. **The 64-bit path is not part of the release image.** It is built by its own

@@ -21,6 +21,7 @@
 #include "apic64.h"
 #include "idt64.h"
 #include "timer64.h"
+#include "madt64.h"
 #include "serial64.h"
 
 #define CR0_PG (1ULL << 31)
@@ -595,6 +596,36 @@ static void report_timer(void)
     }
 }
 
+/* How many CPUs exist, from firmware. `CPUID` can only describe the core it is
+ * running on, so the MADT is the only firmware-published source for this.
+ *
+ * Reported, not acted on: starting a secondary processor needs an INIT-SIPI sequence
+ * and a low-memory trampoline, neither of which this kernel has. So `M2a`'s "second
+ * CPU brought up or its absence reported" is answered with the second option, and the
+ * log says so rather than implying the cores are usable. */
+static void report_topology(const struct pc5_boot64 *boot)
+{
+    struct pc5_madt64 madt;
+    const char *why;
+
+    why = madt64_scan(&madt, boot->acpi_rsdp, &g_map);
+    if (why != 0) {
+        serial64_write("PC5-64-TOPOLOGY not-parsed reason=\"");
+        serial64_write(why);
+        serial64_write("\"\n");
+        return;
+    }
+
+    madt64_print(&madt);
+    if (madt.cpu_count <= 1) {
+        serial64_write("PC5-64-TOPOLOGY single-cpu=1 usable=1 bringup=not-attempted\n");
+    } else {
+        serial64_write("PC5-64-TOPOLOGY single-cpu=0 usable=1 present=");
+        serial64_dec(madt.cpu_count);
+        serial64_write(" bringup=not-attempted reason=\"no INIT-SIPI trampoline\"\n");
+    }
+}
+
 static void continue_on_handed_stack(void *argument)
 {
     const struct pc5_boot64 *bi = (const struct pc5_boot64 *)argument;
@@ -609,6 +640,7 @@ static void continue_on_handed_stack(void *argument)
     cpu64_print(&cpu);
     report_local_apic();
     report_timer();
+    report_topology(bi);
 
     /* Every mandatory check passed; only now is the marker emitted. */
     serial64_write("PC5-64BIT-LONG-MODE-OK\n");

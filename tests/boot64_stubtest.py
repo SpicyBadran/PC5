@@ -98,6 +98,17 @@ def checks_for(trace, expect_success=True):
           fields(serial, "PC5-64-FB", "usability") in ("ok", "unsupported", "absent"))
     check("the kernel classified the RSDP",
           fields(serial, "PC5-64-RSDP", "usability") in ("ok", "unsupported", "absent"))
+    # The stub firmware publishes an RSDP but no MADT, and has no PIT that answers.
+    # Both subsystems must therefore reach a *classified* refusal rather than a fault
+    # or a hang: a boot that stops here is the failure mode these checks exist for.
+    check("the timer either calibrated or said why not",
+          "PC5-64-TIMER calibrated=" in serial
+          and (fields(serial, "PC5-64-TIMER", "calibrated") == "1"
+               or 'not-calibrated reason=' in serial),
+          "an uncalibrated clock must be reported, not presented as working")
+    check("CPU topology was either enumerated or its absence reported",
+          "PC5-64-TOPOLOGY " in serial
+          and ("not-parsed reason=" in serial or "usable=" in serial))
     check("the kernel ran to its verdict", "PC5-64-DONE" in serial)
 
     if expect_success:
