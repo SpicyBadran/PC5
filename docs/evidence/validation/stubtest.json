@@ -4,10 +4,10 @@
     "skipped": 0,
     "total": 58
   },
-  "code_revision": "a9b383ddf9419e4e97379b6767fe9098206fae54",
+  "code_revision": "9fdba4f406ae70fe5268cb3d799dcfb8be51ed7d",
   "command": "make stubtest",
-  "commit": "a9b383ddf9419e4e97379b6767fe9098206fae54",
-  "date": "2026-11-16",
+  "commit": "9fdba4f406ae70fe5268cb3d799dcfb8be51ed7d",
+  "date": "2026-11-20",
   "dirty": false,
   "exit_code": 0,
   "gate": "stubtest",
