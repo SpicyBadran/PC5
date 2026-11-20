@@ -35,6 +35,7 @@
 #include "pc5_map.h"
 #include "handover64.h"
 #include "pagetables.h"
+#include "alloc64.h"
 
 #define LOAD_LIMIT 0xFFFFFFFFull
 static u16 KERNEL_NAME[] = {'\\', 'K', 'E', 'R', 'N', 'E', 'L',
@@ -249,15 +250,56 @@ static void validate_loader_placement(efi_handle image, struct pc5_boot64 *boot_
  * The contract is checked again on the way out rather than trusted: firmware (or a
  * stub) that returns a range crossing the limit, wrapping, or not honouring the
  * bound must stop the boot, not hand the kernel a pointer it cannot dereference.
- * `pages` is validated first, because `pages * 4096` is itself a wrap site. */
+ * `pages` is validated first, because `pages * 4096` is itself a wrap site.
+ *
+ * D2: report the allocation exactly as the firmware performed it.
+ *
+ * Every field here is an observed value: `requested_max` is the variable the
+ * firmware was handed (and wrote back into), `returned_base` is what firmware
+ * actually wrote, and `end` is derived from those two - never from a constant
+ * or from what the loader expected.  The kernel64/alloc64.c verdict logic is
+ * reused verbatim so the loader's arithmetic is the arithmetic under test. */
+static void report_allocation(u64 requested_max, u64 pages, u64 returned_base)
+{
+    struct pc5_alloc_check check;
+
+    pc5_alloc_check(&check, requested_max, pages, returned_base,
+                    PC5_IDENTITY_LIMIT);
+
+    serial_write("PC5-64-LOADER-ALLOC type=max-address pages=");
+    serial_dec(pages);
+    serial_write(" requested-max=");
+    serial_hex(requested_max);
+    serial_write(" returned-base=");
+    serial_hex(returned_base);
+    serial_write(" end=");
+    serial_hex(check.end_address);
+    serial_write(" within-bound=");
+    serial_write(check.within_bound ? "1" : "0");
+    serial_write(" within-limit=");
+    serial_write(check.within_limit ? "1" : "0");
+    serial_write(" verdict=");
+    serial_write(pc5_alloc_verdict(&check));
+    if (check.note[0]) {
+        serial_write(" note=");
+        serial_write(check.note);
+    }
+    serial_write("\n");
+}
+
 static void *alloc_below_4g(u64 pages, u64 *physical)
 {
     if (pages == 0 || pages > (PC5_IDENTITY_LIMIT / 4096ull))
         return 0;
 
-    u64 address = PC5_IDENTITY_LIMIT - 1ull;      /* input: uppermost allowed byte */
+    u64 requested_max = PC5_IDENTITY_LIMIT - 1ull; /* input: uppermost allowed byte */
+    u64 address = requested_max;
     efi_status status = g_bs->allocate_pages(EFI_ALLOCATE_MAX_ADDRESS,
                                             EFI_LOADER_DATA, pages, &address);
+
+    /* Report before deciding, so a rejected allocation still leaves evidence of
+     * what firmware returned rather than only a bare failure. */
+    report_allocation(requested_max, pages, address);
     if (EFI_ERROR(status) || address == 0)
         return 0;
 

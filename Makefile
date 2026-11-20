@@ -110,16 +110,38 @@ $(BUILD)/mbr.bin: $(OBJ)/mbr.o
 # `make stubtest64` runs both under the long-mode stub firmware.  Nothing in
 # the release path depends on any of it, which is what keeps the 32-bit image
 # the thing that ships while the 64-bit path is still being proven.
+# The UEFI boot application is an ordinary PE32+ EFI image built with the
+# same binutils/gcc the rest of the tree uses: no EDK2, no mingw toolchain.
+# `ld -m i386pep` is binutils' 64-bit PE emulation, and --enable-reloc-section
+# derives the base relocation table from the absolute addresses the compiler
+# emits with -fno-pic.
+#
+# Defined before the 64-bit rules because those rules expand it: a := variable
+# used earlier in the file would expand to nothing and compile the loader
+# without its flags.
+#
+# No kernel64 include paths here.  This variable also compiles the 32-bit
+# release loader, and adding them would change that recipe - the release
+# artifact must stay byte-for-byte what it was.  The one source that needs
+# pc5_boot64.h gets the paths in its own rule instead.
+UEFI_CFLAGS := -m64 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
+               -ffreestanding -fno-pic -fno-stack-protector -fno-builtin \
+               -mno-red-zone -fno-asynchronous-unwind-tables -fno-unwind-tables \
+               -fno-tree-loop-distribute-patterns \
+               -Ikernel/include -Iboot/uefi
+
 KERNEL64_CFLAGS := -m64 -std=gnu11 -O2 -Wall -Wextra -Werror -ffreestanding \
                    -fno-pic -fno-pie -fno-builtin -fno-stack-protector \
                    -mno-red-zone -fno-asynchronous-unwind-tables \
                    -fno-unwind-tables -fno-tree-loop-distribute-patterns \
                    -Ikernel64/include
 KERNEL64_SRC := kernel64/start.S kernel64/main.c kernel64/serial64.c \
-                kernel64/cpu64.c
+                kernel64/cpu64.c kernel64/pagetable64.c \
+                kernel64/pagetable64_check.c
 KERNEL64_HDR := kernel64/include/pc5_boot64.h kernel64/include/pc5_map.h \
                 kernel64/include/pc5_io.h \
-                kernel64/serial64.h kernel64/cpu64.h kernel64/kernel64.ld
+                kernel64/serial64.h kernel64/cpu64.h kernel64/kernel64.ld \
+                kernel64/pagetable64.h kernel64/alloc64.h
 LOADER64_SRC := boot/uefi64/uefi64_main.c boot/uefi64/pagetables.c \
                 boot/uefi64/bootx64.S
 LOADER64_HDR := boot/uefi64/pagetables.h boot/uefi64/handover64.h \
@@ -142,6 +164,8 @@ $(BUILD)/kernel64:
 # times") - which is what a from-scratch build of this target used to hit.
 $(BUILD)/kernel64/pc5-64.elf: $(BUILD)/kernel64/start.o $(BUILD)/kernel64/main.o \
                               $(BUILD)/kernel64/serial64.o $(BUILD)/kernel64/cpu64.o \
+                              $(BUILD)/kernel64/pagetable64.o \
+                              $(BUILD)/kernel64/pagetable64_check.o \
                               kernel64/kernel64.ld
 	$(LD) -m elf_x86_64 -T kernel64/kernel64.ld -nostdlib -o $@ $(filter %.o,$^)
 
@@ -156,7 +180,17 @@ kernel64: $(BUILD)/kernel64/KERNEL64.BIN
 $(BUILD)/kernel64/pagetables.o: boot/uefi64/pagetables.c boot/uefi64/pagetables.h | $(BUILD)/kernel64
 	$(CC) $(KERNEL64_CFLAGS) -c $< -o $@
 
+# -Ikernel64 as well as -Ikernel64/include: the loader includes the shared
+# allocation header by name, and that header includes pc5_boot64.h from
+# include/.  The path is added here rather than to UEFI_CFLAGS because that
+# variable also compiles the 32-bit release loader.
 $(BUILD)/kernel64/uefi64_main.o: boot/uefi64/uefi64_main.c $(LOADER64_HDR) | $(BUILD)/kernel64
+	$(CC) $(UEFI_CFLAGS) -Werror -Ikernel64/include -Ikernel64 -c $< -o $@
+
+# alloc64.c is shared with the loader: the arithmetic that judges an
+# AllocateMaxAddress result is the same code the host probe drives, so a change
+# in the verdict logic cannot drift between firmware and its test.
+$(BUILD)/kernel64/alloc64-uefi.o: kernel64/alloc64.c kernel64/alloc64.h | $(BUILD)/kernel64
 	$(CC) $(UEFI_CFLAGS) -Werror -Ikernel64/include -c $< -o $@
 
 $(BUILD)/kernel64/bootx64-64.o: boot/uefi64/bootx64.S | $(BUILD)/kernel64
@@ -164,10 +198,12 @@ $(BUILD)/kernel64/bootx64-64.o: boot/uefi64/bootx64.S | $(BUILD)/kernel64
 
 $(BUILD)/uefi64/BOOTX64.EFI: $(BUILD)/kernel64/uefi64_main.o \
                              $(BUILD)/kernel64/pagetables.o \
+                             $(BUILD)/kernel64/alloc64-uefi.o \
                              $(BUILD)/kernel64/bootx64-64.o boot/uefi/bootx64.ld
 	@mkdir -p $(BUILD)/uefi64
 	$(LD) $(UEFI_LDFLAGS) -e _start $(BUILD)/kernel64/bootx64-64.o \
-	  $(BUILD)/kernel64/uefi64_main.o $(BUILD)/kernel64/pagetables.o -o $@
+	  $(BUILD)/kernel64/uefi64_main.o $(BUILD)/kernel64/pagetables.o \
+	  $(BUILD)/kernel64/alloc64-uefi.o -o $@
 	@python3 tools/eficheck.py $@ --require-relocs --max-bytes 196608
 
 # A separate ESP image: the release ESP never carries KERNEL64.BIN.
@@ -190,16 +226,6 @@ stubtest64: $(BUILD)/efi64.img $(BUILD)/kernel64/KERNEL64.BIN
 	  --json-out $(BUILD)/stubtest64-report.json
 
 # ---------------------------------------------------------------- UEFI ----
-# The UEFI boot application is an ordinary PE32+ EFI image built with the
-# same binutils/gcc the rest of the tree uses: no EDK2, no mingw toolchain.
-# `ld -m i386pep` is binutils' 64-bit PE emulation, and --enable-reloc-section
-# derives the base relocation table from the absolute addresses the compiler
-# emits with -fno-pic.
-UEFI_CFLAGS := -m64 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
-               -ffreestanding -fno-pic -fno-stack-protector -fno-builtin \
-               -mno-red-zone -fno-asynchronous-unwind-tables -fno-unwind-tables \
-               -fno-tree-loop-distribute-patterns \
-               -Ikernel/include -Iboot/uefi
 UEFI_LDFLAGS := -m i386pep -nostdlib -T boot/uefi/bootx64.ld \
                 --image-base 0x10000000 --subsystem 10 \
                 --section-alignment 0x1000 --file-alignment 0x200 \
@@ -398,6 +424,39 @@ ovmf-test: $(ISO) $(BUILD)/efi.img
 	python3 tests/ovmf_boot.py --iso $(ISO) --efi-image $(BUILD)/efi.img \
 	  --kernel $(BUILD)/kernel.bin --json-out $(BUILD)/ovmf-report.json \
 	  --matrix-out $(BUILD)/ovmf-matrix.json $(OVMF_ARGS)
+
+# The 64-bit counterpart.  Separate on purpose: `ovmf-test` boots the 32-bit ISO
+# and looks for the 32-bit marker dialect, so it cannot see this path at all -
+# its verdict says nothing about it in either direction.  This target boots
+# efi64.img and speaks only PC5-64-*.
+#
+# Also opt-in, and for the same reason: QEMU and OVMF are not dependencies of
+# `make`, `make check`, `all`, `iso` or the release artifact, and this target is
+# in none of them.  Exit code 3 means NOT TESTED; 2 means the boot happened but
+# a runtime assertion failed; 1 means a stage failed.
+#
+#   PC5_QEMU=/usr/bin/qemu-system-x86_64
+#   PC5_OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
+#   PC5_OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
+#
+# OVMF64_ARGS is a separate variable from the 32-bit target's OVMF_ARGS so that
+# setting one cannot silently change the other target's invocation.
+OVMF64_ARGS ?= $(if $(PC5_OVMF_CODE),--ovmf-code $(PC5_OVMF_CODE)) \
+              $(if $(PC5_OVMF_VARS),--ovmf-vars $(PC5_OVMF_VARS)) \
+              $(if $(PC5_QEMU),--qemu $(PC5_QEMU))
+
+ovmf-test64: $(BUILD)/efi64.img
+	python3 tests/ovmf_boot64.py --image $(BUILD)/efi64.img \
+	  --loader $(BUILD)/uefi64/BOOTX64.EFI \
+	  --kernel $(BUILD)/kernel64/KERNEL64.BIN \
+	  --json-out $(BUILD)/ovmf64-report.json $(OVMF64_ARGS)
+
+# Negative controls for the 64-bit validation: each mutant breaks one thing in
+# an isolated copy and must be caught by the specific test that claims to catch
+# it.  Host-only, no QEMU, so it is safe to run anywhere - but it is still not
+# part of `check`, because it copies the tree several times.
+negative-controls64:
+	python3 tools/negative_controls_64.py
 
 # Provision the external dependencies of the gate above (QEMU and a real
 # TianoCore OVMF build) with the distribution's package manager, then print the
