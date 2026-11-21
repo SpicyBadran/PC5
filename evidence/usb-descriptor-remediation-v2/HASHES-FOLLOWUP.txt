@@ -1,6 +1,6 @@
 Artifact identities — follow-up reconciliation of PR #35, branch `docs/usb-post-merge-reconciliation`.
 
-Generated 2026-11-21T23:31:30Z by measurement from the staged tree, after every file it records existed.
+Generated 2026-11-21T23:38:20Z by measurement from the staged tree, after every file it records existed.
 
 Why a new manifest instead of regenerating the ones that exist:
   `HASHES-PR-TIP.txt` and `CORRECTED-MANIFEST.txt` describe `main` at PR #35's tip
@@ -29,7 +29,7 @@ each are the drift named in section D, not damage.
 docs/INSTALLATION.md 11326 9661c06032f730bd5be6b1d9cdd6cf6bbec8ce6b9b8e9435069d4287655f2885
 docs/engineering/USB-IDENTITY-BOUNDARY-DESIGN-v1.md 19886 af1392c7c6529e611d93acf8e4660bd7a70757572252ce9b46e98004f7d10ccd
 # evidence/usb-descriptor-remediation-v2/HASHES-FOLLOWUP.txt excluded: a manifest cannot record itself
-evidence/usb-descriptor-remediation-v2/POST-MERGE-RECONCILIATION-20261122.md 15184 57f75c6fb8c65dacf5baa0b4ef47d0d0f92fea1375781b2f648416ce9309ae1c
+evidence/usb-descriptor-remediation-v2/POST-MERGE-RECONCILIATION-20261122.md 21698 5c9db8104c650093e5533d5048a8ab450c2a5351c3b2fe05cae290eed8b86858
 tests/test_repository_hygiene.py 6030 bdfd2f5f4e74b9121a359f63cf24777e6ccecb8fb7b528f18ee2b52fd5dbff52
 
 === B — the v2 evidence package at this branch ===
@@ -38,7 +38,7 @@ evidence/usb-descriptor-remediation-v2/FINDINGS-CLOSURE-20261121.md 24876 fea689
 evidence/usb-descriptor-remediation-v2/FINDINGS-DISPOSITION-20261121.md 8504 d81a7e792474a3441ca39f4ae56f12c031fdcde69b7db256d4312d57e10268e7
 evidence/usb-descriptor-remediation-v2/HASHES-PR-TIP.txt 16427 80f3c26190cb66c4a2815fb611411db86f93fbcf31fff775bcbf87c661f27313
 evidence/usb-descriptor-remediation-v2/HASHES.txt 5935 3f0e56a28912cc33817c8bad51e2f19373876510e85de29c19cca4c471345cab
-evidence/usb-descriptor-remediation-v2/POST-MERGE-RECONCILIATION-20261122.md 15184 57f75c6fb8c65dacf5baa0b4ef47d0d0f92fea1375781b2f648416ce9309ae1c
+evidence/usb-descriptor-remediation-v2/POST-MERGE-RECONCILIATION-20261122.md 21698 5c9db8104c650093e5533d5048a8ab450c2a5351c3b2fe05cae290eed8b86858
 evidence/usb-descriptor-remediation-v2/PR-BODY.md 13542 14219b640d6a2b46b5f5bcdcb8c2c60d69ac5b377a6497c036be3e6f268e27a8
 evidence/usb-descriptor-remediation-v2/README.md 4703 c2bdc65d73c0c7824bb81a24f869cffb81b8b38e2089fc0845fc579744be42ca
 evidence/usb-descriptor-remediation-v2/TIMESTAMP-RECONCILIATION.md 5713 92061f3082a9fbe506b5cb359d25461dd0edc5073c4d5da4cc45169deed6a96a

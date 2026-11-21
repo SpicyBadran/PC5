@@ -226,3 +226,97 @@ not deployment-approved**.
 
 *Recorded 2026-11-21T23:27:42Z. No device node exists in this environment, `mknod` is denied, and no
 destructive call was made or possible.*
+
+## 8. Destination roadmap: verified state, and what is actually startable
+
+Checked against `docs/architecture/roadmap.json` in this clone — its `updated` field is
+`2026-11-16`, schema `pc5.roadmap/2`, 35 milestones — and against the two documents that
+govern the destination: `docs/playstation/BOOT_FEASIBILITY.md` (124 lines) and
+`docs/PS5_SYSTEM_SOFTWARE_TARGET.md` (212 lines). Nothing below is inferred from the roadmap's
+prose; each claim is a field of the JSON or a line of a test.
+
+| claim | verdict | measurement |
+|---|---|---|
+| `M14` not started | **confirmed** | `"state": "not_started"`, `depends_on: [M13, M7]` |
+| `M15` not started | **confirmed** | `not_started`, `depends_on: [M13]` |
+| `M16` not started | **confirmed** | `not_started`, `depends_on: [M12, M3]` |
+| `M17`–`M19` blocked | **confirmed** | `blocked` each; blockers quoted below; `M20`, `M21` blocked too |
+
+Full census: `complete` 9 (`M0`, `M1a`, `M1c`–`M1i`), `in_progress` 2 (`M9`, `M10`),
+`not_started` 18, `blocked` 6 (`M1b`, `M17`, `M18`, `M19`, `M20`, `M21`).
+
+**Why `M9` and `M10` stay `in_progress` although their acceptance reads as met.** The gate is
+`tests/test_product_identity.py::test_no_milestone_claims_a_level_above_its_evidence`:
+
+> `f"{m['id']} is complete at level {m['level']}: only levels 1-2 have evidence"`
+
+A milestone above level 2 cannot be marked `complete` at all while that rule stands — it is what
+keeps `M1` honest, and `M10`'s own `notes` field says so. So "finish `M9`/`M10`" is not
+achievable work: they are substantively accepted and structurally held. The repository already
+enforces the substance: `test_the_file_in_the_tree_is_a_pointer_not_a_payload`,
+`test_the_declared_size_is_recorded_in_the_documents` and `test_nothing_in_the_tree_is_a_sony_binary`
+assert the `M9` acceptance items about the LFS pointer
+(`42ea0e5a…063fb`, 1,423,697,408 B) and the payload's absence.
+
+**Dependency reachability, measured on the graph.** `M11` depends on `M2`, `M3`, `M10`; `M2` and
+`M3` depend on `M1` and `M2a`/`M2b`, and `M1`'s acceptance is a physical boot on qualified hardware
+with a `tools/hw_record.py` record. So `M11`→`M16` are not startable here: their unmet
+dependencies are hardware-validated layers, not documents. `M18` additionally needs a lawful,
+authenticated input; `M19` needs `M14`–`M16` + `M18`.
+
+**The one startable gap, and it is `M17`'s analysis half.** `M17`'s blocker is explicit that it
+"can proceed only as analysis", and its deliverable is
+`docs/playstation/SECURITY_BOUNDARY.md` — a path that **does not exist** (`ls`:
+`docs/playstation/` holds `BOOT_FEASIBILITY.md`, `FIRMWARE_VERSIONS.md`, `RESEARCH_LOG.md`,
+`SYSTEM_FEATURE_PARITY.md`). Its four acceptance items are answerable from work already in the
+tree: `BOOT_FEASIBILITY.md` §2 classifies dependencies into six classes, §3 lists the four
+"would have to be true" paths, §4 lists three falsifiers ("None has been observed"), and ADR-007
+/ ADR-022 fix the lawfulness boundary. No gate catches the missing file:
+`tests/test_architecture.py` checks deliverable existence for `docs/architecture/` names only
+(`test_deliverables_exist_and_are_substantive`), and no test references that path — which is why
+an in-progress analysis milestone can carry an unwritten deliverable unnoticed.
+
+**Where this remediation sits in the graph.** The descriptor-bound write tool appears in **no**
+milestone's deliverables or acceptance: `usb` in the JSON reaches `M2d` (kernel xHCI/HID/DualSense
+input path, `not_started`) and `M15` (PS5 USB *device model*, `not_started`) — different layers
+from a host-side imaging tool. What the tool serves is `M1`, whose acceptance includes "an
+installation writes a bootable target" and whose four deliverables (`docs/evidence/`,
+`docs/HARDWARE_COMPATIBILITY.md`, `docs/hardware/M1_PHYSICAL_BOOT_PROCEDURE.md`,
+`tools/hw_record.py`) all already exist — what `M1` lacks is a machine. So:
+
+* the remediation advances **no milestone**, and §8 of the design document says the same about
+  deployment approval;
+* what it *did* produce is a validated-safe write path, which is a **prerequisite** for `M1`'s
+  write step and for any physical validation of it;
+* the evidence class of every item in §6 is **synthetic / documented**, not emulator-backed and
+  not hardware-backed: `make check` here runs `unicorn`-free (109 skips), and no device node was
+  ever created in this sandbox (`mknod` denied, `/dev/` clean).
+
+**Smallest concrete next PR I would accept, with measurable criteria** — write
+`docs/playstation/SECURITY_BOUNDARY.md` as the `M17` analysis deliverable, changing no code:
+
+1. every authentication step in the console boot chain listed, each row carrying what it depends
+   on and whether a PC can lawfully provide it, and a source class of
+   `public documentation | observable behaviour | unknown` — the `M10` rule, "none is invented";
+2. the four "would have to be true" paths of `BOOT_FEASIBILITY.md` §3 restated with their
+   falsifiers, and the three falsifiers of §4 recorded as *not observed as of 2026-11-22*;
+3. an explicit statement, one row per step, of which steps a platform model could satisfy and
+   which it cannot — that is `M17`'s fourth acceptance item, and it is what `M18`'s loader design
+   would consume;
+4. `M17` stays `blocked` in `roadmap.json`; only its `notes` gains "analysis published, blocker
+   unchanged" — the `M10` discipline, not a state bump;
+5. a test in `tests/test_architecture.py`-style coverage asserting that every milestone
+   `deliverables` entry in `WS10` names a file that exists when the milestone is
+   `in_progress`/`blocked`-with-analysis — so a named deliverable cannot silently stay unwritten;
+6. gates green from a fresh clone: `make docs-check`, `make check`, and the new test's own
+   negative control (delete the file, watch it fail).
+
+Two things this does **not** need and must not smuggle in: any key handling, decryption or
+authentication bypass (ADR-022 boundary, and item 5 of `M9`'s acceptance forbids even *planning*
+it here); and any claim that writing the analysis moves `M17` toward `complete`.
+
+**Separately, three items are waiting on the author, not on engineering:** `M1b` CI needs a
+token with the `workflows` scope so `ci/build.yml` can exist (measured:
+`gh api repos/SpicyBadran/PC5/actions/workflows` → `{"total_count":0}`); `M1` needs a qualified
+machine booted from USB; and physical validation of this write path needs explicit authorisation
+to write a real stick.
