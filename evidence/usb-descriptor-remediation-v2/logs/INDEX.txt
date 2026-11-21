@@ -69,7 +69,11 @@ is summarised from another file's numbers.
 30-fresh-clone-verification.txt
     the decisive reproducibility record: a fresh clone of the committed branch, the citations failure reproduced identically at the base commit and explained (the sandbox repo is shallow), the documented repair run in the clone, then full `make check` exit 0, both manifests verified 100/100 and 101/101, both harnesses PASS
 
-31 transcripts + this index = 32 files here; every one carries a purpose note.
+33 transcripts + this index = 34 files here; every one carries a purpose note.
 `INDEX.txt` itself is listed in `../HASHES.txt` as it stood at 19:36Z and has grown since:
 that drift is recorded in `../CORRECTED-MANIFEST.txt`, not repaired by regenerating the manifest.
 Numbers 01, 11 and 12a remain absent by intent, not by loss.
+31-pr-opened.txt
+    PR #35 opened as a draft; the pushed head verified from GitHub (`make check` exit 0, 925 OK skipped=2), GitHub's diff proven content-identical to `git diff base..HEAD`, and it shown to apply to an untouched `main` with no fuzz
+31a-USB-PR-35-patch-identity.txt
+    the two patch files compared byte for byte, with the 16 header-only differences enumerated

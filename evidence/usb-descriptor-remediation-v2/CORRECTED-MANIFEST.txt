@@ -1,6 +1,6 @@
 Artifact identities — CORRECTED manifest, 2026-11-21 USB descriptor remediation branch `fix/usb-descriptor-bound-remediation`.
 
-Generated 2026-11-21T19:57:58Z by measurement (`stat` size, `sha256sum`), never transcribed.
+Generated 2026-11-21T20:00:56Z by measurement (`stat` size, `sha256sum`), never transcribed.
 
 This file is the additive correction to `evidence/usb-descriptor-remediation-v1/HASHES.txt`,
 which is preserved byte-for-byte. Finding F-2 was that that file declares it cannot hash
@@ -128,7 +128,7 @@ evidence/usb-descriptor-remediation-v2/logs/27-how-the-mapping-was-measured.txt 
 evidence/usb-descriptor-remediation-v2/logs/28-pc5ctl-delta-is-docstring-only.txt 251 77d0be55cf7cec9bb8b926aa1b8d699481d7bbaa877603bbcb127f88c93ce295
 evidence/usb-descriptor-remediation-v2/logs/29-usb-suites-and-v1-harness-after-closure.txt 1376 02e69c7ac2bfe774e6eb4ef0cdcdb5e50448601adebeb8203cd3ffd1d1bd768b
 evidence/usb-descriptor-remediation-v2/logs/30-fresh-clone-verification.txt 4603 a23466e55ad8e92288c763adca0aecb803753070db5e1eed6224e8a577aebe4b
-evidence/usb-descriptor-remediation-v2/logs/INDEX.txt 5632 99b4b368ecc665408deaafc0e2acb6c5293f8d3428cea7cc9c392806e98bced5
+evidence/usb-descriptor-remediation-v2/logs/INDEX.txt 6008 2cb02d09e35b69e231f021f6d3505de79758811dfffa4b59ca20ffe574dc3b38
 evidence/usb-descriptor-remediation-v2/measure_mutation_mapping.py 1889 be399dc3703750f75430e9458880b96e30e4ceee5a471eda02fe80f081ec45a2
 evidence/usb-descriptor-remediation-v2/mutation_harness_v2.py 10364 763a8ada64f823bec5321bfc756f685310094b3073a9e87926d95b0ca56b6b28
 
