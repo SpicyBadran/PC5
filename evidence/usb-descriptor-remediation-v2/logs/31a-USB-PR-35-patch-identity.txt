@@ -1,0 +1,17 @@
+# USB-PR-35.patch vs `git diff 56c58521..HEAD`
+# captured 2026-11-21T20:00:56Z
+
+    USB-PR-35.patch   2,560,207 B  2b3cefb81583168647c2206a68ed10078c7118907bff123b1c055f20b7ab3b10
+    /tmp/local.patch  2,560,240 B  68e816193cf8a6d5405f4523569b12d7c207998ef9aff5a9eabba7c79326cc5f
+
+diff → 16 lines, all of them `@@` hunk headers; the text after the second `@@` is git's
+function-context label, which GitHub computes differently. Compare:
+
+    local : @@ -326,6 +336,7 @@ class StubFirmware64Tests(unittest.TestCase):
+    github: @@ -326,6 +336,7 @@ def unsorted():
+
+Content is identical: the filtered sequence of `diff --git`, `new file mode`, `deleted file
+mode`, `+++`, `---` and every added/removed line is byte-equal in both files (28,300 lines,
+0 differences). Reproduce with:
+
+    diff <(grep -vE '^@@ ' USB-PR-35.patch) <(grep -vE '^@@ ' /tmp/local.patch) && echo identical

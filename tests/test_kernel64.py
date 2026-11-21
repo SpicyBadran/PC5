@@ -24,6 +24,17 @@ import sys
 import tempfile
 import unittest
 
+try:  # the emulator module the machine harness needs; absent in a plain clone
+    import unicorn  # noqa: F401
+    HAVE_UNICORN = True
+except ImportError:
+    HAVE_UNICORN = False
+
+#: Decorator, not a `setUpClass` raise: a class skipped from `setUpClass` collapses
+#: into one summary entry and makes the suite look smaller instead of showing the same
+#: tests as skipped.  The reason is attached to each test, and it is never a pass.
+REQUIRE_UNICORN = unittest.skipUnless(
+    HAVE_UNICORN, "unicorn is not installed (pip install -r requirements-harness.txt)")
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build"
 KERNEL_ELF = BUILD / "kernel64" / "pc5-64.elf"
@@ -178,6 +189,7 @@ class LoaderImageTests(unittest.TestCase):
         self.assertEqual(span, 4 << 30)
 
 
+@REQUIRE_UNICORN
 class KernelContractTests(unittest.TestCase):
     """Every failure path, driven through the kernel's real entry point."""
 
@@ -185,7 +197,12 @@ class KernelContractTests(unittest.TestCase):
     def setUpClass(cls):
         build()
         sys.path.insert(0, str(ROOT / "tests"))
+        # `kernel64_machine` imports unicorn inside its functions, so importing the
+        # module is not a test of the dependency and this guard was vacuous: with the
+        # optional package absent every test in the class errored instead of
+        # skipping.  Ask about the module the machinery actually needs.
         try:
+            import unicorn  # noqa: F401
             import kernel64_machine  # noqa: F401
         except ImportError as exc:
             raise unittest.SkipTest(f"unicorn is not installed: {exc}")
@@ -594,6 +611,7 @@ class ReleaseIsolationTests(unittest.TestCase):
                         "the 32-bit kernel must still be present")
         self.assertTrue((ROOT / "kernel64" / "main.c").exists())
 
+@REQUIRE_UNICORN
 class RsdpValidationTests(unittest.TestCase):
     """Revision-aware RSDP validation, driven through the real kernel.
 
@@ -619,7 +637,12 @@ class RsdpValidationTests(unittest.TestCase):
     def setUpClass(cls):
         build()
         sys.path.insert(0, str(ROOT / "tests"))
+        # `kernel64_machine` imports unicorn inside its functions, so importing the
+        # module is not a test of the dependency and this guard was vacuous: with the
+        # optional package absent every test in the class errored instead of
+        # skipping.  Ask about the module the machinery actually needs.
         try:
+            import unicorn  # noqa: F401
             import kernel64_machine  # noqa: F401
         except ImportError as exc:
             raise unittest.SkipTest(f"unicorn is not installed: {exc}")

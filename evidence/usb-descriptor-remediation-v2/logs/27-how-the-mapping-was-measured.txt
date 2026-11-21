@@ -1,0 +1,20 @@
+# how the INTENTIONS map in mutation_harness_v2.py was measured
+# captured 2026-11-21T19:45:12Z
+$ python3 measure_mutation_mapping.py   (from the repository root)
+  imports MUTATIONS from evidence/usb-descriptor-remediation-v1/mutation_harness.py, applies each mutation to a
+  scratch copy, runs the 91-test inventory, and prints the failing/erroring test names per mutant.
+  The output is the JSON beside this file (26-mutation-mapping-measured.json) and the source of
+  INTENTIONS + NOT_PROTECTIVE in mutation_harness_v2.py.
+
+repository /home/user/pc5
+mutants imported from evidence/usb-descriptor-remediation-v1/mutation_harness.py
+
+### baseline
+Ran 91 tests, exit 0
+collected inventory: 91 test methods
+
+### m1-validation-follows-the-pathname
+REQUIRED: restore pathname-based validation. The final safety decision re-resolves the device path instead of using the identity behind the held descriptor.
+tests run: 91; exit 1; assertion failures: 1; errors: 0
+  caught by test_09_path_replaced_between_the_identity_check_and_final_validation
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_09_path_replaced_between_the_identity_check_and_final_validation

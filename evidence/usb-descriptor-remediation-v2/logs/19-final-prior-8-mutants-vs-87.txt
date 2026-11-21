@@ -1,0 +1,71 @@
+repository /tmp/f8b
+
+### m1-validation-follows-the-pathname
+Restore pathname-based validation: the pre-write decision re-resolves the device path instead of using the identity behind the held descriptor.
+tests run: 87; exit code: 1; assertion failures detected: 1
+  intended test FAIL: test_08_symlink_substitution_after_opening_cannot_authorize_the_write
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_08_symlink_substitution_after_opening_cannot_authorize_the_write
+
+### m2-child-writes-the-pathname
+Substitute the original pathname after validation: dd is handed the device path instead of the descriptor it was authorized for.
+tests run: 87; exit code: 1; assertion failures detected: 3
+  intended test FAIL: test_01_valid_descriptor_and_matching_identity_writes_through_the_fd
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_01_valid_descriptor_and_matching_identity_writes_through_the_fd
+  intended test FAIL: test_16_child_receives_exactly_the_validated_descriptor
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_16_child_receives_exactly_the_validated_descriptor
+  also failed: ['test_dd_is_written_through_the_held_descriptor']
+
+### m3-no-pass_fds
+Omit pass_fds: the child never receives the descriptor, so the descriptor-backed write silently cannot work.
+tests run: 87; exit code: 1; assertion failures detected: 3
+  intended test FAIL: test_03_descriptor_inheritance_is_explicit
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_03_descriptor_inheritance_is_explicit
+  also failed: ['test_01_valid_descriptor_and_matching_identity_writes_through_the_fd', 'test_16_child_receives_exactly_the_validated_descriptor']
+
+### m4-wrong-descriptor-inherited
+Pass the wrong descriptor: the child is told to write one number above the descriptor that was validated.
+tests run: 87; exit code: 1; assertion failures detected: 2
+  intended test FAIL: test_01_valid_descriptor_and_matching_identity_writes_through_the_fd
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_01_valid_descriptor_and_matching_identity_writes_through_the_fd
+  intended test FAIL: test_16_child_receives_exactly_the_validated_descriptor
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_16_child_receives_exactly_the_validated_descriptor
+
+### m5-no-final-identity-comparison
+Skip the final identity comparison: the descriptor is not re-read after the decision and before the child starts.
+tests run: 87; exit code: 1; assertion failures detected: 4
+  intended test FAIL: test_02_descriptor_closed_before_the_child_launches
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_02_descriptor_closed_before_the_child_launches
+  intended test FAIL: test_05_descriptor_redirected_to_a_different_object
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_05_descriptor_redirected_to_a_different_object
+  intended test FAIL: test_17_final_validation_failure_immediately_before_writing
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_17_final_validation_failure_immediately_before_writing
+  also failed: ['test_01_valid_descriptor_and_matching_identity_writes_through_the_fd']
+
+### m6-partial-enumeration-accepted
+Ignore incomplete partition enumeration: children that cannot be inspected are skipped instead of making the protected set unknown.
+tests run: 87; exit code: 1; assertion failures detected: 2
+  intended test FAIL: test_12_partial_topology_followed_by_an_enumeration_error
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_12_partial_topology_followed_by_an_enumeration_error
+  also failed: ['test_device_disappearing_during_enumeration_is_unknown']
+
+### m7-unreadable-topology-is-empty
+Treat unreadable topology as an empty relationship set: a `slaves` or `holders` directory that cannot be listed becomes 'no relationships'.
+tests run: 87; exit code: 1; assertion failures detected: 1
+  intended test did not fail: test_13_unreadable_sysfs_relationship_data
+  intended test did not fail: test_13b_unreadable_holders_directory
+  intended test FAIL: test_unreadable_slaves_is_unknown_not_empty
+    test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_unreadable_slaves_is_unknown_not_empty
+  intended test did not fail: test_unreadable_slaves_refuses_the_physical_backing_partition
+
+### m8-open-failure-writes-by-name
+Turn the target-open refusal into a fallback: when ``os.open`` fails, dd is launched against the device *pathname* instead of the command refusing. This is the fail-open shape the descriptor work exists to remove, and it also drops the ``nothing was written`` contract.
+tests run: 87; exit code: 1; assertion failures detected: 1
+  intended test FAIL: test_22_target_open_failure_refuses_before_any_descriptor_exists
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_22_target_open_failure_refuses_before_any_descriptor_exists
+
+### baseline (unmutated)
+exit code: 0
+Ran 87 tests in 0.167s
+OK
+
+RESULT: PASS: baseline green and every mutation detected by its intended assertion

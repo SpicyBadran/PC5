@@ -1,0 +1,91 @@
+# F-6 closure: the end-to-end guard, and the sensitivity measurement that justifies it
+# captured 2026-11-21T20:06:43Z
+
+Finding F-6 asked for "one end-to-end test that dies if the `_relations` UNKNOWN path is
+weakened". `tests/test_pc5ctl_usb_topology_unknown.py` is those tests. Two things had to be
+measured before writing them, and both overturn the mechanism the finding (and this
+package's earlier draft) named.
+
+## 1. Why `test_20`/`test_21` cannot localise the decision at all
+
+Both chmod `devices/sda/slaves` / `devices/sda/holders` and assert a CLI refusal. Under `m7`
+they still pass — but not because a *second* guard fires instead. `root_closure()` walks the
+root disk and interrogates each child directory it lists, so an unreadable child of `sda`
+makes `partitions_of()` answer UNKNOWN as well. The refusal is overdetermined by the fixture,
+which means neither test can ever distinguish "the relationship reader is right" from
+"something else in the walk noticed". Instrumented, mutant active, refusal still present:
+
+    # /tmp/f7p — scratch copy of tools/ + tests/, `except OSError: return UNKNOWN`
+    # changed to `return []  # MUTANT: unreadable means empty` in the COPY ONLY
+    $ TMPDIR=/tmp python3 probe.py
+    isdir before cli: True
+    closure: UNKNOWN
+    rc: 1 | dd_calls: 0
+    out: image /tmp/…/image.iso | sha256 bd1215a1… | cannot establish the full storage
+         topology under '/' (unreadable or malformed device relationship): refusing to
+         write, because the target cannot be proved distinct from the root storage
+    --- topology calls during cli() ---
+       link_for_devnum((8, 0),) -> '/tmp/…/8:0'
+       partition_of((8, 0),) -> False
+       parent_of((8, 0),) -> None
+       …                            # no `_relations` failure is needed for this outcome
+
+## 2. The fixture that does isolate it
+
+Move the unreadable directory one level down, to a device the *only* reader of which is the
+`_relations` call the walk performs for the root partition:
+
+| fixture directory chmod 000 | `_relations` answer | `root_closure()` | rc | `dd` calls |
+|---|---|---|---|---|
+| `devices/sda/sda1/holders` — real code | `UNKNOWN` | `UNKNOWN` | 1 | 0 |
+| `devices/sda/sda1/holders` — under `m7` | `[]` | `{(8, 0), (8, 1)}` | **0** | **1** |
+| `devices/sda/sda1/slaves` — real code | `UNKNOWN` | `UNKNOWN` | 1 | 0 |
+| `devices/sda/sda1/slaves` — under `m7` | `[]` | `{(8, 0), (8, 1)}` | **0** | **1** |
+| `devices/sdc/holders` (below the target) | `UNKNOWN` | `{(8, 0), (8, 1)}` | 0 | 1 — both ways |
+| nothing unreadable (control) | `[]`/`[]` | `{(8, 0), (8, 1)}` | 0 | 1 |
+
+The target-side row is the boundary the last case records: the closure is rooted at the
+device backing `/`, so an unreadable relationship *below* the target is not this guard's
+business; a device the root depends on is always reached through the root's own
+`slaves`/`holders`, which the two refusing rows pin.
+
+## 3. The suite, both ways
+
+    $ cd /home/user/pc5 && TMPDIR=/tmp python3 -m unittest tests.test_pc5ctl_usb_topology_unknown -v
+    Ran 4 tests in 0.020s
+    OK                                              exit 0   (real code)
+
+    $ cd /tmp/f7q && TMPDIR=/tmp python3 -m unittest discover -s tests -p 'test_pc5ctl_usb_topology_unknown.py'
+    ..FF
+    FAIL: …UnreadableRelationshipEndToEnd.test_unreadable_root_partition_holders_refuses_end_to_end
+    AssertionError: [] is not UNKNOWN : the fixture no longer isolates `_relations`: this
+                    case guards the unreadable-relationship answer, not some other refusal
+    FAIL: …UnreadableRelationshipEndToEnd.test_unreadable_root_partition_slaves_refuses_end_to_end
+    AssertionError: [] is not UNKNOWN
+    Ran 4 tests in 0.013s
+    FAILED (failures=2)                             exit 1   (m7 active)
+
+The control and the target-side boundary case keep passing under the mutant, which is the
+point: they are not the guards. The two that fail are, and the message each prints names the
+property it is protecting before it reports the mutant's answer.
+
+## 4. Counts and the harness after the addition
+
+    $ TMPDIR=/tmp python3 -m unittest discover -s tests -p 'test_pc5ctl_usb*.py'
+    Ran 95 tests in 0.279s
+    OK                                              exit 0   (56 + 27 + 8 + 4)
+    $ TMPDIR=/tmp make check
+    Ran 929 tests in 78.891s
+    OK (skipped=2)                                  exit 0
+    $ TMPDIR=/tmp python3 evidence/usb-descriptor-remediation-v2/mutation_harness_v2.py
+    collected inventory: 95 test methods
+    RESULT: PASS: baseline green, every mutant caught, and every intended test both present and discriminating
+
+`INTENTIONS["m7-unreadable-topology-is-empty"]` in that harness now lists the two new names
+beside `test_unreadable_slaves_is_unknown_not_empty`, and the harness asserts each is present
+in the loader's inventory and fails under the mutant — so this closure cannot rot silently the
+way the v1 mapping did (finding F-5).
+
+F-6 is therefore **closed by a test that dies**, which is what §10.3 of the review asked for,
+and `FINDINGS-DISPOSITION-20261121.md` records the corrected mechanism next to the
+superseded guess rather than replacing it.

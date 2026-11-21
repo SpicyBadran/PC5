@@ -376,6 +376,26 @@ class CommandLineExitTests(Fixture):
         self.assertNotIn("CITATIONS OK", output)
         self.assertIn("not a pass", output)
 
+
+    def test_a_shallow_clone_is_reported_as_truncated_not_as_dead_citations(self):
+        """The condition, not the symptom: a truncated checkout must say so.
+
+        Every citation in a `--depth 1` clone reads as "does not name any Git object",
+        which would send a reader to edit documents that are fine. The helper is what
+        the report branches on, so it is asserted directly against a real shallow
+        marker rather than against a mocked git.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q", "."], cwd=root, check=True)
+            self.assertIsNone(commit_citations.history_truncated(root),
+                              "a full clone must not be reported as truncated")
+            # A shallow entry must be a parseable object id, or Git ignores the file.
+            (root / ".git" / "shallow").write_text("0" * 40 + "\n", encoding="utf-8")
+            reason = commit_citations.history_truncated(root)
+            self.assertIsNotNone(reason, "a shallow clone must be recognised")
+            self.assertIn("shallow", reason)
+
     def test_a_non_repository_exits_unchecked(self):
         """No `.git`: nothing can be resolved, so nothing may be claimed."""
         plain = Path(tempfile.mkdtemp())

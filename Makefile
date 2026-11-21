@@ -48,7 +48,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: ovmf-setup ovmf-check all iso uefi kernel64 uefi64 stubtest64 check docs-check citations-check presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record brand brand-check
+.PHONY: ovmf-setup ovmf-check all iso uefi kernel64 uefi64 stubtest64 check docs-check citations-check citation-refs presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record brand brand-check
 
 all: iso
 
@@ -318,6 +318,15 @@ presentation-check:
 # backticked object reference in the dated evidence documents.
 citations-check:
 	python3 tools/commit_citations.py
+
+# Provision what `citations-check` needs to be able to see.  Some evidence citations
+# name a pull-request head, and GitHub publishes those objects only under
+# `refs/pull/N/head`, which no default clone fetches -- so in a fresh clone the gate
+# is not wrong but it is blind.  This is a setup step, deliberately not a
+# prerequisite of `check`: `make check` must not need the network.  A clone with no
+# remote exits 2, "cannot be provisioned", which is neither a pass nor a verdict.
+citation-refs:
+	@tools/citation_refs.sh
 
 # The logo and its variants are generated from tools/brand.py, so a hand edit to
 # brand/*.svg is a stale edit.  `brand` writes; `brand-check` reads.

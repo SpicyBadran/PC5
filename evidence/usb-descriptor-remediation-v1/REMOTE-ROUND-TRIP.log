@@ -1,0 +1,8 @@
+=== v6-equivalent (pc5-usb-descriptor-remediation-20261121-v1) round trip, 2026-11-21T16:58Z ===
+local archive sha256   : 4b5c6b9faf9ff5ddd1a08b599a585e5d49741a9e17fc2051a602596926234233
+retrieved via connector: 4b5c6b9faf9ff5ddd1a08b599a585e5d49741a9e17fc2051a602596926234233
+result: BYTE-IDENTICAL binary round trip through the connector
+extraction: 106 files; every member re-hashed against the archived manifest, zero mismatches
+the archived REMEDIATION.patch applied to a fresh git archive HEAD export and the restored tree ran the USB inventory:
+Ran 91 tests in 0.201s
+OK

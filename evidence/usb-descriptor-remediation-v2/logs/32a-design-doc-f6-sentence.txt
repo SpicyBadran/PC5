@@ -1,0 +1,13 @@
+# design document, §7 — appended 2026-11-21T20:06:43Z
+# (recorded here because the design document is a tracked file whose earlier sections are
+#  the historical record and are not edited)
+
+F-6 closure note: the review's F-6 wording ("every CLI-level refusal survives through a
+second, unrelated guard") named the wrong mechanism. Measured: `test_20`/`test_21` refuse for
+two reasons at once — the root-side walk reaches the chmod'ed child directory through
+`partitions_of()` as well — so those cases never localise the decision to `_relations`, and no
+end-to-end case built on that fixture could. `tests/test_pc5ctl_usb_topology_unknown.py` puts
+the unreadable directory one level down, where `_relations` is the only reader, and carries a
+control case that fails if the fixture stops being complete. §4's limit list and the F-8
+residual above are untouched by this: F-8 is about the root side resolving a `/proc/mounts`
+*name* when mountinfo is absent, which no test fixture can make safe.

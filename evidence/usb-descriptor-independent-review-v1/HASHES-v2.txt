@@ -1,0 +1,34 @@
+Artifact identities — independent review package, second manifest. Generated 2026-11-21T19:33:05Z.
+
+`HASHES.txt` in this directory is preserved untouched (18 records, generated
+before the corrigendum below existed, so it no longer covers this directory in
+full). This manifest is additive: it covers every file here EXCEPT itself — a
+manifest never records its own bytes — and it records the original manifest's
+identity so the two can be told apart. Drift between them is expected: it is the
+record of a review being amended rather than rewritten.
+
+Reproduce from the repository root (portable; mawk has no {64} intervals):
+    awk 'NF==3 && length($3)==64 {print $3"  "$1}' <this file> | sha256sum -c -
+
+evidence/usb-descriptor-independent-review-v1/COMMIT-HANDOFF.md 5280 a003089ae65e4bb9ab7c3906dc474c2551c987db685251f28ebc28d38de4cfb4
+evidence/usb-descriptor-independent-review-v1/HASHES.txt 2366 4fcf1a5d9dcb4d20a9ef2c3a18b3b1a463a7bc11387db9a5274c01d3ca5ecd6b
+evidence/usb-descriptor-independent-review-v1/INDEPENDENT-REVIEW-20261121.md 23206 981d71b95bc330a9ed90196a503262dcd7a1a2985bb1ce681d41297102fdb502
+evidence/usb-descriptor-independent-review-v1/STATE.txt 6768 723c020d744db0eeb97892d408cafce6ece329baf8370c7eb6f7c3565c331ee7
+evidence/usb-descriptor-independent-review-v1/audit_evidence.py 14073 d777f6a5932ec05500ad6736130dfb16c6cc4475b7a9853b7c060db02af8433a
+evidence/usb-descriptor-independent-review-v1/logs/evidence-audit.txt 8660 1b748e950249a487f818daac4737ca53a26154f80e318873241e7a2f7caf984f
+evidence/usb-descriptor-independent-review-v1/logs/make-check-base-clone-run1.txt 148590 3993560d7764638203ee72f94038c344cd08203d967da3b758729fb5ee8f34a2
+evidence/usb-descriptor-independent-review-v1/logs/make-check-base-clone-run1.txt.CORRIGENDUM.txt 1660 2617c25648fc4ad26e9b2ca11ed2a9a05a2fdc62e26b20ede4a1d3ae347e2ff3
+evidence/usb-descriptor-independent-review-v1/logs/make-check-base-clone.txt 148382 36ada0d0499d03732d64c476ecc01f52d0d45b53ac72aa1ddfea1261d444ff9b
+evidence/usb-descriptor-independent-review-v1/logs/make-check-remote-tip.txt 160073 a5024ed26d878582a3373933faeec3b01cdb5522652f1802538fcc7da9beb565
+evidence/usb-descriptor-independent-review-v1/logs/make-check-without-pr-refs-NEGATIVE-CONTROL.txt 1127 e8e73cf2575e37b69c22c7f4fa2c844f68820a9b836057e2c6f2a446b83a161c
+evidence/usb-descriptor-independent-review-v1/logs/mutations-8-prior-suite.txt 5113 ff300fd30a1a42498ad424503cdecdad085e28163c9062b0f422e41c43261aab
+evidence/usb-descriptor-independent-review-v1/logs/mutations-9.txt 6541 8149b4e3ba83fa8683da2907496a358672d2802c0201dbc95de105f19fe095e2
+evidence/usb-descriptor-independent-review-v1/logs/prior-87-suite-vs-current.txt 8257 6707ed66c09054e009afdbc278df2181224d4de09fcc6aafdbe1d257f0823305
+evidence/usb-descriptor-independent-review-v1/logs/probes-patched.txt 297 ac554db00dd92646048df517574c3cdbb1ea32cfc84d1558144350b42c82b208
+evidence/usb-descriptor-independent-review-v1/logs/probes-pristine.txt 26268 f3f363c1453f5653c0e924ed54d0ebfcc6fbf9550a9e0cb04304cdf085cad4d2
+evidence/usb-descriptor-independent-review-v1/logs/unit-suite-without-unicorn.txt 406 33b600d47414bcce6f9e1b054638916d69be92eafb08cd0392dcd671bdad90d8
+evidence/usb-descriptor-independent-review-v1/logs/usb-suite-patched.txt 5940 a26bf3b7d3f584c554171a2c4b682df7d022b8f8e7cf5b401bb9239a69da74bf
+evidence/usb-descriptor-independent-review-v1/logs/usb-suite-pristine.txt 14065 c3c834445c3ce452e745049e2c80a2b43808529473b4f8597c2fb8870c45c29a
+evidence/usb-descriptor-independent-review-v1/reviewer-probes.py 51171 8b5338f9a48fe6ef567a06f3c9e55be558b2e2329ce83b7ec296e0aa872a66d1
+
+records: 20  self-records: 0  (HASHES-v2.txt excluded by design; HASHES.txt recorded normally)

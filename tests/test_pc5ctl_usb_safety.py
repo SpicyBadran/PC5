@@ -417,17 +417,27 @@ class CommandRefusesBeforeWriting(unittest.TestCase):
         st.st_rdev = os.makedev(8, 9)
         topo = mock.MagicMock()
         topo.devnum_for_path.return_value = (8, 9)
+        # A real writable descriptor, so the flow reaches the *second* guard
+        # consultation instead of stopping at the first interrogation of the fd.
+        # Nothing about the assertions changes: two consultations, a refusal, and
+        # no dd -- which is the whole content of this test.
+        _tmp = tempfile.TemporaryDirectory()
+        _backing = os.open(os.path.join(_tmp.name, "backing.bin"),
+                           os.O_WRONLY | os.O_CREAT, 0o600)
         try:
             with mock.patch.object(pc5ctl, "check_target_safe", side_effect=sequencing), \
                     mock.patch.object(pc5ctl, "Topology", return_value=topo), \
                     mock.patch.object(pc5ctl.os.path, "exists", return_value=True), \
-                    mock.patch.object(pc5ctl.os, "open", return_value=3), \
+                    mock.patch.object(pc5ctl.os, "open",
+                                      side_effect=lambda *a, **k: os.dup(_backing)), \
                     mock.patch.object(pc5ctl.os, "close"), \
                     mock.patch.object(pc5ctl.os, "fstat", return_value=st), \
                     mock.patch.object(pc5ctl.shutil, "which", return_value="/bin/dd"):
                 rc = pc5ctl.cmd_usb(self._args("/dev/sdz9", yes=True))
         finally:
             pc5ctl.subprocess.call = real_call
+            os.close(_backing)
+            _tmp.cleanup()
         self.assertGreaterEqual(len(seen), 2,
                                 "the guard must be re-consulted before the write")
         self.assertEqual(rc, 1, "a device that became related must refuse")
@@ -1036,18 +1046,26 @@ class TopologyConsistency(UsbPathCase):
                          mountinfo="/nonexistent")
         topo.devnum_for_path = lambda p: usb
         topo.root_devnum = lambda: (8, 0)
-        fake = mock.MagicMock()
-        fake.fileno.return_value = 7
         args = mock.Mock()
         args.iso = self.iso()
         args.device = "/dev/sdc"
         args.yes = True
         real_exists = os.path.exists
-        with mock.patch.object(
+        # The descriptor is a real, writable one (an ordinary temporary file),
+        # not a fabricated number.  A fixture that hands back `7` cannot reach the
+        # code under test at all once the write path interrogates the descriptor it
+        # holds, and a test that stops early would "pass" without proving that the
+        # validated object is the written one.
+        _tmp = tempfile.TemporaryDirectory()
+        _backing = os.open(os.path.join(_tmp.name, "backing.bin"),
+                           os.O_WRONLY | os.O_CREAT, 0o600)
+        try:
+          with mock.patch.object(
                 pc5ctl.os.path, "exists",
                 lambda p: True if p == "/dev/sdc" else real_exists(p)), \
                 mock.patch.object(pc5ctl, "Topology", return_value=topo), \
-                mock.patch.object(pc5ctl.os, "open", return_value=7), \
+                mock.patch.object(pc5ctl.os, "open",
+                                  side_effect=lambda *a, **k: os.dup(_backing)), \
                 mock.patch.object(pc5ctl.os, "fstat") as fstat, \
                 mock.patch.object(pc5ctl.os, "close"):
             fstat.return_value = os.stat_result(
@@ -1055,8 +1073,13 @@ class TopologyConsistency(UsbPathCase):
             with mock.patch.object(pc5ctl.os, "major", return_value=8), \
                     mock.patch.object(pc5ctl.os, "minor", return_value=32):
                 rc = pc5ctl.cmd_usb(args)
+        finally:
+            os.close(_backing)
+            _tmp.cleanup()
         self.assertEqual(rc, 0, "an unrelated device should reach dd")
         self.assertEqual(len(self.dd_calls), 1)
         of_arg = [a for a in self.dd_calls[0][0] if a.startswith("of=")][0]
         self.assertTrue(of_arg.startswith("of=/proc/self/fd/"),
                         f"dd must write through the pinned fd, got {of_arg}")
+        self.assertIn("conv=fsync", self.dd_calls[0][0],
+                      "the write must still be fsync-ed, descriptor or not")

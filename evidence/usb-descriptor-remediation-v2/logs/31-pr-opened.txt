@@ -1,0 +1,74 @@
+# PR #35 opened, and the pushed head verified from GitHub
+# captured 2026-11-21T20:00:56Z
+
+    branch                 fix/usb-descriptor-bound-remediation
+    pull request           #35  https://github.com/SpicyBadran/PC5  (draft, base main)
+    head commit            3715247898d69396cf4dd74f8ccb644ba1d466ba
+    tree                   1c4f4981aaa9a3f2f98bcbfeabb759ce994afa2f
+    base                   main @ 56c58521580e88c4339ceb6eb40ce724a2bb533b
+    gh pr view --json mergeable,mergeStateStatus  ->  MERGEABLE / CLEAN
+    gh pr checks 35        ->  no checks reported
+
+    $ gh pr diff 35 > USB-PR-35.patch ; sha256sum
+    2b3cefb815831686…  2,560,207 bytes      (also in USB-PR-35.patch.sha256)
+    $ git diff 56c58521..HEAD > /tmp/local.patch ; sha256sum
+    68e816193cf8a6d5…  2,560,240 bytes
+
+**No CI ran, and the reason is recorded rather than glossed: a draft pull request does not
+trigger `pull_request` workflows.** What CI would have done was run here, in a clone of
+GitHub's own bytes:
+
+    $ git clone --no-hardlinks -b fix/usb-descriptor-bound-remediation https://github.com/SpicyBadran/PC5.git /tmp/pr35clone
+    $ git rev-parse HEAD
+    3715247898d69396cf4dd74f8ccb644ba1d466ba                    # equals the PR head
+    $ TMPDIR=/tmp make check                                                     exit 0
+    PASSED: 165 checks, 0 failures
+    PSM conformance: 261/261 checks passed
+    DOCS OK: 67 Markdown files, 34 make targets, links, anchors and commands resolve
+    CITATIONS OK: 258 commit reference(s) resolve across 11 documents
+    PRESENTATION OK / BRAND OK
+    Ran 925 tests in 78.976s
+    OK (skipped=2)
+
+`CITATIONS OK` here, with no `citation-refs` step and no manual object import, is also the
+control for `30-fresh-clone-verification.txt`: the failure recorded there came from this
+sandbox's shallow repository, not from the branch. The same 925/`OK (skipped=2)` total as the
+workspace, from the public remote.
+
+The 33-byte size difference between the two patch files is **not** a difference in content.
+Compared line by line after normalising the `@@` hunk headers, 16 lines differ and all 16 are
+the function-context label git appends to a hunk header (GitHub resolves it differently for
+three test files: `class StubFirmware64Tests(…)` vs `def unsorted():`). The stronger claim
+was checked directly: the sequence of `diff --git`, `new/deleted file mode`, `+++`, `---` and
+every added or removed content line — 28,300 lines — is identical in both files, so the diff
+GitHub serves *is* the branch delta. The raw identities above are both recorded so a reviewer
+can re-derive it.
+
+The review's condition that a patch match the merged content is met by the diff GitHub serves,
+and applying it to an untouched `main` was run as a separate experiment:
+
+    $ rm -rf /tmp/main35clone && git clone --no-hardlinks --single-branch --branch main https://github.com/SpicyBadran/PC5.git /tmp/main35clone
+    $ git rev-parse HEAD
+    56c58521580e88c4339ceb6eb40ce724a2bb533b
+    $ git apply --check /tmp/pr35.patch ; echo $?      ->  0     (no fuzz, no fallback)
+    $ git apply /tmp/pr35.patch ; echo $?              ->  0     (68 whitespace warnings, 0 context errors)
+    $ git status --porcelain                           ->  11 modified, 6 new paths
+    $ TMPDIR=/tmp python3 -m unittest discover -s tests -p 'test_pc5ctl_usb*.py'
+    Ran 91 tests … OK                                              exit 0
+    $ TMPDIR=/tmp python3 evidence/usb-descriptor-remediation-v2/mutation_harness_v2.py
+    collected inventory: 91 test methods
+    RESULT: PASS: baseline green, every mutant caught, and every intended test both present and discriminating
+
+## Why no committed copy of this branch's own diff exists
+
+`USB-REMEDIATION-v2.patch` (100,588 B, `e1dae862d0d01af8…`) is kept byte-identical as the
+artifact the independent review was performed on. A committed patch describing this branch
+would have to contain itself — the impossibility finding F-2 was about — so the PR diff is the
+authoritative delta, `USB-PR-35.patch` here is the out-of-band capture of it, and its identity
+is anchored by this file, which is inside the tree while `3715247…` is not.
+
+## Status
+
+Opened as a draft on the authorisation in the session directive. Draft state, no review
+approval, and **USB media writing remains not deployment-approved**: nothing here was tested
+on a device.
