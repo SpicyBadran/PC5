@@ -1,0 +1,307 @@
+test_1_absent_image_is_refused_before_the_device_is_considered (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_1_absent_image_is_refused_before_the_device_is_considered) ... ok
+test_2_checksum_mismatch_refuses_before_any_descriptor_is_taken (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_2_checksum_mismatch_refuses_before_any_descriptor_is_taken) ... ok
+test_3_device_outside_dev_is_refused_without_topology_or_open (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_3_device_outside_dev_is_refused_without_topology_or_open) ... ok
+test_4_missing_dd_refuses_before_the_descriptor_is_taken (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_4_missing_dd_refuses_before_the_descriptor_is_taken) ... ok
+test_5_without_yes_the_command_stops_at_confirmation (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_5_without_yes_the_command_stops_at_confirmation) ... ok
+test_6_yes_cannot_bypass_a_refusal_even_with_a_writable_descriptor (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_6_yes_cannot_bypass_a_refusal_even_with_a_writable_descriptor) ... ok
+test_7_argv_keeps_the_image_input_and_the_descriptor_output_distinct (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_7_argv_keeps_the_image_input_and_the_descriptor_output_distinct) ... ok
+test_8_descriptor_is_closed_once_on_both_paths_and_never_a_std_stream (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_8_descriptor_is_closed_once_on_both_paths_and_never_a_std_stream) ... ok
+test_25_real_dd_writes_through_the_inherited_descriptor (test_pc5ctl_usb_descriptor_identity.RealChildWrites.test_25_real_dd_writes_through_the_inherited_descriptor) ... FAIL
+test_26_real_dd_cannot_write_when_inheritance_is_dropped (test_pc5ctl_usb_descriptor_identity.RealChildWrites.test_26_real_dd_cannot_write_when_inheritance_is_dropped)
+The contract `pass_fds` carries, measured rather than argued. ... ok
+test_01_valid_descriptor_and_matching_identity_writes_through_the_fd (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_01_valid_descriptor_and_matching_identity_writes_through_the_fd) ... FAIL
+test_02_descriptor_closed_before_the_child_launches (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_02_descriptor_closed_before_the_child_launches) ... FAIL
+test_03_missing_descriptor_inheritance_is_explicit (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_03_missing_descriptor_inheritance_is_explicit) ... FAIL
+test_04_invalid_descriptor_number_is_refused_without_closing_a_standard_stream (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_04_invalid_descriptor_number_is_refused_without_closing_a_standard_stream) ... FAIL
+test_05_descriptor_redirected_to_a_different_object (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_05_descriptor_redirected_to_a_different_object) ... ok
+test_06_descriptor_identity_mismatch_against_the_named_target (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_06_descriptor_identity_mismatch_against_the_named_target) ... ok
+test_07_pathname_replaced_after_opening (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_07_pathname_replaced_after_opening) ... ok
+test_08_symlink_substitution_after_opening_cannot_authorize_the_write (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_08_symlink_substitution_after_opening_cannot_authorize_the_write)
+THE CRITICAL CASE (pathname-based validation, variant 1). ... ok
+test_09_path_replaced_between_the_identity_check_and_final_validation (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_09_path_replaced_between_the_identity_check_and_final_validation)
+THE CRITICAL CASE (the exact shipped-code timeline). ... FAIL
+test_10_root_descriptor_with_a_substituted_safe_name_still_refuses (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_10_root_descriptor_with_a_substituted_safe_name_still_refuses)
+The name never looks dangerous at all; the object always is. ... ok
+test_11_topology_change_immediately_before_the_final_safety_decision (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_11_topology_change_immediately_before_the_final_safety_decision) ... ok
+test_12_failed_descriptor_read (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_12_failed_descriptor_read) ... FAIL
+test_13_child_startup_failure_never_falls_back_to_the_pathname (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_13_child_startup_failure_never_falls_back_to_the_pathname) ... ERROR
+test_14_final_validation_failure_immediately_before_writing (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_14_final_validation_failure_immediately_before_writing) ... FAIL
+test_15_valid_non_destructive_control_with_a_populated_root (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_15_valid_non_destructive_control_with_a_populated_root) ... ok
+test_16_child_receives_exactly_the_validated_descriptor (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_16_child_receives_exactly_the_validated_descriptor) ... FAIL
+test_16b_inherited_descriptor_number_is_the_closed_one (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_16b_inherited_descriptor_number_is_the_closed_one) ... FAIL
+test_17_descriptor_not_open_for_write_is_refused (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_17_descriptor_not_open_for_write_is_refused) ... FAIL
+test_18_missing_procfs_entry_cannot_fall_back_to_the_pathname (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_18_missing_procfs_entry_cannot_fall_back_to_the_pathname) ... FAIL
+test_19_unlinked_referent_is_refused (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_19_unlinked_referent_is_refused) ... FAIL
+test_20_unreadable_sysfs_relationship_data (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_20_unreadable_sysfs_relationship_data) ... ok
+test_21_unreadable_holders_directory (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_21_unreadable_holders_directory) ... ok
+test_22_partial_topology_followed_by_an_enumeration_error (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_22_partial_topology_followed_by_an_enumeration_error)
+A listing that stops describing the device must not become an answer. ... ok
+test_23_target_open_failure_refuses_before_any_descriptor_exists (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_23_target_open_failure_refuses_before_any_descriptor_exists)
+A refused ``os.open`` on the target must not become anything else. ... ok
+test_24_unknown_topology_never_becomes_a_write_even_with_yes (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_24_unknown_topology_never_becomes_a_write_even_with_yes) ... ok
+test_root_outside_sysfs_cannot_be_closed_over (test_pc5ctl_usb_safety.AmbiguityFailsClosed.test_root_outside_sysfs_cannot_be_closed_over) ... ok
+test_target_without_a_device_number_is_refused (test_pc5ctl_usb_safety.AmbiguityFailsClosed.test_target_without_a_device_number_is_refused) ... ok
+test_tmpfs_root_has_no_backing_device (test_pc5ctl_usb_safety.AmbiguityFailsClosed.test_tmpfs_root_has_no_backing_device) ... ok
+test_unresolvable_root_is_refused (test_pc5ctl_usb_safety.AmbiguityFailsClosed.test_unresolvable_root_is_refused) ... ok
+test_refusal_never_becomes_a_write_even_if_target_opens (test_pc5ctl_usb_safety.CommandRefusesBeforeWriting.test_refusal_never_becomes_a_write_even_if_target_opens)
+The decisive --yes test: a refusal must not become dd. ... ok
+test_root_device_refused_and_no_dd_called (test_pc5ctl_usb_safety.CommandRefusesBeforeWriting.test_root_device_refused_and_no_dd_called) ... ok
+test_safe_target_passes_check_without_writing (test_pc5ctl_usb_safety.CommandRefusesBeforeWriting.test_safe_target_passes_check_without_writing)
+A resolvable, unrelated device reaches the confirmation and stops. ... ok
+test_target_that_becomes_related_before_the_write_is_refused (test_pc5ctl_usb_safety.CommandRefusesBeforeWriting.test_target_that_becomes_related_before_the_write_is_refused)
+TOCTOU: a device that joins the root topology is caught. ... ok
+test_yes_cannot_bypass_the_guard (test_pc5ctl_usb_safety.CommandRefusesBeforeWriting.test_yes_cannot_bypass_the_guard) ... ok
+test_host_mountinfo_is_not_consulted_when_a_fixture_is_given (test_pc5ctl_usb_safety.MountinfoIsInjectable.test_host_mountinfo_is_not_consulted_when_a_fixture_is_given) ... ok
+test_missing_mountinfo_falls_through_to_mounts_source (test_pc5ctl_usb_safety.MountinfoIsInjectable.test_missing_mountinfo_falls_through_to_mounts_source) ... ok
+test_root_devnum_uses_the_supplied_mountinfo (test_pc5ctl_usb_safety.MountinfoIsInjectable.test_root_devnum_uses_the_supplied_mountinfo) ... ok
+test_unreadable_fixture_actually_denies_reads (test_pc5ctl_usb_safety.MountinfoIsInjectable.test_unreadable_fixture_actually_denies_reads)
+Guards the tests themselves: chmod must really block the read. ... ok
+test_absent_partition_attribute_stays_absent (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_absent_partition_attribute_stays_absent) ... ok
+test_device_disappearing_during_enumeration_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_device_disappearing_during_enumeration_is_unknown) ... ok
+test_failed_directory_listing_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_failed_directory_listing_is_unknown)
+A disk directory that cannot be listed at all is UNKNOWN. ... ok
+test_failure_after_entries_discovered_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_failure_after_entries_discovered_is_unknown)
+The same property holds when the failure is an error, not a status. ... ok
+test_malformed_partition_metadata_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_malformed_partition_metadata_is_unknown) ... ok
+test_malformed_partition_number_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_malformed_partition_number_is_unknown) ... ok
+test_partial_list_never_permits_a_write (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_partial_list_never_permits_a_write) ... ok
+test_three_discovered_fourth_unreadable_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_three_discovered_fourth_unreadable_is_unknown)
+Atomicity: three partitions resolve, the fourth cannot be read. ... ok
+test_unreadable_partition_attribute_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_unreadable_partition_attribute_is_unknown) ... ok
+test_unreadable_partition_directory_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_unreadable_partition_directory_is_unknown) ... ok
+test_unresolvable_devnum_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_unresolvable_devnum_is_unknown) ... ok
+test_unresolvable_sysfs_link_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_unresolvable_sysfs_link_is_unknown) ... ok
+test_yes_cannot_bypass_unknown_enumeration (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_yes_cannot_bypass_unknown_enumeration) ... ok
+test_dev_root_alias_resolves_to_the_same_device (test_pc5ctl_usb_safety.RootDiskRefused.test_dev_root_alias_resolves_to_the_same_device) ... ok
+test_device_mapper_backing_the_root_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_device_mapper_backing_the_root_is_refused) ... ok
+test_holder_of_a_root_member_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_holder_of_a_root_member_is_refused) ... ok
+test_lvm_physical_volume_under_the_root_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_lvm_physical_volume_under_the_root_is_refused) ... ok
+test_multi_layer_dm_stack_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_multi_layer_dm_stack_is_refused) ... ok
+test_other_partition_on_the_root_disk_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_other_partition_on_the_root_disk_is_refused) ... ok
+test_parent_disk_of_root_partition_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_parent_disk_of_root_partition_is_refused) ... ok
+test_partition_containing_root_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_partition_containing_root_is_refused) ... ok
+test_target_is_the_root_disk_itself (test_pc5ctl_usb_safety.RootDiskRefused.test_target_is_the_root_disk_itself) ... ok
+test_second_disk_on_a_multidisk_root_is_allowed (test_pc5ctl_usb_safety.SafeTargetAccepted.test_second_disk_on_a_multidisk_root_is_allowed) ... ok
+test_separate_usb_disk_is_allowed (test_pc5ctl_usb_safety.SafeTargetAccepted.test_separate_usb_disk_is_allowed) ... ok
+test_usb_partition_is_allowed_when_unrelated (test_pc5ctl_usb_safety.SafeTargetAccepted.test_usb_partition_is_allowed_when_unrelated) ... ok
+test_dd_is_written_through_the_held_descriptor (test_pc5ctl_usb_safety.TopologyConsistency.test_dd_is_written_through_the_held_descriptor) ... ok
+test_absent_partition_attribute_means_whole_disk (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_absent_partition_attribute_means_whole_disk) ... ok
+test_empty_slaves_is_an_empty_list_not_unknown (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_empty_slaves_is_an_empty_list_not_unknown) ... ok
+test_holder_only_relationship_refuses (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_holder_only_relationship_refuses) ... ok
+test_malformed_partition_metadata_is_unknown_not_whole_disk (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_malformed_partition_metadata_is_unknown_not_whole_disk) ... ok
+test_malformed_slaves_entry_refuses (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_malformed_slaves_entry_refuses) ... ok
+test_unreadable_partition_attribute_is_unknown_not_absent (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_unreadable_partition_attribute_is_unknown_not_absent) ... ok
+test_unreadable_partition_metadata_refuses_the_parent_disk (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_unreadable_partition_metadata_refuses_the_parent_disk) ... ok
+test_unreadable_slaves_is_unknown_not_empty (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_unreadable_slaves_is_unknown_not_empty) ... ok
+test_unreadable_slaves_refuses_the_physical_backing_partition (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_unreadable_slaves_refuses_the_physical_backing_partition) ... ok
+test_unresolvable_parent_refuses_instead_of_falling_back (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_unresolvable_parent_refuses_instead_of_falling_back) ... ok
+test_yes_does_not_rescue_unknown_topology (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_yes_does_not_rescue_unknown_topology) ... ok
+test_closure_includes_disk_and_both_partitions (test_pc5ctl_usb_safety.WholeDiskRootProtectsPartitions.test_closure_includes_disk_and_both_partitions) ... ok
+test_each_partition_refused_through_cmd_usb (test_pc5ctl_usb_safety.WholeDiskRootProtectsPartitions.test_each_partition_refused_through_cmd_usb) ... ok
+test_partition_root_protects_parent_and_all_siblings (test_pc5ctl_usb_safety.WholeDiskRootProtectsPartitions.test_partition_root_protects_parent_and_all_siblings) ... ok
+test_sibling_partition_refused (test_pc5ctl_usb_safety.WholeDiskRootProtectsPartitions.test_sibling_partition_refused) ... ok
+test_three_partitions_all_protected (test_pc5ctl_usb_safety.WholeDiskRootProtectsPartitions.test_three_partitions_all_protected) ... ok
+test_unrelated_device_still_permitted (test_pc5ctl_usb_safety.WholeDiskRootProtectsPartitions.test_unrelated_device_still_permitted) ... ok
+
+======================================================================
+ERROR: test_13_child_startup_failure_never_falls_back_to_the_pathname (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_13_child_startup_failure_never_falls_back_to_the_pathname)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 452, in test_13_child_startup_failure_never_falls_back_to_the_pathname
+    self.cli()
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 266, in cli
+    self.rc = self.run_cli(launch=launch, which=which)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 261, in run_cli
+    return self.run_argv(["usb", "--iso", str(self.iso),
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 258, in run_argv
+    return pc5ctl.main(list(argv))
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/tmp.DZkBuaegrc/tools/pc5ctl.py", line 756, in main
+    return args.func(args)
+           ^^^^^^^^^^^^^^^
+  File "/tmp/tmp.DZkBuaegrc/tools/pc5ctl.py", line 718, in cmd_usb
+    return subprocess.call([dd, f"if={iso}", f"of={writing}",
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/mock.py", line 1118, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/mock.py", line 1122, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/mock.py", line 1183, in _execute_mock_call
+    result = effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 213, in _launch
+    raise self.dd_error
+FileNotFoundError: [Errno 2] No such file or directory
+
+======================================================================
+FAIL: test_25_real_dd_writes_through_the_inherited_descriptor (test_pc5ctl_usb_descriptor_identity.RealChildWrites.test_25_real_dd_writes_through_the_inherited_descriptor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 646, in test_25_real_dd_writes_through_the_inherited_descriptor
+    self.assertEqual(rc, 0, self.stdout.getvalue())
+AssertionError: 1 != 0 : image    /tmp/tmp.DZkBuaegrc/tmptwh39ulo/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_01_valid_descriptor_and_matching_identity_writes_through_the_fd (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_01_valid_descriptor_and_matching_identity_writes_through_the_fd)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 312, in test_01_valid_descriptor_and_matching_identity_writes_through_the_fd
+    self.assertEqual(self.dd_kwargs().get("pass_fds"), (fd,),
+AssertionError: None != (5,) : the validated descriptor must be the inherited one
+
+======================================================================
+FAIL: test_02_descriptor_closed_before_the_child_launches (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_02_descriptor_closed_before_the_child_launches)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 328, in test_02_descriptor_closed_before_the_child_launches
+    self.assert_refused("cannot hold a writable descriptor")
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmp.DZkBuaegrc/tmptchczp18/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_03_missing_descriptor_inheritance_is_explicit (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_03_missing_descriptor_inheritance_is_explicit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 335, in test_03_missing_descriptor_inheritance_is_explicit
+    self.assertIn("pass_fds", self.dd_kwargs(),
+AssertionError: 'pass_fds' not found in {} : the write child must be given the descriptor explicitly
+
+======================================================================
+FAIL: test_04_invalid_descriptor_number_is_refused_without_closing_a_standard_stream (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_04_invalid_descriptor_number_is_refused_without_closing_a_standard_stream)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 343, in test_04_invalid_descriptor_number_is_refused_without_closing_a_standard_stream
+    self.assert_refused("cannot inherit the target descriptor")
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmp.DZkBuaegrc/tmp840p8ydy/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_09_path_replaced_between_the_identity_check_and_final_validation (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_09_path_replaced_between_the_identity_check_and_final_validation)
+THE CRITICAL CASE (the exact shipped-code timeline).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 413, in test_09_path_replaced_between_the_identity_check_and_final_validation
+    self.assert_refused()
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmp.DZkBuaegrc/tmpzdwd7uam/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_12_failed_descriptor_read (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_12_failed_descriptor_read)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 447, in test_12_failed_descriptor_read
+    self.assert_refused("cannot identify the descriptor")
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 284, in assert_refused
+    self.assertIn(fragment, self.out)
+AssertionError: 'cannot identify the descriptor' not found in 'image    /tmp/tmp.DZkBuaegrc/tmp391hlmyk/image.iso\nsha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4\ntarget   /dev/pc5-synthetic-never-opened\n\nTHIS ERASES EVERYTHING ON THE TARGET DEVICE.\n/dev/pc5-synthetic-never-opened is no longer a block device: refusing to write\nnothing was written\n'
+
+======================================================================
+FAIL: test_14_final_validation_failure_immediately_before_writing (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_14_final_validation_failure_immediately_before_writing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 466, in test_14_final_validation_failure_immediately_before_writing
+    self.assert_refused("changed before the write")
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmp.DZkBuaegrc/tmpf9zpa32m/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_16_child_receives_exactly_the_validated_descriptor (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_16_child_receives_exactly_the_validated_descriptor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 489, in test_16_child_receives_exactly_the_validated_descriptor
+    self.assertEqual(self.dd_kwargs().get("pass_fds"), (fd,),
+AssertionError: None != (3,) : the inherited descriptor must be the one that was validated
+
+======================================================================
+FAIL: test_16b_inherited_descriptor_number_is_the_closed_one (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_16b_inherited_descriptor_number_is_the_closed_one)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 502, in test_16b_inherited_descriptor_number_is_the_closed_one
+    self.assertEqual(passed, (fd,))
+AssertionError: None != (3,)
+
+======================================================================
+FAIL: test_17_descriptor_not_open_for_write_is_refused (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_17_descriptor_not_open_for_write_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 513, in test_17_descriptor_not_open_for_write_is_refused
+    self.assert_refused("cannot hold a writable descriptor")
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmp.DZkBuaegrc/tmps425t97_/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_18_missing_procfs_entry_cannot_fall_back_to_the_pathname (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_18_missing_procfs_entry_cannot_fall_back_to_the_pathname)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 518, in test_18_missing_procfs_entry_cannot_fall_back_to_the_pathname
+    self.assert_refused("is not usable as a write target")
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmp.DZkBuaegrc/tmpsn7qk970/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_19_unlinked_referent_is_refused (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_19_unlinked_referent_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 525, in test_19_unlinked_referent_is_refused
+    self.assert_refused("is not usable as a write target")
+  File "/tmp/tmp.DZkBuaegrc/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmp.DZkBuaegrc/tmp6_x09dnu/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+----------------------------------------------------------------------
+Ran 91 tests in 0.256s
+
+FAILED (failures=13, errors=1)
+Exception ignored in: <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>
+OSError: [Errno 9] Bad file descriptor
+pristine exit=120

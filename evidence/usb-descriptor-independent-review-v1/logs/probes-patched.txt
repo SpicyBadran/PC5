@@ -1,0 +1,7 @@
+........................../usr/bin/dd: failed to open '/proc/self/fd/27': No such file or directory
+../usr/bin/dd: failed to open '/proc/self/fd/26': No such file or directory
+......................
+----------------------------------------------------------------------
+Ran 50 tests in 0.233s
+
+OK

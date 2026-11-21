@@ -1,0 +1,7 @@
+# the PREVIOUS session's USB test inventory (tests/test_pc5ctl_usb_descriptor_identity.py,
+# test_pc5ctl_usb_safety.py, test_pc5ctl_usb_cli_boundaries.py as recovered from
+# pc5-identity-boundary-20261121-v5.tar.gz), run against THIS session's tools/pc5ctl.py.
+# Independently authored tests, independently authored implementation: green. 2026-11-21T17:02Z
+
+Ran 87 tests in 0.166s
+OK

@@ -1,0 +1,75 @@
+product under test : /tmp/tmp.hn3iq3ASJQ/tools/pc5ctl.py
+source blob        : working tree
+pc5ctl sha256      : c768ad5609635fbf6900cb58a93d08094276a920539c23f5f19bebbe76e652f9
+python             : 3.11.2
+dd                 : dd (coreutils) 9.1
+
+==============================================================================
+defect-1  the child is never given the descriptor (no pass_fds)
+==============================================================================
+The device the operator named resolves to a safe, unrelated stick, the open
+succeeds, the identity check passes, and dd is launched for real.  The output
+target the product chooses is /proc/self/fd/<fd>, but `subprocess.call` is
+called without `pass_fds`, so Python closes that descriptor in the child.
+
+production stdout (verbatim):
+    | image    /tmp/tmp.hn3iq3ASJQ/tmp2coovpq_/pc5.iso
+    | sha256   cda5f1796720f8be4e89c11a8919f251b37e563b7333eb69d4bc03b792ba5b87
+    | target   /dev/pc5-synthetic
+    | 
+    | THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+real /bin/dd child: production exit status = 1
+child stderr (verbatim):
+    | /bin/dd: failed to open '/proc/self/fd/9': No such file or directory
+bytes received by the device stand-in: 0
+observed: the real child could not open its output target and nothing was written;
+        the verdict is in `DEFECT-REPRO-pristine.log` (shipped source) versus
+        `DEFECT-REPRO-corrected.log` (this repository's remediated source).
+
+==============================================================================
+defect-1 control  the same code path, with the descriptor actually inherited
+==============================================================================
+
+production exit status = 0
+child stderr           = 0+1 records in
+0+1 records out
+18 bytes copied, 0.000822404 s, 21.9 kB/s
+bytes received by the device stand-in: 18
+content: b'PC5-IMAGE-CONTENTS'
+sha256 of image on disk   : cda5f1796720f8be4e89c11a8919f251b37e563b7333eb69d4bc03b792ba5b87
+sha256 of image (expected): cda5f1796720f8be4e89c11a8919f251b37e563b7333eb69d4bc03b792ba5b87
+observed: the only difference between the two runs above is whether the child
+        inherited the descriptor, which isolates the failure to fd inheritance
+        rather than to the file, the dd invocation, the offsets or the fixture.
+
+==============================================================================
+defect-2  the final safety decision is about the pathname, not the held object
+==============================================================================
+Timeline the guard cannot see (all three lookups are separate `stat` calls):
+  1. check_target_safe(device)      name -> stick (8,32)     => permitted
+  2. os.open(device)                name -> root partition (8,1)  [swap in]
+  3. devnum_for_path(device)        name -> root partition (8,1)  => matches fd
+  4. check_target_safe(device)      name -> stick (8,32)     [swap back] => OK
+  5. dd of=/proc/self/fd/<fd>       fd     -> root partition (8,1)
+The descriptor and the *last* safety decision disagree about which device is
+being written.  dd is mocked here so nothing is written anywhere; the assertion
+is about whether the destructive call was made at all.
+
+--- interleaved swaps (the 5-step timeline above)
+    exit status          : 0
+    dd invocations      : 1
+    dd output argument   : ['of=/proc/self/fd/5']
+    pass_fds            : not passed
+    stdout tail          : THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+    bytes on the device stand-in: 0
+    verdict              : FAIL-OPEN: the write was authorised for a device the guard never examined
+
+--- name pointing at the safe stick for every lookup while the fd holds the root partition
+    exit status          : 1
+    dd invocations      : 0
+    stdout tail          : nothing was written
+    bytes on the device stand-in: 0
+    verdict              : REFUSED: the decision and the write target are the same object
+
+no block device was created, opened or written by this script.
+exit=0

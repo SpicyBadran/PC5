@@ -1,0 +1,1885 @@
+.....................................................EEEEEEEEEEEEEEEEEEEEEEEEEEssssssssssssssssssssss....................................................................................................................................................................................................................../tmp/f1clone/tests/test_hybrid.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/f1clone/Makefile' mode='r' encoding='utf-8'>
+  makefile = open(os.path.join(ROOT, "Makefile"), encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+....................EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE..........EEEEEEEEEEEEEEEEEEEEE............................s................................................................................................................................................................................................................................../tmp/f1clone/tests/test_product_identity.py:214: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/f1clone/PS5UPDATE.PUP'>
+  raw = open(self.POINTER, "rb").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+..................................................................../tmp/f1clone/tests/test_release.py:224: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/f1clone/ci/build.yml' mode='r' encoding='utf-8'>
+  text = open(found[0], encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./tmp/f1clone/tests/test_release.py:205: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/f1clone/ci/build.yml' mode='r' encoding='utf-8'>
+  text = open(found[0], encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./tmp/f1clone/tests/test_release.py:249: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/f1clone/ci/README.md' mode='r' encoding='utf-8'>
+  text = open(readme, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+../tmp/f1clone/tests/test_release.py:158: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/pc5-publish-b7juba0u/state/calls.log' mode='r' encoding='utf-8'>
+  return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/f1clone/tests/test_release.py:158: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/pc5-publish-b7juba0u/state/calls.log' mode='r' encoding='utf-8'>
+  return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+............................................................................................/tmp/f1clone/tests/test_tools.py:228: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/pc5-meta-70prbh22/pc5.iso'>
+  self.sha = hashlib.sha256(open(self.iso, "rb").read()).hexdigest()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./tmp/f1clone/tests/test_tools.py:228: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/pc5-meta-ny5_f943/pc5.iso'>
+  self.sha = hashlib.sha256(open(self.iso, "rb").read()).hexdigest()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./tmp/f1clone/tests/test_tools.py:228: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/pc5-meta-xzxhcocm/pc5.iso'>
+  self.sha = hashlib.sha256(open(self.iso, "rb").read()).hexdigest()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.s................../tmp/f1clone/tests/test_tools.py:339: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/f1clone/tools/publish_release.sh' mode='r' encoding='utf-8'>
+  script = open(os.path.join(ROOT, "tools", "publish_release.sh"), encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+............................................
+======================================================================
+ERROR: test_a_failed_allocation_stops_the_boot_before_the_handover (test_boot64_stub.AllocateMaxAddressTests.test_a_failed_allocation_stops_the_boot_before_the_handover)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 473, in test_a_failed_allocation_stops_the_boot_before_the_handover
+    machine = self.machine(allocate_return=self.module.EFI_OUT_OF_RESOURCES)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 350, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_a_maximum_below_the_page_count_cannot_succeed (test_boot64_stub.AllocateMaxAddressTests.test_a_maximum_below_the_page_count_cannot_succeed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 448, in test_a_maximum_below_the_page_count_cannot_succeed
+    machine = self.machine()
+              ^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 350, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_a_zero_maximum_verifies_as_unsatisfiable (test_boot64_stub.AllocateMaxAddressTests.test_a_zero_maximum_verifies_as_unsatisfiable)
+The contract the old code violated, asserted directly on the stub.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 439, in test_a_zero_maximum_verifies_as_unsatisfiable
+    machine = self.machine()
+              ^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 350, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_allocation_failure_happens_before_exit_boot_services (test_boot64_stub.AllocateMaxAddressTests.test_allocation_failure_happens_before_exit_boot_services)
+Every allocation precedes ExitBootServices, so failure is reportable.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 482, in test_allocation_failure_happens_before_exit_boot_services
+    machine = self.machine()
+              ^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 350, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_conforming_firmware_can_satisfy_the_loader (test_boot64_stub.AllocateMaxAddressTests.test_conforming_firmware_can_satisfy_the_loader)
+A, part 1: with a real MaxAddress bound, a correct loader succeeds.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 493, in test_conforming_firmware_can_satisfy_the_loader
+    machine = self.machine()
+              ^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 350, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_conforming_firmware_with_no_memory_in_range_fails_safely (test_boot64_stub.AllocateMaxAddressTests.test_conforming_firmware_with_no_memory_in_range_fails_safely)
+A, part 2: an honest bound with no memory under it is refused.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 506, in test_conforming_firmware_with_no_memory_in_range_fails_safely
+    machine = self.machine(allocation_limit=0x2000)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 350, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_every_maximum_request_carries_the_identity_limit_as_its_bound (test_boot64_stub.AllocateMaxAddressTests.test_every_maximum_request_carries_the_identity_limit_as_its_bound)
+The bound itself, not just a plausible allocation that came back.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 407, in test_every_maximum_request_carries_the_identity_limit_as_its_bound
+    machine = self.machine()
+              ^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 350, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_firmware_that_ignores_the_bound_is_rejected (test_boot64_stub.AllocateMaxAddressTests.test_firmware_that_ignores_the_bound_is_rejected)
+A range whose last byte crosses 4 GiB must stop the boot.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 466, in test_firmware_that_ignores_the_bound_is_rejected
+    machine = self.machine(ignore_max_address=True, allocations_at_limit=True)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 350, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_the_high_allocation_path_also_reports_the_same_bound (test_boot64_stub.AllocateMaxAddressTests.test_the_high_allocation_path_also_reports_the_same_bound)
+The bound is recorded on the branch that honours it, not just the default.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 428, in test_the_high_allocation_path_also_reports_the_same_bound
+    machine = self.machine(high_allocations=True)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 350, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_the_high_allocation_window_is_inside_the_bound (test_boot64_stub.AllocateMaxAddressTests.test_the_high_allocation_window_is_inside_the_bound)
+Firmware may place the handover regions anywhere up to the bound.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 516, in test_the_high_allocation_window_is_inside_the_bound
+    machine = self.machine(high_allocations=True)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 350, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_the_loader_passes_a_maximum_that_can_actually_be_satisfied (test_boot64_stub.AllocateMaxAddressTests.test_the_loader_passes_a_maximum_that_can_actually_be_satisfied)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 374, in test_the_loader_passes_a_maximum_that_can_actually_be_satisfied
+    machine = self.machine()
+              ^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 350, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_a_zero_descriptor_version_is_also_refused (test_boot64_stub.DescriptorVersionTests.test_a_zero_descriptor_version_is_also_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 833, in test_a_zero_descriptor_version_is_also_refused
+    machine, trace = self.run_once(describe_version=0)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 798, in run_once
+    machine = self.module.StubFirmware64(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_an_unsupported_descriptor_version_stops_the_boot (test_boot64_stub.DescriptorVersionTests.test_an_unsupported_descriptor_version_stops_the_boot)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 826, in test_an_unsupported_descriptor_version_stops_the_boot
+    machine, trace = self.run_once(describe_version=2)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 798, in run_once
+    machine = self.module.StubFirmware64(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_supported_descriptor_version_is_accepted_and_recorded (test_boot64_stub.DescriptorVersionTests.test_supported_descriptor_version_is_accepted_and_recorded)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 820, in test_supported_descriptor_version_is_accepted_and_recorded
+    machine, trace = self.run_once()
+                     ^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 798, in run_once
+    machine = self.module.StubFirmware64(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_the_refusal_happens_before_exit_boot_services (test_boot64_stub.DescriptorVersionTests.test_the_refusal_happens_before_exit_boot_services)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 840, in test_the_refusal_happens_before_exit_boot_services
+    machine, trace = self.run_once(describe_version=2)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 798, in run_once
+    machine = self.module.StubFirmware64(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_a_failed_growth_allocation_stops_the_boot_and_frees_nothing (test_boot64_stub.MemoryMapGrowthTests.test_a_failed_growth_allocation_stops_the_boot_and_frees_nothing)
+Growth fails before the old buffer is released.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 720, in test_a_failed_growth_allocation_stops_the_boot_and_frees_nothing
+    machine, trace = self.run_once(map_small_buffer_calls=1,
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 662, in run_once
+    machine = self.module.StubFirmware64(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_a_firmware_without_free_pages_still_completes_the_growth (test_boot64_stub.MemoryMapGrowthTests.test_a_firmware_without_free_pages_still_completes_the_growth)
+An older boot-services table may leave FreePages null.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 735, in test_a_firmware_without_free_pages_still_completes_the_growth
+    machine, trace = self.run_once(map_small_buffer_calls=1,
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 662, in run_once
+    machine = self.module.StubFirmware64(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_a_sufficient_buffer_never_grows_and_never_frees (test_boot64_stub.MemoryMapGrowthTests.test_a_sufficient_buffer_never_grows_and_never_frees)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 671, in test_a_sufficient_buffer_never_grows_and_never_frees
+    machine, trace = self.run_once()
+                     ^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 662, in run_once
+    machine = self.module.StubFirmware64(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_every_exit_attempt_uses_the_key_from_its_own_get_memory_map (test_boot64_stub.MemoryMapGrowthTests.test_every_exit_attempt_uses_the_key_from_its_own_get_memory_map)
+No ExitBootServices may be given a key that a free has invalidated.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 753, in test_every_exit_attempt_uses_the_key_from_its_own_get_memory_map
+    machine, trace = self.run_once(map_small_buffer_calls=1)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 662, in run_once
+    machine = self.module.StubFirmware64(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_growth_then_a_stale_key_retries_with_another_fresh_key (test_boot64_stub.MemoryMapGrowthTests.test_growth_then_a_stale_key_retries_with_another_fresh_key)
+Growth and a firmware-side key race in the same boot.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 771, in test_growth_then_a_stale_key_retries_with_another_fresh_key
+    machine, trace = self.run_once(map_small_buffer_calls=1, race_map_key=1)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 662, in run_once
+    machine = self.module.StubFirmware64(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_one_buffer_too_small_grows_once_and_frees_the_old_buffer (test_boot64_stub.MemoryMapGrowthTests.test_one_buffer_too_small_grows_once_and_frees_the_old_buffer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 680, in test_one_buffer_too_small_grows_once_and_frees_the_old_buffer
+    machine, trace = self.run_once(map_small_buffer_calls=1)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 662, in run_once
+    machine = self.module.StubFirmware64(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_three_buffer_too_small_answers_free_each_abandoned_buffer (test_boot64_stub.MemoryMapGrowthTests.test_three_buffer_too_small_answers_free_each_abandoned_buffer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 694, in test_three_buffer_too_small_answers_free_each_abandoned_buffer
+    machine, trace = self.run_once(map_small_buffer_calls=3)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 662, in run_once
+    machine = self.module.StubFirmware64(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_allocate_pages_returns_out_of_resources_when_the_pool_is_empty (test_boot64_stub.PoolExhaustionTests.test_allocate_pages_returns_out_of_resources_when_the_pool_is_empty)
+The service answer is a status, and it is the documented one.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 575, in test_allocate_pages_returns_out_of_resources_when_the_pool_is_empty
+    machine = self.starved()
+              ^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 571, in starved
+    return self.machine(pool_reserve=reserve, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 542, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_allocate_pool_returns_out_of_resources_when_the_pool_is_empty (test_boot64_stub.PoolExhaustionTests.test_allocate_pool_returns_out_of_resources_when_the_pool_is_empty)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 588, in test_allocate_pool_returns_out_of_resources_when_the_pool_is_empty
+    machine = self.machine()
+              ^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 542, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_exhaustion_is_reported_as_a_status_not_an_exception (test_boot64_stub.PoolExhaustionTests.test_exhaustion_is_reported_as_a_status_not_an_exception)
+Guard against a regression to StubError on the service path.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 620, in test_exhaustion_is_reported_as_a_status_not_an_exception
+    machine = self.machine()
+              ^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 542, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_the_loader_takes_its_own_failure_path_under_real_exhaustion (test_boot64_stub.PoolExhaustionTests.test_the_loader_takes_its_own_failure_path_under_real_exhaustion)
+The point of the fix: the loader's die() path actually runs.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 602, in test_the_loader_takes_its_own_failure_path_under_real_exhaustion
+    machine = self.starved(reserve=0)
+              ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 571, in starved
+    return self.machine(pool_reserve=reserve, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_boot64_stub.py", line 542, in machine
+    return self.module.StubFirmware64(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/boot64_stub.py", line 112, in __init__
+    super().__init__(*args, **options)
+  File "/tmp/f1clone/tests/uefi_stub_firmware.py", line 163, in __init__
+    raise StubError("the 'unicorn' module is not installed "
+uefi_stub_firmware.StubError: the 'unicorn' module is not installed (pip install unicorn)
+
+======================================================================
+ERROR: test_a_loader_that_reports_an_unsupported_format_is_believed (test_kernel64.KernelContractTests.test_a_loader_that_reports_an_unsupported_format_is_believed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 480, in test_a_loader_that_reports_an_unsupported_format_is_believed
+    result = self.run_kernel(flags=flags, framebuffer_addr=0)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_loader_that_says_a_resource_is_unmapped_is_believed (test_kernel64.KernelContractTests.test_a_loader_that_says_a_resource_is_unmapped_is_believed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 416, in test_a_loader_that_says_a_resource_is_unmapped_is_believed
+    result = self.run_kernel(flags=flags, framebuffer_addr=0)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_missing_address_width_is_reported_not_assumed (test_kernel64.KernelContractTests.test_a_missing_address_width_is_reported_not_assumed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 502, in test_a_missing_address_width_is_reported_not_assumed
+    result = self.run_kernel(cpuid=cpuid)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_adjacent_and_unsorted_valid_maps_are_accepted (test_kernel64.KernelContractTests.test_adjacent_and_unsorted_valid_maps_are_accepted)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 457, in test_adjacent_and_unsorted_valid_maps_are_accepted
+    self.assert_boots(self.run_kernel(memmap=memmap))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_bad_magic_is_refused (test_kernel64.KernelContractTests.test_bad_magic_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 232, in test_bad_magic_is_refused
+    self.assert_refuses(self.run_kernel(magic=0xDEADBEEF), "bootinfo-magic")
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_conventional_memory_is_accepted_for_loader_owned_ranges (test_kernel64.KernelContractTests.test_conventional_memory_is_accepted_for_loader_owned_ranges)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 431, in test_conventional_memory_is_accepted_for_loader_owned_ranges
+    self.assert_boots(self.run_kernel(memmap=memmap))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_cpuid_invariant_tsc_is_reported (test_kernel64.KernelContractTests.test_cpuid_invariant_tsc_is_reported)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 513, in test_cpuid_invariant_tsc_is_reported
+    result = self.run_kernel(cpuid=cpuid)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_cpuid_reported_address_width_reaches_the_environment_check (test_kernel64.KernelContractTests.test_cpuid_reported_address_width_reaches_the_environment_check)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 491, in test_cpuid_reported_address_width_reaches_the_environment_check
+    result = self.run_kernel(cpuid=CPUID_LONG_MODE)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_descriptor_that_wraps_is_refused (test_kernel64.KernelContractTests.test_descriptor_that_wraps_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 357, in test_descriptor_that_wraps_is_refused
+    self.assert_refuses(self.run_kernel(memmap=memmap),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_descriptor_with_an_impossible_type_is_refused (test_kernel64.KernelContractTests.test_descriptor_with_an_impossible_type_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 362, in test_descriptor_with_an_impossible_type_is_refused
+    self.assert_refuses(self.run_kernel(memmap=memmap),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_empty_descriptor_is_refused (test_kernel64.KernelContractTests.test_empty_descriptor_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 263, in test_empty_descriptor_is_refused
+    self.assert_refuses(self.run_kernel(memmap=memmap),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_empty_framebuffer_is_unsupported (test_kernel64.KernelContractTests.test_empty_framebuffer_is_unsupported)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 388, in test_empty_framebuffer_is_unsupported
+    result = self.run_kernel(framebuffer_width=0)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_framebuffer_above_the_span_is_never_called_usable (test_kernel64.KernelContractTests.test_framebuffer_above_the_span_is_never_called_usable)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 376, in test_framebuffer_above_the_span_is_never_called_usable
+    result = self.run_kernel(framebuffer_addr=4 << 30)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_framebuffer_crossing_the_span_is_unsupported_not_fatal (test_kernel64.KernelContractTests.test_framebuffer_crossing_the_span_is_unsupported_not_fatal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 370, in test_framebuffer_crossing_the_span_is_unsupported_not_fatal
+    result = self.run_kernel(framebuffer_addr=(4 << 30) - 0x1000)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_framebuffer_format_is_validated (test_kernel64.KernelContractTests.test_framebuffer_format_is_validated) (format=0)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 469, in test_framebuffer_format_is_validated
+    result = self.run_kernel(framebuffer_format=fmt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_framebuffer_format_is_validated (test_kernel64.KernelContractTests.test_framebuffer_format_is_validated) (format=1)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 469, in test_framebuffer_format_is_validated
+    result = self.run_kernel(framebuffer_format=fmt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_framebuffer_format_is_validated (test_kernel64.KernelContractTests.test_framebuffer_format_is_validated) (format=2)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 469, in test_framebuffer_format_is_validated
+    result = self.run_kernel(framebuffer_format=fmt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_framebuffer_format_is_validated (test_kernel64.KernelContractTests.test_framebuffer_format_is_validated) (format=3)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 469, in test_framebuffer_format_is_validated
+    result = self.run_kernel(framebuffer_format=fmt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_framebuffer_format_is_validated (test_kernel64.KernelContractTests.test_framebuffer_format_is_validated) (format=4)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 469, in test_framebuffer_format_is_validated
+    result = self.run_kernel(framebuffer_format=fmt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_framebuffer_with_a_short_pitch_is_unsupported (test_kernel64.KernelContractTests.test_framebuffer_with_a_short_pitch_is_unsupported)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 383, in test_framebuffer_with_a_short_pitch_is_unsupported
+    result = self.run_kernel(framebuffer_pitch=4)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_huge_framebuffer_is_classified_not_dereferenced (test_kernel64.KernelContractTests.test_huge_framebuffer_is_classified_not_dereferenced)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 395, in test_huge_framebuffer_is_classified_not_dereferenced
+    result = self.run_kernel(framebuffer_pitch=0x80000000,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_identity_span_above_the_limit_is_refused (test_kernel64.KernelContractTests.test_identity_span_above_the_limit_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 330, in test_identity_span_above_the_limit_is_refused
+    self.assert_refuses(self.run_kernel(identity_span=8 << 30,
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_identity_span_must_match_the_tables_that_were_built (test_kernel64.KernelContractTests.test_identity_span_must_match_the_tables_that_were_built)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 326, in test_identity_span_must_match_the_tables_that_were_built
+    self.assert_refuses(self.run_kernel(identity_span=2 << 30),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_kernel_loaded_anywhere_else_is_refused (test_kernel64.KernelContractTests.test_kernel_loaded_anywhere_else_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 272, in test_kernel_loaded_anywhere_else_is_refused
+    self.assert_refuses(self.run_kernel(kernel_base=0x200000),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_kernel_refuses_a_handover_without_a_stack (test_kernel64.KernelContractTests.test_kernel_refuses_a_handover_without_a_stack)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 282, in test_kernel_refuses_a_handover_without_a_stack
+    self.assert_refuses(self.run_kernel(stack_top=0), "bootinfo-stack")
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_kernel_size_that_does_not_match_the_image_is_refused (test_kernel64.KernelContractTests.test_kernel_size_that_does_not_match_the_image_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 348, in test_kernel_size_that_does_not_match_the_image_is_refused
+    self.assert_refuses(self.run_kernel(kernel_size=4 << 30),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_loader_image_outside_the_map_is_refused (test_kernel64.KernelContractTests.test_loader_image_outside_the_map_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 335, in test_loader_image_outside_the_map_is_refused
+    self.assert_refuses(self.run_kernel(loader_image_addr=0x60000000,
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_loader_image_that_wraps_is_refused (test_kernel64.KernelContractTests.test_loader_image_that_wraps_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 340, in test_loader_image_that_wraps_is_refused
+    self.assert_refuses(self.run_kernel(loader_image_addr=MASK64 - 0xFFF,
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_marker_follows_the_checks_not_the_banner (test_kernel64.KernelContractTests.test_marker_follows_the_checks_not_the_banner)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 221, in test_marker_follows_the_checks_not_the_banner
+    serial = self.run_kernel()["serial"]
+             ^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_memory_map_size_must_be_a_multiple_of_the_stride (test_kernel64.KernelContractTests.test_memory_map_size_must_be_a_multiple_of_the_stride)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 352, in test_memory_map_size_must_be_a_multiple_of_the_stride
+    self.assert_refuses(self.run_kernel(memmap_bytes=100),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_misaligned_memory_map_is_refused (test_kernel64.KernelContractTests.test_misaligned_memory_map_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 249, in test_misaligned_memory_map_is_refused
+    self.assert_refuses(self.run_kernel(memmap_addr=self.machine_module.MEMMAP + 4),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_misaligned_stack_is_refused (test_kernel64.KernelContractTests.test_misaligned_stack_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 276, in test_misaligned_stack_is_refused
+    self.assert_refuses(self.run_kernel(stack_top=self.machine_module.STACK_TOP + 8),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_missing_memory_map_is_refused (test_kernel64.KernelContractTests.test_missing_memory_map_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 246, in test_missing_memory_map_is_refused
+    self.assert_refuses(self.run_kernel(memmap_addr=0), "bootinfo-memmap-null")
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_no_conventional_memory_is_refused (test_kernel64.KernelContractTests.test_no_conventional_memory_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 268, in test_no_conventional_memory_is_refused
+    self.assert_refuses(self.run_kernel(memmap=memmap),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_overlapping_descriptors_are_refused_before_any_coverage (test_kernel64.KernelContractTests.test_overlapping_descriptors_are_refused_before_any_coverage) (name='conflicting types')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 451, in test_overlapping_descriptors_are_refused_before_any_coverage
+    self.assert_refuses(self.run_kernel(memmap=memmap),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_overlapping_descriptors_are_refused_before_any_coverage (test_kernel64.KernelContractTests.test_overlapping_descriptors_are_refused_before_any_coverage) (name='same type')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 451, in test_overlapping_descriptors_are_refused_before_any_coverage
+    self.assert_refuses(self.run_kernel(memmap=memmap),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_overlapping_descriptors_are_refused_before_any_coverage (test_kernel64.KernelContractTests.test_overlapping_descriptors_are_refused_before_any_coverage) (name='duplicate')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 451, in test_overlapping_descriptors_are_refused_before_any_coverage
+    self.assert_refuses(self.run_kernel(memmap=memmap),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_overlapping_descriptors_are_refused_before_any_coverage (test_kernel64.KernelContractTests.test_overlapping_descriptors_are_refused_before_any_coverage) (name='nested')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 451, in test_overlapping_descriptors_are_refused_before_any_coverage
+    self.assert_refuses(self.run_kernel(memmap=memmap),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_overlapping_descriptors_are_refused_before_any_coverage (test_kernel64.KernelContractTests.test_overlapping_descriptors_are_refused_before_any_coverage) (name='partial')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 451, in test_overlapping_descriptors_are_refused_before_any_coverage
+    self.assert_refuses(self.run_kernel(memmap=memmap),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_page_table_description_is_validated (test_kernel64.KernelContractTests.test_page_table_description_is_validated) (pagetable_addr=5242888)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 315, in test_page_table_description_is_validated
+    self.assert_refuses(self.run_kernel(**override), reason)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_page_table_description_is_validated (test_kernel64.KernelContractTests.test_page_table_description_is_validated) (pagetable_pages=2)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 315, in test_page_table_description_is_validated
+    self.assert_refuses(self.run_kernel(**override), reason)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_page_table_description_is_validated (test_kernel64.KernelContractTests.test_page_table_description_is_validated) (pagetable_pages=515)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 315, in test_page_table_description_is_validated
+    self.assert_refuses(self.run_kernel(**override), reason)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_page_tables_at_the_top_of_the_span_are_refused (test_kernel64.KernelContractTests.test_page_tables_at_the_top_of_the_span_are_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 319, in test_page_tables_at_the_top_of_the_span_are_refused
+    self.run_kernel(pagetable_addr=(4 << 30) - 0x1000, pagetable_pages=6),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_paging_disabled_stops_the_kernel (test_kernel64.KernelContractTests.test_paging_disabled_stops_the_kernel)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 229, in test_paging_disabled_stops_the_kernel
+    self.assert_refuses(self.run_kernel(paging=False), "paging-disabled")
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_rsdp_outside_the_map_is_invalid (test_kernel64.KernelContractTests.test_rsdp_outside_the_map_is_invalid)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 407, in test_rsdp_outside_the_map_is_invalid
+    result = self.run_kernel(acpi_rsdp=0x60000000)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_rsdp_without_the_signature_is_invalid (test_kernel64.KernelContractTests.test_rsdp_without_the_signature_is_invalid)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 401, in test_rsdp_without_the_signature_is_invalid
+    result = self.run_kernel(rsdp_signature=b"NOPE NOPE")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_stack_in_memory_the_map_calls_unusable_is_refused (test_kernel64.KernelContractTests.test_stack_in_memory_the_map_calls_unusable_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 306, in test_stack_in_memory_the_map_calls_unusable_is_refused
+    self.assert_refuses(self.run_kernel(stack_top=0x60000000, stack_size=0x2000),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_stack_outside_the_span_is_refused (test_kernel64.KernelContractTests.test_stack_outside_the_span_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 301, in test_stack_outside_the_span_is_refused
+    self.assert_refuses(self.run_kernel(stack_top=5 << 30, stack_size=0x2000),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_stack_size_is_validated (test_kernel64.KernelContractTests.test_stack_size_is_validated) (stack_size=0)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 294, in test_stack_size_is_validated
+    self.assert_refuses(self.run_kernel(stack_size=size), reason)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_stack_size_is_validated (test_kernel64.KernelContractTests.test_stack_size_is_validated) (stack_size=4097)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 294, in test_stack_size_is_validated
+    self.assert_refuses(self.run_kernel(stack_size=size), reason)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_stack_size_is_validated (test_kernel64.KernelContractTests.test_stack_size_is_validated) (stack_size=2097152)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 294, in test_stack_size_is_validated
+    self.assert_refuses(self.run_kernel(stack_size=size), reason)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_stack_that_underflows_is_refused (test_kernel64.KernelContractTests.test_stack_that_underflows_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 297, in test_stack_that_underflows_is_refused
+    self.assert_refuses(self.run_kernel(stack_top=0x1000, stack_size=0x2000),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_unknown_version_is_refused (test_kernel64.KernelContractTests.test_unknown_version_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 239, in test_unknown_version_is_refused
+    self.assert_refuses(self.run_kernel(version=1), "bootinfo-version")
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_valid_handover_boots_and_prints_the_marker_last (test_kernel64.KernelContractTests.test_valid_handover_boots_and_prints_the_marker_last)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 212, in test_valid_handover_boots_and_prints_the_marker_last
+    result = self.run_kernel()
+             ^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_wrong_descriptor_size_is_refused (test_kernel64.KernelContractTests.test_wrong_descriptor_size_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 253, in test_wrong_descriptor_size_is_refused
+    self.assert_refuses(self.run_kernel(memmap_desc_size=48),
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_wrong_size_is_refused (test_kernel64.KernelContractTests.test_wrong_size_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 243, in test_wrong_size_is_refused
+    self.assert_refuses(self.run_kernel(size=104), "bootinfo-size")
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 196, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_declared_length_below_the_structure_minimum_is_refused (test_kernel64.RsdpValidationTests.test_a_declared_length_below_the_structure_minimum_is_refused) (length=0)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 696, in test_a_declared_length_below_the_structure_minimum_is_refused
+    result = self.run_kernel(rsdp_bytes=bytes(table))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_declared_length_below_the_structure_minimum_is_refused (test_kernel64.RsdpValidationTests.test_a_declared_length_below_the_structure_minimum_is_refused) (length=4)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 696, in test_a_declared_length_below_the_structure_minimum_is_refused
+    result = self.run_kernel(rsdp_bytes=bytes(table))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_declared_length_below_the_structure_minimum_is_refused (test_kernel64.RsdpValidationTests.test_a_declared_length_below_the_structure_minimum_is_refused) (length=20)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 696, in test_a_declared_length_below_the_structure_minimum_is_refused
+    result = self.run_kernel(rsdp_bytes=bytes(table))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_declared_length_below_the_structure_minimum_is_refused (test_kernel64.RsdpValidationTests.test_a_declared_length_below_the_structure_minimum_is_refused) (length=32)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 696, in test_a_declared_length_below_the_structure_minimum_is_refused
+    result = self.run_kernel(rsdp_bytes=bytes(table))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_declared_length_below_the_structure_minimum_is_refused (test_kernel64.RsdpValidationTests.test_a_declared_length_below_the_structure_minimum_is_refused) (length=35)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 696, in test_a_declared_length_below_the_structure_minimum_is_refused
+    result = self.run_kernel(rsdp_bytes=bytes(table))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_length_above_the_supported_maximum_is_refused (test_kernel64.RsdpValidationTests.test_a_length_above_the_supported_maximum_is_refused)
+A declared length that is not an RSDP at all is refused on its face.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 706, in test_a_length_above_the_supported_maximum_is_refused
+    result = self.run_kernel(rsdp_bytes=bytes(table))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_length_the_map_cannot_cover_is_refused_without_reading_past_it (test_kernel64.RsdpValidationTests.test_a_length_the_map_cannot_cover_is_refused_without_reading_past_it)
+The declared length is checked before any of it is summed.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 741, in test_a_length_the_map_cannot_cover_is_refused_without_reading_past_it
+    result = self.run_kernel(rsdp_bytes=bytes(table), rsdp_address=address,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_loader_marked_unmapped_rsdp_is_distinct_again (test_kernel64.RsdpValidationTests.test_a_loader_marked_unmapped_rsdp_is_distinct_again)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 813, in test_a_loader_marked_unmapped_rsdp_is_distinct_again
+    result = self.run_kernel(acpi_rsdp=0, flags=(0xF & ~0x4) | 0x20)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_malformed_signature_is_refused_before_any_checksum (test_kernel64.RsdpValidationTests.test_a_malformed_signature_is_refused_before_any_checksum)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 820, in test_a_malformed_signature_is_refused_before_any_checksum
+    result = self.run_kernel(rsdp_bytes=self.rsdp(signature=b"NOTRSDP!"))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_null_rsdp_with_the_flag_set_is_reported_null (test_kernel64.RsdpValidationTests.test_a_null_rsdp_with_the_flag_set_is_reported_null)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 802, in test_a_null_rsdp_with_the_flag_set_is_reported_null
+    result = self.run_kernel(acpi_rsdp=0, flags=0xF)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_valid_legacy_rsdp_passes_the_legacy_checksum_only (test_kernel64.RsdpValidationTests.test_a_valid_legacy_rsdp_passes_the_legacy_checksum_only)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 652, in test_a_valid_legacy_rsdp_passes_the_legacy_checksum_only
+    result = self.run_kernel(rsdp_bytes=self.rsdp(revision=0, length=36))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_a_valid_revision_2_rsdp_passes_both_checksums (test_kernel64.RsdpValidationTests.test_a_valid_revision_2_rsdp_passes_both_checksums)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 670, in test_a_valid_revision_2_rsdp_passes_both_checksums
+    result = self.run_kernel(rsdp_bytes=self.rsdp(revision=2, length=36))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_an_absent_rsdp_is_distinct_from_an_invalid_one (test_kernel64.RsdpValidationTests.test_an_absent_rsdp_is_distinct_from_an_invalid_one)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 808, in test_an_absent_rsdp_is_distinct_from_an_invalid_one
+    result = self.run_kernel(flags=0xF & ~0x4)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_an_invalid_extended_checksum_is_reported (test_kernel64.RsdpValidationTests.test_an_invalid_extended_checksum_is_reported)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 679, in test_an_invalid_extended_checksum_is_reported
+    result = self.run_kernel(rsdp_bytes=self.rsdp(revision=2, length=36,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_an_invalid_legacy_checksum_is_reported_and_the_boot_continues (test_kernel64.RsdpValidationTests.test_an_invalid_legacy_checksum_is_reported_and_the_boot_continues)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 663, in test_an_invalid_legacy_checksum_is_reported_and_the_boot_continues
+    result = self.run_kernel(rsdp_bytes=self.rsdp(revision=0,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_an_rsdp_at_the_end_of_the_map_is_refused (test_kernel64.RsdpValidationTests.test_an_rsdp_at_the_end_of_the_map_is_refused)
+A table may not be the last 20 bytes of the address space the map covers.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 764, in test_an_rsdp_at_the_end_of_the_map_is_refused
+    result = self.run_kernel(acpi_rsdp=(4 << 30) - 20)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_an_rsdp_not_covered_by_firmware_memory_is_refused (test_kernel64.RsdpValidationTests.test_an_rsdp_not_covered_by_firmware_memory_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 796, in test_an_rsdp_not_covered_by_firmware_memory_is_refused
+    result = self.run_kernel(memmap=memmap, rsdp_bytes=self.rsdp())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_an_rsdp_wholly_below_a_short_span_is_accepted (test_kernel64.RsdpValidationTests.test_an_rsdp_wholly_below_a_short_span_is_accepted)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 774, in test_an_rsdp_wholly_below_a_short_span_is_accepted
+    result = self.run_kernel(rsdp_bytes=self.rsdp())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_an_undefined_revision_is_refused (test_kernel64.RsdpValidationTests.test_an_undefined_revision_is_refused) (revision=1)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 830, in test_an_undefined_revision_is_refused
+    result = self.run_kernel(
+             ^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_an_undefined_revision_is_refused (test_kernel64.RsdpValidationTests.test_an_undefined_revision_is_refused) (revision=3)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 830, in test_an_undefined_revision_is_refused
+    result = self.run_kernel(
+             ^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+======================================================================
+ERROR: test_an_undefined_revision_is_refused (test_kernel64.RsdpValidationTests.test_an_undefined_revision_is_refused) (revision=255)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/f1clone/tests/test_kernel64.py", line 830, in test_an_undefined_revision_is_refused
+    result = self.run_kernel(
+             ^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/test_kernel64.py", line 630, in run_kernel
+    return self.machine_module.run_kernel(self.kernel, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 282, in run_kernel
+    machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/f1clone/tests/kernel64_machine.py", line 147, in __init__
+    from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, \
+ModuleNotFoundError: No module named 'unicorn'
+
+----------------------------------------------------------------------
+Ran 889 tests in 60.803s
+
+FAILED (errors=103, skipped=24)
+image    /tmp/tmp9lphod58/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmpgsrjlg99/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture root device
+nothing was written
+image    /tmp/tmphswrmcjm/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdc
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+re-run with --yes to confirm after checking the device path
+image    /tmp/tmpra2shcl3/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdz9
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+refusing: became related
+nothing was written
+image    /tmp/tmpx6lrzgoq/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmpx6lrzgoq/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmp9mcwbu48/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp2xfw3ct1/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp_xhp586n/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpeo8_e7y1/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpeq4553v6/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpzc_2vq66/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpqgnw5_k8/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp68smd_sn/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmptz6fvh9l/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmptz6fvh9l/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp2dhh9xh7/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdc
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+image    /tmp/tmp9axrlyvt/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpuymhmt6g/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda1: /dev/sda1 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmpuymhmt6g/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmprqhniyja/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda: /dev/sda is the whole disk carrying the root filesystem (root device 8:1)
+nothing was written
+image    /tmp/tmprqhniyja/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmp33hdcl15/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written

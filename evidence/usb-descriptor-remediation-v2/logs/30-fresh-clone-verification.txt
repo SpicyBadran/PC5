@@ -1,0 +1,82 @@
+# Fresh-clone verification of the committed branch (P3)
+# captured 2026-11-21T19:57:03Z
+
+Branch `fix/usb-descriptor-bound-remediation`, 103 files in the branch delta against
+`56c58521580e88c4339ceb6eb40ce724a2bb533b`. **No commit hash of its own commit appears in this
+file**: a log inside a commit cannot record the hash of the commit that carries it, and the
+first revision of this paragraph did exactly that while naming `dab557338667933435ac3a8d6f2ffac2d8e8af57`
+— an earlier revision of the same commit, superseded when a stray
+`__pycache__/mutation_harness_v2.cpython-311.pyc` was removed from the set (that .pyc had
+entered via `git add -f <directory>` and was never wanted as evidence). The final commit hash,
+its tree, the PR number and the identity of the diff GitHub serves are recorded in
+`31-pr-opened.txt`, written after the push, where no self-reference is possible.
+
+    $ git clone --no-hardlinks -b fix/usb-descriptor-bound-remediation file:///home/user/pc5 /tmp/pushcheck
+    $ cd /tmp/pushcheck && TMPDIR=/tmp make check          # exit 2, citations-check only
+
+## Why the first run fails, measured rather than assumed
+
+The same recipe at the base commit fails with the identical count, so this is the
+environment, not the branch:
+
+    $ rm -rf /tmp/basecheck && git clone --no-hardlinks file:///home/user/pc5 /tmp/basecheck
+    $ cd /tmp/basecheck && git checkout 56c58521580e88c4339ceb6eb40ce724a2bb533b
+    $ python3 tools/commit_citations.py
+    258 dead commit reference(s) across 11 documents
+
+    $ git rev-parse --is-shallow-repository        # in /home/user/pc5 and in the clone
+    true                                           # .git/shallow present, 41 B
+    $ git merge-base --is-ancestor 9d4a79d refs/heads/main      # cited PR27 head
+    (no)
+
+`/home/user/pc5` is a **shallow** repository and a clone inherits that; a clone also never
+copies `refs/remotes/origin/pr/*` (34 of them here). The cited commits are not ancestors of
+`main`, so nothing in that clone can reach them. The tool's own output names both causes and
+refuses to convert either into a pass — that is the behaviour finding F-1 asked for, and no
+line of `tools/commit_citations.py` was edited to obtain this log.
+
+## The documented repair, run inside the clone
+
+    $ git fetch --unshallow origin
+    $ git fetch origin '+refs/remotes/origin/pr/*:refs/remotes/origin/pr/*'   # 34 refs
+    $ make citations-check
+    CITATIONS OK: 258 commit reference(s) resolve across 11 documents            exit 0
+
+## Full gate, same clone, unprovisioned (no venv, no device, TMPDIR=/tmp)
+
+    $ TMPDIR=/tmp make check                                                     exit 0
+    PASSED: 165 checks, 0 failures
+    PSM conformance: 261/261 checks passed
+    DOCS OK: 67 Markdown files, 34 make targets, links, anchors and commands resolve
+    CITATIONS OK: 258 commit reference(s) resolve across 11 documents
+    PRESENTATION OK: 6 figures and 5 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+    BRAND OK: 11 assets current, no text elements, no external references
+    Ran 925 tests in 79.508s
+    OK (skipped=2)
+
+## Evidence manifests, verified inside the clone
+
+    $ awk 'NF==3 && length($3)==64 {print $3"  "$1}' evidence/usb-descriptor-remediation-v2/CORRECTED-MANIFEST.txt | sha256sum -c -
+    100 records, 100 OK, 0 FAILED
+    $ awk 'NF==3 && length($3)==64 {print $3"  "$1}' evidence/usb-descriptor-remediation-v2/HASHES-PR-TIP.txt | sha256sum -c -
+    101 records, 101 OK, 0 FAILED
+
+The 25 out-of-tree anchor lines do not match `NF==3` by design, so the recipe a reviewer
+runs checks exactly what a clone can check. `DOCS OK: 67 Markdown files` in the clone versus
+`94` in the workspace is the 27 untracked `docs/engineering/` and evidence notes that this
+branch deliberately does not carry; no link broke because of their absence.
+
+## USB suites and both harnesses, in the clone
+
+    $ TMPDIR=/tmp python3 -m unittest discover -s tests -p 'test_pc5ctl_usb*.py'      exit 0
+    Ran 91 tests in 0.232s
+    
+    OK
+    $ TMPDIR=/tmp python3 evidence/usb-descriptor-remediation-v1/mutation_harness.py
+    RESULT: PASS: baseline green and every mutation detected by its intended assertion
+    $ TMPDIR=/tmp python3 evidence/usb-descriptor-remediation-v2/mutation_harness_v2.py
+    collected inventory: 91 test methods
+    RESULT: PASS: baseline green, every mutant caught, and every intended test both present and discriminating
+
+Nothing here is a device test: the fixtures are temporary regular files and a synthetic
+`/sys/dev/block` tree.

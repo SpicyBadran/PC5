@@ -1,0 +1,202 @@
+........F.FFFF....F..FEF.FFFFF.............................................................
+======================================================================
+ERROR: test_13_child_startup_failure_never_falls_back_to_the_pathname (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_13_child_startup_failure_never_falls_back_to_the_pathname)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 452, in test_13_child_startup_failure_never_falls_back_to_the_pathname
+    self.cli()
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 266, in cli
+    self.rc = self.run_cli(launch=launch, which=which)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 261, in run_cli
+    return self.run_argv(["usb", "--iso", str(self.iso),
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 258, in run_argv
+    return pc5ctl.main(list(argv))
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine/tools/pc5ctl.py", line 756, in main
+    return args.func(args)
+           ^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine/tools/pc5ctl.py", line 718, in cmd_usb
+    return subprocess.call([dd, f"if={iso}", f"of={writing}",
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/mock.py", line 1118, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/mock.py", line 1122, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/mock.py", line 1183, in _execute_mock_call
+    result = effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 213, in _launch
+    raise self.dd_error
+FileNotFoundError: [Errno 2] No such file or directory
+
+======================================================================
+FAIL: test_25_real_dd_writes_through_the_inherited_descriptor (test_pc5ctl_usb_descriptor_identity.RealChildWrites.test_25_real_dd_writes_through_the_inherited_descriptor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 646, in test_25_real_dd_writes_through_the_inherited_descriptor
+    self.assertEqual(rc, 0, self.stdout.getvalue())
+AssertionError: 1 != 0 : image    /tmp/tmp5_mrqnqs/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_01_valid_descriptor_and_matching_identity_writes_through_the_fd (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_01_valid_descriptor_and_matching_identity_writes_through_the_fd)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 312, in test_01_valid_descriptor_and_matching_identity_writes_through_the_fd
+    self.assertEqual(self.dd_kwargs().get("pass_fds"), (fd,),
+AssertionError: None != (5,) : the validated descriptor must be the inherited one
+
+======================================================================
+FAIL: test_02_descriptor_closed_before_the_child_launches (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_02_descriptor_closed_before_the_child_launches)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 328, in test_02_descriptor_closed_before_the_child_launches
+    self.assert_refused("cannot hold a writable descriptor")
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmpkc2gvfys/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_03_missing_descriptor_inheritance_is_explicit (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_03_missing_descriptor_inheritance_is_explicit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 335, in test_03_missing_descriptor_inheritance_is_explicit
+    self.assertIn("pass_fds", self.dd_kwargs(),
+AssertionError: 'pass_fds' not found in {} : the write child must be given the descriptor explicitly
+
+======================================================================
+FAIL: test_04_invalid_descriptor_number_is_refused_without_closing_a_standard_stream (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_04_invalid_descriptor_number_is_refused_without_closing_a_standard_stream)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 343, in test_04_invalid_descriptor_number_is_refused_without_closing_a_standard_stream
+    self.assert_refused("cannot inherit the target descriptor")
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmp53yjb3h6/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_09_path_replaced_between_the_identity_check_and_final_validation (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_09_path_replaced_between_the_identity_check_and_final_validation)
+THE CRITICAL CASE (the exact shipped-code timeline).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 413, in test_09_path_replaced_between_the_identity_check_and_final_validation
+    self.assert_refused()
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmpbokit_ki/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_12_failed_descriptor_read (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_12_failed_descriptor_read)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 447, in test_12_failed_descriptor_read
+    self.assert_refused("cannot identify the descriptor")
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 284, in assert_refused
+    self.assertIn(fragment, self.out)
+AssertionError: 'cannot identify the descriptor' not found in 'image    /tmp/tmp_xfrh6yd/image.iso\nsha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4\ntarget   /dev/pc5-synthetic-never-opened\n\nTHIS ERASES EVERYTHING ON THE TARGET DEVICE.\n/dev/pc5-synthetic-never-opened is no longer a block device: refusing to write\nnothing was written\n'
+
+======================================================================
+FAIL: test_14_final_validation_failure_immediately_before_writing (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_14_final_validation_failure_immediately_before_writing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 466, in test_14_final_validation_failure_immediately_before_writing
+    self.assert_refused("changed before the write")
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmpxmiqfwfg/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_16_child_receives_exactly_the_validated_descriptor (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_16_child_receives_exactly_the_validated_descriptor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 489, in test_16_child_receives_exactly_the_validated_descriptor
+    self.assertEqual(self.dd_kwargs().get("pass_fds"), (fd,),
+AssertionError: None != (3,) : the inherited descriptor must be the one that was validated
+
+======================================================================
+FAIL: test_16b_inherited_descriptor_number_is_the_closed_one (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_16b_inherited_descriptor_number_is_the_closed_one)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 502, in test_16b_inherited_descriptor_number_is_the_closed_one
+    self.assertEqual(passed, (fd,))
+AssertionError: None != (3,)
+
+======================================================================
+FAIL: test_17_descriptor_not_open_for_write_is_refused (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_17_descriptor_not_open_for_write_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 513, in test_17_descriptor_not_open_for_write_is_refused
+    self.assert_refused("cannot hold a writable descriptor")
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmp3_cb_7zd/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_18_missing_procfs_entry_cannot_fall_back_to_the_pathname (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_18_missing_procfs_entry_cannot_fall_back_to_the_pathname)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 518, in test_18_missing_procfs_entry_cannot_fall_back_to_the_pathname
+    self.assert_refused("is not usable as a write target")
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmp0g3773dn/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_19_unlinked_referent_is_refused (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_19_unlinked_referent_is_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 525, in test_19_unlinked_referent_is_refused
+    self.assert_refused("is not usable as a write target")
+  File "/home/user/review-pristine/tests/test_pc5ctl_usb_descriptor_identity.py", line 279, in assert_refused
+    self.assertEqual(self.rc, 1, f"expected a refusal, got exit {self.rc}: {self.out}")
+AssertionError: 0 != 1 : expected a refusal, got exit 0: image    /tmp/tmpiuyyf1yf/image.iso
+sha256   bd1215a1ef29e88cd1e72be6128d6cef8eb6e3093250440154cb66e1e031dcd4
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+----------------------------------------------------------------------
+Ran 91 tests in 0.201s
+
+FAILED (failures=13, errors=1)
+Exception ignored in: <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>
+OSError: [Errno 9] Bad file descriptor

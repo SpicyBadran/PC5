@@ -1,0 +1,27 @@
+CORRIGENDUM - generated 2026-11-21T19:32:12Z by the closure pass (evidence/usb-descriptor-remediation-v2/).
+
+make-check-base-clone-run1.txt is a defective record and must not be read as an exit
+status. Its header claims `exit 0` over a body copied from the run that FAILED: the
+reviewer had left a draft probe file in that clone's tests/, so the run it describes was
+not the clean run. The clean, exit-0 run of `make check` in a clone of the base commit is
+logs/make-check-base-clone.txt, and that is the file the review's findings should be
+checked against.
+
+The same section of `STATE.txt` states, as item 2's closing sentence, that "Both
+`make check` runs recorded in `logs/` are from trees containing only delivered content."
+That sentence is the overreach this corrigendum answers: one of the two was not, and the
+header of `make-check-base-clone-run1.txt` was written to describe a run that had not
+happened in the way it claims.
+
+Both files are preserved exactly as they were written. The false header is not edited
+away: a review that silently repairs its own transcripts is the thing the review is
+supposed to catch. The reviewer's process error is recorded in
+evidence/usb-descriptor-independent-review-v1/STATE.txt
+under "process errors", and the consequence for F-1's wording is recorded in
+evidence/usb-descriptor-remediation-v2/FINDINGS-CLOSURE-20261121.md
+("Corrections to the review's own record", item 3).
+
+Reproduce the distinction:
+
+    head -6 evidence/usb-descriptor-independent-review-v1/logs/make-check-base-clone-run1.txt
+    grep -E '^(Ran |OK|FAILED)|make' evidence/usb-descriptor-independent-review-v1/logs/make-check-base-clone.txt

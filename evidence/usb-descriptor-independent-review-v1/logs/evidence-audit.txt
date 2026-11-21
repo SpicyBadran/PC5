@@ -1,0 +1,103 @@
+
+======================================================================
+1. HASHES.txt record verification
+======================================================================
+lines=267 records=217 non-record lines=36
+verified=216  missing=0  size-drift=1  hash-drift=1
+unrecorded files under evidence/usb-descriptor-remediation-v1: 0
+
+======================================================================
+2. REMEDIATION.patch — identity, application, byte equality
+======================================================================
+bytes=55331 sha256=19793a838870913b3afa59e84994bdf1032ad5248d09b0a5192eac6c8a499dac
+sidecar: 19793a838870913b3afa59e84994bdf1032ad5248d09b0a5192eac6c8a499dac REMEDIATION.patch
+files=4 hunks=9
+git apply --check exit=0  git apply exit=0
+tracked diff after applying:
+     tests/test_pc5ctl_usb_safety.py |  33 +++++--
+     tools/pc5ctl.py                 | 190 +++++++++++++++++++++++++++++++++++-----
+     2 files changed, 196 insertions(+), 27 deletions(-)
+status after applying:
+     M tests/test_pc5ctl_usb_safety.py
+     M tools/pc5ctl.py
+    ?? tests/test_pc5ctl_usb_cli_boundaries.py
+    ?? tests/test_pc5ctl_usb_descriptor_identity.py
+    IDENTICAL tests/test_pc5ctl_usb_safety.py
+    IDENTICAL tools/pc5ctl.py
+    IDENTICAL tests/test_pc5ctl_usb_cli_boundaries.py
+    IDENTICAL tests/test_pc5ctl_usb_descriptor_identity.py
+
+======================================================================
+3. recovery/…-v3.tar.gz — sidecar, members, round trip
+======================================================================
+archive bytes=927493 sha256=ea6329e4e4b8287317d126f59d62f82f3aaa7cd6ca9abd4b73c662fbe700eb41
+sidecar: ea6329e4e4b8287317d126f59d62f82f3aaa7cd6ca9abd4b73c662fbe700eb41 pc5-usb-descriptor-remediation-20261121-v3.tar.gz
+manifest member_count=193  len(members)=193
+manifest generated='2026-11-21T17:17:26Z'
+tar file members=194 (directories and links excluded)
+unlisted in the archive: ['pc5-usb-descriptor-remediation-20261121-v3-manifest.json']
+listed but absent: none
+members verified against the manifest: 193  absent=0  drift=0
+members whose workspace copy has moved on since the archive (superseded): 3
+    evidence/usb-descriptor-remediation-v1/HASHES.txt
+    evidence/usb-descriptor-remediation-v1/MAKE-CHECK.log
+    evidence/usb-descriptor-remediation-v1/REMOTE-CONTINUITY.md
+archived REMEDIATION.patch bytes=55331 sha256=19793a838870913b3afa59e84994bdf1032ad5248d09b0a5192eac6c8a499dac
+round-trip `git apply` of the archived patch: exit=0 
+round-trip suite: Ran 91 tests in 0.212s |  | OK
+
+======================================================================
+4. provenance and internal consistency
+======================================================================
+workspace HEAD=56c58521580e88c4339ceb6eb40ce724a2bb533b branch=arena/c8a76776-pc5
+  manifest branch = arena/c8a76776-pc5
+  manifest local_head = 56c58521580e88c4339ceb6eb40ce724a2bb533b
+  manifest remediation_patch_sha256 = 19793a838870913b3afa59e84994bdf1032ad5248d09b0a5192eac6c8a499dac
+  manifest remediation_patch_bytes = 55331
+  workspace patch sha256 19793a838870913b3afa59e84994bdf1032ad5248d09b0a5192eac6c8a499dac  bytes 55331
+
+docs and reports: any claim of commit / push / deploy?
+  docs/engineering/USB-DESCRIPTOR-REMEDIATION-20261121.md:18: merged as PR32 (`gh api repos/SpicyBadran/PC5/pulls/32`: base `46a9fda1b3b0fe3351d62c829fbdba484ffbe791`,
+  docs/engineering/USB-DESCRIPTOR-REMEDIATION-20261121.md:19: head `7c16285a54e8da8ee17e042facb82d2b51022226`, merged 2026-11-20T15:29:46Z, merge commit
+  docs/engineering/USB-DESCRIPTOR-REMEDIATION-20261121.md:20: `56c58521580e88c4339ceb6eb40ce724a2bb533b`). That commit added
+  docs/engineering/USB-DESCRIPTOR-REMEDIATION-20261121.md:70: | `make check` in this working tree | final gate, exit 0: `Ran 924 tests … OK (skipped=2)`, `DOCS OK: 87 Markdown files, 33 make targets`, `CITATIONS 
+  docs/engineering/PROJECT_STATE.md:5: At this snapshot current GitHub main and local HEAD are `56c58521580e88c4339ceb6eb40ce724a2bb533b`; branch `arena/c8a76776-pc5` was shallow at the pri
+  docs/engineering/PROJECT_STATE.md:7: PR31 head `ac17c5d3afa6fa3ca779c012c6aef36b64751b55` is open, diverged from main by 17 ahead/5 behind; PR33 was merged **into PR31's feature branch**,
+  docs/engineering/PROJECT_STATE.md:13: The targeted synthetic USB descriptor probe and read-only documentation checker were run; no broad suite, fresh clone, source change, commit, push, PR
+  docs/engineering/PROJECT_STATE.md:17: The main fetch and original GitHub-reported PR1–16 merge-object fetch both exited 0; Git reports non-shallow. Main history has distinct PR-labelled me
+  docs/engineering/PROJECT_STATE.md:33: See `evidence/continuation-descriptor-v1/RESULTS.md` for commands, full logs and limitations. The USB missing-inheritance symptom was reproduced as an
+  docs/engineering/PROJECT_STATE.md:39: branch still `ae9f3e25f66ac3d31b2b7b64dccef7695fef1d73` (five commits ahead of local, left
+  docs/engineering/PROJECT_STATE.md:40: alone). Nothing was committed, pushed, merged, reset or cleaned. `tools/pc5ctl.py` and
+  docs/engineering/PROJECT_STATE.md:77: OVMF run was performed, and the PR was not updated. PR34's four M2a commits remain separate and
+  docs/engineering/PROJECT_STATE.md:106: Composition, measured rather than argued: in a disposable local clone checked out at the pushed
+  docs/engineering/PROJECT_STATE.md:107: branch tip `ae9f3e25f66ac3d31b2b7b64dccef7695fef1d73` (main + PR34's four M2a commits + one roadmap
+  docs/engineering/PROJECT_STATE.md:108: commit), the unmodified tree runs 954 tests `OK (skipped=2)`; with
+  docs/engineering/PROJECT_STATE.md:116: and separate, nothing here was run on firmware or hardware, nothing was pushed, and USB acceptance
+  docs/engineering/PROJECT_STATE.md:128: `pass_fds`, and the final safety decision re-resolves the pathname. That is shipped code merged
+  docs/engineering/PROJECT_STATE.md:161: untouched: still `open` at `ac17c5d3`, no comment, no update, no push. USB acceptance remains **BLOCKED**: uncommitted, unreviewed, no device run,
+  docs/engineering/EVIDENCE_INDEX.md:16: PR31's five committed OVMF64 pairs were re-read and their recorded commit/tree relationships, raw markers and PASS-detail fields inspected without rer
+  docs/engineering/EVIDENCE_INDEX.md:30: See `evidence/continuation-descriptor-v1/RESULTS.md` for commands, full logs and limitations. The USB missing-inheritance symptom was reproduced as an
+  docs/engineering/EVIDENCE_INDEX.md:40: | `PR31.json`, `PR34.json` | raw `gh api` PR metadata: open, base/head SHAs, commit and file counts | mergeability ≠ review or readiness |
+  evidence/usb-descriptor-remediation-v1/HASHES.txt:7: `CITATIONS OK: 258 commit reference(s) across 11 documents`, kernel unit `PASSED: 165 checks,
+  evidence/usb-descriptor-remediation-v1/HASHES.txt:9: `main`); working branch `arena/c8a76776-pc5`; nothing committed, nothing pushed, no PR touched, no
+  evidence/usb-descriptor-remediation-v1/REMOTE-CONTINUITY.md:74: `ac17c5d3afa6fa3ca779c012c6aef36b64751b55` (base `46a9fda1`, 17 commits, 30 files, clean), PR34 open
+  evidence/usb-descriptor-remediation-v1/REMOTE-CONTINUITY.md:75: at `547ebd5c`. Zero commits, zero pushes, zero PR comments or updates by me.
+  recovery/pc5-usb-descriptor-remediation-20261121-v3-manifest.json:43: "commit",
+  recovery/pc5-usb-descriptor-remediation-20261121-v3-manifest.json:44: "push",
+
+mtime sanity (the sandbox normalises mtimes; recorded so nobody re-reads them as order):
+  evidence/usb-descriptor-remediation-v1/REMEDIATION.patch mtime=1795284290
+  evidence/usb-descriptor-remediation-v1/HASHES.txt mtime=1795284290
+  recovery/pc5-usb-descriptor-remediation-20261121-v3.tar.gz mtime=1795284290
+  recovery/pc5-usb-descriptor-remediation-20261121-v3-manifest.json mtime=1795284290
+  docs/engineering/PROJECT_STATE.md mtime=1795284290
+
+======================================================================
+RESULT
+======================================================================
+problems=3 notes=0
+  PROBLEM HASHES.txt:33: size drift for evidence/usb-descriptor-remediation-v1/HASHES.txt: recorded 30519, measured 30878
+  PROBLEM HASHES.txt:33: hash drift for evidence/usb-descriptor-remediation-v1/HASHES.txt: recorded 17b2f47b8049fe3b…, measured 37cf9de4482319e9…
+  PROBLEM HASHES.txt:33: the manifest records its own bytes (30519 B, 17b2f47b8049…) while the file measures 30878 B / 37cf9de44823…, and its own header says it 'cannot hash itself' - a self-record that is stale by construction
+
+scratch kept at /tmp/pc5-review-audit-thakyqxf (removed by the OS only if TMPDIR is cleaned)

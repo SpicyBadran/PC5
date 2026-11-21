@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import fcntl
 import json
 import os
 import shutil
@@ -627,6 +628,122 @@ def check_target_safe(device, topology=None):
     return True, "target is not part of the root storage"
 
 
+# ---------------------------------------------------------------- descriptor binding
+#
+# `check_target_safe` above answers a question about a *path*.  A path is not an
+# object: between the answer and the write, the name can be unlinked, retargeted
+# at another device node, or replaced by a symlink, and every further lookup of
+# that name then describes a different device.  The write itself cannot follow
+# the name, because a `write(2)` goes to whatever the open file description refers
+# to -- so if the safety decision is made about the name while the write is made
+# through a descriptor, the two can disagree, and the disagreement decides
+# whether a disk gets erased.
+#
+# The rule the code below enforces is therefore narrow and absolute: once the
+# target is open, the identity used for the safety decision comes from
+# `fstat` on that descriptor and from nowhere else.  A pathname may only ever
+# *refuse* (it is compared, and a mismatch stops the write); it can never
+# authorise, because authorisation from a re-resolvable name is what the whole
+# guard exists to avoid.
+#
+# What this does NOT buy, and no userspace code can: atomicity of the topology.
+# `major:minor` describes an object the kernel reports *now*.  A root remount,
+# a device-mapper table reload, an md add/remove, a partition-table rewrite or a
+# replug that reuses a device number can all change what the same identity means
+# after the last check has run.  The decision is therefore repeated immediately
+# before the child is launched, which shortens that window to microseconds
+# without closing it; and the honest residual is stated in
+# docs/engineering/USB-IDENTITY-BOUNDARY-DESIGN-v1.md: never write to a device
+# from a system whose own root storage could be rearranged underneath you.
+
+
+def fd_writable(fd):
+    """True only if this open file description itself permits writing.
+
+    `os.access` and the file's mode bits describe the *path* and the calling
+    privileges, not this descriptor: a descriptor can be opened read-only while
+    the name looks writable, or inherited with the write bit stripped.  Reading
+    `O_ACCMODE` out of `F_GETFL` asks the kernel about the object we hold.  A
+    descriptor we cannot interrogate at all is a refusal, not a pass.
+    """
+    try:
+        flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+    except (OSError, ValueError):
+        return False
+    return (flags & os.O_ACCMODE) != os.O_RDONLY
+
+
+def fd_block_identity(fd):
+    """`(major, minor)` of the block device behind `fd`; None if there is none.
+
+    This is the identity that the safety decision is allowed to be about.  It
+    comes from `fstat`, so it cannot be moved by renaming, unlinking or
+    re-pointing any path -- including the `/dev/...` name the operator typed.
+    """
+    try:
+        st = os.fstat(fd)
+    except (OSError, ValueError):
+        return None
+    if not stat.S_ISBLK(st.st_mode):
+        return None
+    return (os.major(st.st_rdev), os.minor(st.st_rdev))
+
+
+def fd_child_target_usable(fd):
+    """True if a child can open `/proc/self/fd/<fd>` as its write target.
+
+    A descriptor-backed path is not automatically usable: procfs can be
+    unmounted or hidden, the entry can be gone, and the referent can have been
+    unlinked (the `(deleted)` suffix the kernel appends is how that shows up).
+    Each of those is a refusal.  There is deliberately no fallback to the
+    `/dev/...` name in the failure paths: falling back is how a validated
+    descriptor becomes an unvalidated pathname.
+
+    What this does *not* do is verify that the alias points back at this
+    descriptor: `readlink` answers with the referent's *text*, and text cannot
+    authorise anything.  The write's identity comes from the descriptor the
+    child inherits, never from what the link says (independent review, finding
+    F-7: this check is advisory by design, and a spoofed referent was measured
+    to leave the write bound to the held descriptor).
+    """
+    path = f"/proc/self/fd/{fd}"
+    try:
+        os.lstat(path)
+        referent = os.readlink(path)
+    except (OSError, ValueError):
+        return False
+    if referent.endswith(" (deleted)"):
+        return False
+    return True
+
+
+class _BoundTopology:
+    """A topology view in which the target's identity is the descriptor's.
+
+    `check_target_safe` asks exactly one question about the target --
+    `devnum_for_path(device)` -- and everything else it asks is about the root
+    storage.  Replacing that one answer with the identity the kernel reported for
+    the held descriptor makes the decision and the write share an object by
+    construction: no change to any pathname, in any order, at any moment, can
+    make this guard consent to writing something it did not examine.
+
+    The `device` argument still flows through, but only into the message text, so
+    a refusal can name what the operator typed.
+    """
+
+    def __init__(self, topology, devnum):
+        self._topology = topology
+        self._devnum = devnum
+
+    def devnum_for_path(self, path):
+        return self._devnum
+
+    def __getattr__(self, name):
+        # root_devnum, root_closure, root_disk, link_for_devnum, partitions_of,
+        # parent_of: all about the root, never about the name we are holding.
+        return getattr(self._topology, name)
+
+
 def cmd_usb(args):
     iso = args.iso
     if not os.path.exists(iso):
@@ -672,31 +789,47 @@ def cmd_usb(args):
         print("dd not found")
         return 1
 
-    # Narrow the check-to-use window and make the write name the device it was
-    # validated against.  `check_target_safe` above is a snapshot; by the time
-    # dd runs, the path could name a different device (a re-plugged stick, a
-    # changed symlink) or the topology could have grown to include it.  Hold an
-    # open descriptor on the target, re-read its identity through that
-    # descriptor, and write through /proc/self/fd so dd cannot pick up a
-    # different device than the one just validated.  This does not make the
-    # snapshot atomic -- nothing in userspace can -- but it removes the
-    # path-substitution window and detects a device that changed underneath.
+    # From here on, the target is the descriptor -- not the name.  Holding an
+    # open file description is what makes "the object I checked" and "the object
+    # I write" the same kernel object, and that is only true if three things all
+    # hold: the safety decision is computed from the descriptor's identity, the
+    # child is actually given that descriptor, and nothing falls back to the
+    # pathname when any of it fails.
     try:
         target_fd = os.open(device, os.O_WRONLY)
     except OSError as exc:
         print(f"cannot open {device} for writing ({exc.strerror}): refusing to write")
         print("nothing was written")
         return 1
+    # Checked before the cleanup block: refusing must not close a descriptor the
+    # process still needs, and `pass_fds` cannot inherit one of 0/1/2.
+    if target_fd < 3:
+        print(f"cannot inherit the target descriptor for {device} (fd {target_fd}): "
+              "refusing to write")
+        print("nothing was written")
+        return 1
     try:
-        try:
-            st = os.fstat(target_fd)
-        except OSError:
-            st = None
-        if st is None or not stat.S_ISBLK(st.st_mode):
-            print(f"{device} is no longer a block device: refusing to write")
+        if not fd_writable(target_fd):
+            print(f"cannot hold a writable descriptor for {device}: refusing to write")
             print("nothing was written")
             return 1
-        opened_as = (os.major(st.st_rdev), os.minor(st.st_rdev))
+        opened_as = fd_block_identity(target_fd)
+        if opened_as is None:
+            print(f"cannot identify the descriptor for {device}: refusing to write")
+            print("nothing was written")
+            return 1
+        if not fd_child_target_usable(target_fd):
+            print(f"/proc/self/fd/{target_fd} is not usable as a write target: "
+                  "refusing to write")
+            print("nothing was written")
+            return 1
+
+        # The name the operator typed must still resolve to the object being
+        # held.  This can only *refuse*: the decision below never trusts this
+        # lookup, because a pathname lookup is exactly what a substitution
+        # attack controls.  It exists so a swapped device node -- the stick
+        # pulled and replugged as something else, the symlink retargeted -- is
+        # reported to the operator instead of being silently written through.
         named_as = Topology().devnum_for_path(device)
         if opened_as != named_as:
             print(f"{device} changed identity between validation and write "
@@ -705,18 +838,38 @@ def cmd_usb(args):
             print("nothing was written")
             return 1
 
-        # Re-run the whole safety decision against the identity actually held
-        # open.  If the topology moved to include this device in the interval,
-        # this second pass sees it and refuses.
-        again = check_target_safe(device)
+        # The authoritative safety decision: the same complete check as above,
+        # but about the device the descriptor refers to.  Because the topology
+        # itself can move (dm/md reloads, partition-table rewrites, root
+        # remounts), this is re-run here rather than assumed from the earlier
+        # pass -- and it is re-run on the descriptor identity, so a pathname
+        # swap between the two passes cannot make it describe a different
+        # device than the one about to be written.
+        again = check_target_safe(device, topology=_BoundTopology(Topology(), opened_as))
         if not again[0]:
             print(again[1])
             print("nothing was written")
             return 1
+        if fd_block_identity(target_fd) != opened_as:
+            print(f"descriptor for {device} changed before the write: refusing to write")
+            print("nothing was written")
+            return 1
 
+        # The child gets exactly one thing from us: this validated descriptor.
+        # `pass_fds` is not decoration -- without it Python closes every fd >= 3
+        # in the child and `/proc/self/fd/N` simply does not exist there, which is
+        # the state `usb` shipped in.  `close_fds=True` is stated explicitly so the
+        # inheritance set is visible in the source: one descriptor, no others.
         writing = f"/proc/self/fd/{target_fd}"
-        return subprocess.call([dd, f"if={iso}", f"of={writing}",
-                                "bs=4M", "status=progress", "conv=fsync"])
+        argv = [dd, f"if={iso}", f"of={writing}",
+                "bs=4M", "status=progress", "conv=fsync"]
+        try:
+            return subprocess.call(argv, close_fds=True, pass_fds=(target_fd,))
+        except OSError as exc:
+            # A failed launch is a refusal, never a retry against the pathname.
+            print(f"could not launch {dd} ({exc.strerror}): refusing to write")
+            print("nothing was written")
+            return 1
     finally:
         os.close(target_fd)
 

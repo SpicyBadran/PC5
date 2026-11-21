@@ -1,0 +1,92 @@
+# Review-pass state record — written 2026-11-21T18:43:20Z by the independent reviewer
+
+## Workspace state (measured, read-only commands)
+HEAD: 56c58521580e88c4339ceb6eb40ce724a2bb533b
+branch: arena/c8a76776-pc5
+commits beyond base: 0
+upstream: fatal: no upstream configured for branch 'arena/c8a76776-pc5'
+
+## Tracked modifications (unchanged by this review — the implementation's own two files)
+   M tests/test_pc5ctl_usb_safety.py
+   M tools/pc5ctl.py
+
+## Reviewer process errors, recorded rather than hidden
+1. `HASHES.txt` for this directory was first generated with `find .` run from the repository root,
+   so it recorded 775 repo-wide paths instead of this directory's 17. Detected on self-verification
+   (the manifest did not match its own directory) and regenerated in place; no file outside this
+   directory was affected by the mistake.
+2. An early draft of the reviewer's probe suite was written into the clone's `tests/` directory and
+   was collected by the clone's `make check`, failing it with the draft's own bugs (a `run()` override
+   clash and two mis-specified assertions). The draft was the reviewer's file, not repo content; it was
+   removed from `tests/` and the final version lives in `reviewer-probes.py` here. Both `make check`
+   runs recorded in `logs/` are from trees containing only delivered content.
+3. Two probe scenarios initially asserted things the code does not promise (that a spoofed
+   `/proc/self/fd` referent would be refused, and that `root_disk()==UNKNOWN` must flip a decision).
+   Both were rewritten to assert the real property — the referent text is advisory and cannot redirect
+   the write; `root_disk` feeds only the refusal message — see findings F-7 and the F-6 note. Neither
+   change altered any production code.
+
+## Writes by this review — complete list
+Nothing was deleted, regenerated, silently replaced or reformatted anywhere in the repository.
+ 1. 18 new files inside evidence/usb-descriptor-independent-review-v1/ (this record, the report, the
+    handoff, the reviewer's probe suite, the audit script and `logs/`).
+ 2. ONE append-only edit outside that directory, made after the fact and disclosed here: section 8
+    ("Review addendum") appended to docs/engineering/USB-DESCRIPTOR-REMEDIATION-20261121.md, which
+    grew from 184 to 226 lines; no existing line of that file was altered or removed. The addition is
+    required because section 7 asserted "unreviewed by anyone else", which this review makes false.
+ Docs gate after both writes: `DOCS OK: 89 Markdown files, 33 make targets, links, anchors and
+ commands resolve`, exit 0; `tests.test_architecture` `Ran 53 … OK`.
+
+## Every path this review created (nothing else was written in the repository)
+  evidence/usb-descriptor-independent-review-v1/COMMIT-HANDOFF.md
+  evidence/usb-descriptor-independent-review-v1/INDEPENDENT-REVIEW-20261121.md
+  evidence/usb-descriptor-independent-review-v1/STATE.txt
+  evidence/usb-descriptor-independent-review-v1/audit_evidence.py
+  evidence/usb-descriptor-independent-review-v1/logs/evidence-audit.txt
+  evidence/usb-descriptor-independent-review-v1/logs/make-check-base-clone.txt
+  evidence/usb-descriptor-independent-review-v1/logs/make-check-first-attempt-diagnostics.txt
+  evidence/usb-descriptor-independent-review-v1/logs/make-check-remote-tip.txt
+  evidence/usb-descriptor-independent-review-v1/logs/make-check-without-pr-refs-NEGATIVE-CONTROL.txt
+  evidence/usb-descriptor-independent-review-v1/logs/mutations-8-prior-suite.txt
+  evidence/usb-descriptor-independent-review-v1/logs/mutations-9.txt
+  evidence/usb-descriptor-independent-review-v1/logs/prior-87-suite-vs-current.txt
+  evidence/usb-descriptor-independent-review-v1/logs/probes-patched.txt
+  evidence/usb-descriptor-independent-review-v1/logs/probes-pristine.txt
+  evidence/usb-descriptor-independent-review-v1/logs/unit-suite-without-unicorn.txt
+  evidence/usb-descriptor-independent-review-v1/logs/usb-suite-patched.txt
+  evidence/usb-descriptor-independent-review-v1/logs/usb-suite-pristine.txt
+  evidence/usb-descriptor-independent-review-v1/reviewer-probes.py
+
+## Files this review deliberately did NOT touch (spot-check of the delivered package, still present; each re-hashed against the delivered HASHES.txt record, and unchanged by this review)
+  REMEDIATION.patch                                55331 B  19793a838870  OK
+  HASHES.txt                                       30878 B  37cf9de44823  DRIFT — the file's own self-record, which is finding F-2 of INDEPENDENT-REVIEW-20261121.md
+  MAKE-CHECK.log                                  148041 B  c3f07ea7b636  OK
+  MUTATIONS.log                                     7011 B  c03c8b22f0d0  OK
+  USB-SUITE.log                                    21922 B  42b4c0db7cd4  OK
+  USB-SUITE-pristine.log                           29497 B  7a3e9ffb2768  OK
+  PATCH-REVISION.txt                                 530 B  6157d07e6324  OK
+  PATCH-APPLY.log                                    998 B  3caf84c4a737  OK
+  FAILURE-CLASSIFICATION.md                         7453 B  b80a72a42e87  OK
+  REMOTE-CONTINUITY.md                              7358 B  6b05bd65cbe4  OK
+  mutation_harness.py                              11250 B  2b597f4e59bf  OK
+  repro_descriptor_defects.py                      12634 B  3eb8ee358967  OK
+  pristine/pc5ctl.py                               29686 B  c768ad560963  OK
+
+## Reviewer scratch outside the repository (not evidence, not committed)
+  /home/user/review-pc5                  exists=yes HEAD=56c5852
+  /home/user/review-pristine             exists=yes HEAD=56c5852
+  /home/user/review-pristine-probes      exists=yes HEAD=56c5852
+  /home/user/review-ontip                exists=yes HEAD=ae9f3e2
+  /home/user/review-negative             exists=yes HEAD=56c5852
+  /home/user/prior-vs-current            exists=yes HEAD=
+
+## Bytecode byproducts, disclosed
+The final confirmation run of the three focused suites was executed *inside* the workspace
+(`python3 -m unittest -q tests.test_pc5ctl_usb_*`), which created/updated `__pycache__/*.pyc` files
+under `tests/` and `tools/` (one extra untracked entry: 233 → 234). `PYTHONDONTWRITEBYTECODE=1` was set
+for every clone run but not for that one. No tracked file was affected — `git status` still shows only
+the implementation's own two modifications — and no evidence file was rewritten.
+
+## Actions NOT taken: 0 commits, 0 pushes, 0 PR comments/updates, no merge/rebase/rename, no device or firmware run.
+## Read-only remote/GitHub measurements taken: git ls-remote origin; gh api pulls/31 pulls/34 refs/heads/*; gh api compare (2x).
+## Local side effects, disclosed: git fetch of refs/pull/*/head and of ae9f3e25 (objects + remote-tracking refs only); pip install --user unicorn==2.1.4.

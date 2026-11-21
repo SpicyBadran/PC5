@@ -1,0 +1,51 @@
+Artifact identities — the F-1/F-2/F-3 closure package. Generated 2026-11-21T19:36:17Z.
+
+Scope: every file in `evidence/usb-descriptor-remediation-v2/` when this manifest
+was written, except this file — plus the two records this pass appended to the
+review package. A manifest never lists itself; that is finding F-2, and the answer
+is not a self-hash but an external anchor (`CORRECTED-MANIFEST.txt`'s scope rule,
+and the F-2 section of the closure document). Nothing outside this package was
+edited to produce these numbers: the bytes under
+`evidence/usb-descriptor-remediation-v1/` are the delivered ones, re-verified by
+`python3 evidence/usb-descriptor-independent-review-v1/audit_evidence.py`.
+
+Reproduce from the repository root (portable; mawk has no {64} intervals):
+    awk 'NF==3 && length($3)==64 {print $3"  "$1}' <this file> | sha256sum -c -
+
+evidence/usb-descriptor-remediation-v2/CORRECTED-MANIFEST.txt 9066 d1b0b40dccd51ba1543e1c7c504002631465f791b3d5120490d03360ed1339be
+evidence/usb-descriptor-remediation-v2/FINDINGS-CLOSURE-20261121.md 24804 ed392769a59b592f2aec85baca969c4be5ff162a998b465bbe173920c0749e5a
+evidence/usb-descriptor-remediation-v2/PR-BODY.md 11461 0e39f4996cec26c0f4f015c40a07810142e7d4b2eba3a0bccd4d7c2d55a98418
+evidence/usb-descriptor-remediation-v2/README.md 2814 c4393e9dbcb87072e0bc34b84558c6afa27dba19d1db36a7ac8cfae6fa1a8343
+evidence/usb-descriptor-remediation-v2/TIMESTAMP-RECONCILIATION.md 5713 92061f3082a9fbe506b5cb359d25461dd0edc5073c4d5da4cc45169deed6a96a
+evidence/usb-descriptor-remediation-v2/USB-REMEDIATION-v2.patch 100588 e1dae862d0d01af8674243f4e77a000f04f051f598405f506c6bcd539f234002
+evidence/usb-descriptor-remediation-v2/USB-REMEDIATION-v2.patch.sha256 130 3624769f5019de55560834a73292a1d84fbbfd1210d4eef48cb1fbfad34ecf52
+evidence/usb-descriptor-remediation-v2/logs/00-CAPTURE-TIME.txt 43 4b30801d1b5e54c299482e7dd03fd619b3671fef60f24db63b3a71148fb21c9b
+evidence/usb-descriptor-remediation-v2/logs/02-make-check-patched-no-provisioning.txt 155487 bcc638f57341198912662d268395abd77af6b4bb054beee69af002c26722510f
+evidence/usb-descriptor-remediation-v2/logs/03-make-check-patched-with-provisioning.txt 148007 6190893fb67448e70b237648b1a436f3d440fb2164c1f2d66ac5ad28596b0b4b
+evidence/usb-descriptor-remediation-v2/logs/04-mutation-harness-9.txt 6532 3f8d95e0269579bda097b4fd43ef819d57ebc8b5ac7d57cba031342de7a3d36e
+evidence/usb-descriptor-remediation-v2/logs/05-usb-suite-91.txt 5940 7a297ecc4b7b237b966c1b84478d861d10004bd4209a0654168309eba689e26a
+evidence/usb-descriptor-remediation-v2/logs/06-make-check-BASE-clean-clone.txt 141212 9d41ca3d26aafa8e72b0a102ce8579bf08decd2bac4e2308ff15215b39bf7046
+evidence/usb-descriptor-remediation-v2/logs/07-unittest-BASE-no-unicorn.txt 127168 0e2a7f2909126b9f1c938aae5c1f490f3b6a8ef718bf80bbc2d5285d6a05b739
+evidence/usb-descriptor-remediation-v2/logs/08-cli-boundaries-standalone.txt 106 1327f170732ee47f216ae8aa32ed702ca689d7d7ecc0a8c9e1ed4592ceb31670
+evidence/usb-descriptor-remediation-v2/logs/09-pip-install-requirements-harness.txt 198 2b43028dd7b89526f6a920d462020bcc5da775645085f6d5d8a7ef6236e8bd25
+evidence/usb-descriptor-remediation-v2/logs/10-prior-8-mutants-vs-PRIOR-87-tests.txt 5098 7e57f90124d430360512aa2b5039afdeaea57ad7275431864bd1c2b6b3a13daa
+evidence/usb-descriptor-remediation-v2/logs/12-citation-refs-on-fresh-clone.txt 907 13061c96554c96b9eb9cbb3df2b6e7a9fce4f3cf46e6219e9ab3af25427d6408
+evidence/usb-descriptor-remediation-v2/logs/12b-citation-refs-target-absent-at-BASE.txt 584 31d3fc17873db0c1df44af73d0ad4951a4778f5abd9792f6cb6a7fdc0704ad92
+evidence/usb-descriptor-remediation-v2/logs/13-shallow-clone-guidance.txt 1309 97376ccb2fb0765a6929966561d648ad5ca819b11c859de82130494004fbc806
+evidence/usb-descriptor-remediation-v2/logs/14-final-A1-make-check-no-provisioning.txt 155741 023751c17711c314732fbb97cdf561dce59879f67897282b7a37d40c3ffd8b76
+evidence/usb-descriptor-remediation-v2/logs/15-final-usb-suite-91.txt 5940 287f595244e4f5271827f890aa2f1327f2f06b341174847f8d10ff930f72d1e1
+evidence/usb-descriptor-remediation-v2/logs/16-final-A2-make-check-provisioned.txt 148261 642358eec6f2d6e6e6682c1feb06d1457267cc6f15211b065f344ca8f14a540b
+evidence/usb-descriptor-remediation-v2/logs/17-final-mutation-harness-9.txt 6532 7500797ff0a442c9949601076177003b1e4535d2c7a89b3efee71478f9824190
+evidence/usb-descriptor-remediation-v2/logs/18-final-prior-87-suite.txt 8257 5abeb392dd554f3edacdfeb719d6f5e7c7892a3e9e6f8e786ea7caa42f2982fc
+evidence/usb-descriptor-remediation-v2/logs/18a-final-prior-87-provenance.txt 752 c2421e5e5b75ef3621c6f9802d1dd69a6515a348e8aafc51924581815a56b381
+evidence/usb-descriptor-remediation-v2/logs/19-final-prior-8-mutants-vs-87.txt 5094 8ecf8e624db5c0ed500e38ea613c5ca325d6175404ffc385a4756103e6c1bd5f
+evidence/usb-descriptor-remediation-v2/logs/20-prior-8-mutants-vs-CURRENT-91.txt 5122 60d9296a3f10bf8f55f20a41a9d6457fc45760d7894d3e3d085e848f621e623e
+evidence/usb-descriptor-remediation-v2/logs/21-evidence-audit-rerun.txt 9504 d108ae3b40745d9d3587873a9491981fdf4111a5625a47ec44b879ec7946067f
+evidence/usb-descriptor-remediation-v2/logs/22-manifest-verification-final.txt 2339 8ba09029988f408b6fc0f8480233a0d316f58ae24e533439d99fd1e7262359dc
+evidence/usb-descriptor-remediation-v2/logs/23-final-workspace-gates.txt 1738 585f1c477bf641c6f615ca5a09300022fda6fc5f9e1871ff5ddfca96d5fcbf66
+evidence/usb-descriptor-remediation-v2/logs/24-workspace-make-check-final.txt 148295 9b74aa157be1592dba8a5cd23c3e7ab81240a57df7cda600b6d021e1cc47028d
+evidence/usb-descriptor-remediation-v2/logs/INDEX.txt 3859 fc274dfcd6057ec665c230c71a0545461588ccc31c790640588fc8d0573d2e0b
+evidence/usb-descriptor-independent-review-v1/HASHES-v2.txt 3700 9a927c187491a99ead9c961fac8440af2d423dbdf7569e8bafa28aa94d0d0d34
+evidence/usb-descriptor-independent-review-v1/logs/make-check-base-clone-run1.txt.CORRIGENDUM.txt 1660 2617c25648fc4ad26e9b2ca11ed2a9a05a2fdc62e26b20ede4a1d3ae347e2ff3
+
+records: 35  self-records: 0

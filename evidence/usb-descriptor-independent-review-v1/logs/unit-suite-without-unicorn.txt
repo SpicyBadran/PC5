@@ -1,0 +1,7 @@
+# Why 103 errors appear in a clone that lacks the optional harness dependency:
+# command: TMPDIR=/tmp PYTHONNOUSERSITE=1 python3 -m unittest discover -s tests -p 'test_*.py'
+#   (PYTHONNOUSERSITE hides ~/.local, where 'unicorn' was pip-installed for the gate run)
+     77 No module named 'unicorn'
+     52 the 'unicorn' module is not installed
+      1 Ran 924 tests
+      1 FAILED (errors=103, skipped=24)

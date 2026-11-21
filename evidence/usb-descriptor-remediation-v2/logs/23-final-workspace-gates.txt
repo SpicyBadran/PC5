@@ -1,0 +1,36 @@
+# final workspace gates, after every closure edit
+# captured 2026-11-21T19:33:54Z
+$ python3 -m unittest -q tests.test_pc5ctl_usb_safety tests.test_pc5ctl_usb_descriptor_identity tests.test_pc5ctl_usb_cli_boundaries
+  Ran 91 tests in 0.205s
+  OK
+  exit: 0
+$ python3 -m unittest -q tests.test_commit_citations tests.test_presentation tests.test_docs_check tests.test_architecture tests.test_release
+  Ran 171 tests in 1.937s
+  OK
+  exit: 0
+$ make docs-check
+  /bin/bash: line 1: 600: command not found
+  exit: 127
+$ TMPDIR=/tmp make check
+  exit: 0
+  PASSED: 165 checks, 0 failures
+  PSM conformance: 261/261 checks passed
+  DOCS OK: 93 Markdown files, 34 make targets, links, anchors and commands resolve
+  CITATIONS OK: 258 commit reference(s) resolve across 11 documents
+  PRESENTATION OK: 6 figures and 5 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+  BRAND OK: 11 assets current, no text elements, no external references
+  The regression: an empty tree used to print CITATIONS OK and exit 0. ... ok
+  Ran 925 tests in 77.564s
+  OK (skipped=2)
+
+Correction to the third block above: the `make docs-check` line was written with a
+malformed prefix (`TMPDIR=/timeout 600 make docs-check`), so the shell reported
+`command not found` and exit 127. That is a defect in this transcript, not a gate
+failure. The gate itself ran and is green — `make check` invokes it, and its output
+above reads `DOCS OK: 93 Markdown files, 34 make targets, links, anchors and commands
+resolve`. Run on its own, from the repository root:
+
+    $ make docs-check
+    python3 tools/docs_check.py
+    DOCS OK: 93 Markdown files, 34 make targets, links, anchors and commands resolve
+    exit status: 0

@@ -1,0 +1,84 @@
+repository /tmp/f8clone
+
+### m1-validation-follows-the-pathname
+REQUIRED: restore pathname-based validation. The final safety decision re-resolves the device path instead of using the identity behind the held descriptor.
+tests run: 91; exit code: 1; assertion failures overall: 1
+  intended test FAIL: test_09_path_replaced_between_the_identity_check_and_final_validation
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_09_path_replaced_between_the_identity_check_and_final_validation
+  intended test did not fail: test_11_topology_change_immediately_before_the_final_safety_decision
+
+### m2-inheritance-omitted
+REQUIRED: omit descriptor inheritance. dd is launched with the descriptor-backed output path but the descriptor is not passed to the child, so the child cannot open it. This is the defect the shipped code has.
+tests run: 91; exit code: 1; assertion failures overall: 5
+  intended test FAIL: test_01_valid_descriptor_and_matching_identity_writes_through_the_fd
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_01_valid_descriptor_and_matching_identity_writes_through_the_fd
+  intended test FAIL: test_03_missing_descriptor_inheritance_is_explicit
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_03_missing_descriptor_inheritance_is_explicit
+  intended test FAIL: test_16_child_receives_exactly_the_validated_descriptor
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_16_child_receives_exactly_the_validated_descriptor
+  intended test FAIL: test_25_real_dd_writes_through_the_inherited_descriptor
+    test_pc5ctl_usb_descriptor_identity.RealChildWrites.test_25_real_dd_writes_through_the_inherited_descriptor
+  also failed: ['test_16b_inherited_descriptor_number_is_the_closed_one']
+
+### m3-wrong-descriptor-inherited
+REQUIRED: inherit the wrong descriptor: the child is told to write one number above the descriptor that was validated.
+tests run: 91; exit code: 1; assertion failures overall: 4
+  intended test FAIL: test_01_valid_descriptor_and_matching_identity_writes_through_the_fd
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_01_valid_descriptor_and_matching_identity_writes_through_the_fd
+  intended test FAIL: test_16_child_receives_exactly_the_validated_descriptor
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_16_child_receives_exactly_the_validated_descriptor
+  intended test did not fail: test_16b_inherited_descriptor_number_is_the_closed_one
+  also failed: ['test_15_valid_non_destructive_control_with_a_populated_root', 'test_25_real_dd_writes_through_the_inherited_descriptor']
+
+### m4-final-identity-reread-skipped
+REQUIRED: skip the last identity comparison. The descriptor is not re-read after the decision, so an object that changed underneath the check is written.
+tests run: 91; exit code: 1; assertion failures overall: 1
+  intended test FAIL: test_14_final_validation_failure_immediately_before_writing
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_14_final_validation_failure_immediately_before_writing
+
+### m5-name-versus-descriptor-comparison-skipped
+REQUIRED (second half of the identity comparison): drop the check that the name the operator typed still resolves to the object being held. The refusal that reports a substituted device node disappears.
+tests run: 91; exit code: 1; assertion failures overall: 4
+  intended test FAIL: test_05_descriptor_redirected_to_a_different_object
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_05_descriptor_redirected_to_a_different_object
+  intended test FAIL: test_06_descriptor_identity_mismatch_against_the_named_target
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_06_descriptor_identity_mismatch_against_the_named_target
+  also failed: ['test_10_root_descriptor_with_a_substituted_safe_name_still_refuses', 'test_6_yes_cannot_bypass_a_refusal_even_with_a_writable_descriptor']
+
+### m6-partial-enumeration-accepted
+REQUIRED: ignore incomplete partition enumeration. Children that cannot be inspected are skipped instead of making the protected set unknown.
+tests run: 91; exit code: 1; assertion failures overall: 2
+  intended test FAIL: test_22_partial_topology_followed_by_an_enumeration_error
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_22_partial_topology_followed_by_an_enumeration_error
+  intended test FAIL: test_device_disappearing_during_enumeration_is_unknown
+    test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_device_disappearing_during_enumeration_is_unknown
+  intended test did not fail: test_partial_list_never_permits_a_write
+
+### m7-unreadable-topology-is-empty
+Treat unreadable topology as an empty relationship set: a `slaves` or `holders` directory that cannot be listed becomes 'no relationships'.
+tests run: 91; exit code: 1; assertion failures overall: 1
+  intended test did not fail: test_20_unreadable_sysfs_relationship_data
+  intended test did not fail: test_21_unreadable_holders_directory
+  intended test FAIL: test_unreadable_slaves_is_unknown_not_empty
+    test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_unreadable_slaves_is_unknown_not_empty
+
+### m8-writability-not-checked
+Assume the descriptor is writable. The decision then authorises a write through an open file description that cannot carry one, which is a silent no-op rather than a refusal.
+tests run: 91; exit code: 1; assertion failures overall: 2
+  intended test FAIL: test_17_descriptor_not_open_for_write_is_refused
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_17_descriptor_not_open_for_write_is_refused
+  intended test FAIL: test_02_descriptor_closed_before_the_child_launches
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_02_descriptor_closed_before_the_child_launches
+
+### m9-open-failure-writes-by-name
+Turn the target-open refusal into a fallback: when `os.open` fails, dd is launched against the device *pathname*. The fail-open shape the descriptor binding exists to remove, and the `nothing was written` contract is lost.
+tests run: 91; exit code: 1; assertion failures overall: 1
+  intended test FAIL: test_23_target_open_failure_refuses_before_any_descriptor_exists
+    test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_23_target_open_failure_refuses_before_any_descriptor_exists
+
+### baseline (unmutated)
+exit code: 0
+Ran 91 tests in 0.207s
+OK
+
+RESULT: PASS: baseline green and every mutation detected by its intended assertion

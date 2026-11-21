@@ -1,0 +1,139 @@
+.......................................................................................
+----------------------------------------------------------------------
+Ran 87 tests in 0.163s
+
+OK
+image    /tmp/tmp08n7y9up/image.iso
+sha256   bbb9a30ac377725931b09171c74994e4428edd32294adb6bf49285e786715299
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp7ojdtxmc/image.iso
+sha256   bbb9a30ac377725931b09171c74994e4428edd32294adb6bf49285e786715299
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpmefkjukf/image.iso
+sha256   bbb9a30ac377725931b09171c74994e4428edd32294adb6bf49285e786715299
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpk2r5bvmt/image.iso
+sha256   bbb9a30ac377725931b09171c74994e4428edd32294adb6bf49285e786715299
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+/dev/pc5-synthetic-never-opened changed identity between validation and write (opened 8:48, path now (8, 32)): refusing to write
+nothing was written
+image    /tmp/tmp7yvqq533/image.iso
+sha256   bbb9a30ac377725931b09171c74994e4428edd32294adb6bf49285e786715299
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp7hldqtpf/image.iso
+sha256   bbb9a30ac377725931b09171c74994e4428edd32294adb6bf49285e786715299
+refusing to overwrite /dev/pc5-synthetic-never-opened: /dev/pc5-synthetic-never-opened is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmp3tir3s7a/image.iso
+sha256   bbb9a30ac377725931b09171c74994e4428edd32294adb6bf49285e786715299
+target   /dev/pc5-synthetic-never-opened
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+image    /tmp/tmpymr3ysck/image.iso
+sha256   bbb9a30ac377725931b09171c74994e4428edd32294adb6bf49285e786715299
+refusing to overwrite /dev/pc5-synthetic-never-opened: /dev/pc5-synthetic-never-opened is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmp89z2xitp/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmpjnx_oalx/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture root device
+nothing was written
+image    /tmp/tmpmced2_nf/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdc
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+re-run with --yes to confirm after checking the device path
+image    /tmp/tmpjpfwaqha/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdz9
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+refusing: became related
+nothing was written
+image    /tmp/tmpim7wui4s/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmpim7wui4s/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmp9co_t08v/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpni74pg1q/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp9qak5kwo/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpx3uibmub/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpr0lpqprz/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpwfq5pn3_/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpr532wnlw/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp002x4yt7/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp67lvpxcq/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp67lvpxcq/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpeojap7rj/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdc
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+image    /tmp/tmp60mv4tn0/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpcmzlissn/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda1: /dev/sda1 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmpcmzlissn/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmp1q82b5vg/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda: /dev/sda is the whole disk carrying the root filesystem (root device 8:1)
+nothing was written
+image    /tmp/tmp1q82b5vg/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmp8vf5tdt9/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written

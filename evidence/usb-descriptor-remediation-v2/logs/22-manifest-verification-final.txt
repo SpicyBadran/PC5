@@ -1,0 +1,31 @@
+# final state of the three manifests + the delivered v1 package, measured together
+# captured 2026-11-21T19:33:22Z
+$ awk 'NF==3 && length($3)==64 {print $3"  "$1}' evidence/usb-descriptor-remediation-v2/CORRECTED-MANIFEST.txt | sha256sum -c -
+    OK=50 FAILED=0
+$ awk 'NF==3 && length($3)==64 {print $3"  "$1}' evidence/usb-descriptor-independent-review-v1/HASHES-v2.txt | sha256sum -c -
+    OK=20 FAILED=0
+$ awk 'NF==3 && length($3)==64 {print $3"  "$1}' evidence/usb-descriptor-remediation-v2/HASHES.txt | sha256sum -c -
+    OK=32 FAILED=0
+$ python3 evidence/usb-descriptor-independent-review-v1/audit_evidence.py
+  lines=267 records=217 non-record lines=36
+  verified=215  missing=0  size-drift=2  hash-drift=2
+  members verified against the manifest: 193  absent=0  drift=0
+  problems=5 notes=0
+    PROBLEM HASHES.txt:33: size drift for evidence/usb-descriptor-remediation-v1/HASHES.txt: recorded 30519, measured 30878
+    PROBLEM HASHES.txt:33: hash drift for evidence/usb-descriptor-remediation-v1/HASHES.txt: recorded 17b2f47b8049fe3b…, measured 37cf9de4482319e9…
+    PROBLEM HASHES.txt:33: the manifest records its own bytes (30519 B, 17b2f47b8049…) while the file measures 30878 B / 37cf9de44823…, and its own header says it 'cannot hash itself' - a self-record that is stale by construction
+    PROBLEM HASHES.txt:232: size drift for docs/engineering/USB-DESCRIPTOR-REMEDIATION-20261121.md: recorded 13583, measured 21959
+    PROBLEM HASHES.txt:232: hash drift for docs/engineering/USB-DESCRIPTOR-REMEDIATION-20261121.md: recorded 7cff0d41258ebcc3…, measured 1e890ef1e7b2f62b…
+  audit exit: 1
+  (the audit script reports problems on purpose: F-2 and the append-only doc drift;
+   exit status 1 means "problems found", which is the expected answer for the delivered v1 package)
+
+Note on the three `$ awk …` lines above: they are shown with the shell's own escaping
+doubled by the generator's here-document, so the printed form is not literally
+copy-pastable. The command actually executed, and the one to use, is
+
+    awk 'NF==3 && length($3)==64 {print $3"  "$1}' <manifest> | sha256sum -c -
+
+run from /home/user/pc5. `length($3)==64` instead of `/^[0-9a-f]{64}$/` because Debian's
+mawk does not enable interval expressions, and a recipe that selects nothing looks
+exactly like a manifest with nothing wrong in it.

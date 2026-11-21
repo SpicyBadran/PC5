@@ -1,0 +1,4 @@
+Collecting unicorn==2.1.4
+  Using cached unicorn-2.1.4-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (16.4 MB)
+Installing collected packages: unicorn
+Successfully installed unicorn-2.1.4

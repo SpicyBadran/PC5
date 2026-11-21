@@ -1,0 +1,13 @@
+# NEGATIVE CONTROL: the citation-refs target does not exist at 56c5852; it is introduced by USB-REMEDIATION-v2.patch
+# $ git clone --no-hardlinks --single-branch --branch main https://github.com/SpicyBadran/PC5.git /tmp/f4clone
+# $ cd /tmp/f4clone && git rev-parse HEAD
+56c58521580e88c4339ceb6eb40ce724a2bb533b
+# $ git for-each-ref --format='%(refname)'
+refs/heads/main
+refs/remotes/origin/HEAD
+refs/remotes/origin/main
+# $ make citation-refs
+make: *** No rule to make target 'citation-refs'.  Stop.
+exit: 2
+# $ git for-each-ref refs/remotes/origin/pr --format='%(refname)' | wc -l
+0
