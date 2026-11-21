@@ -1,6 +1,6 @@
 Artifact identities — CORRECTED manifest, 2026-11-21 USB descriptor remediation branch `fix/usb-descriptor-bound-remediation`.
 
-Generated 2026-11-21T20:01:13Z by measurement (`stat` size, `sha256sum`), never transcribed.
+Generated 2026-11-21T20:06:43Z by measurement (`stat` size, `sha256sum`), never transcribed.
 
 This file is the additive correction to `evidence/usb-descriptor-remediation-v1/HASHES.txt`,
 which is preserved byte-for-byte. Finding F-2 was that that file declares it cannot hash
@@ -27,10 +27,10 @@ a recipe that matches nothing looks exactly like a manifest with nothing wrong.)
 
 === source, tests and documentation ===
 Makefile 20927 b9be9c2d4532ac7f3fc39c9a01c79e4d842987e2135477c05bf54bfa60b86c2e
-README.md 29051 4b1cc8ea1d76fcadb893101a38d8959334e6736856d5a1166edc160b65419dcb
+README.md 29379 cab91bdfe8af57436682679a53d0c5fac8d20b9f12e1918b5f00aea92d77d687
 docs/BUILDING.md 11049 7b6bd55056fdc41f8a41bfdcf7d793f6db02a46e469166fb5115fa5a70b5a63e
 docs/INSTALLATION.md 9493 d9dcd22502bcfffb577e7267ab0fce4069cc49c770f83a0418b59d1043eaf814
-docs/engineering/USB-IDENTITY-BOUNDARY-DESIGN-v1.md 14440 4697e304154b572deb3232b01916947594cc66df6134e90b7134969effd4086e
+docs/engineering/USB-IDENTITY-BOUNDARY-DESIGN-v1.md 15437 fafa850662e69604c6b8c84abb07f03ccc248f216f89c08345d390c8678ae4c2
 requirements-harness.txt 15 56bce36af734e3b9aeff2be4301bbc2a2c2b58ea1ea1e6ee6e792db84f96fbd4
 tests/test_boot64_stub.py 43488 cc1a0995dce812ce7337927cca3c0807469bb09c22af95d5249d5b0acca1722d
 tests/test_commit_citations.py 21644 85ac5a66cca7378804ebafbcd9f26316b4360cb4a9fcb9036a5a6a1e5443be66
@@ -38,6 +38,7 @@ tests/test_kernel64.py 43185 678450b5e724ece050aa161eb5a7a57ece60d19dcbcafa3a707
 tests/test_pc5ctl_usb_cli_boundaries.py 6977 8efb0525a7cf1c76d4a113b0a1585180f622a4c1e83c90c1e78615c590d2ad00
 tests/test_pc5ctl_usb_descriptor_identity.py 32006 1a0955e17f6ef9977e511525206a00d9bb1c01d8621565e0b731baba505754d9
 tests/test_pc5ctl_usb_safety.py 49004 11879172c53b192e198382d76841f51ea0694c1c2e1074d62759764b54ea3c80
+tests/test_pc5ctl_usb_topology_unknown.py 7300 7337623e097ab04e5147ab5974748037002631a48b222ec3c9fa5d02f699821a
 tests/test_presentation.py 26155 2bb684c121673ecd8ee88e0b6734843f0f4aafead7d1498f77bc1ece5176251d
 tools/citation_refs.sh 2934 89afcff0982cb3a6c7cfa597a1a5e0167fe9337595d162ccbb45a71f87adca3a
 tools/commit_citations.py 16517 a85a0547c0450c9d9bcc79b39503959e26ddd4c0c4ec10683956147e6177ddd3
@@ -89,10 +90,10 @@ evidence/usb-descriptor-remediation-v1/pristine/test_pc5ctl_usb_safety.py 47639 
 evidence/usb-descriptor-remediation-v1/repro_descriptor_defects.py 12634 3eb8ee358967c64d1d35f79c8a01f44838587f8721496c8dfe7b69efe9b5a28d
 # evidence/usb-descriptor-remediation-v2/CORRECTED-MANIFEST.txt excluded: a manifest cannot record itself or a file written later
 evidence/usb-descriptor-remediation-v2/FINDINGS-CLOSURE-20261121.md 24876 fea6896b0ddcf898412e9c0a20711c5181a72c3de77f5e93e3733a6bfd5df67d
-evidence/usb-descriptor-remediation-v2/FINDINGS-DISPOSITION-20261121.md 8377 c712cb262b1d18bdbd07a1e75c6b1c83fb66508a88585d4a69c5d1a432791464
+evidence/usb-descriptor-remediation-v2/FINDINGS-DISPOSITION-20261121.md 8504 d81a7e792474a3441ca39f4ae56f12c031fdcde69b7db256d4312d57e10268e7
 # evidence/usb-descriptor-remediation-v2/HASHES-PR-TIP.txt excluded: a manifest cannot record itself or a file written later
 evidence/usb-descriptor-remediation-v2/HASHES.txt 5935 3f0e56a28912cc33817c8bad51e2f19373876510e85de29c19cca4c471345cab
-evidence/usb-descriptor-remediation-v2/PR-BODY.md 13340 7fdc40f5108a550417de1185ec48aecb189d480b3f9a0e5413d018ab7b9472f5
+evidence/usb-descriptor-remediation-v2/PR-BODY.md 13542 14219b640d6a2b46b5f5bcdcb8c2c60d69ac5b377a6497c036be3e6f268e27a8
 evidence/usb-descriptor-remediation-v2/README.md 4703 c2bdc65d73c0c7824bb81a24f869cffb81b8b38e2089fc0845fc579744be42ca
 evidence/usb-descriptor-remediation-v2/TIMESTAMP-RECONCILIATION.md 5713 92061f3082a9fbe506b5cb359d25461dd0edc5073c4d5da4cc45169deed6a96a
 evidence/usb-descriptor-remediation-v2/USB-PR-35.patch 2560207 2b3cefb81583168647c2206a68ed10078c7118907bff123b1c055f20b7ab3b10
@@ -132,11 +133,13 @@ evidence/usb-descriptor-remediation-v2/logs/29-usb-suites-and-v1-harness-after-c
 evidence/usb-descriptor-remediation-v2/logs/30-fresh-clone-verification.txt 4603 a23466e55ad8e92288c763adca0aecb803753070db5e1eed6224e8a577aebe4b
 evidence/usb-descriptor-remediation-v2/logs/31-pr-opened.txt 4410 5e84c776076dc13eb8dd2a9b64dac6995962a15970244dd38f14dd9c362813be
 evidence/usb-descriptor-remediation-v2/logs/31a-USB-PR-35-patch-identity.txt 882 36cee4c3d4ef98401bda48255aef7eee774deb201bcbd07b8e03d3343481d5c8
-evidence/usb-descriptor-remediation-v2/logs/INDEX.txt 6008 2cb02d09e35b69e231f021f6d3505de79758811dfffa4b59ca20ffe574dc3b38
+evidence/usb-descriptor-remediation-v2/logs/32-f6-end-to-end-guard-sensitivity.txt 5203 0719459d4597760ca05a5d28def256baceac83216fd6e8a9cc6a29ea528ee1e4
+evidence/usb-descriptor-remediation-v2/logs/32a-design-doc-f6-sentence.txt 1000 73e34a6de396ba1b04d1c0a29b6605e9cd8385eb8317a82976a788f59577ff6f
+evidence/usb-descriptor-remediation-v2/logs/INDEX.txt 6430 63a2df527582adcc40e15fbfe8754ed98ba61675701f95a7e7bc21f26688ca20
 evidence/usb-descriptor-remediation-v2/measure_mutation_mapping.py 1889 be399dc3703750f75430e9458880b96e30e4ceee5a471eda02fe80f081ec45a2
-evidence/usb-descriptor-remediation-v2/mutation_harness_v2.py 10364 763a8ada64f823bec5321bfc756f685310094b3073a9e87926d95b0ca56b6b28
+evidence/usb-descriptor-remediation-v2/mutation_harness_v2.py 10803 bf4a61b850329abbc80ad5b9626c26d6fa63a058495f539d0bed846fd1029237
 
-in-tree records: 105   self-records: 0   files in the committed set: 107
+in-tree records: 108   self-records: 0   files in the committed set: 111
 
 === OUT-OF-TREE ANCHORS: deliberately not in this branch's tree ===
 

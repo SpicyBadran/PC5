@@ -322,11 +322,15 @@ without closing it. The operational consequence: do not write an image from a sy
 whose own storage could be rearranged underneath you. See
 [`docs/engineering/USB-IDENTITY-BOUNDARY-DESIGN-v1.md`](docs/engineering/USB-IDENTITY-BOUNDARY-DESIGN-v1.md).
 
-**Automated tests, and their actual scope.** 91 tests in
-`tests/test_pc5ctl_usb_safety.py`, `tests/test_pc5ctl_usb_descriptor_identity.py` and
-`tests/test_pc5ctl_usb_cli_boundaries.py`: the topology rules, the descriptor boundary,
-the child-inheritance contract, and a real `/bin/dd` writing through a real inherited
-descriptor into a temporary **regular file**. Three mutation harnesses prove the tests have teeth:
+**Automated tests, and their actual scope.** 95 tests in
+`tests/test_pc5ctl_usb_safety.py` (56), `tests/test_pc5ctl_usb_descriptor_identity.py`
+(27), `tests/test_pc5ctl_usb_cli_boundaries.py` (8) and
+`tests/test_pc5ctl_usb_topology_unknown.py` (4): the topology rules, the descriptor
+boundary, the child-inheritance contract, and a real `/bin/dd` writing through a real
+inherited descriptor into a temporary **regular file**. The last file exists because a
+review found that two unreadable-topology cases refused for a *second* reason as well, so
+they could not localise the decision to the function that reads the relationship; its
+control case pins that the fixture is otherwise complete. Three mutation harnesses prove the tests have teeth:
 `evidence/usb-descriptor-remediation-v1/mutation_harness.py` (the nine reviewed mutants),
 `evidence/usb-descriptor-remediation-v2/mutation_harness_v2.py` (the same nine mutation
 texts, imported from the first, with an intention map that is measured and that fails if a

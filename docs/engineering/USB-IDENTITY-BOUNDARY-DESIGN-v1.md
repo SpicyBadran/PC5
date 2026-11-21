@@ -213,3 +213,15 @@ what was done about its findings, including the two claims of its own that measu
 overturned. What §6 also states — physical validation not performed — is unchanged: the
 USB milestone stays **BLOCKED** whatever happens to this branch, and a merged PR is not a
 device test.
+
+**F-6 closure, and a correction to how it was first described.** The review's F-6 said the
+CLI-level refusals survive the unreadable-topology mutant "through a second, unrelated guard".
+Measured, the reason is less flattering and more fixable: `test_20`/`test_21` make a
+directory under `devices/sda` unreadable, and the root-side walk interrogates each child of
+the root disk in `partitions_of()` too — so both tests refuse for two reasons at once and can
+never attribute the decision to `_relations`. `tests/test_pc5ctl_usb_topology_unknown.py`
+instead denies reads on `devices/sda/sda1/holders` (and `…/slaves`), which only
+`_relations` reads: real code answers UNKNOWN and the CLI refuses; with the mutant applied,
+the answer is `[]`, the closure completes, and `dd` is launched — the cases fail, which is the
+property the review asked to be pinned. Its control case asserts the same fixture writes when
+nothing is unreadable, so the refusal cannot be overdetermined again by accident.

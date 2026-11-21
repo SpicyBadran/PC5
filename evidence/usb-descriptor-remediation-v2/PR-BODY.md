@@ -82,7 +82,7 @@ because falling back is how a validated descriptor turns back into an unvalidate
 
 | Evidence | Result |
 |---|---|
-| `python3 -m unittest discover -s tests -p 'test_pc5ctl_usb*.py'` | `Ran 91 … OK` — 56 safety, 27 descriptor-identity, 8 CLI-boundary |
+| `python3 -m unittest discover -s tests -p 'test_pc5ctl_usb*.py'` | `Ran 95 … OK` — 56 safety, 27 descriptor-identity, 8 CLI-boundary, 4 unreadable-topology end-to-end |
 | `evidence/usb-descriptor-remediation-v1/mutation_harness.py` | `RESULT: PASS: baseline green and every mutation detected by its intended assertion` — 9/9 |
 | prior pass's suite (recovered from `recovery/pc5-identity-boundary-20261121-v5.tar.gz`) against this production | `Ran 87 … OK` — independently authored tests, one implementation |
 | prior 8-mutant harness against that 87-test inventory | `RESULT: PASS`, all 8 detected |
@@ -113,9 +113,11 @@ newly documented root-level file — hence the one-line fixture additions here.
 The disposition of every remaining finding, with the command that reproduces it and
 whether it blocks merge, is in `evidence/usb-descriptor-remediation-v2/FINDINGS-DISPOSITION-20261121.md`:
 F-4 (loader portability), F-5 (stale intended-detector names, replaced by a measured
-harness), F-7 (docstring says the alias check is advisory) and F-10 (manifest scope) are
-closed; F-6, F-8 and F-9 stay open with mechanisms and candidate fixes named, and none of
-them leaves a production path unprotected.
+harness), F-6 (an end-to-end test that dies if the unreadable-relationship answer is
+weakened — `tests/test_pc5ctl_usb_topology_unknown.py`, `Ran 4 … FAILED (failures=2)` under
+`m7`), F-7 (docstring says the alias check is advisory) and F-10 (manifest scope) are closed;
+F-8 and F-9 stay open with mechanisms and candidate fixes named, and neither leaves a
+production path unprotected.
 
 An independent adversarial review (`evidence/usb-descriptor-independent-review-v1/`)
 returned `CONDITIONAL` with findings F-1…F-10. F-1, F-2 and F-3 are addressed by this PR;

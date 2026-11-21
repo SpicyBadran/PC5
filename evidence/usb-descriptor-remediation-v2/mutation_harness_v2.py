@@ -74,6 +74,12 @@ INTENTIONS = {
     ],
     "m7-unreadable-topology-is-empty": [
         "test_unreadable_slaves_is_unknown_not_empty",
+        # Added by the F-6 closure: end-to-end cases whose refusal has exactly one
+        # possible source, `_relations` answering UNKNOWN for a directory that exists
+        # but cannot be listed.  Before them, `m7` removed a production guarantee and
+        # only a unit-level assertion noticed.
+        "test_unreadable_root_partition_holders_refuses_end_to_end",
+        "test_unreadable_root_partition_slaves_refuses_end_to_end",
     ],
     "m8-writability-not-checked": [
         "test_17_descriptor_not_open_for_write_is_refused",
