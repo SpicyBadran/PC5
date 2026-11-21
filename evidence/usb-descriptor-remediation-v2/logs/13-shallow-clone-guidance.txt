@@ -1,0 +1,12 @@
+# PATCHED tool in a --depth 1 clone of main (the condition that reads as 258 dead citations)
+# captured 2026-11-21T19:23:05Z
+$ make citations-check
+[FAIL] docs/ARCHITECTURE.md:272: `ed9c6a3` does not name any Git object (commit citation is dead): entries (corrected in `ed9c6a3`; see `TEST_RESULTS.md` §27). All six pages are
+258 dead commit reference(s) across 11 documents
+CITATIONS INCOMPLETE: this clone cannot resolve the references above. That is not a pass, and it is not proof the citations are dead.
+    history truncated: shallow clone (.git/shallow present; history depth limited by `--depth`). A commit excluded by the fetch depth is indistinguishable from a missing one here.
+    repair the checkout, not the documents: `git fetch --unshallow` or re-clone without --depth/--filter (CI: fetch-depth: 0), then re-run `make citations-check`.
+    this clone also holds no pull-request refs, so a citation to a PR head (refs/pull/N/head on the remote) cannot resolve here even when the object exists upstream: run `make citation-refs`, then re-run `make citations-check`.
+    If the count is still non-zero afterwards, the citations are dead for real (a rewrite or a deleted branch), and the documents need an addendum rather than an edit.
+make: *** [Makefile:320: citations-check] Error 1
+  exit: 2

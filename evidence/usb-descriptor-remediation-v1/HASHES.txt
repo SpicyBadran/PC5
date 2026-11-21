@@ -1,0 +1,267 @@
+Artifact identities — 2026-11-21 USB descriptor remediation (second pass), PR31 recovery, restored records.
+
+Each line is `<path> <bytes> <sha256>`, measured from the file in this workspace at
+2026-11-21T17:20:21Z (`date -u`, printed immediately before and after this block was written, same second), fifteen seconds after the
+final gate capture: `MAKE-CHECK.log`, mtime 17:20:06Z, `make check` exit 0 —
+`Ran 924 tests ... OK (skipped=2)`, `DOCS OK: 87 Markdown files, 33 make targets`,
+`CITATIONS OK: 258 commit reference(s) across 11 documents`, kernel unit `PASSED: 165 checks,
+0 failures`. Repository state: HEAD `56c58521580e88c4339ceb6eb40ce724a2bb533b` (unchanged, equals
+`main`); working branch `arena/c8a76776-pc5`; nothing committed, nothing pushed, no PR touched, no
+device or VM run.
+
+The deliverable is REMEDIATION.patch: 55,331 B, 4 files, `git apply --check` clean on a fresh
+`git archive HEAD` export, applies, and the patched export reports `Ran 91 tests ... OK`
+(PATCH-APPLY.log). It supersedes 55,289 B `65944ecd...`, which had fallen three lines behind the tree
+(PATCH-REVISION.txt records why; those bytes remain recoverable from
+recovery/pc5-usb-descriptor-remediation-20261121-v2.tar.gz, which is where its size and hash were
+re-measured from rather than quoted from memory).
+
+PR31's D1 v2 patch and its original v1 proposal are RECOVERED and reviewed against verified bytes:
+evidence/continuation-descriptor-v1/PR31-D1-V2-RECOVERY-AND-REVIEW-20261121.md, whose section 8 lists
+the eleven archives searched and what each held. Nothing in this directory belongs to PR34.
+
+This file is the last write of the pass, by design: it cannot hash itself, and the v3 continuity
+archive (recovery/, ea6329e4e4b8287317d126f59d62f82f3aaa7cd6ca9abd4b73c662fbe700eb41) was built at
+17:16:48Z, so the copy of this file inside it predates the 17:20Z gate capture and the 17:16:00Z / 17:16:25Z edits to the PR31 review and the
+engineering notes (their mtimes are listed in the groups below). A tar.gz never contains its own sha256 — verify the sidecar, the manifest, and the
+remote object metadata before trusting any member.
+--- evidence/usb-descriptor-remediation-v1 ---
+evidence/usb-descriptor-remediation-v1/BASELINE-REAL-CLONE.log 426 2304d4813e3ee1ba05c5da37c047f3abea0a02f58d29276e1258171b5f220f59
+evidence/usb-descriptor-remediation-v1/DEFECT-REPRO-corrected.log 3866 344cc0ba11dd50ef3e710fcce4284ca374433163d4b927c969e48ecc360ae178
+evidence/usb-descriptor-remediation-v1/DEFECT-REPRO-pristine.log 4012 41d521cf3de6f9b7c1da45f3d5db88df5d59af8b4075ce0cdc4420eeff539d9d
+evidence/usb-descriptor-remediation-v1/FAILURE-CLASSIFICATION.md 7453 b80a72a42e87864bbcf49cb2b50841c16d47de44605190bf118778493d3595fd
+evidence/usb-descriptor-remediation-v1/HASHES.txt 30519 17b2f47b8049fe3b70c5fee2fcd0c8046be682a77a9ed36e13a6d1084203b9a3
+evidence/usb-descriptor-remediation-v1/MAKE-CHECK.log 148041 c3f07ea7b63631f2062465bed95a03f877707acc56f6b9132d40aebf99c51f8a
+evidence/usb-descriptor-remediation-v1/MUTATIONS.log 7011 c03c8b22f0d0f246e7bf92417e307c7502e089d29fbb8206989cccf06f9fc68d
+evidence/usb-descriptor-remediation-v1/PATCH-APPLY.log 998 3caf84c4a7375466959fe84babcca8527af444f5e5fa05520506b4381d3e907a
+evidence/usb-descriptor-remediation-v1/PATCH-REVISION.txt 530 6157d07e63242e7fd113f12c9d299331d8d192adefa0bfd48c36713102c584b9
+evidence/usb-descriptor-remediation-v1/PRIOR-MUTATIONS-vs-CURRENT-implementation.log 5095 74d5deb618f34f80a468566890fde0c1337b5a72f13fc1029f04dba9b2f68f42
+evidence/usb-descriptor-remediation-v1/PRIOR-SUITE-vs-CURRENT-implementation.log 384 9a7df8d331c37b0ada8ff3675e15121aeeffe757a2967e4bb37f3df410bd6d5d
+evidence/usb-descriptor-remediation-v1/REMEDIATION.patch 55331 19793a838870913b3afa59e84994bdf1032ad5248d09b0a5192eac6c8a499dac
+evidence/usb-descriptor-remediation-v1/REMEDIATION.patch.sha256 84 07c31355dafb917691f1f3dd656d78f454d905e67321374716f42d0841a6c109
+evidence/usb-descriptor-remediation-v1/REMOTE-CONTINUITY.md 7358 6b05bd65cbe4255f4b8a5abd0f6f6286f3f151f079cbc9bc48eefc32a8d9fe0e
+evidence/usb-descriptor-remediation-v1/REMOTE-ROUND-TRIP.log 578 f45906e505fd528291677dc5ea25668a63ae6552a0cacead2b26b68d21919b22
+evidence/usb-descriptor-remediation-v1/USB-SUITE-pristine.log 29497 7a3e9ffb2768eb35babe5d3000e07c312bdd2930908e456d5f660095e9b9279a
+evidence/usb-descriptor-remediation-v1/USB-SUITE.log 21922 42b4c0db7cd4bfd236202a52588685991bcc72a101cdffdf7e01dc248826e142
+evidence/usb-descriptor-remediation-v1/mutation_harness.py 11250 2b597f4e59bf4ac591be822f49583e4d19e66ca44ef40f20db1a8b47c3558742
+evidence/usb-descriptor-remediation-v1/pristine/pc5ctl.py 29686 c768ad5609635fbf6900cb58a93d08094276a920539c23f5f19bebbe76e652f9
+evidence/usb-descriptor-remediation-v1/pristine/test_pc5ctl_usb_safety.py 47639 5888f9c42f8349f8133a8236b65f9d42355e8535e8fab60a8d2dd78e61234fd3
+evidence/usb-descriptor-remediation-v1/repro_descriptor_defects.py 12634 3eb8ee358967c64d1d35f79c8a01f44838587f8721496c8dfe7b69efe9b5a28d
+
+--- evidence/continuation-descriptor-v1 (recovered 17:04Z from pc5-descriptor-continuation-20261121-v1.tar.gz) ---
+evidence/continuation-descriptor-v1/ARCHIVE-VERIFY.log 25590 5d29984b3d2b96de6ab0e421719caf16bdb271262041686372658474d4df5a3c
+evidence/continuation-descriptor-v1/CHECKPOINT.txt 30360 0a4b486ae473c0ddf57f9ea365ed109e302116a80484a96cd2dbe92c1c6430c8
+evidence/continuation-descriptor-v1/GATE-docs-final.log 122 648145f019e43f693addc39d56fc25d5821974c08587b40348ceeec26ee47cbd
+evidence/continuation-descriptor-v1/GATE-make_citations-check.log 112 22e94a4168aa88ee23578c56a378e6bf202b53f9c453cecf43a9f4dfc44957eb
+evidence/continuation-descriptor-v1/GATE-make_docs-check.log 122 ed4eb1ce78a197d0a7450d745b628a809b1a863a4e651749279d2e78966ff41b
+evidence/continuation-descriptor-v1/GATE-python3_tools_roadmap.py_check.log 103 cc36ce8532f5aa42cc9e6395b514b071b860002e2654f4a795e8128bb32c12ec
+evidence/continuation-descriptor-v1/ISOLATED-ROOT.txt 30 bdcd03caf5e552425845043f3cce7b26e0dbad9eb1f20ae02b7d64f27d6147a2
+evidence/continuation-descriptor-v1/ISOLATION.log 12 bde294368bfed77c2cddf8cec271d398aee9cdbab3b26e1059281bd33adb0120
+evidence/continuation-descriptor-v1/PR31-BASE-BUILT.log 16242 0c4251e0a2cafee878797df8b8a79dbb2088a828c04624a98a4a3b846a7cc9df
+evidence/continuation-descriptor-v1/PR31-BASE-ROOT.txt 26 0381695885e3ae8f5fdb27d59c8a35fe8b99e163a335f5b34ac4f10cd060d291
+evidence/continuation-descriptor-v1/PR31-BASE-UNBUILT.log 22666 8af33693b6f4e25d651fcf501108dcc899581505c975ff2b1b77808858b14661
+evidence/continuation-descriptor-v1/PR31-BUILD.log 5066 41350a4d94da328e642d1d2aa9aaf3b947a719f2a35591633698ebfc0b6d642a
+evidence/continuation-descriptor-v1/PR31-BUILT-TEST.log 16556 a3ade4b647eeb6837e3fc3c90c3eccfd15de47a3b7638b1dfab47fd2c50cb2d7
+evidence/continuation-descriptor-v1/PR31-BUILT-V2.log 16724 bdd49ba5f11b707ce3fc61f8585c6e17d9a56b7f0791638829c2129b4f102207
+evidence/continuation-descriptor-v1/PR31-D1-V2-RECOVERY-AND-REVIEW-20261121.md 15160 08ebd05b1ee81048bd6547354d84a4f2c6eb164a6c820f7d31fb92925df61078
+evidence/continuation-descriptor-v1/PR31-D1-proposal-v2.patch 2760 031d846e1fe045cf102e5a621424e7032efeada42cd84caf528ee1ed1c405e96
+evidence/continuation-descriptor-v1/PR31-FOCUSED.log 2535 0624c90305bbd14fdf6fef4e16f342dc37e27d8e32defa79877a71246cfefdc5
+evidence/continuation-descriptor-v1/PR31-NEGATIVE.log 2469 df4f3bc23e7acdd401010c7c16fabe39a92a3e9113571e67ae51e9d57d33ea7d
+evidence/continuation-descriptor-v1/PR31-PAIRS.log 8599 07d0a12a4542b08c1f39672b077a78750a9e333d7189af200a3634e03cb522f7
+evidence/continuation-descriptor-v1/PR31-ROOT.txt 27 fe8a101f1867387e514189281fcc509008d861fa9bb79427d70e359b6eba2681
+evidence/continuation-descriptor-v1/REPOSITORY-SUITE-v2.log 83 02e77741b209c39db71aef105718507c60fd6f812d9ce2f27752b141764676c1
+evidence/continuation-descriptor-v1/REPOSITORY-SUITE-v3.log 39 4cfb4516f1ce42e5863d6731250ad7e2d2ed7f4b5f25af197e5cf2f692e3664c
+evidence/continuation-descriptor-v1/REPOSITORY-SUITE-v4.log 151155 9e73b9977d5d9827f91b28f5921638d296c9d4f6122c7cd8428cad6ef6fe7610
+evidence/continuation-descriptor-v1/REPOSITORY-SUITE.log 149 c918ce3fe3b2d023bf5cec5e7972b9e59d7413d2c792947b955e0bd8c464ffc9
+evidence/continuation-descriptor-v1/REPOSITORY-TEST-INSPECTION.txt 16352 cd0ed5bfde6366a93c315f8576a830347cc1f77b2ed3338c956a6d152f7843d3
+evidence/continuation-descriptor-v1/RESULTS.md 8122 e3d8593d7baf44e65fc0adbe05e64b75e4e8d2920294c7ea5858b5e0eaca991b
+evidence/continuation-descriptor-v1/USB-CLI-TEST.log 3773 879a2c40e757c483fbec44b667af617a95f18443bb85a07efa0a9c5599c98959
+evidence/continuation-descriptor-v1/USB-DRAFT-PATH-CONTROL.log 547 d6fa0ccb7c1985874c4f08d0d1e911e570238ece53721d1b4459c0134e6270d1
+evidence/continuation-descriptor-v1/USB-DRAFT-PRELIMINARY.log 19446 d6e0bf7cc8771cfe137a6040efc7afae4e499ffbe27a9e49df3e0cf9e58270da
+evidence/continuation-descriptor-v1/USB-FD-REPRO.log 603 7c5c20458a9030d07ec619989d2b70bd3ef0a067d5b5bcf80253813751817a0a
+evidence/continuation-descriptor-v1/USB-MUTANTS.log 2482 6c022dbfd6cf729003fd36661c0b1b7bf82ff1a6a26199ad24b284dc7b8470b8
+evidence/continuation-descriptor-v1/USB-PATH-RACE.log 447 9c413d30ced990ee1a6f7fbf781924de6863c0162c727feb666e76f12deb183f
+evidence/continuation-descriptor-v1/USB-SUITE.log 18725 1da985152862d3dec77b839149ed74653ceb60a286fe9e5445da274e82a5f979
+evidence/continuation-descriptor-v1/USB-descriptor-draft.patch 1149 cbef535fbe01df668db0890cd406c0890bddc5c0a1b33e2879ff548d855a39a0
+evidence/continuation-descriptor-v1/usb_path_race_probe.py 1946 b293ba8976c91d949c7260f18ef14bec5ac9f35aec3805e131b1042d979af179
+
+--- evidence/continuation-mission-v1 (recovered 17:12Z from pc5-continuation-20261121T101109Z.tar.gz) ---
+evidence/continuation-mission-v1/GATE-docs-after-update.log 122 ed4eb1ce78a197d0a7450d745b628a809b1a863a4e651749279d2e78966ff41b
+evidence/continuation-mission-v1/GATE-make_citations-check.log 112 22e94a4168aa88ee23578c56a378e6bf202b53f9c453cecf43a9f4dfc44957eb
+evidence/continuation-mission-v1/GATE-make_docs-check.log 122 ed4eb1ce78a197d0a7450d745b628a809b1a863a4e651749279d2e78966ff41b
+evidence/continuation-mission-v1/GATE-python3_tools_roadmap.py_check.log 103 cc36ce8532f5aa42cc9e6395b514b071b860002e2654f4a795e8128bb32c12ec
+evidence/continuation-mission-v1/PR01-16-HISTORY.json 146854 ee192009739e6f86c3e7ba99a04d3c4786b9a479f2ceb16eab553679bd84448f
+evidence/continuation-mission-v1/PR31-D1-FOCUSED.log 2367 edbf97bcdda59d4ba82f6539e6eb7a8d6e52684b52e392a99cc004c77d71c09f
+evidence/continuation-mission-v1/PR31-D1-NEGATIVE.log 1662 218f07bfc40cd2510f1979e4a95e2ba19c202c64b53329a39cf1f60a5197fa44
+evidence/continuation-mission-v1/PR31-D1-proposal.patch 1891 5d67c0fa9f64d8c49650cb52d3b112b2ed0a35d3ed714e7c5be1636929469368
+evidence/continuation-mission-v1/PR31-PROPOSAL-TEST.log 22978 4e12b91a3efae11c6cd1d7fe4a7d4fbfd9f2f363e09f01e2164978a913261d2a
+evidence/continuation-mission-v1/PR31-PROPOSAL-TMP.txt 30 415df276906983218c3b52f2ced23ea540b7eb5a0a2b0977d68667497b67f443
+evidence/continuation-mission-v1/PR31-current.json 35477 c253454441200aab0878bb7622f6e5d38550a85233f282b25fc5e3c866558ba0
+evidence/continuation-mission-v1/PR34-current.json 26421 9509db3f79a780549fee730eefbf95b5402c10185166fdc51c7f91b5d040a829
+evidence/continuation-mission-v1/RESTORE-INVENTORY-v2.txt 24076 56a6e09b1a6f6f70395c948ce897fc25cd0e2c6bab7cc7231b50882f2bec1bd4
+evidence/continuation-mission-v1/RESTORE-INVENTORY.txt 131 bd04fc2263b029a13f608277c51ae67e40a8c2d2d6c212572f46f73e4166f28b
+evidence/continuation-mission-v1/RESTORE-VERIFICATION.log 3964 e71cc60693e3a1bc1b05f17f7ae462aad5c73f193a15ecf35a5950ea7c800491
+evidence/continuation-mission-v1/RESTORED-OBJECTS.txt 521 e9f27141455e19856f31de514a1eff0973f3f6ef2bb6cf9a37e917e45aefda38
+evidence/continuation-mission-v1/USB-MUTANT-baseline.log 2943 594df90c313bb035fb9950c41d913cf7c3a7ab7087ee7b3680ce20fbabe3169d
+evidence/continuation-mission-v1/USB-MUTANT-bypass-guards.log 5587 412960fbbf9436088c333ba4841180c9c2c5a8348fe930d430516753949f5370
+evidence/continuation-mission-v1/USB-MUTANT-identity-mismatch.log 3675 610b862e06f0eb2283ca73be951eae067d5f51bab3587a233861365a751a5257
+evidence/continuation-mission-v1/USB-MUTANT-malformed-partition.log 3695 0cbd537d7b28c93eece4db9c3b3641c2c07389b9f54e1f3e81edd810a72912cf
+evidence/continuation-mission-v1/USB-MUTANT-missing-relations.log 4263 d015e2fef49a0840fdb60635dd81124d6a35a53e52324d096381013c8604b609
+evidence/continuation-mission-v1/USB-MUTANT-whole-disk.log 4324 36a44f402bdee3c834f53996b147d04059ac530f6e3b8054d28376bdaf9e4a47
+evidence/continuation-mission-v1/USB-MUTATION-SUMMARY.log 1806 928cf23207041f27f6cbdb4c8877f54e476955b6d707ec8b33cc5b9533143ce1
+evidence/continuation-mission-v1/USB-TESTS.log 18114 2cf505df70075c9410fad6a7db7c302ea231aa81d64688545d0540064be35a2f
+evidence/continuation-mission-v1/reconcile_history.py 2856 9e1a6e1b6b931951b4df95f1ca22f294f838b9c7f0cdc167f80a8573475afe27
+evidence/continuation-mission-v1/usb_cli_mutations.py 3133 76b244129f03c130120dd5eb2ec5ba0ad238c3f05bfe3eef16e9cee72ee6a2f7
+
+--- evidence/candidate-recovery-v1 and -v2 (recovered 17:10Z from pc5-continuity-arena-c8a76776-v1.tar.gz) ---
+evidence/candidate-recovery-v1/ARTIFACT-INVENTORY.txt 3887 776f1a619f24a6d00cf5ddb1f3b47bbde20a1f83c702fc0cdadf596b02346a85
+evidence/candidate-recovery-v1/OVMF32-LOG-RECOVERY.md 1049 439ce167c402a4d5c2c4f09f52787396e0fef2260e3d97e0e3f355572959f8b6
+evidence/candidate-recovery-v1/PR31-CANDIDATE-RECOVERY.md 1015 3a2eebfbb56ee38c0d55ac2a77804d45407b421c5984e5bc7e8537d4bf1a22f4
+evidence/candidate-recovery-v1/RECOVERY-STATUS.md 1727 23faaba0257fe342617d81e1c0f9e64e5a6e553b04911a3a05dd90353375c4d2
+evidence/candidate-recovery-v1/SHA256SUMS.txt 778 5b23acd9f4f2e79092c3a601a56c8b22361be58beb442c3c201764a119c44c45
+evidence/candidate-recovery-v1/USB-CANDIDATE-RECOVERY.md 986 b038ca2ce7621d06c726ee8c5156af3c4f225410f6074981fa04d056830236f4
+evidence/candidate-recovery-v1/recovered-metadata/arena-context-coding.patch 27179 2c427ee3e245d4f85da3ca67ff6bdc0fa5d763a10c7ec22e81fa3a401f2b5fef
+evidence/candidate-recovery-v1/recovered-metadata/dropbox-current-state.txt 21460 ea750cf3ad252de5bf3a95818a898633e8e865eedad27e21c497b27bce80b66b
+evidence/candidate-recovery-v1/recovered-metadata/dropbox-manifest.json 1176 6d51af9c9240e65e0838a070742033e36e898869285f07e6576201b4d9d15d9a
+evidence/candidate-recovery-v2/ARCHIVE-MEMBER-INVENTORY.txt 895675 725afce027e79ca88cae2ed5e67a6dbd0137c7a4ec73c1903a636fd1f0fa31d6
+evidence/candidate-recovery-v2/ARCHIVE-SEARCH-RESULTS.txt 98 5e678869efaba756daa6a8397dc1efd189271fc82910b1e5afa35d73aefaa3cd
+evidence/candidate-recovery-v2/ARTIFACT-INVENTORY.txt 3069 d0ba4e652af0a686c576d6d71dd103f36dd8e13b4659ba7de645b42a85620687
+evidence/candidate-recovery-v2/DROPBOX-CHUNK-INSPECTION.md 3429 54d791f0ceeb4d3f2f0bc61bab1e77d2505fbcf4051bbcf841a449ec6d50d3e5
+evidence/candidate-recovery-v2/DROPBOX-OBJECT-HASHES.txt 4078 db711a0899051a08bea34eb4ab0e90ab37e32fc099c19fb7770767c236f7676b
+evidence/candidate-recovery-v2/OVMF32-EVIDENCE-RESULT.md 1245 ab695eea9dd0e33a77a438988c33338998a87826ae189ebdc9777b98105e2ced
+evidence/candidate-recovery-v2/PACK-SEARCH-RESULTS.txt 384 73122b851ae9939468efb9744951511306ac693c52a73a7702842bd2aa45ecd1
+evidence/candidate-recovery-v2/PLATFORM-SNAPSHOT-SEARCH.md 1498 e7d2c7df53d61b3aa760c196aef88f6d00e4f5bfcf1e7d589d9ef6abb975910c
+evidence/candidate-recovery-v2/PR31-RECOVERY-RESULT.md 1177 c000ae4c5979b9b1a7d97df7792c40799c3180768ea2ec5e3663be9bc9641a9c
+evidence/candidate-recovery-v2/RECOVERY-SOURCE-MATRIX.md 3426 d72b3013d4a434decdfeed3c24dac4669709e899ff14cd7498c318d6948d47a7
+evidence/candidate-recovery-v2/SHA256SUMS.txt 1124 8bb8de1fc3a52a7c2fa401d11e1f5563e75c690652f9390211d7377f15f48127
+evidence/candidate-recovery-v2/USB-RECOVERY-RESULT.md 1185 f6af6d136b77930e07d4cc3ac1b7ba9a33078aefb1119952b0269b3aaae1374f
+evidence/candidate-recovery-v2/partial-historical/integration-audit-ovmf32.log 3021 d45310cb4d5744980a4df5c7055ab3edede2ed0b408e50230d788ae62f0e429f
+
+--- evidence/identity-boundary-v1 (restored from pc5-identity-boundary-20261121-v5.tar.gz) ---
+evidence/identity-boundary-v1/CHECKPOINT.txt 37740 c95978b66c39dc59c88e764d9c63f6f928fbca6637d83d4e38e87690e5d004d0
+evidence/identity-boundary-v1/CHROOT-DIAGNOSTICS-v2.log 864 fc56a37e36267b5a236707080c6d2f2dcdc7ccae6c5699ba222d41a649de0663
+evidence/identity-boundary-v1/CHROOT-DIAGNOSTICS-v3.log 513 1329f6671bffd4331f68faf850561fddc44a5aa8687ee3f270aeb65ff18bd2d4
+evidence/identity-boundary-v1/CHROOT-DIAGNOSTICS.log 112 b1422f475c2f5b85b1efc790ccb42a0f420923080d9770fc2b9379b507132b73
+evidence/identity-boundary-v1/CLAIMED-HASHES-v2.txt 2369 75c1f80b411cbbe4800fed8baeecf6b4f0c0fbcff4973bc1f7a7b1a8cf7c17b4
+evidence/identity-boundary-v1/CLAIMED-HASHES-v3.txt 3570 19e755fb898bc749ad276c30ff0a753e8ca3c0207eb36815a685e1fddfb71206
+evidence/identity-boundary-v1/CLAIMED-HASHES.txt 617 0adcce54d158201e8e789e593c4ff99f9ceb0f1aff81263a618a54a1b7acf527
+evidence/identity-boundary-v1/COMPOSITION-REMOTE-TIP-v1.log 1796 cac6172678efc619b1974eca285e2c7c7be9e8626d6b6539955f2a463b3ccbb1
+evidence/identity-boundary-v1/CORRECTION-ON-REMOTE-TIP-export.log 824 5aaffe15cbc118a3afa1bb66340ed351d331b750a239da31b89e68f10cac5565
+evidence/identity-boundary-v1/DROPBOX-CONTINUITY-STATUS.txt 5870 87164b7985b6975767520dc09a5dab4a3555d08c3b7f1a46a16c037748b4e85b
+evidence/identity-boundary-v1/DROPBOX-REMOTE-INVENTORY.json 6129 43731b7961f92d775e1fd191d310c1e806739f740eee9d9e5c8bd6d6c58d9974
+evidence/identity-boundary-v1/ISOLATION-ROOT.txt 30 9ea5522bea4238c764db0a6651233eae9c26164a8e2edbaa5cdfd04ed1264f03
+evidence/identity-boundary-v1/PR31-D1-V2-INDEPENDENT-REVIEW.md 12646 02fdd28fbe61f2abdbafd114accf873aad5b323ff10132145e0b0fc50ce9f7c1
+evidence/identity-boundary-v1/PR31-EVIDENCE-PAIRS-VERIFY.log 2592 97f06baa8e11d5e45322b87786b5e32a2c31f20a2adb6b1f7b129e6c4d9143d2
+evidence/identity-boundary-v1/PR31-SCHEMA-CONSUMERS.txt 2462 3cbff274a8d64e8917d341af87ae129e1a4cc48d51fd8e0b3015d37a7ef49e6a
+evidence/identity-boundary-v1/PR31-base-build.log 5066 dd5718d7f85e25094781733a1a1bbde693b272fabdadb06c2e4d0e7022c72a35
+evidence/identity-boundary-v1/PR31-base-tests.log 16242 923d6c888cfdd29c97108a6ff620b78aea8b85c82a9ba306b509ede6af7bfc55
+evidence/identity-boundary-v1/PR31-compare.log 126 b0cfec7bad98a5c3e44a9469d66821ffa7ce5f2ed6950a94e5b8e274f4075c47
+evidence/identity-boundary-v1/PR31-duplicate-mutant.log 945 18f13d65ce62662fdb604f8da52d626f80c36df061f0531aadac42e23b797b6b
+evidence/identity-boundary-v1/PR31-original-build.log 5066 90d40a0b61167359af35cb1eed44ae2d5800149d03b516dd3576a6e89c81f829
+evidence/identity-boundary-v1/PR31-original-tests.log 16556 ffa7ccc69bccdcd6259aed13dbd0256be911a0d004e94b5490b8dce3103f2274
+evidence/identity-boundary-v1/PR31-v2-build.log 5066 15f3dc7443340161182d2befd86efb2d66c415e387f1f285442ab4039b280490
+evidence/identity-boundary-v1/PR31-v2-tests.log 16724 b4266a8a91218f87d128cec5afd394513050110b716bce8512f0dc1286d84cf7
+evidence/identity-boundary-v1/PR31.json 35477 c253454441200aab0878bb7622f6e5d38550a85233f282b25fc5e3c866558ba0
+evidence/identity-boundary-v1/PR34.json 26421 9509db3f79a780549fee730eefbf95b5402c10185166fdc51c7f91b5d040a829
+evidence/identity-boundary-v1/RECOVERY-RESULTS-v3.md 1714 a690f6de9e46009fd04a4f095084035ec8039362b2960022ffec7fc0478c02d2
+evidence/identity-boundary-v1/RECOVERY-RESULTS-v4.md 2171 d3fdd3422d68f38b0c90fc799dbe02f049d4c03737b77107c6a8cf181da4567d
+evidence/identity-boundary-v1/REPO-FAILURE-CLASSIFICATION.md 10441 c87e20b6ca53f02e6ab9f8b09e1113ca5e54e352bfd935f8346ccde72e9de81a
+evidence/identity-boundary-v1/REPO-FOCUSED-HOST.log 1179 78570302a6cff1b1f7309e8ca81f0fc9d518194465ff39673f9fac7849758052
+evidence/identity-boundary-v1/REPO-FOCUSED.log 4044 3c29f2c315faf0626aa7b8bf95ba41b49afae26504127446ea28cb4cadd0e3e7
+evidence/identity-boundary-v1/REPO-SUITE-caps-dropped.log 263921 b83f80e0b603228668262d24dea2b1cdc48e12acdf5f3fc6d7cd4159c6f94f5d
+evidence/identity-boundary-v1/REPO-SUITE-corrected-build.log 4036 6cedd5a02910621d9d0895f326b5e5d521a448446273c4b6c3028806f50e7917
+evidence/identity-boundary-v1/REPO-SUITE-corrected-namespace.log 147552 863974af013363ef2ebe52d374b7238bb1935af0f35b713ec20b26ca0b4ae418
+evidence/identity-boundary-v1/REPO-SUITE-prepared-corrected.log 149 258f7aee330c5b8083a9e26535903fc81ae67cde7b58278c9d0838787f79dcc6
+evidence/identity-boundary-v1/REPO-SUITE-prepared.log 142740 a801f43e07cb377e486be8e823997f8a69f6c646217c2a13c410bdb1f49009d5
+evidence/identity-boundary-v1/RESTORE-PROCEDURE.md 7452 9e07f17f2d6e5d4c62a7ab22ff6f1568018778c05abc18e413e29650bbd023f3
+evidence/identity-boundary-v1/RESULTS-CONTINUATION-v3.md 10628 e2cf2ba980af63a39a63cbb96a4b5325b3db15e722b23041ccb58ab4340ca106
+evidence/identity-boundary-v1/UNICORN-INSTALL.log 370 9a118be6439cc050b561e004f5b317de962e22d338b6a2f17bd50b129e893aee
+evidence/identity-boundary-v1/UNTRACKED-HASHES-v2.txt 39605 41062517ab29783929b5d5b7c3501442213ff1f9d0629cb2875e78e9293790fe
+evidence/identity-boundary-v1/UNTRACKED-HASHES-v3.txt 69618 3e3cdca3de9750f40fa45f264629613d96e72581c88451eea8c33ac1a710b6ef
+evidence/identity-boundary-v1/UNTRACKED-HASHES-v4.txt 71323 fbeb34c53a1e6e080630dd74e9a7aa43159aad09157bad90eaa4dfa94feaee4f
+evidence/identity-boundary-v1/UNTRACKED-HASHES.txt 63190 e740f0362de3dc849a1feed850c8ff74540d3fbb142007471b15e164ab426c56
+evidence/identity-boundary-v1/USB-CORRECTION-APPLY-v2.log 363 a4cea781d0265b5809445fc1c7cfd053925adb2c0b96dd392a79ae61b4790adc
+evidence/identity-boundary-v1/USB-CORRECTION-APPLY.log 22740 ccf52db1c0e3aa8247e49ef332192488a46a637eec131fa722301c482fc8a545
+evidence/identity-boundary-v1/USB-CORRECTION-HASHES.txt 668 4dc8824c3b94fe03f5d0047a8e9d2700c2d0bf29e4036c2a3067d6ee9390d060
+evidence/identity-boundary-v1/USB-MUTANT-baseline.log 3902 2b0497763c5af2b604818068b594b2add05e09ab853875c2e07937fc53e86706
+evidence/identity-boundary-v1/USB-MUTANT-bypass-guards.log 7935 660acbadac1e0a2d3d610711e11ba0a3c2febf6816d095fe0b11c731310edd7c
+evidence/identity-boundary-v1/USB-MUTANT-identity-mismatch.log 4652 941142338e9b76c566cea397470399dadf7b7cc0e4516ef5f1f3ee22a96a8422
+evidence/identity-boundary-v1/USB-MUTANT-malformed-partition.log 4946 ea8525efc5ae1096411dd9119c541b067d093dd492c0bf205e94028594a681fb
+evidence/identity-boundary-v1/USB-MUTANT-missing-relations.log 5240 91b869bb24c4ed5f4c2f7c5175525d732898d0a6adbfca8ce1fd1e02529f9153
+evidence/identity-boundary-v1/USB-MUTANT-whole-disk.log 5974 7af535c7da1ae2cf588cf4f46f75d20b72da4f8352b0163c16fb8081dc25ae42
+evidence/identity-boundary-v1/USB-MUTATIONS-v2.log 4529 e72f6730f56736c7eb3320b356a4806819f1bf2758cd054cb5b29e06d54fecaa
+evidence/identity-boundary-v1/USB-MUTATIONS-v3.log 5100 5dc0dd427d8b56bcc9dc813d222c83c48ee4992f83ba4b517dd3fd3ff13dfc52
+evidence/identity-boundary-v1/USB-PRIOR-MUTATIONS-corrected.log 2482 48377e48d89e2dd6c804557a711e976676f1cb1ecf4909b1969de9a73076fd66
+evidence/identity-boundary-v1/USB-PRIOR-MUTATIONS.log 2482 8a8c9d8b6e3c8fe89e6c795ad3ccd14a39051734f0cfb22ecbdca60880a090ec
+evidence/identity-boundary-v1/USB-REAL-DD-FD-PROOF.log 1479 5dd08961db108a744443a3eb56942550ab40807a4e91594435b5de5925cc61c3
+evidence/identity-boundary-v1/USB-SUITE-v2-BASELINE.log 28024 91b21cf6d52fcd7ccc3a2972a2760b3acf87e096fcb7456ea5877ed726192459
+evidence/identity-boundary-v1/USB-SUITE-v2.log 22517 958e44ee40c7768386d163792ec699e7afd3504b7069d4dc9a373bd121a0fa61
+evidence/identity-boundary-v1/USB-SUITE-v3-BASELINE.log 28141 6a824c653f22169cc7eaf3ad5e38bb2e03b4e3f24e76a32748d2c9c0fd4dcdd7
+evidence/identity-boundary-v1/USB-SUITE-v3.log 22789 494a34a0542459b36e13d3298166716dca9d20b33967f0a77ad76b5956ea6e32
+evidence/identity-boundary-v1/USB-TESTS.log 20599 e7db29b7a2382aa0adcd98858c9e317e7add3240c67f5a059a00c8526f89356f
+evidence/identity-boundary-v1/USB-cli-boundaries-fd-update-v1.diff 1824 808d16a04ed6900aca239bc16b2537f5cab6354b36ba4edc6a95104d00297f2e
+evidence/identity-boundary-v1/USB-cli-boundaries-fd-update-v2.diff 5352 359dc0e79560ac93c92bd1972742895f8878538c5f05f528c41cd5d585e50bc2
+evidence/identity-boundary-v1/USB-identity-boundary-correction-v1.patch 35637 1d21264ad2d2d88a0bea28850f39de18d1e5aa2173ff42b4449080e22428409a
+evidence/identity-boundary-v1/USB-identity-boundary-correction-v1.sha256 138 d261131a82d1c4f02d5b76099fd4ea37fb37c598cb7537e9fa3ab1fab3e9afe1
+evidence/identity-boundary-v1/USB-identity-boundary-correction-v2.patch 37912 0b1464c541a75c46be462103ee32958e8463e17aab4c89a1419cb08e08bf9a14
+evidence/identity-boundary-v1/WORKSPACE-MAKE-CHECK-missing-unicorn.log 272563 db6a796a7daebb9c4ef5413961dda50f6cccdc513bf20c1c9eef839dd4ccbeba
+evidence/identity-boundary-v1/WORKSPACE-MAKE-CHECK-v2.log 149521 5c2c2e9935418141faa44d6030c58e105b62829d96efdcf82b783b393056a2ea
+evidence/identity-boundary-v1/WORKSPACE-MAKE-CHECK-v3.log 149521 17cf2b9ecaeed87d4b4c09683794060bebe8e97bed4ad14c9757a5cdf5917132
+evidence/identity-boundary-v1/WORKSPACE-MAKE-CHECK.log 149254 16e7496c6d9143b6a887a2cc0d3551795a48041160950ffbbd972baf9d9d02c4
+evidence/identity-boundary-v1/pristine/pc5ctl.py 29686 c768ad5609635fbf6900cb58a93d08094276a920539c23f5f19bebbe76e652f9
+evidence/identity-boundary-v1/pristine/test_pc5ctl_usb_cli_boundaries.py.pre-edit 4547 057fb9e0b4a3a00640120f7e2ed8dad45481a709787504478ba0a7b64e7cf199
+evidence/identity-boundary-v1/reproduce_pr31.sh 2109 20a88295d10b21cf11dfc344e196d0bdc12677a0b4af0e047294687ff78849e0
+evidence/identity-boundary-v1/usb_identity_mutations.py 9846 f7ade82ffc421cc1143121c1975e77e14e20b97f1b0f7fe4c94b125fc2a58fe2
+evidence/identity-boundary-v1/usb_real_dd_fd_proof.py 5403 51607b8e18d055a5d0ac37dffe25e4a81cb8a9d7615ebfee3afdeaed7f18117c
+
+--- workspace source and test files (the deliverable state) ---
+tools/pc5ctl.py 36695 2b221bd01b6be8beaf05095e9107119496359eff77cb5bfda36336ed78cf1441
+tests/test_pc5ctl_usb_safety.py 49004 11879172c53b192e198382d76841f51ea0694c1c2e1074d62759764b54ea3c80
+tests/test_pc5ctl_usb_descriptor_identity.py 32006 1a0955e17f6ef9977e511525206a00d9bb1c01d8621565e0b731baba505754d9
+tests/test_pc5ctl_usb_cli_boundaries.py 6338 faf65e73b2db477745fc54ab46711e41ca4286d5b766a059ae82f0d67929f0d1
+
+--- docs/engineering (10 Markdown files; 4 written or extended by this pass, 1 restored from the v5 archive) ---
+docs/engineering/AUTONOMOUS_MISSION_FINAL_REPORT.md 7880 4cfd44cf28bb75ed24f6de8571a7f9d5790cd1f502f0469d1935b9411c247696
+docs/engineering/AUTONOMOUS_SESSION_CHECKPOINT.md 7426 812ce78a3aef0ecd31bf07be4aa3b0c6f76dc9f6ad7d18bbcc551e78b56e9059
+docs/engineering/ENGINEERING_HISTORY.md 7229 11e1958f880891b849ee24cdb88619a877ddcdcadb9a9e64e9c6f640d1b3fdaa
+docs/engineering/EVIDENCE_INDEX.md 12789 9d613e0555b05629ff659f7d2dd4236ddbd1c097f38b3733ee8f071b5744c2b6
+docs/engineering/MILESTONE_EXECUTION.md 17431 7f3f87eaec46ca99b7bda1b00cbca25adcee2bf2cc59160f6a2b09fd715f7281
+docs/engineering/PROJECT_STATE.md 16982 d3905e5965622168b4beea6f55a3d670d0b7f8cc77ce2e5bc0a099b067b73492
+docs/engineering/PULL_REQUEST_REGISTER.md 16093 be8e5fc07c5c745b8dac1311d76e170ea03384b5925605988be73035f95ee39c
+docs/engineering/RECOVERY_AND_CONTINUITY.md 15446 50c45ed8fb9e81987b6f789480285c1b06ab2fcd4ac217fce76157d48f2674f5
+docs/engineering/USB-DESCRIPTOR-REMEDIATION-20261121.md 13583 7cff0d41258ebcc3dbc61a49f7016c4e64d899b7e80312ad1d64996cb3f505fc
+docs/engineering/USB-IDENTITY-BOUNDARY-DESIGN-v1.md 12310 8ccc623ecffedfc0c61c2cb3079c74b03868399a8ff61d4b172da740709cca5f
+
+--- recovery/ (this session's continuity archives, sidecars and manifests) ---
+recovery/pc5-identity-boundary-20261121-v5-manifest.json 18063 f1eabec0fd0be2f021c32fb186640600b403e2f2879b35a96545d4612248e97a
+recovery/pc5-identity-boundary-20261121-v5.tar.gz 435045 1485d2e370a89eb7b5a11a138c3de9ed3238a0984319c170c7125b5f276dae0a
+recovery/pc5-usb-descriptor-remediation-20261121-v1-manifest.json 20822 ff9665a0d022c47abfac67900612ea602e3759c9cbc0e6ad25ff48b7e6f1db24
+recovery/pc5-usb-descriptor-remediation-20261121-v1.tar.gz 525090 4b5c6b9faf9ff5ddd1a08b599a585e5d49741a9e17fc2051a602596926234233
+recovery/pc5-usb-descriptor-remediation-20261121-v1.tar.gz.sha256 116 221ac88d48c7eef30009fed5d53af2c925d21279539889ba9344f968f6626107
+recovery/pc5-usb-descriptor-remediation-20261121-v2-manifest.json 21746 4834c2d8677b3e1c19bc64e5dcc7a20d79ac2fb23ac285d91f7562e5dbe62ef9
+recovery/pc5-usb-descriptor-remediation-20261121-v2.tar.gz 526859 805848c3f8b4829306b8b8783363ff31add9ad1fb41c5830baac87cc715befc8
+recovery/pc5-usb-descriptor-remediation-20261121-v2.tar.gz.sha256 116 bf6a8f182305880f21890cd35f9d90cbc0b88a1ee8f9297e55ea37ee581f438e
+recovery/pc5-usb-descriptor-remediation-20261121-v3-manifest.json 38098 e8e133e0419700c3e5e0dc78b275f56fabcba726076f0264dff982c8229a94cb
+recovery/pc5-usb-descriptor-remediation-20261121-v3.tar.gz 927493 ea6329e4e4b8287317d126f59d62f82f3aaa7cd6ca9abd4b73c662fbe700eb41
+recovery/pc5-usb-descriptor-remediation-20261121-v3.tar.gz.sha256 116 e012b921b6344908bebe3d7f1638bf35efd0acf8c59bb60ee180e043abc1b599
+
+--- dropbox/ (retrieved remote archives, kept so the table in the PR31 review is checkable) ---
+dropbox/pc5-continuity-supplement-v2.tar.gz 21273 0fa721cca18011cda8d5765bfdb5d25da8d29537e2e8f47d6a9f784feb5e4fca
+dropbox/pc5-descriptor-continuation-20261121-v1.tar.gz 81436 91a029de6123baa58cdd54626522bbe5891e8d6c8a5b6913ddaf3c98280896d8
+dropbox/pc5-identity-boundary-20261121-v1.tar.gz 252908 da8b2b242ab554e08428d4f5bb2d937ed4bc19935c8570d459088e70c0139e0a
+dropbox/pc5-identity-boundary-20261121-v2.tar.gz 253931 fc2b7da075428942b198530af3915d9b8c4c05cb9bfa3395534d2eadd2b717b0
+dropbox/pc5-identity-boundary-20261121-v3.tar.gz 320903 5f02fc32cdf89a45896b191a0dde97928fcd9f8bdc9246efc598aa8126a7a4fe
+dropbox/pc5-identity-boundary-20261121-v4.tar.gz 383056 bb19e9d0625ba1b1c1c7f08ca3606d7f5c996f51960f21955aac093f95793c27
+dropbox/pc5-identity-boundary-20261121-v5-manifest.json 18063 f1eabec0fd0be2f021c32fb186640600b403e2f2879b35a96545d4612248e97a
+dropbox/pc5-identity-boundary-20261121-v5.tar.gz 435045 1485d2e370a89eb7b5a11a138c3de9ed3238a0984319c170c7125b5f276dae0a
+dropbox/pc5-usb-descriptor-remediation-20261121-v1.tar.gz 525090 4b5c6b9faf9ff5ddd1a08b599a585e5d49741a9e17fc2051a602596926234233
+dropbox/pc5-usb-descriptor-remediation-20261121-v2-manifest.json 21746 4834c2d8677b3e1c19bc64e5dcc7a20d79ac2fb23ac285d91f7562e5dbe62ef9
+dropbox/pc5-usb-descriptor-remediation-20261121-v2.tar.gz 526859 805848c3f8b4829306b8b8783363ff31add9ad1fb41c5830baac87cc715befc8
+dropbox/pc5-usb-descriptor-remediation-20261121-v3-manifest.json 38098 e8e133e0419700c3e5e0dc78b275f56fabcba726076f0264dff982c8229a94cb
+dropbox/pc5-usb-descriptor-remediation-20261121-v3.tar.gz 927493 ea6329e4e4b8287317d126f59d62f82f3aaa7cd6ca9abd4b73c662fbe700eb41
+
+
+Never write to a device from a system whose own root storage can be rearranged underneath it: the
+topology window is documented in docs/engineering/USB-IDENTITY-BOUNDARY-DESIGN-v1.md and no
+userspace code closes it. Nothing in these files constitutes deployment readiness, and no number in
+this file was transcribed — each was measured, then the file it describes was left untouched.

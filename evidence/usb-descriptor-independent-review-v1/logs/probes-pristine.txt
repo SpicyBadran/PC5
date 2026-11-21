@@ -1,0 +1,353 @@
+EEEEEEE..EE.EEE.....E...../usr/bin/dd: failed to open '/proc/self/fd/28': No such file or directory
+../usr/bin/dd: failed to open '/proc/self/fd/27': No such file or directory
+.E.E..F.F.FFF.F....FFFFEFF
+======================================================================
+ERROR: test_a_dangerous_identity_cannot_be_made_safe_by_a_different_path_argument (test_review_independent_probes.TestAuthorisationSurface.test_a_dangerous_identity_cannot_be_made_safe_by_a_different_path_argument)
+`check_target_safe`'s `device` argument is only ever cosmetic for a bound view.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 818, in test_a_dangerous_identity_cannot_be_made_safe_by_a_different_path_argument
+    ok, reason = pc5ctl.check_target_safe(path, topology=self.bound(ROOT_PARTITION))
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 748, in bound
+    return pc5ctl._BoundTopology(self.topo, identity)
+           ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute '_BoundTopology'
+
+======================================================================
+ERROR: test_each_dangerous_identity_is_refused_by_name (test_review_independent_probes.TestAuthorisationSurface.test_each_dangerous_identity_is_refused_by_name)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 756, in test_each_dangerous_identity_is_refused_by_name
+    ok, reason = pc5ctl.check_target_safe("/dev/whatever", topology=self.bound(identity))
+                                                                    ^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 748, in bound
+    return pc5ctl._BoundTopology(self.topo, identity)
+           ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute '_BoundTopology'
+
+======================================================================
+ERROR: test_identity_with_no_sysfs_entry_is_assessed_only_by_set_membership (test_review_independent_probes.TestAuthorisationSurface.test_identity_with_no_sysfs_entry_is_assessed_only_by_set_membership)
+PROBED AND REFUTED as a hole, recorded so the attack is visible.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 781, in test_identity_with_no_sysfs_entry_is_assessed_only_by_set_membership
+    ok, reason = pc5ctl.check_target_safe("/dev/x", topology=self.bound(ghost))
+                                                             ^^^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 748, in bound
+    return pc5ctl._BoundTopology(self.topo, identity)
+           ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute '_BoundTopology'
+
+======================================================================
+ERROR: test_partial_enumeration_is_refused_not_silently_shortened (test_review_independent_probes.TestAuthorisationSurface.test_partial_enumeration_is_refused_not_silently_shortened)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 810, in test_partial_enumeration_is_refused_not_silently_shortened
+    ok, reason = pc5ctl.check_target_safe("/dev/x", topology=self.bound(identity))
+                                                             ^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 748, in bound
+    return pc5ctl._BoundTopology(self.topo, identity)
+           ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute '_BoundTopology'
+
+======================================================================
+ERROR: test_the_bound_view_answers_for_every_path_it_is_handed (test_review_independent_probes.TestAuthorisationSurface.test_the_bound_view_answers_for_every_path_it_is_handed)
+No re-resolution: any pathname maps to the descriptor's identity.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 768, in test_the_bound_view_answers_for_every_path_it_is_handed
+    self.assertEqual(self.bound(USB_TARGET).devnum_for_path(path), USB_TARGET,
+                     ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 748, in bound
+    return pc5ctl._BoundTopology(self.topo, identity)
+           ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute '_BoundTopology'
+
+======================================================================
+ERROR: test_unreadable_root_refuses_everything (test_review_independent_probes.TestAuthorisationSurface.test_unreadable_root_refuses_everything)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 802, in test_unreadable_root_refuses_everything
+    "/dev/x", topology=pc5ctl._BoundTopology(dead, identity))
+                       ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute '_BoundTopology'
+
+======================================================================
+ERROR: test_unrelated_identity_is_allowed (test_review_independent_probes.TestAuthorisationSurface.test_unrelated_identity_is_allowed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 761, in test_unrelated_identity_is_allowed
+    ok, reason = pc5ctl.check_target_safe("/dev/whatever", topology=self.bound(USB_TARGET))
+                                                                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 748, in bound
+    return pc5ctl._BoundTopology(self.topo, identity)
+           ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute '_BoundTopology'
+
+======================================================================
+ERROR: test_helpers_never_raise_where_a_refusal_is_expected (test_review_independent_probes.TestDescriptorInterrogation.test_helpers_never_raise_where_a_refusal_is_expected)
+An escaping exception is a traceback, not a refusal: check for both.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 943, in test_helpers_never_raise_where_a_refusal_is_expected
+    for helper in (pc5ctl.fd_writable, pc5ctl.fd_block_identity,
+                   ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute 'fd_writable'
+
+======================================================================
+ERROR: test_identity_of_a_regular_file_is_none (test_review_independent_probes.TestDescriptorInterrogation.test_identity_of_a_regular_file_is_none)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 914, in test_identity_of_a_regular_file_is_none
+    self.assertIsNone(pc5ctl.fd_block_identity(fd),
+                      ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute 'fd_block_identity'
+
+======================================================================
+ERROR: test_procfs_usability_tracks_the_descriptor_not_the_name (test_review_independent_probes.TestDescriptorInterrogation.test_procfs_usability_tracks_the_descriptor_not_the_name)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 934, in test_procfs_usability_tracks_the_descriptor_not_the_name
+    self.assertTrue(pc5ctl.fd_child_target_usable(fd))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute 'fd_child_target_usable'
+
+======================================================================
+ERROR: test_writability_asks_the_kernel_about_the_description (test_review_independent_probes.TestDescriptorInterrogation.test_writability_asks_the_kernel_about_the_description)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 897, in test_writability_asks_the_kernel_about_the_description
+    self.assertFalse(pc5ctl.fd_writable(fds[os.O_RDONLY]),
+                     ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute 'fd_writable'
+
+======================================================================
+ERROR: test_writability_refuses_closed_and_bogus_descriptors (test_review_independent_probes.TestDescriptorInterrogation.test_writability_refuses_closed_and_bogus_descriptors)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 909, in test_writability_refuses_closed_and_bogus_descriptors
+    self.assertFalse(pc5ctl.fd_writable(bad), f"{bad} was accepted")
+                     ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute 'fd_writable'
+
+======================================================================
+ERROR: test_launch_failure_refuses (test_review_independent_probes.TestNoFallbackAnywhere.test_launch_failure_refuses)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 608, in test_launch_failure_refuses
+    rc, out = self.run_cli()
+              ^^^^^^^^^^^^^^
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 217, in run_cli
+    self.rc = pc5ctl.main(["usb", "--iso", str(self.iso), "--device",
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine-probes/tools/pc5ctl.py", line 756, in main
+    return args.func(args)
+           ^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine-probes/tools/pc5ctl.py", line 718, in cmd_usb
+    return subprocess.call([dd, f"if={iso}", f"of={writing}",
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/mock.py", line 1118, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/mock.py", line 1122, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/mock.py", line 1183, in _execute_mock_call
+    result = effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 179, in _launch
+    raise OSError(errno.ENOENT, "No such file or directory", argv[0])
+FileNotFoundError: [Errno 2] No such file or directory: 'dd'
+
+======================================================================
+ERROR: test_a_retargeted_root_node_would_move_the_boundary (test_review_independent_probes.TestRootSideResidual.test_a_retargeted_root_node_would_move_the_boundary)
+The root-side mirror of the patched defect: name-trust on the root lookup.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 877, in test_a_retargeted_root_node_would_move_the_boundary
+    "/dev/sda1", topology=pc5ctl._BoundTopology(topo, ROOT_PARTITION))
+                          ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute '_BoundTopology'
+
+======================================================================
+ERROR: test_unresolved_root_refuses_all_targets (test_review_independent_probes.TestRootSideResidual.test_unresolved_root_refuses_all_targets)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 866, in test_unresolved_root_refuses_all_targets
+    "/dev/x", topology=pc5ctl._BoundTopology(topo, identity))
+                       ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pc5ctl' has no attribute '_BoundTopology'
+
+======================================================================
+ERROR: test_procfs_alias_referent_is_not_compared_to_the_original_path (test_review_independent_probes.TestUnusableDescriptorRefuses.test_procfs_alias_referent_is_not_compared_to_the_original_path)
+MEASURED, then judged: a spoofed `readlink` is not accepted as consent to
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 493, in test_procfs_alias_referent_is_not_compared_to_the_original_path
+    self.assertEqual(kwargs["pass_fds"], (self.opened_fd,),
+                     ~~~~~~^^^^^^^^^^^^
+KeyError: 'pass_fds'
+
+======================================================================
+FAIL: test_fstat_drift_between_validation_and_launch_is_caught (test_review_independent_probes.TestSubstitutionCannotAuthorise.test_fstat_drift_between_validation_and_launch_is_caught)
+The last re-read must be about the descriptor, not the name.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 370, in test_fstat_drift_between_validation_and_launch_is_caught
+    self.assert_never_launched()
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 224, in assert_never_launched
+    self.assertEqual(self.launches, [],
+AssertionError: Lists differ: [(['dd', 'if=/tmp/tmptqxmo6aq/image.iso', [65 chars] {})] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+(['dd', 'if=/tmp/tmptqxmo6aq/image.iso', 'of=/proc/self/fd/28', 'bs=4M', 'status=progress', 'conv=fsync'], {})
+
++ []
+- [(['dd',
+-    'if=/tmp/tmptqxmo6aq/image.iso',
+-    'of=/proc/self/fd/28',
+-    'bs=4M',
+-    'status=progress',
+-    'conv=fsync'],
+-   {})] : the destructive child was launched. 
+output:
+image    /tmp/tmptqxmo6aq/image.iso
+sha256   54f624253436dcd5fe656688f7ddb3a314b4524453ce553a5b39a62ce0de4ee5
+target   /dev/pc5-review-synthetic
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_name_flipping_back_before_the_final_validation_cannot_authorise_the_fd (test_review_independent_probes.TestSubstitutionCannotAuthorise.test_name_flipping_back_before_the_final_validation_cannot_authorise_the_fd)
+SHIPPED DEFECT 1, reproduced as an ordering rather than as a message.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 323, in test_name_flipping_back_before_the_final_validation_cannot_authorise_the_fd
+    self.assertEqual(self.launches, [],
+AssertionError: Lists differ: [(['dd', 'if=/tmp/tmpchkc08uu/image.iso', [65 chars] {})] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+(['dd', 'if=/tmp/tmpchkc08uu/image.iso', 'of=/proc/self/fd/30', 'bs=4M', 'status=progress', 'conv=fsync'], {})
+
++ []
+- [(['dd',
+-    'if=/tmp/tmpchkc08uu/image.iso',
+-    'of=/proc/self/fd/30',
+-    'bs=4M',
+-    'status=progress',
+-    'conv=fsync'],
+-   {})] : the destructive child ran against a descriptor the final validation had never examined: image    /tmp/tmpchkc08uu/image.iso
+sha256   54f624253436dcd5fe656688f7ddb3a314b4524453ce553a5b39a62ce0de4ee5
+target   /dev/pc5-review-synthetic
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_non_block_st_mode_on_the_descriptor_refuses (test_review_independent_probes.TestSubstitutionCannotAuthorise.test_non_block_st_mode_on_the_descriptor_refuses) (kind='regular')
+A regular file or a char device must never be accepted as the target.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 401, in test_non_block_st_mode_on_the_descriptor_refuses
+    self.assertIn("cannot identify the descriptor", out)
+AssertionError: 'cannot identify the descriptor' not found in 'image    /tmp/tmp2j6gzl8e/image.iso\nsha256   54f624253436dcd5fe656688f7ddb3a314b4524453ce553a5b39a62ce0de4ee5\ntarget   /dev/pc5-review-synthetic\n\nTHIS ERASES EVERYTHING ON THE TARGET DEVICE.\n/dev/pc5-review-synthetic is no longer a block device: refusing to write\nnothing was written\n'
+
+======================================================================
+FAIL: test_non_block_st_mode_on_the_descriptor_refuses (test_review_independent_probes.TestSubstitutionCannotAuthorise.test_non_block_st_mode_on_the_descriptor_refuses) (kind='char')
+A regular file or a char device must never be accepted as the target.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 401, in test_non_block_st_mode_on_the_descriptor_refuses
+    self.assertIn("cannot identify the descriptor", out)
+AssertionError: 'cannot identify the descriptor' not found in 'image    /tmp/tmppsg7ugpz/image.iso\nsha256   54f624253436dcd5fe656688f7ddb3a314b4524453ce553a5b39a62ce0de4ee5\ntarget   /dev/pc5-review-synthetic\n\nTHIS ERASES EVERYTHING ON THE TARGET DEVICE.\n/dev/pc5-review-synthetic is no longer a block device: refusing to write\nnothing was written\n'
+
+======================================================================
+FAIL: test_non_block_st_mode_on_the_descriptor_refuses (test_review_independent_probes.TestSubstitutionCannotAuthorise.test_non_block_st_mode_on_the_descriptor_refuses) (kind='fifo')
+A regular file or a char device must never be accepted as the target.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 401, in test_non_block_st_mode_on_the_descriptor_refuses
+    self.assertIn("cannot identify the descriptor", out)
+AssertionError: 'cannot identify the descriptor' not found in 'image    /tmp/tmp__h7tqal/image.iso\nsha256   54f624253436dcd5fe656688f7ddb3a314b4524453ce553a5b39a62ce0de4ee5\ntarget   /dev/pc5-review-synthetic\n\nTHIS ERASES EVERYTHING ON THE TARGET DEVICE.\n/dev/pc5-review-synthetic is no longer a block device: refusing to write\nnothing was written\n'
+
+======================================================================
+FAIL: test_safe_fd_and_safe_name_writes_through_the_descriptor (test_review_independent_probes.TestSubstitutionCannotAuthorise.test_safe_fd_and_safe_name_writes_through_the_descriptor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 285, in test_safe_fd_and_safe_name_writes_through_the_descriptor
+    self.assert_launched_once()
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 233, in assert_launched_once
+    self.assertEqual(kwargs.get("pass_fds"), (self.opened_fd,),
+AssertionError: None != (33,) : child must inherit exactly the validated descriptor: {}
+
+======================================================================
+FAIL: test_deleted_referent_refuses (test_review_independent_probes.TestUnusableDescriptorRefuses.test_deleted_referent_refuses)
+The one alias check that does catch a real hazard: an unlinked object.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 508, in test_deleted_referent_refuses
+    self.assertEqual(rc, 1, out)
+AssertionError: 0 != 1 : image    /tmp/tmp57hpdzh5/image.iso
+sha256   54f624253436dcd5fe656688f7ddb3a314b4524453ce553a5b39a62ce0de4ee5
+target   /dev/pc5-review-synthetic
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_low_descriptor_numbers_refuse_before_any_check (test_review_independent_probes.TestUnusableDescriptorRefuses.test_low_descriptor_numbers_refuse_before_any_check) (fd=0)
+The `target_fd < 3` guard, with the harness protected against its absence.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 435, in test_low_descriptor_numbers_refuse_before_any_check
+    self.assertIn("cannot inherit", out)
+AssertionError: 'cannot inherit' not found in 'image    /tmp/tmp9o8m9d80/image.iso\nsha256   54f624253436dcd5fe656688f7ddb3a314b4524453ce553a5b39a62ce0de4ee5\ntarget   /dev/pc5-review-synthetic\n\nTHIS ERASES EVERYTHING ON THE TARGET DEVICE.\n/dev/pc5-review-synthetic is no longer a block device: refusing to write\nnothing was written\n'
+
+======================================================================
+FAIL: test_low_descriptor_numbers_refuse_before_any_check (test_review_independent_probes.TestUnusableDescriptorRefuses.test_low_descriptor_numbers_refuse_before_any_check) (fd=1)
+The `target_fd < 3` guard, with the harness protected against its absence.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 435, in test_low_descriptor_numbers_refuse_before_any_check
+    self.assertIn("cannot inherit", out)
+AssertionError: 'cannot inherit' not found in 'image    /tmp/tmp0fqdgp18/image.iso\nsha256   54f624253436dcd5fe656688f7ddb3a314b4524453ce553a5b39a62ce0de4ee5\ntarget   /dev/pc5-review-synthetic\n\nTHIS ERASES EVERYTHING ON THE TARGET DEVICE.\n/dev/pc5-review-synthetic is no longer a block device: refusing to write\nnothing was written\n'
+
+======================================================================
+FAIL: test_low_descriptor_numbers_refuse_before_any_check (test_review_independent_probes.TestUnusableDescriptorRefuses.test_low_descriptor_numbers_refuse_before_any_check) (fd=2)
+The `target_fd < 3` guard, with the harness protected against its absence.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 435, in test_low_descriptor_numbers_refuse_before_any_check
+    self.assertIn("cannot inherit", out)
+AssertionError: 'cannot inherit' not found in 'image    /tmp/tmpt61v5ujv/image.iso\nsha256   54f624253436dcd5fe656688f7ddb3a314b4524453ce553a5b39a62ce0de4ee5\ntarget   /dev/pc5-review-synthetic\n\nTHIS ERASES EVERYTHING ON THE TARGET DEVICE.\n/dev/pc5-review-synthetic is no longer a block device: refusing to write\nnothing was written\n'
+
+======================================================================
+FAIL: test_procfs_directory_unusable_refuses (test_review_independent_probes.TestUnusableDescriptorRefuses.test_procfs_directory_unusable_refuses)
+`fd_child_target_usable` failing must stop the write, not redirect it.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 468, in test_procfs_directory_unusable_refuses
+    self.assertEqual(rc, 1, out)
+AssertionError: 0 != 1 : image    /tmp/tmpm1tka8qr/image.iso
+sha256   54f624253436dcd5fe656688f7ddb3a314b4524453ce553a5b39a62ce0de4ee5
+target   /dev/pc5-review-synthetic
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+
+
+======================================================================
+FAIL: test_read_only_descriptor_refuses (test_review_independent_probes.TestUnusableDescriptorRefuses.test_read_only_descriptor_refuses)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/review-pristine-probes/review-probes/test_review_independent_probes.py", line 445, in test_read_only_descriptor_refuses
+    self.assertIn("writable", out)
+AssertionError: 'writable' not found in 'image    /tmp/tmpyfff6njo/image.iso\nsha256   54f624253436dcd5fe656688f7ddb3a314b4524453ce553a5b39a62ce0de4ee5\ntarget   /dev/pc5-review-synthetic\n\nTHIS ERASES EVERYTHING ON THE TARGET DEVICE.\n/dev/pc5-review-synthetic changed identity between validation and write (opened 8:1, path now (8, 9)): refusing to write\nnothing was written\n'
+
+----------------------------------------------------------------------
+Ran 50 tests in 0.234s
+
+FAILED (failures=12, errors=16)

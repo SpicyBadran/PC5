@@ -1,0 +1,12 @@
+# prior-generation inventory (from the v5 continuity archive) against the FINAL patched production
+# captured 2026-11-21T19:26:18Z
+$ sha256sum recovery/pc5-identity-boundary-20261121-v5.tar.gz
+  1485d2e370a89eb7b5a11a138c3de9ed3238a0984319c170c7125b5f276dae0a  /home/user/pc5/recovery/pc5-identity-boundary-20261121-v5.tar.gz
+$ tar xzf <v5 archive> -C /tmp/v5x ; copy its three tests/test_pc5ctl_usb_*.py over tests/
+  test_pc5ctl_usb_safety.py                    48664 bytes  675f100214599a58
+  test_pc5ctl_usb_descriptor_identity.py       23729 bytes  5da7500e24bb2970
+  test_pc5ctl_usb_cli_boundaries.py            5022 bytes  27d1bad194e755e3
+$ python3 -m unittest discover -s tests -p 'test_pc5ctl_usb*.py'
+  exit: 0
+  Ran 87 tests in 0.176s
+  OK

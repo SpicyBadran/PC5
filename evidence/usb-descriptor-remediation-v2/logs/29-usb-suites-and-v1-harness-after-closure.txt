@@ -1,0 +1,28 @@
+captured 2026-11-21T19:48:26Z
+$ python3 -m unittest discover -s tests -p 'test_pc5ctl_usb*.py'   (TMPDIR=/tmp)
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+
+$ python3 evidence/usb-descriptor-remediation-v1/mutation_harness.py   (the reviewed harness, unchanged)
+### m1-validation-follows-the-pathname
+tests run: 91; exit code: 1; assertion failures overall: 1
+### m2-inheritance-omitted
+tests run: 91; exit code: 1; assertion failures overall: 5
+### m3-wrong-descriptor-inherited
+tests run: 91; exit code: 1; assertion failures overall: 4
+### m4-final-identity-reread-skipped
+tests run: 91; exit code: 1; assertion failures overall: 1
+### m5-name-versus-descriptor-comparison-skipped
+tests run: 91; exit code: 1; assertion failures overall: 4
+### m6-partial-enumeration-accepted
+tests run: 91; exit code: 1; assertion failures overall: 2
+### m7-unreadable-topology-is-empty
+tests run: 91; exit code: 1; assertion failures overall: 1
+### m8-writability-not-checked
+tests run: 91; exit code: 1; assertion failures overall: 2
+### m9-open-failure-writes-by-name
+tests run: 91; exit code: 1; assertion failures overall: 1
+### baseline (unmutated)
+RESULT: PASS: baseline green and every mutation detected by its intended assertion
+v1-harness exit: 0

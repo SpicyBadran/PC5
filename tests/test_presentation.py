@@ -169,7 +169,9 @@ class CheckTest(unittest.TestCase):
             if entry.name == "assets":
                 continue
             (self.tmp / "docs" / entry.name).symlink_to(entry, target_is_directory=entry.is_dir())
-        for name in ("CONTRIBUTING.md", "LICENSE", "ci"):
+        # requirements-harness.txt is linked too: the README documents it at
+        # the repository root, and a fixture without it would report a dead link.
+        for name in ("CONTRIBUTING.md", "LICENSE", "requirements-harness.txt", "ci"):
             (self.tmp / name).symlink_to(REPO / name, target_is_directory=(REPO / name).is_dir())
         (self.tmp / "docs/assets").mkdir()
         for name, body in P.rendered(self.data).items():
@@ -313,7 +315,8 @@ class CommandContractTest(unittest.TestCase):
                 if entry.name != "assets":
                     (tmp / "docs" / entry.name).symlink_to(
                         entry, target_is_directory=entry.is_dir())
-            for name in ("CONTRIBUTING.md", "LICENSE", "ci", "brand"):
+            for name in ("CONTRIBUTING.md", "LICENSE", "requirements-harness.txt",
+                         "ci", "brand"):
                 (tmp / name).symlink_to(REPO / name,
                                         target_is_directory=(REPO / name).is_dir())
             (tmp / "docs/assets").mkdir(parents=True)

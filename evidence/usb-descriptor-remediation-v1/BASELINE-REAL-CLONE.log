@@ -1,0 +1,11 @@
+0
+--- tracked suite, real clone of HEAD (correctly prepared baseline) ---
+CLONE-HEAD Ran 889 tests in 77.061s
+CLONE-HEAD FAILED (failures=2, skipped=2)
+--- 91 USB files vs pristine production, in a real clone ---
+CLONE-HEAD-USB Ran 91 tests in 0.221s
+CLONE-HEAD-USB FAILED (failures=13, errors=1)
+Ran 889 tests in 78.546s
+OK (skipped=2)
+--- and the failing-TMPDIR control, kept as evidence of the misclassification trap ---
+1

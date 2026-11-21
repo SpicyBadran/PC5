@@ -208,7 +208,20 @@ A blocker is a dependency that cannot be satisfied here — a machine, a workflo
 
 ## Quick start
 
-Needs `gcc`, `binutils`, `make`, `python3` — nothing else.
+Needs `gcc`, `binutils`, `make`, `python3` — nothing else. Two suites inside
+`make check` drive the loader against an emulated firmware and need one pinned Python
+module, `unicorn==2.1.4`, listed in [`requirements-harness.txt`](requirements-harness.txt).
+Without it those tests **skip and say why**, and `make check` still reports
+`Ran 924 … OK (skipped=109)` — the same count, so a machine without the module cannot
+mistake a skipped suite for a passed one. With it they run: `OK (skipped=2)`.
+The install is a venv, because a distribution Python managed under PEP 668 refuses
+`pip install` outright, and because CI uses exactly this venv:
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-harness.txt
+export PATH="$PWD/.venv/bin:$PATH"    # so `make check` runs the venv's python3
+```
 
 ```sh
 make              # build/pc5.iso + sha256 + build/build-info.json
@@ -217,6 +230,7 @@ make check        # host unit tests, kernel unit tests, contract, docs and gener
 make roadmap      # validate the milestone graph, release isolation, destination path
 make boot-test    # boot the ISO in the emulator and assert the interface
 make docs-check   # every Markdown link, heading anchor and documented command resolves
+make citation-refs   # fetch the pull-request refs, for when evidence cites a commit that lives only on an open PR head
 make presentation # regenerate the figures and every generated README block
 make presentation-check  # read-only: are the generated files still current?
 ```
@@ -229,6 +243,7 @@ make presentation-check  # read-only: are the generated files still current?
 | `make roadmap` | the graph is consistent and the destination is still reachable |
 | `make boot-test` | PC5's own code boots under the v86 emulator and prints the expected interface |
 | `make docs-check` | no document links a missing file, a renamed heading or a removed target |
+| `make citation-refs` | the objects behind the evidence citations are present in this clone. A full clone of `main` resolves all 258 of them without this step; a tree that cites an open pull-request head, or one fetched with a history filter, cannot — and says so instead of implying the evidence is dead |
 | `make presentation` | rewrites the figures and the generated README blocks from the data |
 | `make presentation-check` | those files are current; part of `make check`, and it never writes |
 
@@ -251,6 +266,82 @@ and the date — is a separate, explicit act:
 python3 tools/validation.py run check verify boot-test stubtest ovmf-test
 python3 tools/validation.py list
 ```
+
+## Writing the image to a USB device
+
+`python3 tools/pc5ctl.py usb` is a **host-side** tool: it writes `build/pc5.iso` to a
+block device so a machine can boot from it. It is not a PC5 kernel feature — the
+kernel has no USB driver yet (`docs/KNOWN_LIMITATIONS.md`), which is why the tool runs
+on the machine you are writing **from**, before any boot.
+
+```sh
+python3 tools/pc5ctl.py usb --iso build/pc5.iso --device /dev/sdX
+# reads the image, re-verifies build/pc5.iso.sha256, prints the target and the
+# topology findings, and stops here. Re-run with --yes only after checking the path:
+python3 tools/pc5ctl.py usb --iso build/pc5.iso --device /dev/sdX --yes
+```
+
+**The boundary it enforces.** The target is compared against the storage that the
+running system is actually built on — not against a name the operator typed:
+
+| Rule | What happens |
+|---|---|
+| The device backing `/` | refused, by major:minor, whichever way the root is expressed (whole disk, partition, `/dev/root` alias) |
+| The whole disk carrying the root filesystem | refused |
+| Any **sibling partition** on that disk (e.g. `/dev/sda2` when `/` is on `/dev/sda1`) | refused |
+| **dm / md / LVM** relationships — the root's slaves and holders, transitively | refused for every device in that closure, so a member disk of the same RAID or the physical volume under a logical volume cannot be picked out as "unrelated" |
+| Checksum mismatch against the `.sha256` sidecar | refused before anything is opened |
+| No `--yes` | exits 2, nothing written; `--yes` never overrides a safety refusal |
+
+**Descriptor-bound identity.** A pathname is not an object: between a check and a write
+the name can be unlinked, re-pointed at another device node, or replaced by a symlink.
+So once the target is open, `pc5ctl` keeps that descriptor, asks the kernel what it
+holds (`fstat` → `major:minor`), evaluates the whole protection decision against
+**that identity**, and hands the **same descriptor** to `dd` — passed explicitly to the
+child (`pass_fds`) and addressed as `/proc/self/fd/N`, so the write cannot be redirected
+by a name. The name is consulted only to *refuse*: if it no longer resolves to the
+object being held, the write stops. Every failure path — open failure, a descriptor that
+cannot carry a write, an unreadable `/proc`, a `fstat` error, an identity that changed,
+a child that cannot be launched — is a refusal with `nothing was written` and a non-zero
+exit. There is no fallback to the pathname, because falling back is how a validated
+descriptor becomes an unvalidated name.
+
+**Unknown is not safe, and unreadable is not absent.** If a sysfs relationship cannot be
+read, if a partition entry appears and then vanishes mid-enumeration, if the root
+device has no sysfs entry, or if `/` turns out to be tmpfs/overlay/network with no single
+backing device, the answer is **refuse** — a partial list of protected devices is
+indistinguishable from a complete one at the point of decision, and that is exactly how
+a disk belonging to the running system gets erased.
+
+**What this cannot do.** No userspace code can make the topology atomic. `major:minor`
+says what the kernel reports *now*: a device-mapper table reload, an md add/remove, a
+partition-table rewrite, a root remount, or a replug that reuses a device number can all
+change what the same identity means **after** the last check. The decision is recomputed
+immediately before the child is launched, which shortens that window to microseconds
+without closing it. The operational consequence: do not write an image from a system
+whose own storage could be rearranged underneath you. See
+[`docs/engineering/USB-IDENTITY-BOUNDARY-DESIGN-v1.md`](docs/engineering/USB-IDENTITY-BOUNDARY-DESIGN-v1.md).
+
+**Automated tests, and their actual scope.** 91 tests in
+`tests/test_pc5ctl_usb_safety.py`, `tests/test_pc5ctl_usb_descriptor_identity.py` and
+`tests/test_pc5ctl_usb_cli_boundaries.py`: the topology rules, the descriptor boundary,
+the child-inheritance contract, and a real `/bin/dd` writing through a real inherited
+descriptor into a temporary **regular file**. Three mutation harnesses prove the tests have teeth:
+`evidence/usb-descriptor-remediation-v1/mutation_harness.py` (the nine reviewed mutants),
+`evidence/usb-descriptor-remediation-v2/mutation_harness_v2.py` (the same nine mutation
+texts, imported from the first, with an intention map that is measured and that fails if a
+named test stops discriminating), and `evidence/identity-boundary-v1/usb_identity_mutations.py`
+(the prior pass's eight). Restoring pathname-based validation, omitting `pass_fds`,
+inheriting the wrong descriptor, skipping the identity re-read, accepting a partial
+enumeration or reading an unreadable relationship as "empty" each fail a named assertion.
+
+These tests are **synthetic by design** — temporary files, a synthetic `/sys/dev/block`
+tree, and no device node is ever created or written. They establish that the guard's
+decisions and call sequence are what the code claims. They do **not** establish
+physical-device safety: no real disk, USB stick, firmware or machine has been used,
+`mknod` is not permitted here, and no `udisks`/`systemd-repart` interaction has been
+observed. **Writing media with this tool is therefore not deployment-approved: it
+remains blocked pending physical-device validation and explicit authorisation.**
 
 ## Hardware and compatibility
 

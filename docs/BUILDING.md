@@ -9,6 +9,16 @@
 | `make` | GNU make | top-level `Makefile` |
 | `python3` | 3.11 | ISO writer, verifier, firmware tool, tests |
 | `node` + `v86-system` | node 22 | only for `make boot-test` (`npm install v86-system`) |
+| `unicorn` (pinned `2.1.4`) | `requirements-harness.txt`, installed into `.venv` | the emulator-backed loader suites; without it `make check` skips 107 tests and says why, with it they run |
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-harness.txt
+export PATH="$PWD/.venv/bin:$PATH"
+```
+
+That is the same provisioning `ci/build.yml` performs. `pip install` straight into a
+distribution Python is refused under PEP 668, so the venv is not a preference here.
 
 The UEFI application in `boot/uefi/` uses the *same* toolchain: it is a PE32+
 image produced by `ld -m i386pep` (binutils' 64-bit PE emulation), so neither a
@@ -24,6 +34,9 @@ make info        # version, build id, timestamp, source list
 make             # build/pc5.iso, build/pc5.iso.sha256, build/build-info.json
 make unit        # host-side kernel unit tests (165 checks)
 make check       # unit tests + python test suite
+make citations-check  # every commit cited by the evidence documents resolves here
+make citation-refs    # fetch refs/pull/*/head: needed only for citations that point at an
+                      # open pull-request head, or in a filtered/partial clone
 make verify      # independent ISO verification (+ build/verify-report.json)
 make roadmap     # validate the milestone graph, release isolation and the destination path
 make uefi        # just the UEFI application and the FAT ESP (build/efi.img)

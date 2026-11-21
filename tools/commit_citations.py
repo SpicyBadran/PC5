@@ -56,6 +56,25 @@ Reachability is a different question, and the documents that cite an old revisio
 answer it themselves, in prose, at the point of citation. Confusing the two would
 force those documents to delete an accurate historical record to satisfy a checker.
 
+What a fresh clone can and cannot resolve
+-----------------------------------------
+Several documents cite the *head of a pull request* rather than a commit on `main` --
+that is the honest way to record "the revision this review was written against", and
+the head stays genuine history even when the branch is later rebased. But GitHub
+publishes pull-request heads only under `refs/pull/N/head`, and a default clone (and
+`actions/checkout`, even with `fetch-depth: 0`) does not fetch them. So in a fresh
+clone those citations are **unresolvable without being wrong**, and the gate says so
+while still failing, because a pass would be a claim it has not earned:
+
+    make citation-refs     # fetch +refs/pull/*/head:refs/remotes/origin/pr/* from a remote
+    make citations-check   # now every citation can actually be resolved
+
+`citation-refs` is a provisioning step, not a gate: it changes what the next check is
+able to see. The distinction matters because a repository cloned from a local path, or
+checked out from a bundle, has no pull refs to fetch at all -- and that must read as
+"this clone cannot verify those citations", never as "the citations are dead" and
+never as "they are fine".
+
 Exit status
 -----------
     0  every citation resolved
@@ -165,6 +184,54 @@ def object_type(root: Path, reference: str) -> str | None:
     return result.stdout.strip() or None
 
 
+def pr_ref_count(root: Path | None = None) -> int:
+    """How many pull-request head refs this clone can resolve through.
+
+    Zero does not mean the repository has no pull requests and it does not mean the
+    citations are dead: it means this clone never fetched `refs/pull/*`, so no
+    PR-head object can be resolved here. The count is what lets the report name the
+    difference between a stale citation and a clone that cannot check it, instead of
+    collapsing both into "does not name any Git object".
+    """
+    root = ROOT if root is None else root
+    result = subprocess.run(
+        ["git", "-C", str(root), "for-each-ref", "--format=%(refname)",
+         "refs/remotes/origin/pr/", "refs/pull/"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return 0
+    return len([line for line in result.stdout.splitlines() if line.strip()])
+
+
+def history_truncated(root: Path | None = None) -> str | None:
+    """Why this clone may hold too few objects to check anything, if it does.
+
+    A shallow or filtered clone cannot resolve a citation to a commit that its
+    fetch depth excluded, and the failure looks *identical* to a dead citation:
+    `git cat-file` answers "not found" either way. Naming the condition is the
+    difference between telling a reader to repair the documents and telling them
+    to repair the checkout, so the report has to know which one it is looking at.
+    Returns a short reason string, or None when the history is complete.
+    """
+    root = ROOT if root is None else root
+    if not is_repository(root):
+        return None
+    shallow = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--is-shallow-repository"],
+        capture_output=True, text=True,
+    )
+    if shallow.returncode == 0 and shallow.stdout.strip() == "true":
+        return "shallow clone (.git/shallow present; history depth limited by `--depth`)"
+    partial = subprocess.run(
+        ["git", "-C", str(root), "config", "--get", "extensions.partialclone"],
+        capture_output=True, text=True,
+    )
+    if partial.returncode == 0 and partial.stdout.strip():
+        return f"partial clone (objects fetched on demand, promisor {partial.stdout.strip()!r})"
+    return None
+
+
 def problems(root: Path | None = None) -> list[str]:
     """Every citation that does not resolve, as an actionable line per problem."""
     root = ROOT if root is None else root
@@ -226,6 +293,31 @@ def main(argv=None) -> int:
         print(f"[FAIL] {problem}")
     if found:
         print(f"{len(found)} dead commit reference(s) across {len(documents)} documents")
+        refs = pr_ref_count()
+        if refs == 0:
+            # Say what the clone could not see, without turning the failure into a
+            # pass: the citations remain unresolved here until the refs are fetched,
+            # and a reader who fetches and re-runs gets a real verdict either way.
+            print("CITATIONS INCOMPLETE: this clone cannot resolve the references above. "
+                  "That is not a pass, and it is not proof the citations are dead.")
+            truncated = history_truncated(ROOT)
+            if truncated:
+                print(f"    history truncated: {truncated}. A commit excluded by the "
+                      f"fetch depth is indistinguishable from a missing one here.")
+                print("    repair the checkout, not the documents: `git fetch --unshallow` "
+                      "or re-clone without --depth/--filter (CI: fetch-depth: 0), then "
+                      "re-run `make citations-check`.")
+            print("    this clone also holds no pull-request refs, so a citation to a PR "
+                  "head (refs/pull/N/head on the remote) cannot resolve here even when the "
+                  "object exists upstream: run `make citation-refs`, then re-run "
+                  "`make citations-check`.")
+            print("    If the count is still non-zero afterwards, the citations are dead "
+                  "for real (a rewrite or a deleted branch), and the documents need an "
+                  "addendum rather than an edit.")
+        else:
+            print(f"CITATION REFS PRESENT: {refs} pull-request ref(s) are fetched, so "
+                  f"every unresolved reference above is genuinely unresolvable in this "
+                  f"repository, not merely unfetched.")
         return 1
 
     checked = sum(

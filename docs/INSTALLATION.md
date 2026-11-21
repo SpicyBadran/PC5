@@ -16,12 +16,20 @@ independently.
 
 ## 2. Write it to a USB stick
 
-Safety rules enforced by `pc5ctl usb`:
+Safety rules enforced by `pc5ctl usb` (see the README section
+[Writing the image to a USB device](../README.md#writing-the-image-to-a-usb-device)
+for what each one covers):
 
-* the checksum is re-verified before writing,
+* the checksum is re-verified against `pc5.iso.sha256` before anything is opened,
 * the target must be a `/dev/` block device that exists,
-* the device holding `/` is refused,
-* nothing is written without `--yes`.
+* the device holding `/` is refused **by `major:minor`**, together with the whole disk
+  carrying it, that disk's other partitions, and every device in the root's dm/md
+  closure (slaves and holders, transitively),
+* the decision is made about the open file descriptor, not about the pathname: the
+  identity comes from `fstat` on it, the name is consulted only to refuse, and `dd` is
+  given that same descriptor (`pass_fds`, `of=/proc/self/fd/N`),
+* an unreadable or partial topology is a refusal, never an empty protected set,
+* nothing is written without `--yes`, and `--yes` cannot override a refusal.
 
 ```sh
 python3 tools/pc5ctl.py usb --iso build/pc5.iso --device /dev/sdX
@@ -142,10 +150,14 @@ disk). The MBR bootstrap loads the very same 4096-byte stage-1 loader that El
 Torito names, so both paths converge before the first PC5 instruction runs. On
 the hard-disk path the loader sees 512-byte units and says so.
 
-Writing to a stick is safe (`pc5ctl usb` verifies the checksum and refuses the
-root device), and the medium no longer has to be a CD on a firmware level. What
-remains unproven is the stick on real hardware: the emulator proves the MBR and
-the boot path, not that a particular BIOS likes them. `docs/KNOWN_LIMITATIONS.md`
+Writing to a stick is guarded (`pc5ctl usb` re-verifies the checksum, refuses the
+root storage by device number through its whole dm/md closure, and writes only through
+the descriptor it validated), and the medium no longer has to be a CD on a firmware
+level. What remains unproven is the stick on real hardware: the emulator proves the MBR
+and the boot path, not that a particular BIOS likes them, and the 91 `pc5ctl usb` tests
+run against synthetic sysfs trees and temporary regular files, never against a device
+node. Physical-device validation has not occurred, so writing media is not
+deployment-approved. `docs/KNOWN_LIMITATIONS.md`
 item 5 states the boundary, and `docs/HARDWARE_COMPATIBILITY.md` §6 lists the
 firmware behaviours that could still refuse the medium.
 

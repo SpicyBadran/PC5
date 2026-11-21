@@ -1,0 +1,17 @@
+apply --check: clean
+applied
+Ran 91 tests in 0.241s
+OK
+
+=== re-verification of the revised patch, 2026-11-21T17:15Z ===
+REMEDIATION.patch now: 55,331 B sha256 19793a838870913b3afa59e84994bdf1032ad5248d09b0a5192eac6c8a499dac
+supersedes 55,289 B sha256 65944ecd44922d67b7fa16d34c9716a2724a16e6e77a4d719d3655be0471e9ea
+(that earlier file is still recoverable byte-for-byte from recovery/pc5-usb-descriptor-remediation-20261121-v2.tar.gz,
+ which is how its size and hash were re-measured for this line rather than quoted from memory).
+reason: the archived patch omitted the widening of the three descriptor-interrogation
+  handlers to 'except (OSError, ValueError)'; the working tree has carried it since 16:47Z
+  and the test files were already identical. The deliverable is now the tree, not a near miss.
+git apply --check: exit 0; git apply: exit 0; the four patched files are byte-identical to the
+  working tree (diff -q, no output); USB inventory on the patched export:
+Ran 91 tests in 0.220s
+OK

@@ -27,6 +27,15 @@ except ImportError:
 import test_kernel64  # noqa: E402  (build helper, reused so both run once)
 
 
+#: Why a decorator and not a `setUpClass` guard: a skip raised from `setUpClass`
+#: replaces the whole class with a single summary entry, so the suite *shrinks* when
+#: the dependency is missing and a reader counting tests sees fewer tests run rather
+#: than the same tests reported as skipped.  Decorators keep the count stable and the
+#: reason attached to each test -- "skipped", never "passed", never "errored".
+REQUIRE_UNICORN = unittest.skipUnless(
+    HAVE_UNICORN, "unicorn is not installed (pip install -r requirements-harness.txt)")
+
+
 def _header_constant(name):
     """Evaluate a `#define` from the real kernel header by compiling it.
 
@@ -60,6 +69,7 @@ def artifacts():
 
 
 @unittest.skipUnless(HAVE_UNICORN, "unicorn is not installed (pip install unicorn)")
+@REQUIRE_UNICORN
 class StubFirmware64Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -326,6 +336,7 @@ class StubFirmware64Tests(unittest.TestCase):
 
 
 
+@REQUIRE_UNICORN
 class AllocateMaxAddressTests(unittest.TestCase):
     """EFI_ALLOCATE_MAX_ADDRESS: the bound the loader passes, and what it accepts.
 
@@ -521,6 +532,7 @@ class AllocateMaxAddressTests(unittest.TestCase):
         self.assertTrue(used, "the high window should have been used")
 
 
+@REQUIRE_UNICORN
 class PoolExhaustionTests(unittest.TestCase):
     """A firmware that runs out of memory must answer, not raise.
 
@@ -636,6 +648,7 @@ class PoolExhaustionTests(unittest.TestCase):
                                     f"{service.__name__} reported success while "
                                     f"the pool was empty")
 
+@REQUIRE_UNICORN
 class MemoryMapGrowthTests(unittest.TestCase):
     """The GetMemoryMap growth loop: what it frees, and which key it uses.
 
@@ -778,6 +791,7 @@ class MemoryMapGrowthTests(unittest.TestCase):
         self.assertEqual(machine.boot_service_calls_after_exit, [])
         self.assertIn(MARKER, trace.serial)
 
+@REQUIRE_UNICORN
 class DescriptorVersionTests(unittest.TestCase):
     """What memmap_desc_version means, and what the loader does with it.
 

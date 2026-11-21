@@ -1,0 +1,18 @@
+# F-1 provisioning demonstration — clean GitHub clone + patch, nothing else
+# captured 2026-11-21T19:21:33Z
+$ git clone --no-hardlinks --single-branch --branch main https://github.com/SpicyBadran/PC5.git /tmp/f6clone
+  HEAD: 56c58521580e88c4339ceb6eb40ce724a2bb533b
+$ git for-each-ref --format='%(refname)'
+  refs/heads/main
+  refs/remotes/origin/HEAD
+  refs/remotes/origin/main
+$ git apply /home/user/pc5/evidence/usb-descriptor-remediation-v2/USB-REMEDIATION-v2.patch
+  /home/user/pc5/evidence/usb-descriptor-remediation-v2/USB-REMEDIATION-v2.patch:1864: new blank line at EOF.
+  +
+  warning: 1 line adds whitespace errors.
+  git apply exit: 0
+$ make citation-refs
+  CITATION REFS OK: 34 pull-request head ref(s) fetched from 'origin' (was 0); `make citations-check` can now resolve PR-head citations.
+  citation-refs exit: 0
+$ git for-each-ref refs/remotes/origin/pr --format='%(refname)' | wc -l
+  34

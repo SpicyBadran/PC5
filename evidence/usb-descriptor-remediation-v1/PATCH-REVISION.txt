@@ -1,0 +1,6 @@
+supersedes: REMEDIATION.patch sha256 65944ecd44922d67b7fa16d34c9716a2724a16e6e77a4d719d3655be0471e9ea (55,289 B), the same patch three lines narrower:
+  it omitted the widening of the three descriptor-interrogation handlers from
+  'except OSError' to 'except (OSError, ValueError)', which the verified working tree
+  carries; the three test files were already byte-identical to the tree.
+  The earlier file is not deleted from the record: its hash stands in
+  REMOTE-ROUND-TRIP.log and in the published continuity archives v1/v2.
