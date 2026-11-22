@@ -63,8 +63,10 @@ The full suite, and the legs that this machine cannot close:
 
   $ make check                                                exit 0    Ran 971 tests in 357s ... OK
   $ python3 -m unittest discover -s tests -p 'test_*.py'      exit 0    Ran 971 tests in 338s ... OK
-  $ make -s ovmf-check                                        exit 2    (recipe exits 1) genuine OVMF firmware and/or QEMU is not available
-  $ make ovmf-test                                            exit 2    NOT TESTED: ... Install OVMF (edk2-ovmf / ovmf) and QEMU
+  $ make -s ovmf-check                                        exit 2    (recipe exits 1) "qemu: not found", every OVMF CODE candidate "-",
+                                                                         "ovmf-setup: qemu-system-x86_64 is still not on PATH"
+  $ make ovmf-test                                            exit 2    NOT TESTED: genuine OVMF firmware and/or QEMU is not
+                                                                         available on this machine. Install OVMF (edk2-ovmf / ovmf) and QEMU
 
 Both suite legs were run again after the commit this directory documents, and both were also
 run *during* the work - which is where one shape worth recording showed up. `make check`

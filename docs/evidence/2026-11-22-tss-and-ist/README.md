@@ -97,3 +97,44 @@ check nobody tried to break is a check nobody needs.
 * **No claim about `qemu-system-i386`.** The 32-bit boot test is an emulator with a hand-built
   memory map, and the 64-bit stub gate is Unicorn, not firmware. Both are PC5's code on a
   model of a machine, which is the most this repository can currently show.
+
+## Why the OVMF leg could not be closed here, measured
+
+`make ovmf-test` is the gate that would settle both of the paragraphs above, and it needs two
+artifacts this machine does not have. Recorded so the next attempt starts from a measurement
+rather than from a guess. `make -s ovmf-check` exits 1 inside `make`'s 2, and its own discovery
+output is the shortest form of the answer:
+
+```
+qemu: not found
+OVMF CODE candidates:
+  /usr/share/OVMF/OVMF_CODE_4M.fd                      -
+  /usr/share/OVMF/OVMF_CODE.fd                         -
+  /usr/share/ovmf/OVMF_CODE.fd                         -
+  /usr/share/edk2/ovmf/OVMF_CODE.fd                    -
+  /usr/share/edk2/x64/OVMF_CODE.4m.fd                  -
+  /usr/share/qemu/OVMF_CODE.fd                         -
+  /usr/share/OVMF/OVMF_CODE.secboot.fd                 -
+  /usr/share/edk2-ovmf/x64/OVMF_CODE.fd                -
+ovmf-setup: qemu-system-x86_64 is still not on PATH
+```
+
+Three things were checked beyond that, because "not found" is where an attempt usually starts
+rather than ends:
+
+* the binaries themselves - `qemu-system-x86_64`, `qemu-system-i386` and `qemu-img` are all
+  absent from `PATH`, and `/usr/lib/qemu` does not exist, so this is not a firmware-only gap;
+* it is not installable from the package manager here: `apt-cache policy qemu-system-x86
+  edk2-x86` prints nothing at all for either name, so there is no candidate version to fetch,
+  and the network this workspace can reach does not carry distribution archives;
+* the v86 assets this repository already uses for `make boot-test` ship `seabios.bin` and
+  `vgabios.bin` only, so the emulator we *do* have cannot stand in for the one we do not -
+  v86 boots PC5's 32-bit legacy image, not the 64-bit PE/COFF handover. There is no UEFI
+  firmware in that path to point the gate at.
+
+`make ovmf-test` states the same conclusion in its own words - `NOT TESTED: genuine OVMF
+firmware and/or QEMU is not available on this machine` - and
+`PC5_OVMF_CODE` / `PC5_OVMF_VARS` / `PC5_QEMU` are the override the gate reads, so a machine
+that has the packages closes the leg with one command and no change to this tree - which is
+the only reason `docs/evidence/validation/ovmf-test.json` still reads `not-tested` while
+`M2a` and `M2b` read `in_progress`.
