@@ -917,14 +917,20 @@ def main(argv=None) -> int:
             raise ReconcileError("--note writes into a receipt, and this run writes none: pass "
                                  "--record (or --record --bootstrap) with --note")
         if (args.bootstrap or args.dry_run) and not args.record:
-            which = ("--bootstrap and --dry-run" if (args.bootstrap and args.dry_run)
-                     else "--bootstrap" if args.bootstrap else "--dry-run")
+            flagged = [(" --bootstrap", args.bootstrap), (" --dry-run", args.dry_run)]
+            flagged = [name.strip() for name, given in flagged if given]
+            meaning = []
+            if args.bootstrap:
+                meaning.append("--bootstrap seeds the first receipt on a line of history")
+            if args.dry_run:
+                meaning.append("--dry-run prints the receipt a recording run would write")
+            which = " and ".join(flagged)
+            plural = len(flagged) > 1
             raise ReconcileError(
-                f"{which} only mean something to a run that would write a receipt: --bootstrap "
-                "seeds the first one on a line of history, --dry-run prints the one that would be "
-                "written. Without --record this run writes none, so the flag would have been "
-                "ignored and the answer above would have been the ordinary read. Pass --record, "
-                f"or drop {which}.")
+                f"{which} {'have' if plural else 'has'} no effect without --record: "
+                f"{'; '.join(meaning)}. This run writes no receipt, so the flag"
+                f"{'s' if plural else ''} would have been ignored and the answer would have been "
+                f"the ordinary read. Pass --record, or drop {which}.")
         if args.here and args.target:
             raise ReconcileError(
                 f"--here and --target name different things to reconcile: the branch you are "
@@ -962,9 +968,13 @@ def main(argv=None) -> int:
         return 1
     except ReconcileError as error:
         if args.json_mode:
+            # In machine mode the object *is* the answer: appending the prose line after it would
+            # leave a caller that redirects 2>&1 (or reads stderr, where errors belong) with an
+            # unparseable stream. The reason is already inside the object.
             print(json.dumps({"status": "error", "reason": str(error)},
                              indent=2, sort_keys=True), file=sys.stderr)
-        print(f"ERROR — {error}", file=sys.stderr)
+        else:
+            print(f"ERROR — {error}", file=sys.stderr)
         return 2
 
 

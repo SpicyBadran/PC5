@@ -52,7 +52,7 @@ Makefile are byte-identical: #42 changes no visual artefact and no generated blo
 | #40 | Ran 968, OK (skipped=109), exit 0 | exit 0 | exit 0 | exit 0 | exit 0 | **exit 0 `CURRENT`** | exit 0; `--here`/`--record` unrecognised |
 | #41 | Ran 1037, OK (skipped=110), exit 0 | exit 0 | exit 0 | exit 0 | exit 0 | exit 2 (tool says 1) | exit 1 `OUTSTANDING … bootstrap it` |
 | #42 | Ran 1044, OK (skipped=110), exit 0 | exit 0 | exit 0 | exit 0 | exit 0 | exit 2 (tool says 1) | exit 1 `OUTSTANDING … bootstrap it` |
-| fix branch | Ran 1048, OK (**skipped=109**), exit 0 | exit 0 | exit 0 | exit 0 | exit 0 | exit 2 (tool says 1) | exit 1 |
+| fix branch `34f5223…` | Ran 1048, OK (**skipped=109**), exit 0 | exit 0 | exit 0 | exit 0 | exit 0 | exit 2 (tool says 1) | exit 1 |
 
 `make presentation` then `git status --porcelain` is empty on all five (`git status exit=0`).
 Clones used `git clone https://github.com/SpicyBadran/PC5.git` + `git fetch origin <ref>`; two
@@ -72,3 +72,28 @@ independent clones of #42 produced the same head and tree (9e184d7714ae).
   AUDIT_TREE=/tmp/audit42/pr42 AUDIT_LABEL=pr42 TMPDIR=/tmp python3 raw/probe.py
 (set AUDIT_TREE to the tree under test; the harness overwrites lib.REAL/lib.TOOL with it, so the
 same batch runs against any head without editing the cases).
+
+## measured on this branch's head, through the public command (not through a fixture)
+
+  python3 tools/dashboard_reconcile.py --bootstrap                  -> exit 2  "--bootstrap has no effect without --record: …"
+  python3 tools/dashboard_reconcile.py --dry-run                    -> exit 2  "--dry-run has no effect without --record: …"
+  python3 tools/dashboard_reconcile.py --bootstrap --dry-run        -> exit 2  "…have no effect without --record…"
+  python3 tools/dashboard_reconcile.py --here --target origin/main  -> exit 2  "--here and --target name different things to reconcile…"
+  python3 tools/dashboard_reconcile.py --note x                      -> exit 2  (as #42)
+  python3 tools/dashboard_reconcile.py --boundary <sha>              -> exit 2  (as #42)
+  python3 tools/dashboard_reconcile.py --record --boundary <sha>     -> exit 2  (as #42)
+  tools/docs_check.py deleted, exempt range, read   -> #41 exit 0 CURRENT · #42 exit 1 "not what its data
+                                                        produces (verifier … is missing)" · this branch exit 2,
+                                                        and --record exit 2 "refusing to record a receipt over
+                                                        an unverifiable tree"
+  docs-only gate failure, exempt range              -> #41 exit 0 CURRENT · #42 blames generated output ·
+                                                        this branch exit 1 "the check that earns that
+                                                        exemption says no … documentation links … failed"
+  --json on a refused combination: stdout empty, stderr a single parseable object (fixed here; #42
+  appended "ERROR — …" after the object, so a caller reading the stream could not parse it)
+
+## re-read of GitHub after pushing this branch (07:1xZ, 2026-11-22)
+
+  #40 8e3f0b642a92c2d2e27ba6d2a066803a70165697 · #41 5bc5d5d4353f2e2c520224fd48711556b0054fc4
+  #42 709581450f24d61a23f4068c9b9df51e8729fc76 · main 52f682c8435956c8210b3189cad23ebea973d2de
+  all three still open/draft/mergeable-clean; this branch is #43, draft, based on #42's branch ref

@@ -1290,7 +1290,23 @@ class ReconcileScenarioTest(unittest.TestCase):
             self.assertEqual(done.returncode, 2,
                              f"{' '.join(argv)} without --record was ignored:\n{done.stdout}")
             self.assertIn("would have been ignored", done.stderr)
+            self.assertIn("no effect without --record", done.stderr)
+            for flag in argv:
+                self.assertIn(flag, done.stderr,
+                              "the refusal names every flag it is refusing, and says what each means")
             self.assertNotIn("CURRENT", done.stdout)
+            as_json = fx.reconcile(*argv, "--json")
+            self.assertEqual(as_json.returncode, 2, as_json.stdout + as_json.stderr)
+            self.assertEqual(as_json.stdout, "",
+                             "stdout stays empty on a refusal, so an empty answer with exit 2 can "
+                             "only mean 'no answer' — never 'nothing outstanding'")
+            try:
+                payload = json.loads(as_json.stderr)
+            except json.JSONDecodeError as exc:
+                self.fail(f"--json on a refused flag combination is not parseable ({exc}): "
+                          f"{as_json.stderr[:160]!r}")
+            self.assertEqual(payload["status"], "error")
+            self.assertIn("no effect without --record", payload["reason"])
         fx.bootstrap()
         here = fx.reconcile("--here")
         self.assertEqual(here.returncode, 0, here.stdout + here.stderr)
