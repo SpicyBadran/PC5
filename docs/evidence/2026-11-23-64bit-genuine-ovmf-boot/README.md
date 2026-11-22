@@ -43,9 +43,19 @@ timeout 260 "$QEMU" -machine q35 -m 512 \
 `BOOTX64.EFI` = `build/uefi64/bootx64.efi` and `KERNEL64.BIN` = `build/kernel64.bin`:
 
 ```
-$ sha256sum build/pc5.iso
-ff1c2baab92f7a4959346d22112c8a4b10f13644701e3d5e988be0c8701dbec1  build/pc5.iso   (1806336 bytes)
+$ SOURCE_DATE_EPOCH=1700000000 make BUILD=/tmp/r1 PC5_UEFI=64 iso   # and again into /tmp/r2
+$ sha256sum /tmp/r1/pc5.iso /tmp/r2/pc5.iso
+d8e4e2a70f195abca8c33a0f6f8ffee8f4d403630cccef9690e600ea20248caf  /tmp/r1/pc5.iso
+d8e4e2a70f195abca8c33a0f6f8ffee8f4d403630cccef9690e600ea20248caf  /tmp/r2/pc5.iso
 ```
+
+Two build directories, one digest: that is the release artifact, and it is the file booted below.
+Built without `SOURCE_DATE_EPOCH` the ISO differs (`ff1c2baab92f7a4959346d22112c8a4b10f13644701e3d5e988be0c8701dbec1`,
+also 1806336 bytes) because the FAT volume's timestamp and serial are taken from the clock; both
+digests booted to the same markers, and the boot-log line counts differ only in
+`PC5-64-TIMER spins=`. That is the reproducibility claim `docs/BUILDING.md` makes, and the
+`test_each_mode_rebuilds_byte_identically` case in `tests/test_release_esp.py` pins the pinned-epoch
+form. Quoting an unanchored digest as "the release hash" would have been the mistake.
 
 Two independent boots of the path are on file in this directory's log and in the notes: apart from
 one timing line (`PC5-64-TIMER spins=701` against `spins=5377`, TCG scheduling), the 68 lines of
