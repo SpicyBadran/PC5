@@ -312,17 +312,21 @@ presentation-check:
 	python3 tools/presentation.py check
 
 # A merge into `main` is the trigger for a dashboard review, and the review has to be
-# recorded rather than remembered.  `dashboard-reconcile` is read-only: it prints every
-# first-parent merge that has not been reconciled with the generated README and figure
-# yet (AGENTS.md).  `post-merge` runs the whole reconciliation, writing only the files
-# the generator owns.
+# recorded rather than remembered.  The two targets answer different questions:
+#
+#   dashboard-reconcile  audits what has LANDED — reads the receipt from `origin/main` and
+#                        lists every first-parent change since its boundary (AGENTS.md).
+#   post-merge           performs the duty on the branch you just merged into, which is not
+#                        on origin/main yet.  Reconciling the local HEAD is the only honest
+#                        target at that moment; `--here` records that fact in the receipt.
+#                        It regenerates, checks, and writes the receipt and nothing else.
 dashboard-reconcile:
-	python3 tools/dashboard_reconcile.py
+	python3 tools/dashboard_reconcile.py --target origin/main
 
 post-merge: presentation
 	python3 tools/presentation.py check
 	python3 tools/docs_check.py
-	python3 tools/dashboard_reconcile.py
+	python3 tools/dashboard_reconcile.py --here --record
 
 # A citation is only evidence while Git can hand the object back, and a rebase
 # rewrites commit ids silently.  `docs-check` validates links, anchors and make
