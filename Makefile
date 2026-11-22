@@ -520,7 +520,8 @@ stubtest: $(ISO)
 ovmf-test: $(ISO) $(BUILD)/efi.img
 	python3 tests/ovmf_boot.py --iso $(ISO) --efi-image $(BUILD)/efi.img \
 	  --kernel $(BUILD)/kernel.bin --json-out $(BUILD)/ovmf-report.json \
-	  --matrix-out $(BUILD)/ovmf-matrix.json $(OVMF_ARGS)
+	  --matrix-out $(BUILD)/ovmf-matrix.json \
+	  --serial-dir $(BUILD)/ovmf-serial $(OVMF_ARGS)
 
 # Provision the external dependencies of the gate above (QEMU and a real
 # TianoCore OVMF build) with the distribution's package manager, then print the

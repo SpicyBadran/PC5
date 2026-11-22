@@ -687,7 +687,7 @@ REQUIRED_MATRIX = [
     ("an invalid EFI image is rejected", "negative:bad-pe"),
     ("an ESP without BOOTX64.EFI is refused by firmware", "negative:no-boot-app"),
     ("a truncated medium does not boot", "negative:truncated-iso"),
-    ("insufficient memory fails safely", "negative:low-memory"),
+    ("a small machine refuses or reports its own memory", "negative:small-memory"),
     ("a boot that outlives its deadline is a timeout, not a pass", "negative:deadline"),
 ]
 
@@ -821,10 +821,11 @@ def negative_runs(report, args, found, data_dir, work):
         run = boot("no-boot-app", path)
         seen = classify(run)
         report.check("firmware refuses an ESP without BOOTX64.EFI (firmware fault)",
-                     not seen["loader_banner"] and
-                     (seen["firmware_refused"] or not seen["boot_ok"]),
-                     "the loader still ran" if seen["loader_banner"]
-                     else "no boot manager output")
+                     seen["firmware_banner"] and not seen["loader_banner"] and
+                     seen["firmware_refused"],
+                     "fw_ran=%s loader_ran=%s refused=%s" % (
+                         seen["firmware_banner"], seen["loader_banner"],
+                         seen["firmware_refused"]))
     except (OSError, subprocess.CalledProcessError) as exc:
         report.check("firmware refuses an ESP without BOOTX64.EFI (firmware fault)",
                      False, f"mutant could not be built: {exc}")
@@ -841,8 +842,12 @@ def negative_runs(report, args, found, data_dir, work):
         run = boot("bad-pe", path)
         seen = classify(run)
         report.check("firmware rejects a boot image with a broken PE32+ header "
-                     "(firmware fault)", not seen["boot_ok"] and not seen["kernel_entry"],
-                     seen["failure_codes"])
+                     "(firmware fault)",
+                     seen["firmware_banner"] and not seen["loader_banner"] and
+                     seen["firmware_refused"],
+                     "fw_ran=%s loader_ran=%s refused=%s" % (
+                         seen["firmware_banner"], seen["loader_banner"],
+                         seen["firmware_refused"]))
     except (OSError, subprocess.CalledProcessError) as exc:
         report.check("firmware rejects a boot image with a broken PE32+ header "
                      "(firmware fault)", False, f"mutant could not be built: {exc}")
@@ -887,8 +892,11 @@ def negative_runs(report, args, found, data_dir, work):
     run = boot("truncated-iso", truncated)
     seen = classify(run)
     report.check("firmware refuses a truncated ISO (firmware fault)",
-                 not seen["boot_ok"] and not seen["kernel_entry"],
-                 seen["failure_codes"])
+                 seen["firmware_banner"] and not seen["loader_banner"] and
+                 seen["firmware_refused"],
+                 "fw_ran=%s loader_ran=%s refused=%s" % (
+                     seen["firmware_banner"], seen["loader_banner"],
+                     seen["firmware_refused"]))
 
     # 6. The deadline itself: a one-second budget on the good ISO must be
     #    reported as a timeout, never as a pass.
@@ -904,22 +912,51 @@ def negative_runs(report, args, found, data_dir, work):
     report.check("a boot that outlives its deadline is reported as a timeout, "
                  "not as a pass", run["killed"] and run["stopped_on"] == "timeout")
 
-    # 7. A machine with too little memory for the loader's window: the boot must
-    #    stop with a diagnostic, never pretend it handed over.
-    vars_path = os.path.join(work, "vars-lowmem.fd")
+    # 7. A machine with far less memory than the development host.  The first
+    #    version of this control starved the guest to 24 MiB and required a PC5
+    #    diagnostic; on real firmware that run produced an EMPTY log, because 24
+    #    MiB is below OVMF's own floor -- the check was therefore measuring the
+    #    firmware's limit and calling it PC5's safety, and it failed whenever the
+    #    firmware simply refused to start.  An empty log is not evidence about PC5.
+    #    So the control now asks the question that is actually PC5's, on a machine
+    #    small enough to be a constraint and large enough for firmware to run:
+    #    either the boot stops with a PC5 diagnostic, or it boots and reports only
+    #    the memory this machine has.  Over-claiming memory is the failure that
+    #    matters -- a loader that mis-parses the map hands the kernel a frame
+    #    allocator full of pages that do not exist.
+    vars_path = os.path.join(work, "vars-small.fd")
     shutil.copyfile(found["vars"], vars_path)
-    serial = os.path.join(work, "serial-low-memory.log")
+    serial = os.path.join(work, "serial-small-memory.log")
+    small_mb = 64
     run = run_qemu(found["qemu"], data_dir, iso, vars_path, serial,
-                   min(args.timeout, 180), 24)
+                   min(args.timeout, 180), small_mb)
     seen = classify(run)
-    report.data["negative"]["low-memory"] = {
-        "memory_mb": 24, "markers": seen, "seconds": run["seconds"],
-        "serial_tail": run["serial"][-400:],
+    reported = seen["conventional_mib"]
+    kernel_reported = seen["kernel_memory_mib"]
+    refused = bool(seen["failure_codes"])
+    # None means the line was never printed, which is not the same as zero.
+    over_claims = (reported is not None and reported > small_mb) or \
+                  (kernel_reported is not None and kernel_reported > small_mb)
+    report.data["negative"]["small-memory"] = {
+        "memory_mb": small_mb, "markers": seen, "seconds": run["seconds"],
+        "conventional_mib": reported, "kernel_memory_mib": kernel_reported,
+        "refused_with_code": refused, "over_claims": over_claims,
+        "serial_bytes": len(run["raw_serial"]),
     }
-    report.check("insufficient memory fails safely, with no handover",
-                 not seen["boot_ok"] and not seen["kernel_entry"] and
-                 (bool(seen["failure_codes"]) or seen["firmware_refused"]),
-                 seen["failure_codes"] or run["serial"][-200:])
+    if not seen["firmware_banner"]:
+        report.check("a small machine stops with a diagnostic or boots with its "
+                     "own memory", False,
+                     "firmware printed nothing in %d bytes of log, so the run says "
+                     "nothing about PC5 (memory_mb=%d); raise the floor until the "
+                     "firmware itself boots" % (len(run["raw_serial"]), small_mb))
+    else:
+        report.check("a small machine stops with a diagnostic or boots with its "
+                     "own memory",
+                     (refused or seen["boot_ok"]) and not over_claims,
+                     "memory_mb=%d reported_conventional=%s kernel_reported=%s "
+                     "failures=%s boot_ok=%s" % (
+                         small_mb, reported, kernel_reported,
+                         seen["failure_codes"], seen["boot_ok"]))
 
 
 def _emit(report, args, exit_code):
