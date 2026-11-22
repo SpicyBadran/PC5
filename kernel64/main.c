@@ -23,6 +23,7 @@
 #include "idt64.h"
 #include "timer64.h"
 #include "madt64.h"
+#include "tss64.h"
 #include "serial64.h"
 
 #define CR0_PG (1ULL << 31)
@@ -513,6 +514,88 @@ static struct pc5_mem64 g_mem64;
  * must not stop a machine that would otherwise boot - but it is never reported as
  * success, and the stub gate requires status=ok, so a real regression is a build
  * failure rather than a footnote. */
+/* The pool's first consumer: the frames a task-state segment and its two interrupt
+ * stacks live in.  Reported the way the pool itself is reported - the fields printed are
+ * what the executed gate asserts, and a refusal is printed as a refusal rather than
+ * folded into a silence. */
+static struct pc5_tss64 g_tss64;
+
+static void report_tss(void)
+{
+    serial64_write("PC5-64-TSS status=");
+
+    if (!pc5_tss64_build(&g_mem64, &g_tss64)) {
+        serial64_write("unavailable reason=");
+        serial64_write(pc5_tss64_reason(&g_tss64));
+        serial64_write("\n");
+        return;
+    }
+    if (!pc5_tss64_install(&g_mem64, &g_tss64)) {
+        serial64_write("failed reason=");
+        serial64_write(pc5_tss64_reason(&g_tss64));
+        serial64_write(" frames=0\n");
+        pc5_tss64_release(&g_mem64, &g_tss64);
+        return;
+    }
+    /* Arming the routing itself, then taking it away again, on the live table: the rule
+     * being tested is the one that keeps a fault honest - a vector the kernel has a
+     * handler for accepts an IST index of 1..7, a vector it has none for accepts nothing,
+     * and 0 (which means "stay on the current stack", the thing a caller trying to be safe
+     * never wants) is refused.  Nothing here claims a double fault was delivered onto the
+     * stack: it claims the writer and the reader agree, on the table the CPU is actually
+     * using.  The presence rule is folded into the range rule because this kernel installs
+     * a present gate on every vector 0..31, so no in-range vector is absent to try. */
+    {
+        int out_of_range = idt64_set_ist(40, 1);    /* handler installed only for 0..31 */
+        int zero = idt64_set_ist(PC5_VECTOR_DOUBLE_FAULT, 0);
+        int too_big = idt64_set_ist(PC5_VECTOR_DOUBLE_FAULT, 8);
+        int armed = idt64_set_ist(PC5_VECTOR_DOUBLE_FAULT, PC5_TSS64_IST_DOUBLE_FAULT);
+        int reads_back = idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT) == PC5_TSS64_IST_DOUBLE_FAULT;
+        idt64_clear_ist(PC5_VECTOR_DOUBLE_FAULT);
+        int cleared = idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT) == 0;
+        if (out_of_range || zero || too_big || !armed || !reads_back || !cleared) {
+            pc5_tss64_release(&g_mem64, &g_tss64);
+            serial64_write("failed reason=ist-rule-broken frames=0\n");
+            return;
+        }
+        serial64_write("ok arm-rules=1");
+    }
+    /* And the state the boot path leaves behind: not armed, because TR does not name this
+     * TSS.  A gate claiming an interrupt stack the CPU cannot resolve turns a reportable
+     * fault into a lost one, which is worse than having no IST at all. */
+    if (idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT) != 0
+        || idt64_gate_ist(PC5_VECTOR_NMI) != 0) {
+        idt64_clear_ist(PC5_VECTOR_DOUBLE_FAULT);
+        idt64_clear_ist(PC5_VECTOR_NMI);
+        pc5_tss64_release(&g_mem64, &g_tss64);
+        serial64_write("failed reason=ist-armed-without-tr frames=0\n");
+        return;
+    }
+    serial64_write(" tss=");
+    serial64_hex(g_tss64.tss_base);
+    serial64_write(" gdt=");
+    serial64_hex(g_tss64.gdt_base);
+    serial64_write(" limit=");
+    serial64_dec(g_tss64.gdt_limit);
+    serial64_write(" gdtr=");
+    serial64_hex(g_tss64.gdtr_base);
+    serial64_write(" cpl=");
+    serial64_dec(g_tss64.cpl);
+    serial64_write(" ist1=");
+    serial64_hex(g_tss64.ist_top[PC5_TSS64_IST_DOUBLE_FAULT]);
+    serial64_write(" ist2=");
+    serial64_hex(g_tss64.ist_top[PC5_TSS64_IST_NMI]);
+    serial64_write(" ist-df=");
+    serial64_dec(idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT));
+    serial64_write(" ist-nmi=");
+    serial64_dec(idt64_gate_ist(PC5_VECTOR_NMI));
+    serial64_write(" frames=");
+    serial64_dec(g_tss64.frames_taken);
+    serial64_write(" free-after=");
+    serial64_dec(pc5_mem64_stats(&g_mem64)->free);
+    serial64_write(" tr=not-loaded reason=ltr-unverifiable-here\n");
+}
+
 static void report_memory(const struct pc5_boot64 *bi)
 {
     const char *reason = "unreported";
@@ -854,6 +937,7 @@ static void continue_on_handed_stack(void *argument)
     report_optional_resources(bi, &g_map);
     cpu64_print(&cpu);
     report_memory(bi);
+    report_tss();
     report_local_apic();
     report_timer();
     report_topology(bi);

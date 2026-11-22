@@ -481,6 +481,38 @@ refuses a `complete` state for either milestone while
 to `complete` that cites no evidence, and refuses any milestone whose cited evidence path
 does not exist.
 
+### 7.5c The first consumer: a TSS, two interrupt stacks, and the one step not taken
+
+The pool exists to be consumed, so the kernel now consumes it.  `kernel64/tss64.c` asks
+for three frames - one for a 104-byte task-state segment, one for the stack a double fault
+runs on (IST1), one for the NMI stack (IST2) - and keeps them for the life of the boot.
+It writes the TSS into the frame it was given, encodes a descriptor for it into a GDT the
+kernel owns, installs that table, and reads GDTR back to prove the install happened:
+`PC5-64-TSS status=ok ... gdt=0x129280 gdtr=0x129280 cpl=0 frames=3 free-after=617`.
+The executed gate requires the frames reported taken to be the frames the pool lost
+(`free 620 -> 617`), the three frames to be distinct, each IST to be a page top, and
+GDTR to equal what was written - so the accounting cannot drift from the report.
+
+**What it does not do is load TR, and that is a measurement, not an omission.** IST is
+only consulted once TR names the TSS, so the natural last step is `ltr`; under the
+emulator this repository can actually run, executing `ltr` raises an exception.  It was
+ruled out that the table is wrong: CPL was read as 0 first, LGDT on the preceding
+instruction succeeded, SGDT read the same base and limit back, the descriptor decodes to
+the granted frame with limit 103 and the available-64-bit-TSS access byte, and pointing
+the descriptor at the kernel's own image instead of a pool frame faults identically.  The
+kernel therefore *refuses to arm the routing* while TR does not name this TSS -
+`tr=not-loaded`, `ist-df=0`, `ist-nmi=0` - and the gate asserts all three.  Arming a gate
+onto an interrupt stack the CPU cannot resolve converts a fault the kernel reports into a
+fault nobody sees, which is the opposite of the point.
+
+The rules that would arm it are exercised on the live table anyway (absent gate refuses,
+index 0 refuses, index 8 refuses, index 1 arms and reads back, clearing clears), which is
+what `arm-rules=1` means, and `tests/test_tss64.py` compiles five mutants of the builder
+(a misaligned IST, an ignored ready flag, a release that forgets the stacks, a refusal
+that keeps the frames, a descriptor whose high base bytes land in the wrong field) and
+fails if any of them survives.  Loading TR on real firmware stays open, and is recorded
+as open: nothing here demonstrates a double fault running on its own stack.
+
 ### 7.6 CPU features and the SVM ladder
 
 `kernel64/cpu64.c` reports vendor, family/model/stepping, physical and virtual

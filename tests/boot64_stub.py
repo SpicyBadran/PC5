@@ -99,7 +99,7 @@ class StubFirmware64(fw.StubFirmware):
     LIMIT_WINDOW = (0x0FFFFFF000, 0x2000)
 
     def __init__(self, *args, high_allocations=False, allocations_at_limit=False,
-                 pool_reserve=None, **options):
+                 pool_reserve=None, fw_cpl=0, **options):
         # Set before the base constructor maps memory and loads the image.
         self.high_allocations = high_allocations
         self.high_next = self.HIGH_WINDOW[0]
@@ -109,6 +109,16 @@ class StubFirmware64(fw.StubFirmware):
         # Bytes to leave for the loader once firmware structures exist.
         # None means the whole pool; 0 models a firmware with no memory.
         self.pool_reserve = pool_reserve
+        # The privilege level firmware is at when it hands over.  A UEFI application
+        # runs at CPL 0, so 0 is the model; the earlier harness handed over with EDK2's
+        # OS-boot selectors (0x33/0x2b, ring 3), which made every privileged instruction
+        # in the kernel illegal and is why the GDT install could not be tested here at
+        # all.  `fw_cpl=3` models that handover on purpose: it is not a gate, because a
+        # ring-3 boot dies at the kernel's first LIDT long before the TSS is reached, but
+        # it lets a reader see which failures are about privilege and which are about the
+        # table.  The CPL rule itself is tested where it can be - in tests/test_tss64.py,
+        # which calls pc5_tss64_install() directly from a ring-3 process.
+        self.fw_cpl = fw_cpl
         super().__init__(*args, **options)
 
     def _map(self):
@@ -248,8 +258,12 @@ class StubFirmware64(fw.StubFirmware):
         # broken the harness rather than modelling a firmware without memory.
         if self.pool_reserve is not None:
             self.pool_next = max(self.pool_next, self.pool_ceiling() - self.pool_reserve)
-        uc.reg_write(UC_X86_REG_CS, 0x33)
-        uc.reg_write(UC_X86_REG_SS, 0x2B)
+        if self.fw_cpl == 0:
+            uc.reg_write(UC_X86_REG_CS, 0x08)
+            uc.reg_write(UC_X86_REG_SS, 0x10)
+        else:
+            uc.reg_write(UC_X86_REG_CS, 0x33)
+            uc.reg_write(UC_X86_REG_SS, 0x2B)
         # Firmware calls the entry point with a return address already on the
         # stack, so the entry sees RSP % 16 == 8; modelling that keeps the ms_abi
         # alignment checks honest instead of accidentally passing.

@@ -1,0 +1,25 @@
+The serial text the executed 64-bit gate read, copied verbatim out of build/stubtest64-report.json after
+`make kernel64 uefi64 stubtest64` in the tree this commit ships (Unicorn 2.1.4,
+paging on, PC5's own page tables installed by PC5's own loader, handover at CPL 0).
+Only the lines this milestone is about, in the order the kernel printed them:
+
+```
+PC5-64-IDT installed=256 present=32
+PC5-64-MAP entries=6 conventional_pages=927 bytes=0xc0
+PC5-64-IMAGE base=0x100000 size=0x32000 range=ok
+PC5-64-STACK rsp=0x2017c90 top=0x2018000 size=16384 aligned=16 range=ok
+PC5-64-MEM status=ok reason=ok frames=768 conventional=671 conventional_total=927 claimed=51 free=620 largest=512 bitmap=0x20000 span=0x100000000
+PC5-64-MEM-SELFTEST one=0x1000 three=0x2000 grant-in-map=1 bitmap-lie-refused=1 refusal-counted=1 disjoint=1 validated=1 claims-clean=1 zero-page-reserved=1 zero-refused=1 oversized-refused=1 refusal-clears-base=1 over-largest-refused=1 double-free-refused=1 unaligned-free-refused=1 first-fit-reuse=1 blocks-apart=1 free-restored=1 result=ok
+PC5-64-TSS status=ok arm-rules=1 tss=0x1000 gdt=0x129280 limit=47 gdtr=0x129280 cpl=0 ist1=0x3000 ist2=0x4000 ist-df=0 ist-nmi=0 frames=3 free-after=617 tr=not-loaded reason=ltr-unverifiable-here
+PC5-64BIT-LONG-MODE-OK
+PC5-64-DONE
+
+```
+
+Gate report: 41/41 checks passed, failures=[], level=stub-firmware-emulation.
+
+`PC5-64-TSS` is the line the nine new checks read. `frames=3` and `free-after=617`
+have to agree with the `free=620` on the `PC5-64-MEM` line, which is the point of
+printing both: the report is cross-checked against the allocator's own count rather
+than trusted. `ist1`/`ist2` name the two stack tops the TSS advertises while
+`ist-df`/`ist-nmi` stay 0 because `tr=not-loaded`.

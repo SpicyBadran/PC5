@@ -118,11 +118,11 @@ KERNEL64_CFLAGS := -m64 -std=gnu11 -O2 -Wall -Wextra -Werror -ffreestanding \
 KERNEL64_SRC := kernel64/start.S kernel64/main.c kernel64/serial64.c \
                 kernel64/cpu64.c kernel64/apic64.c kernel64/idt64.c \
                 kernel64/timer64.c kernel64/madt64.c kernel64/mem64.c \
-                kernel64/idt64.S
+                kernel64/tss64.c kernel64/idt64.S
 KERNEL64_HDR := kernel64/include/pc5_boot64.h kernel64/include/pc5_map.h \
                 kernel64/include/pc5_io.h kernel64/include/pc5_mem64.h \
                 kernel64/serial64.h kernel64/cpu64.h kernel64/apic64.h kernel64/idt64.h kernel64/timer64.h kernel64/madt64.h \
-                kernel64/kernel64.ld
+                kernel64/tss64.h kernel64/kernel64.ld
 LOADER64_SRC := boot/uefi64/uefi64_main.c boot/uefi64/pagetables.c \
                 boot/uefi64/bootx64.S
 LOADER64_HDR := boot/uefi64/pagetables.h boot/uefi64/handover64.h \
@@ -150,6 +150,7 @@ $(BUILD)/kernel64/pc5-64.elf: $(BUILD)/kernel64/start.o $(BUILD)/kernel64/main.o
                               $(BUILD)/kernel64/serial64.o $(BUILD)/kernel64/cpu64.o $(BUILD)/kernel64/apic64.o \
                               $(BUILD)/kernel64/idt64.o $(BUILD)/kernel64/timer64.o $(BUILD)/kernel64/madt64.o \
                               $(BUILD)/kernel64/mem64.o \
+                              $(BUILD)/kernel64/tss64.o \
                               $(BUILD)/kernel64/idt64.S.o kernel64/kernel64.ld
 	$(LD) -m elf_x86_64 -T kernel64/kernel64.ld -nostdlib -o $@ $(filter %.o,$^)
 

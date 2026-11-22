@@ -279,7 +279,8 @@
         "APIC bring-up, exception capture, a PIT-calibrated TSC and MADT CPU enumeration exist (7737d89, 094a03e, 43ab4af, 547ebd5), but nothing takes an interrupt",
         "no OVMF run and no physical machine has executed this path",
         "no interrupts, no SMP, no process separation, no SVM initialisation",
-        "the installed IDT is never exercised by a device: a fault reaches it, an external interrupt does not"
+        "the installed IDT is never exercised by a device: a fault reaches it, an external interrupt does not",
+        "the task-state segment and its interrupt stacks are built and their table is installed, but TR is not loaded, so IST stays unarmed - measured under the emulator, where executing LTR itself raises an exception"
       ],
       "evidence": [
         "docs/TEST_RESULTS.md",
@@ -292,22 +293,24 @@
       "id": "F64M",
       "title": "Memory-management groundwork for the 64-bit kernel",
       "milestone": "M2b",
-      "state": "partial: page tables, ownership rules, and a physical frame pool with no consumer",
+      "state": "partial: page tables, ownership rules, and a physical frame pool whose first consumer is the task-state segment and its interrupt stacks",
       "delivers": [
         "boot/uefi64/pagetables.c: identity-map construction, uncached marking, lookup",
         "ownership rules: the loader owns buffers until handover, the kernel owns tables, stack and image",
         "boot-info pointers constrained below 4 GiB and validated before use"
       ],
       "does_not_complete": [
-        "the frame pool has no kernel consumer: nothing in the running kernel allocates or frees through it for a subsystem",
-        "no per-process address spaces, no page-level protection, no DMA protocol",
+        "the pool's only consumers are the task-state segment and the two interrupt stacks it holds; there is no general-purpose heap, no page-level protection, no per-process address space and no DMA protocol",
+        "no frame is ever handed back: the TSS holds three for the life of the boot, and nothing else has taken or released one during an executed run",
         "the kernel does not yet map above 4 GiB, use NX, or provide guard pages"
       ],
       "evidence": [
         "tests/test_kernel64.py",
         "tests/test_mem64.py",
+        "tests/test_tss64.py",
         "docs/ARCHITECTURE.md",
-        "docs/evidence/2026-11-22-frame-allocator/README.md"
+        "docs/evidence/2026-11-22-frame-allocator/README.md",
+        "docs/evidence/2026-11-22-tss-and-ist/README.md"
       ]
     }
   ],
@@ -748,7 +751,9 @@
       "evidence": [
         "docs/ARCHITECTURE.md",
         "docs/evidence/2026-11-22-frame-allocator/README.md",
+        "docs/evidence/2026-11-22-tss-and-ist/README.md",
         "tests/test_mem64.py",
+        "tests/test_tss64.py",
         "tests/boot64_stubtest.py"
       ],
       "release_gating": true

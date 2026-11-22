@@ -36,17 +36,19 @@ def run_once(image, kernel, race_map_key=0, seed=None):
     return trace
 
 
-def _number(serial, key):
-    """The decimal value of `key=` on the PC5-64-MEM line, or None.
+def _number(serial, key, line="PC5-64-MEM", hex_ok=False):
+    """The value of `key=` on `line`, as an int, or None.
 
     Parsed rather than pattern-matched on the whole line: the gate has to fail with a
-    named reason when the kernel omits a field, not with a traceback.
+    named reason when the kernel omits a field, not with a traceback.  `hex_ok` is for
+    the fields a kernel prints as an address - and a field it cannot parse is None, which
+    every caller below treats as a failure, never as a zero.
     """
-    text = fields(serial, "PC5-64-MEM", key)
+    text = fields(serial, line, key)
     if text is None:
         return None
     try:
-        return int(text)
+        return int(text, 16) if (hex_ok and text.startswith("0x")) else int(text)
     except ValueError:
         return None
 
@@ -172,6 +174,68 @@ def checks_for(trace, expect_success=True):
               "claims-clean", "zero-page-reserved", "double-free-refused",
               "free-restored")))
 
+
+    # ------------------------------------------------------------------ TSS / IST
+    # The frame pool's first consumer.  Every value below is read off the line the kernel
+    # printed while running and cross-checked against the pool's own accounting: three
+    # frames reported as taken must be exactly three frames the pool no longer offers.
+    tss_line = "PC5-64-TSS"
+    tss_status = fields(serial, tss_line, "status")
+    check("the kernel gave the frame pool a consumer", tss_status == "ok",
+          f"status={tss_status} reason={fields(serial, tss_line, 'reason')}")
+    tss_frame = _number(serial, "tss", line=tss_line, hex_ok=True)
+    ist1 = _number(serial, "ist1", line=tss_line, hex_ok=True)
+    ist2 = _number(serial, "ist2", line=tss_line, hex_ok=True)
+    taken = _number(serial, "frames", line=tss_line)
+    free_after = _number(serial, "free-after", line=tss_line)
+    check("it took three frames and the pool lost three",
+          taken == 3 and free is not None and free_after == free - 3,
+          f"frames={taken} free {free} -> {free_after}")
+    check("the TSS and both interrupt stacks are three different frames",
+          tss_frame and ist1 and ist2 and len({tss_frame, ist1, ist2}) == 3,
+          f"tss={tss_frame} ist1={ist1} ist2={ist2}")
+    check("each IST is a page top, which is the only alignment the CPU is promised",
+          ist1 is not None and ist2 is not None
+          and (ist1 & 0xFFF) == 0 and (ist2 & 0xFFF) == 0
+          and (ist1 >> 12) != (ist2 >> 12),
+          f"ist1={ist1 if ist1 is None else hex(ist1)} ist2={ist2 if ist2 is None else hex(ist2)}")
+    # The span is read off the pool's own line rather than assumed: a grant the identity
+    # map does not cover is reachable only with paging changes, and the pool refuses it,
+    # so a report that names an address above the span is a report that is lying about
+    # something the pool already guaranteed.
+    span = _number(serial, "span", line="PC5-64-MEM", hex_ok=True)
+    check("every frame the TSS holds is inside the identity span the kernel mapped",
+          span is not None
+          and all(value is not None and 0 < value < span for value in (tss_frame, ist1, ist2)),
+          f"tss={tss_frame} ist1={ist1} ist2={ist2} span={span}")
+    check("the GDT the CPU reads is the GDT the kernel wrote",
+          fields(serial, tss_line, "gdt") == fields(serial, tss_line, "gdtr"),
+          f"gdt={fields(serial, tss_line, 'gdt')} gdtr={fields(serial, tss_line, 'gdtr')}")
+    # Only the positive case is assertible here: a handover at CPL 3 dies at the kernel's
+    # first LIDT, before the TSS is reached, so the refusal path has no serial line to
+    # check.  tests/test_tss64.py covers that rule by calling the guard from a ring-3
+    # process, which is the same privilege level, reached without the fault.
+    check("the table was installed at CPL 0",
+          fields(serial, tss_line, "cpl") == "0",
+          f"cpl={fields(serial, tss_line, 'cpl')}")
+    check("the IST arming rules hold on the live table",
+          fields(serial, tss_line, "arm-rules") == "1",
+          f"arm-rules={fields(serial, tss_line, 'arm-rules')}")
+    # The claim that must NOT be made: IST means something only once TR names this TSS,
+    # and this boot path does not load TR (see kernel64/tss64.h).  When the last step is
+    # wired up - on an emulator that runs LTR, or on firmware - this check goes red and
+    # says the report and the routing have to be updated together.
+    check("TR is reported unloaded and the gates say the same",
+          fields(serial, tss_line, "tr") == "not-loaded"
+          and fields(serial, tss_line, "ist-df") == "0"
+          and fields(serial, tss_line, "ist-nmi") == "0",
+          f"tr={fields(serial, tss_line, 'tr')} "
+          f"ist-df={fields(serial, tss_line, 'ist-df')} "
+          f"ist-nmi={fields(serial, tss_line, 'ist-nmi')}")
+    check("no exception was reported by the kernel across the boot that installed it",
+          "PC5-64-EXCEPTION" not in serial,
+          "the handler prints this line for any delivered fault, so its absence covers "
+          "the install and everything else on this stack")
 
     if expect_success:
         check("the success marker is present", MARKER in serial)
