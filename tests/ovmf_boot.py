@@ -660,6 +660,7 @@ def main(argv=None):
                          "PC5_OVMF_SECBOOT_CODE / PC5_OVMF_SECBOOT_VARS)", applicable=False)
 
     build_matrix(report)
+    matrix_failures(report, report.data["matrix"])
     if args.matrix_out:
         with open(args.matrix_out, "w") as handle:
             json.dump(report.data["matrix"], handle, indent=2)
@@ -670,6 +671,17 @@ def main(argv=None):
     _emit(report, args, exit_code=code)
     return code
 
+
+#: The two negatives whose verdict is not "firmware or the loader said no".
+#: `deadline` succeeds by killing the machine on the clock, and `small-memory`
+#: succeeds when the boot stops with a diagnostic *or* boots and reports no more
+#: memory than the guest has -- a successful boot on 64 MiB is the good outcome
+#: there.  Both are named once, used as the check's text and as the matrix row's
+#: text, and the run records the name in `negative:<key>["check"]` so the matrix
+#: inherits the verdict instead of guessing it from markers.
+DEADLINE_CHECK = "a boot that outlives its deadline is reported as a timeout, not as a pass"
+SMALL_MEMORY_CHECK = ("a small machine stops with a diagnostic or boots with its "
+                      "own memory")
 
 REQUIRED_MATRIX = [
     ("firmware recognises the PC5 boot medium", "cold"),
@@ -687,8 +699,8 @@ REQUIRED_MATRIX = [
     ("an invalid EFI image is rejected", "negative:bad-pe"),
     ("an ESP without BOOTX64.EFI is refused by firmware", "negative:no-boot-app"),
     ("a truncated medium does not boot", "negative:truncated-iso"),
-    ("a small machine refuses or reports its own memory", "negative:small-memory"),
-    ("a boot that outlives its deadline is a timeout, not a pass", "negative:deadline"),
+    (SMALL_MEMORY_CHECK, "negative:small-memory"),
+    (DEADLINE_CHECK, "negative:deadline"),
 ]
 
 
@@ -718,14 +730,32 @@ def build_matrix(report):
             rows.append({"requirement": name, "source": f"OVMF {source} boot",
                          "state": "verified" if ok else "not-tested"})
         else:
-            entry = negatives.get(source.split(":", 1)[1], {})
+            key = source.split(":", 1)[1]
+            entry = negatives.get(key, {})
             markers = entry.get("markers") or {}
             ran = bool(entry)
             refused = bool(markers.get("failure_codes")) or markers.get("firmware_refused")
             good = ran and refused and not markers.get("boot_ok")
+            # Not every negative is a refusal.  `deadline` passes by killing the
+            # machine on the clock, and `small-memory` passes when the boot stops
+            # with a diagnostic *or* boots and reports no more than the machine
+            # has -- a boot on a 64 MiB guest is the good outcome there.  Those
+            # rows' verdict is whatever the check they drive concluded, so ask the
+            # check; the generic refusal rule is only the fallback for a negative
+            # that has no check of its own.  Without this the matrix said
+            # `failed` for two rows while `make ovmf-test` exited 0 on the same
+            # run -- the harness's summary and its matrix disagreed, and only the
+            # exit code was wired into CI.
+            driven = entry.get("check")
+            by_name = {check["name"]: check for check in report.checks}
+            if driven in by_name:
+                state = {"pass": "verified", "fail": "failed",
+                         "skip": "not-tested"}[by_name[driven]["state"]]
+            else:
+                state = ("verified" if good else
+                         ("not-tested" if not ran else "failed"))
             rows.append({"requirement": name, "source": f"OVMF negative run ({source})",
-                         "state": "verified" if good else
-                                  ("not-tested" if not ran else "failed")})
+                         "state": state})
 
     # Rows whose honest evidence lives in another gate.  They are listed so the
     # matrix is complete, and they never inherit this run's result.
@@ -748,6 +778,20 @@ def build_matrix(report):
     ])
     data["matrix"] = rows
     return rows
+
+
+def matrix_failures(report, rows):
+    """Turn a row nobody verified into a check, so the exit status cannot disagree.
+
+    `build_matrix` used to be cosmetic: two rows read `failed` in
+    `ovmf-matrix.json` while `make ovmf-test` exited 0 on the same run, because
+    the run's status came only from the check list.  A summary that can be green
+    over a matrix that says otherwise is not a gate.
+    """
+    broken = [row["requirement"] for row in rows if row["state"] == "failed"]
+    if broken:
+        report.check("every required matrix row this run claims to verify is verified",
+                     False, "matrix rows failed: " + "; ".join(broken))
 
 
 def secure_boot_verdict(seen):
@@ -909,8 +953,8 @@ def negative_runs(report, args, found, data_dir, work):
         "killed": run["killed"], "seconds": run["seconds"],
         "markers": classify(run),
     }
-    report.check("a boot that outlives its deadline is reported as a timeout, "
-                 "not as a pass", run["killed"] and run["stopped_on"] == "timeout")
+    report.check(DEADLINE_CHECK, run["killed"] and run["stopped_on"] == "timeout")
+    report.data["negative"]["deadline"]["check"] = DEADLINE_CHECK
 
     # 7. A machine with far less memory than the development host.  The first
     #    version of this control starved the guest to 24 MiB and required a PC5
@@ -944,19 +988,18 @@ def negative_runs(report, args, found, data_dir, work):
         "serial_bytes": len(run["raw_serial"]),
     }
     if not seen["firmware_banner"]:
-        report.check("a small machine stops with a diagnostic or boots with its "
-                     "own memory", False,
+        report.check(SMALL_MEMORY_CHECK, False,
                      "firmware printed nothing in %d bytes of log, so the run says "
                      "nothing about PC5 (memory_mb=%d); raise the floor until the "
                      "firmware itself boots" % (len(run["raw_serial"]), small_mb))
     else:
-        report.check("a small machine stops with a diagnostic or boots with its "
-                     "own memory",
+        report.check(SMALL_MEMORY_CHECK,
                      (refused or seen["boot_ok"]) and not over_claims,
                      "memory_mb=%d reported_conventional=%s kernel_reported=%s "
                      "failures=%s boot_ok=%s" % (
                          small_mb, reported, kernel_reported,
                          seen["failure_codes"], seen["boot_ok"]))
+    report.data["negative"]["small-memory"]["check"] = SMALL_MEMORY_CHECK
 
 
 def _emit(report, args, exit_code):
