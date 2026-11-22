@@ -102,10 +102,59 @@ class FoundationTests(unittest.TestCase):
                 self.assertTrue(os.path.exists(os.path.join(ROOT, path)), path)
 
     def test_the_long_mode_work_is_a_foundation_not_a_completed_milestone(self):
+        """The six levels of "done", measured, not asserted from prose.
+
+        M2a's state used to be pinned to `not_started` because nothing on the boot
+        path had run on real firmware.  That made the graph deny work that exists,
+        which is its own kind of false report: the APIC, IDT, TSC and MADT code is
+        in `kernel64/` and is tested on the host and under the emulated 64-bit stub
+        firmware.  The rule that actually protects the reader is the ceiling, not the
+        floor: while the OVMF record says `not-tested`, no 64-bit milestone may claim
+        `complete`.
+        """
         data = graph()
         self.assertIn("F64", {foundation["id"] for foundation in data["foundations"]})
-        self.assertEqual(by_id(data)["M2a"]["state"], "not_started",
-                         "no OVMF run and no hardware run means M2a is not started")
+        m2a = by_id(data)["M2a"]
+        self.assertIn(m2a["state"], ("in_progress", "complete"))
+        for path in m2a["evidence"]:
+            self.assertTrue(os.path.exists(os.path.join(ROOT, path)),
+                            f"M2a cites evidence that does not exist: {path}")
+
+    def test_no_64bit_milestone_is_complete_while_ovmf_is_untested(self):
+        ovmf = os.path.join(ROOT, "docs/evidence/validation/ovmf-test.json")
+        if not os.path.exists(ovmf):
+            self.skipTest("no OVMF validation record has been filed")
+        with open(ovmf, encoding="utf-8") as handle:
+            record = json.load(handle)
+        if record.get("result") == "passed":
+            self.skipTest("OVMF ran on this machine; the ceiling no longer applies")
+        for milestone in graph()["milestones"]:
+            if milestone["id"] in ("M2a", "M2b"):
+                self.assertNotEqual(
+                    milestone["state"], "complete",
+                    f"{milestone['id']} is complete while the OVMF gate reports "
+                    f"{record.get('result')!r}")
+
+    def test_a_state_promotion_without_evidence_is_rejected(self):
+        """Flipping M2a to `complete` with no evidence cited must fail the gate."""
+        data = graph()
+        broken = json.loads(json.dumps(data))
+        for milestone in broken["milestones"]:
+            if milestone["id"] == "M2a":
+                milestone["state"] = "complete"
+                milestone["evidence"] = []
+        errors = roadmap.validate(broken, root=ROOT)
+        self.assertTrue(any("complete but no evidence" in error for error in errors), errors)
+
+    def test_a_cited_evidence_path_that_does_not_exist_is_rejected(self):
+        data = graph()
+        broken = json.loads(json.dumps(data))
+        for milestone in broken["milestones"]:
+            if milestone["id"] == "M2b":
+                milestone["evidence"] = ["docs/evidence/no-such-record.md"]
+        errors = roadmap.validate(broken, root=ROOT)
+        self.assertTrue(any("evidence path does not exist" in error for error in errors),
+                        errors)
 
     def test_a_foundation_without_a_completion_statement_is_rejected(self):
         data = graph()

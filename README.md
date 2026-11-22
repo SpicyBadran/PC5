@@ -68,12 +68,12 @@ and forbids placing them on anything that depicts Sony's software.
 | | |
 |---|---|
 | Product version | `0.2.0` (single source: `Makefile VERSION`) |
-| Roadmap document | `0.4.0-dev`, updated 2026-11-16 |
+| Roadmap document | `0.4.0-dev`, updated 2026-11-22 |
 | Milestones | 35 in 14 workstreams |
 | Complete | 9 |
-| In progress | 2 |
+| In progress | 4 |
 | Blocked | 6 |
-| Not started | 18 |
+| Not started | 16 |
 | Destination | `M19` — Genuine system software boots on PC5 (DESTINATION) |
 | Destination state | **BLOCKED** |
 | Last recorded ISO verification | passed @ 9fdba4f |

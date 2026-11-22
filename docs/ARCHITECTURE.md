@@ -459,6 +459,28 @@ long-mode execution of the linked kernel under Unicorn), and genuine firmware
 (`make ovmf-test`), which this machine cannot run at all and which therefore has **not**
 verified the allocator on OVMF or on a physical PC.
 
+### 7.5b How far the boot path is actually verified
+
+"Done" has six levels here, and the roadmap records them instead of collapsing them:
+
+| level | M2a (long mode, APIC, timers, CPU enumeration) | the frame pool (§7.5a) |
+| --- | --- | --- |
+| implemented | yes - `7737d896ebcfd126fb2aebc161c9bb249115c4d1`, `094a03e5a895cf9212cc8134397ccb9361ae2261`, `43ab4af9f10c272be7752d65dd9551e285b69836`, `547ebd5cff04b87330d95807a90795d9ac4d66d0` | yes - `7fac313668a13511f4278fc27a8bed463b442fcd` |
+| host-tested | yes - `python3 -m unittest tests.test_apic64 tests.test_idt64 tests.test_timer64 tests.test_madt64` | yes - `python3 -m unittest tests.test_mem64` |
+| stub-firmware-tested | yes - executed in long mode under Unicorn by `make stubtest64` | yes - the same gate, and its battery lines |
+| genuine-UEFI-tested | **no** - `make ovmf-test` reports NOT TESTED here (no OVMF image, no QEMU) | **no** |
+| physical-hardware-tested | **no** - no machine has run this kernel | **no** |
+| outstanding acceptance criteria | interrupt delivery from a device, a second CPU brought up, per-machine SVM records in the qualification list | a kernel subsystem that allocates through it, and the same measurements on firmware |
+
+M2a and M2b are therefore `in_progress`, not `not_started` and not `complete`: the code
+and its two lower verification levels are real and re-runnable, the two upper levels have
+never happened, and `make ovmf-test` exits 2 with `NOT TESTED` on this machine rather
+than passing. The ceiling is enforced, not promised - `tests/test_roadmap_dependencies.py`
+refuses a `complete` state for either milestone while
+`docs/evidence/validation/ovmf-test.json` still records `not-tested`, refuses a promotion
+to `complete` that cites no evidence, and refuses any milestone whose cited evidence path
+does not exist.
+
 ### 7.6 CPU features and the SVM ladder
 
 `kernel64/cpu64.c` reports vendor, family/model/stepping, physical and virtual
