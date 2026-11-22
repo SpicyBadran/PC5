@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="382" viewBox="0 0 1200 382" role="img" aria-labelledby="t d">
   <title id="t">PC5 project dashboard</title>
-  <desc id="d">9 of 35 milestones complete across 14 workstreams, 2 in progress, 6 blocked, destination M19 blocked; the latest recorded verification and test results are stamped with the commit they ran at.</desc>
+  <desc id="d">9 of 35 milestones complete across 14 workstreams, 4 in progress, 6 blocked, destination M19 blocked; the latest recorded verification and test results are stamped with the commit they ran at.</desc>
   <rect width="1200" height="382" fill="#0b0f14"/>
   <text x="48" y="44" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="20" fill="#e6edf3" font-weight="bold" text-anchor="start">PC5 DASHBOARD</text>
   <text x="48" y="68" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">every number below is generated from roadmap.json and the committed validation records</text>
@@ -14,7 +14,7 @@
   <text x="442" y="170" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">defined</text>
   <rect x="796" y="92" width="356" height="86" rx="10" fill="#131a23" stroke="#38bdf8"/>
   <text x="816" y="118" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start" letter-spacing="1.5">IN PROGRESS</text>
-  <text x="816" y="154" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="26" fill="#38bdf8" font-weight="bold" text-anchor="start">2</text>
+  <text x="816" y="154" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="26" fill="#38bdf8" font-weight="bold" text-anchor="start">4</text>
   <text x="816" y="170" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">milestones</text>
   <rect x="48" y="196" width="356" height="86" rx="10" fill="#0f151d" stroke="#f87171"/>
   <text x="68" y="222" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start" letter-spacing="1.5">BLOCKED</text>
@@ -22,7 +22,7 @@
   <text x="68" y="274" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">milestones</text>
   <rect x="422" y="196" width="356" height="86" rx="10" fill="#0f151d" stroke="#243040"/>
   <text x="442" y="222" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start" letter-spacing="1.5">NOT STARTED</text>
-  <text x="442" y="258" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="26" fill="#8b98a8" font-weight="bold" text-anchor="start">18</text>
+  <text x="442" y="258" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="26" fill="#8b98a8" font-weight="bold" text-anchor="start">16</text>
   <text x="442" y="274" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">milestones</text>
   <rect x="796" y="196" width="356" height="86" rx="10" fill="#0f151d" stroke="#f87171"/>
   <text x="816" y="222" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start" letter-spacing="1.5">DESTINATION</text>

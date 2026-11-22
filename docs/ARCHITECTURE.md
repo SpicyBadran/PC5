@@ -337,6 +337,7 @@ What the kernel establishes before using anything (in this order):
 | memory map | the map is non-empty, its byte count is a multiple of the stride, fits in `MEMMAP_MAX_BYTES`, every descriptor is self-consistent (nonzero page count, no wrap at `physical_start + page_count·4096`, a known type), **and the set is validated as a set**: no two descriptors may claim the same physical bytes. Overlap — partial, nested, duplicate, or across conflicting types — is refused (`bootinfo-memmap-overlap`) rather than resolved by picking whichever descriptor is convenient, and this happens before any range is checked against the map |
 | mandatory ranges | kernel image (exactly the linked size, at the link address), stack (page-aligned top, sane size, no underflow), page tables (aligned, 3…514 pages, no overflow, and `identity_span == (pages − 2)·512·2 MiB`), the loader's own image, and the memory-map buffer are each inside the span **and** covered by memory of an acceptable type |
 | environment | `CR0.PG`, `CR4.PAE`, `CR3` equals `pagetable_addr`, 64-bit operand size and arithmetic really work, `RSP` is inside the declared stack and 16-byte aligned, and CPUID reports long mode; the CPU's physical address width is checked when CPUID reports one |
+| frame pool | the map is turned into a bitmap the kernel can allocate from: only `EfiConventionalMemory` inside the identity span, with the kernel image, the stack, the page tables, the boot info, the map buffer, the loader's image and the zero page removed from it; a map the bitmap cannot describe is refused rather than managed partially |
 | optional resources | framebuffer and RSDP are validated (geometry, no overflow, inside the span, memory type, `"RSD PTR "` signature for the RSDP). The framebuffer's pixel format must be one of the two direct-colour layouts the protocol can describe; a bit-mask layout or `PixelBltOnly` is classified unusable rather than interpreted. A resource that fails is reported as `usability=unsupported reason=…`; it is **never** dereferenced and never called usable |
 
 Memory types are a contract, not a guess: the loader's own ranges accept
@@ -382,10 +383,13 @@ counts, and the marker is never printed by the loader.
 ### 7.5 Memory foundation: what exists and what does not
 
 Exists: a page-table builder with unit tests, the L4/L3/L2 split, uncached
-framebuffer marking, an ownership protocol, a validated boot-info structure, and
-a physical memory map the kernel can use as the input to an allocator.
+framebuffer marking, an ownership protocol, a validated boot-info structure, a
+physical memory map the kernel validates as a set, and a frame pool over that map
+(`mem64.c`, §7.5a) that hands out only conventional memory below the identity span —
+with no consumer inside the kernel yet, which is what makes it safe rather than useful.
 
-Does not exist: a physical allocator, per-process address spaces, page-level
+Does not exist: a *consumer* of the frame pool (no subsystem allocates a page yet),
+a virtual-memory allocator, per-process address spaces, page-level
 protection, guard pages, NX use (reported by CPUID, not yet set in EFER), any
 mapping above 4 GiB, or any DMA protocol. No process-level protection is
 claimed, because none has been implemented.
@@ -394,6 +398,120 @@ Nothing above 4 GiB is mapped, and nothing pretends to be: a framebuffer or RSDP
 above the span arrives as an explicit "unmapped" flag with a zero address, and an
 application that firmware placed above the span is refused before `CR3` changes.
 Widening the map is future work, not a silent behaviour.
+
+### 7.5a The frame pool: what it manages, and every way it refuses
+
+`kernel64/mem64.c` turns the handover map into a first-fit page-frame pool: one bit per
+4 KiB frame, set means *not available*. Everything about it is a refusal, because a
+kernel this early cannot recover from a wrong grant:
+
+  * the pool begins **all-claimed** and only what the map proves is conventional is
+    opened up; filling it the other way round would hand out any region a map failed to
+    mention;
+  * a conventional region that reaches past `identity_span` contributes only the pages
+    below it — a frame above the map the kernel is running on faults instead of working;
+  * if the map reaches past what the bitmap can describe, init **fails** with
+    `map-above-bitmap-cap` rather than forgetting the frames above the cap: a pool that
+    silently ignored the top of RAM would report it as unavailable, and the kernel would
+    believe the machine had less memory than firmware said it had. The kernel's own
+    bitmap is `PC5_IDENTITY_LIMIT / 4096 / 8` = 128 KiB — derived from the protocol's
+    limit, not chosen — so no map the protocol is allowed to state can outgrow it, and
+    the refusal remains reachable only for a caller that passes a smaller buffer (which
+    `tests/test_mem64.py` pins);
+  * every grant is re-derived at allocation time (the map must still cover the run, and
+    the run must touch nothing claimed), so a bitmap edited behind the pool's back cannot
+    produce an allocation. Two layers assert that: `tests/test_mem64.py`, and — since the
+    in-kernel battery clears frame 0's bit and demands the grant still be refused
+    (`bitmap-lie-refused=1`) — `make stubtest64` as well. The second one exists because
+    the first was not enough: deleting the re-check left the emulator boot reporting
+    31/31 OK, which is how you find out a guard is only tested somewhere else;
+  * `free` refuses a range it never granted, including the zero page and the kernel's own
+    image, so a stray `free(0)` cannot put the pages the kernel stands on back into
+    circulation;
+  * `0` is never a success value *and* an address at once: `pc5_mem64_alloc` reports
+    granted/refused separately, clears its out-parameter on a refusal, and frame 0 is
+    reserved by policy. The sentinelled version of this API had exactly that bug, and the
+    executed stub gate caught it on the first run — the host battery asserts it now too.
+
+The pool reports itself once per boot as `PC5-64-MEM` (`status`, `frames`,
+`conventional`, `conventional_total`, `claimed`, `free`, `largest`, `span`), followed by
+`PC5-64-MEM-SELFTEST`, which allocates, frees, re-allocates, and tries every way of
+cheating the pool. The self-test **dereferences nothing**: an earlier version wrote a
+pattern into the page it had just been granted, which passed the stub firmware (whose map
+backs the whole window) and faulted the synthetic machine in `tests/test_kernel64.py`,
+whose does not — 41 contract tests failing on a line that was not testing them. What
+"the page is usable" means here is a property of the map and the span, so that is what is
+asserted. A pool too small for the battery reports `result=skipped`, and a pool whose
+battery disagrees marks itself `ready = 0` and reports
+`status=unavailable reason=mem64-selftest-failed` rather than halting a boot that has
+nothing to allocate yet. `conventional` and `claimed` obey
+`conventional = claimed + free`, and `conventional_total` must equal the
+`conventional_pages` the map validation counted — two independent counts over the same
+descriptors, compared by `make stubtest64`. A map the pool cannot support is reported as
+`status=unavailable reason=…` and the boot continues: nothing in the kernel allocates
+from it yet, so refusing to *manage* memory must not stop a machine that would otherwise
+boot — but the executed gate requires `status=ok`, so it can never quietly regress.
+
+Three layers check this, and they are deliberately not interchangeable: the host battery
+(`python3 -m unittest tests.test_mem64`, which also compiles three mutants of `mem64.c`
+and fails if any of them passes), the executed 64-bit stub gate (`make stubtest64`, real
+long-mode execution of the linked kernel under Unicorn), and genuine firmware
+(`make ovmf-test`), which this machine cannot run at all and which therefore has **not**
+verified the allocator on OVMF or on a physical PC.
+
+### 7.5b How far the boot path is actually verified
+
+"Done" has six levels here, and the roadmap records them instead of collapsing them:
+
+| level | M2a (long mode, APIC, timers, CPU enumeration) | the frame pool (§7.5a) |
+| --- | --- | --- |
+| implemented | yes - `7737d896ebcfd126fb2aebc161c9bb249115c4d1`, `094a03e5a895cf9212cc8134397ccb9361ae2261`, `43ab4af9f10c272be7752d65dd9551e285b69836`, `547ebd5cff04b87330d95807a90795d9ac4d66d0` | yes - `7fac313668a13511f4278fc27a8bed463b442fcd` |
+| host-tested | yes - `python3 -m unittest tests.test_apic64 tests.test_idt64 tests.test_timer64 tests.test_madt64` | yes - `python3 -m unittest tests.test_mem64` |
+| stub-firmware-tested | yes - executed in long mode under Unicorn by `make stubtest64` | yes - the same gate, and its battery lines |
+| genuine-UEFI-tested | **no** - `make ovmf-test` reports NOT TESTED here (no OVMF image, no QEMU) | **no** |
+| physical-hardware-tested | **no** - no machine has run this kernel | **no** |
+| outstanding acceptance criteria | interrupt delivery from a device, a second CPU brought up, per-machine SVM records in the qualification list | a kernel subsystem that allocates through it, and the same measurements on firmware |
+
+M2a and M2b are therefore `in_progress`, not `not_started` and not `complete`: the code
+and its two lower verification levels are real and re-runnable, the two upper levels have
+never happened, and `make ovmf-test` exits 2 with `NOT TESTED` on this machine rather
+than passing. The ceiling is enforced, not promised - `tests/test_roadmap_dependencies.py`
+refuses a `complete` state for either milestone while
+`docs/evidence/validation/ovmf-test.json` still records `not-tested`, refuses a promotion
+to `complete` that cites no evidence, and refuses any milestone whose cited evidence path
+does not exist.
+
+### 7.5c The first consumer: a TSS, two interrupt stacks, and the one step not taken
+
+The pool exists to be consumed, so the kernel now consumes it.  `kernel64/tss64.c` asks
+for three frames - one for a 104-byte task-state segment, one for the stack a double fault
+runs on (IST1), one for the NMI stack (IST2) - and keeps them for the life of the boot.
+It writes the TSS into the frame it was given, encodes a descriptor for it into a GDT the
+kernel owns, installs that table, and reads GDTR back to prove the install happened:
+`PC5-64-TSS status=ok ... gdt=0x129280 gdtr=0x129280 cpl=0 frames=3 free-after=617`.
+The executed gate requires the frames reported taken to be the frames the pool lost
+(`free 620 -> 617`), the three frames to be distinct, each IST to be a page top, and
+GDTR to equal what was written - so the accounting cannot drift from the report.
+
+**What it does not do is load TR, and that is a measurement, not an omission.** IST is
+only consulted once TR names the TSS, so the natural last step is `ltr`; under the
+emulator this repository can actually run, executing `ltr` raises an exception.  It was
+ruled out that the table is wrong: CPL was read as 0 first, LGDT on the preceding
+instruction succeeded, SGDT read the same base and limit back, the descriptor decodes to
+the granted frame with limit 103 and the available-64-bit-TSS access byte, and pointing
+the descriptor at the kernel's own image instead of a pool frame faults identically.  The
+kernel therefore *refuses to arm the routing* while TR does not name this TSS -
+`tr=not-loaded`, `ist-df=0`, `ist-nmi=0` - and the gate asserts all three.  Arming a gate
+onto an interrupt stack the CPU cannot resolve converts a fault the kernel reports into a
+fault nobody sees, which is the opposite of the point.
+
+The rules that would arm it are exercised on the live table anyway (absent gate refuses,
+index 0 refuses, index 8 refuses, index 1 arms and reads back, clearing clears), which is
+what `arm-rules=1` means, and `tests/test_tss64.py` compiles five mutants of the builder
+(a misaligned IST, an ignored ready flag, a release that forgets the stacks, a refusal
+that keeps the frames, a descriptor whose high base bytes land in the wrong field) and
+fails if any of them survives.  Loading TR on real firmware stays open, and is recorded
+as open: nothing here demonstrates a double fault running on its own stack.
 
 ### 7.6 CPU features and the SVM ladder
 

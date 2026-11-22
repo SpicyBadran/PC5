@@ -1,0 +1,22 @@
+Host suite, `python3 -m unittest discover -s tests -p 'test_*.py'`, unicorn 2.1.4 on PATH.
+
+landing tree (ae9f3e25 + this change):
+    Ran 961 tests in 320.105s
+    FAILED (failures=5)
+
+pristine ae9f3e25 worktree, nothing applied, same command:
+    Ran 954 tests in 216.571s
+    FAILED (failures=5, skipped=2)
+    suite exit=1
+
+Same five failures at both trees, all of them in `test_commit_citations`, and all of them the
+checkout's fault rather than the code's: the documents cite objects that a default clone
+does not fetch (PR heads live only under `refs/pull/N/head`), which is also why
+`make citations-check` exits 2 (its own summary: 258 dead commit references across 11
+documents) and why `make check` therefore never reaches the suite in either tree.
+The base reports `skipped=2` where the landing tree reports none: both skips are the
+missing-artifact guards (`tests/test_ovmf_harness.py:88` wants `build/efi.img`,
+`tests/test_tools.py:211` wants `build/pc5.iso`), and the pristine worktree had never been
+built. Build state, not test state.
+
+The delta in test count is exactly this change's 7 host tests: 954 -> 961.

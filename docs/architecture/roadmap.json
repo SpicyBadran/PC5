@@ -2,7 +2,7 @@
   "schema": "pc5.roadmap/2",
   "document_version": "0.4.0-dev",
   "product_version_source": "Makefile VERSION",
-  "updated": "2026-11-16",
+  "updated": "2026-11-22",
   "authority": "docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md",
   "product": {
     "name": "PC5",
@@ -266,7 +266,7 @@
       "id": "F64",
       "title": "Experimental 64-bit long-mode boot path",
       "milestone": "M2a",
-      "state": "implemented, not verified on firmware",
+      "state": "host-tested and stub-firmware-tested; not verified on genuine UEFI firmware or physical hardware",
       "delivers": [
         "boot/uefi64: a UEFI application that stays in long mode and hands over in it",
         "a PC5-owned identity map (1 PML4 + 1 PDPT + 4 PD, 2 MiB pages, below 4 GiB)",
@@ -275,9 +275,12 @@
         "kernel64: a freestanding kernel that proves long mode, paging, its CR3 root, its stack and its boot info before printing PC5-64BIT-LONG-MODE-OK"
       ],
       "does_not_complete": [
-        "M2a still requires APIC, a high-resolution timer, a second CPU and per-machine SVM records",
+        "M2a still requires interrupt delivery, a second CPU brought up, and per-machine SVM records",
+        "APIC bring-up, exception capture, a PIT-calibrated TSC and MADT CPU enumeration exist (7737d89, 094a03e, 43ab4af, 547ebd5), but nothing takes an interrupt",
         "no OVMF run and no physical machine has executed this path",
-        "no interrupts, no SMP, no process separation, no SVM initialisation"
+        "no interrupts, no SMP, no process separation, no SVM initialisation",
+        "the installed IDT is never exercised by a device: a fault reaches it, an external interrupt does not",
+        "the task-state segment and its interrupt stacks are built and their table is installed, but TR is not loaded, so IST stays unarmed - measured under the emulator, where executing LTR itself raises an exception"
       ],
       "evidence": [
         "docs/TEST_RESULTS.md",
@@ -290,19 +293,24 @@
       "id": "F64M",
       "title": "Memory-management groundwork for the 64-bit kernel",
       "milestone": "M2b",
-      "state": "partial: page tables and ownership rules only",
+      "state": "partial: page tables, ownership rules, and a physical frame pool whose first consumer is the task-state segment and its interrupt stacks",
       "delivers": [
         "boot/uefi64/pagetables.c: identity-map construction, uncached marking, lookup",
         "ownership rules: the loader owns buffers until handover, the kernel owns tables, stack and image",
         "boot-info pointers constrained below 4 GiB and validated before use"
       ],
       "does_not_complete": [
-        "no physical-memory allocator, no per-process address spaces, no protection, no DMA protocol",
+        "the pool's only consumers are the task-state segment and the two interrupt stacks it holds; there is no general-purpose heap, no page-level protection, no per-process address space and no DMA protocol",
+        "no frame is ever handed back: the TSS holds three for the life of the boot, and nothing else has taken or released one during an executed run",
         "the kernel does not yet map above 4 GiB, use NX, or provide guard pages"
       ],
       "evidence": [
         "tests/test_kernel64.py",
-        "docs/ARCHITECTURE.md"
+        "tests/test_mem64.py",
+        "tests/test_tss64.py",
+        "docs/ARCHITECTURE.md",
+        "docs/evidence/2026-11-22-frame-allocator/README.md",
+        "docs/evidence/2026-11-22-tss-and-ist/README.md"
       ]
     }
   ],
@@ -691,7 +699,7 @@
       "kind": "native-platform",
       "level": 2,
       "title": "CPU execution environment: long mode, APIC, SMP and timers",
-      "state": "not_started",
+      "state": "in_progress",
       "owner_role": "kernel-engineer",
       "depends_on": [
         "M0",
@@ -709,7 +717,14 @@
         "a second CPU is brought up through the same path, or the absence of one is reported",
         "CPU feature detection records SVM/VMX availability per machine in the qualification list"
       ],
-      "evidence": [],
+      "evidence": [
+        "docs/ARCHITECTURE.md",
+        "docs/TEST_RESULTS.md",
+        "tests/test_apic64.py",
+        "tests/test_idt64.py",
+        "tests/test_timer64.py",
+        "tests/test_madt64.py"
+      ],
       "release_gating": true
     },
     {
@@ -718,7 +733,7 @@
       "kind": "native-platform",
       "level": 2,
       "title": "Memory management: paging, protection and DMA-visible memory",
-      "state": "not_started",
+      "state": "in_progress",
       "owner_role": "kernel-engineer",
       "depends_on": [
         "M2a",
@@ -733,7 +748,14 @@
         "a physical allocator with fragmentation accounting reported in the boot log",
         "DMA-visible buffers with an explicit ownership protocol, tested by a device driver round trip"
       ],
-      "evidence": [],
+      "evidence": [
+        "docs/ARCHITECTURE.md",
+        "docs/evidence/2026-11-22-frame-allocator/README.md",
+        "docs/evidence/2026-11-22-tss-and-ist/README.md",
+        "tests/test_mem64.py",
+        "tests/test_tss64.py",
+        "tests/boot64_stubtest.py"
+      ],
       "release_gating": true
     },
     {

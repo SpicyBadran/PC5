@@ -17,6 +17,12 @@ import struct
 
 KERNEL_BASE = 0x100000
 
+# The conventional RAM the default map advertises at the bottom of memory.  It is
+# mapped because the kernel now *uses* what the map says exists: the frame allocator
+# hands a low frame to the TSS builder, which writes 104 bytes into it, and a fixture
+# that describes memory without providing it reports that as `UC_ERR_WRITE_UNMAPPED` -
+# an emulator boundary wearing the same clothes as a kernel bug.
+LOW_CONVENTIONAL = (0x00000000, 0x000A0000)
 KERNEL_WINDOW = (0x00100000, 0x00200000)
 BOOT_AREA = (0x00400000, 0x00020000)
 TABLE_AREA = (0x00500000, 0x00020000)
@@ -160,6 +166,7 @@ class Machine:
         # page; the map is page-granular, so that is the only way to express a
         # range that the map cannot cover.
         self.rsdp_address = RSDP if rsdp_address is None else rsdp_address
+        self.uc.mem_map(*LOW_CONVENTIONAL)
         self.uc.mem_map(*KERNEL_WINDOW)
         self.uc.mem_map(*BOOT_AREA)
         self.uc.mem_map(*TABLE_AREA)

@@ -95,6 +95,31 @@ void idt64_install(void)
     __asm__ volatile ("lidt %0" : : "m"(g_idtr));
 }
 
+int idt64_set_ist(u64 vector, u64 ist)
+{
+    if (vector >= 32u || ist == 0u || ist > 7u)
+        return 0;
+    if ((g_idt[vector].type_attr & PC5_GATE_PRESENT) == 0)
+        return 0;
+    g_idt[vector].ist = (u8)ist;
+    return 1;
+}
+
+int idt64_clear_ist(u64 vector)
+{
+    if (vector >= 32u)
+        return 0;
+    g_idt[vector].ist = 0;
+    return 1;
+}
+
+u64 idt64_gate_ist(u64 vector)
+{
+    if (vector >= PC5_IDT_ENTRIES)
+        return 0;
+    return g_idt[vector].ist;
+}
+
 /* A reader of the serial log should not need a table to know that vector 13 is a
  * general-protection fault. Only the vectors a bring-up kernel can plausibly hit
  * are named; the rest print as numbers. */

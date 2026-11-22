@@ -1,0 +1,109 @@
+Commands run, and the exit code each one returned, on the tree this commit ships.
+
+Environment: Linux, gcc 12, GNU Make, Unicorn 2.1.4 (`pip install unicorn` into a venv on
+PATH), v86 assets for `make boot-test` supplied through V86_ASSETS. No qemu-system-x86_64,
+no OVMF image and no mtools/xorriso are present, which is why the OVMF legs below report
+"not tested" rather than passing or failing - see the last two blocks.
+
+Working directory for every line: the repository root. `TMPDIR=/tmp` is exported for the
+legs that build into `build/`.
+
+  $ make clean                     exit 0
+  $ make kernel64                  exit 0    KERNEL64 OK: 204800 bytes at 0x100000
+  $ make uefi64                    exit 0    UEFI64 OK: 1474560 bytes
+  $ make stubtest64                exit 0    64-BIT STUB FIRMWARE OK: 41/41 checks passed
+  $ make stubtest                  exit 0    PASSED: 58/58 checks against the stub firmware
+  $ make unit                      exit 0    PASSED: 165 checks, 0 failures
+
+The executed 64-bit gate is the one this milestone changes (31 checks before, 41 after);
+the 32-bit stub gate and the kernel unit tests are quoted to show they did not move.
+
+Host suites, run individually and as one process:
+
+  $ python3 -m unittest tests.test_tss64                 exit 0    Ran 7 tests ... OK
+  $ python3 -m unittest tests.test_mem64                 exit 0    Ran 7 tests ... OK
+  $ python3 -m unittest tests.test_kernel64              exit 0    Ran 71 tests ... OK
+  $ python3 -m unittest tests.test_kernel64 tests.test_boot64_stub tests.test_apic64 \
+      tests.test_idt64 tests.test_timer64 tests.test_madt64 tests.test_mem64 \
+      tests.test_tss64                                   exit 0    Ran 192 tests in 261s ... OK
+
+The 192-test line is the reason that combined command exists: run as separate processes
+every one of these suites passes, and run in one process two of them did not, for reasons
+that were properties of the fixtures rather than of the kernel (see "Fixture fixes this
+milestone needed" below). Both problems had to be fixed for the combined run to mean
+anything, and it is the run to copy.
+
+Documents and the generated tables:
+
+  $ make docs-check                exit 0    DOCS OK: 63 Markdown files, 33 make targets
+  $ python3 -m unittest tests.test_docs_check                      exit 0    Ran 20 tests ... OK
+  $ make citations-check           exit 0    CITATIONS OK: 263 commit reference(s) across 11 documents
+  $ make presentation-check        exit 0    PRESENTATION OK: 6 figures and 5 blocks current,
+                                             13 status rows match roadmap.json, 11 validation record(s) read
+  $ make roadmap                   exit 0    roadmap: OK - 35 milestones in 14 workstreams,
+                                             destination M19 reachable, document in sync
+  $ make brand-check               exit 0    BRAND OK: 11 assets current
+
+`make roadmap` is quoted because it is the gate that refuses a milestone whose evidence
+path does not exist: adding `docs/evidence/2026-11-22-tss-and-ist/README.md` to M2b and
+F64M in `docs/architecture/roadmap.json` failed that gate until this directory existed.
+
+Images and the 32-bit boot:
+
+  $ make -B iso                    exit 0    pc5: wrote build/pc5.iso (1601536 bytes, 782 sectors)
+  $ make verify                    exit 0    MANIFEST VALID: build/pc5.iso matches build/pc5.iso.manifest.json
+  $ make boot-test                 exit 0    PASSED: boot evidence written to build/test/boot-evidence.json
+
+  sha256  build/pc5.iso                    498993ab14267a3fd806fb36402ffd3e8ec59917256ea3545c99e6867b84ba84
+  sha256  build/kernel64/KERNEL64.BIN      f97a22730bdd310791de6c2ec4040e5764e6fe5d42b6dcaa9618d6b1e9cdcd7a
+  sha256  build/uefi64/BOOTX64.EFI        8c26df9c27b98113ee5376ccaa4d045c6e603163ead49f3bdfd913327332bd2c
+  sha256  build/efi64.img                  76c0728424966a40dbd07a2852686ab6b6b69da1b09889c50e09af34ff0722e2
+
+The full suite, and the legs that this machine cannot close:
+
+  $ make check                                                exit 0    Ran 971 tests in 357s ... OK
+  $ python3 -m unittest discover -s tests -p 'test_*.py'      exit 0    Ran 971 tests in 338s ... OK
+  $ make -s ovmf-check                                        exit 2    (recipe exits 1) "qemu: not found", every OVMF CODE candidate "-",
+                                                                         "ovmf-setup: qemu-system-x86_64 is still not on PATH"
+  $ make ovmf-test                                            exit 2    NOT TESTED: genuine OVMF firmware and/or QEMU is not
+                                                                         available on this machine. Install OVMF (edk2-ovmf / ovmf) and QEMU
+
+Both suite legs were run again after the commit this directory documents, and both were also
+run *during* the work - which is where one shape worth recording showed up. `make check`
+takes `unit psm docs-check citations-check presentation-check brand-check` as prerequisites
+and only then runs the suite, so a documentation problem aborts the recipe before a single
+test has run, and the exit code says nothing about the tests. That happened here: one
+`make check` exited 2 on `docs-check` because this README linked to a file that did not exist
+yet at that moment. The suite was fine; the check was not run. The direct
+`python3 -m unittest discover` line above exists so the same 971 tests are quoted through a
+command that cannot be short-circuited by documentation, and both numbers are recorded
+because they measure slightly different things (one is the gate a reviewer will type, the
+other is the suite itself).
+
+After the commit, `git status --porcelain` is empty: no gate in this list dirties the tracked
+tree. `make -s presentation` / `make roadmap sync` are the writers, and they are deliberately
+not prerequisites of `make check`.
+
+The OVMF legs are not failures of the code and are deliberately not recorded as
+passes either: `docs/evidence/validation/ovmf-test.json` reads `not-tested`, and
+`tests/test_roadmap_dependencies.py` refuses to let any milestone be called `complete`
+while that record says so.
+
+Fixture fixes this milestone needed
+-----------------------------------
+
+Two test-environment defects surfaced only when the suites were run together, and both are
+fixed in this commit because leaving them would have left the combined run unusable:
+
+* `tests/kernel64_machine.py` advertised a memory map whose conventional region
+  (0x0-0x9F000) it never mapped. Nothing noticed while no kernel code wrote there; the
+  frame allocator now hands a low page to the TSS builder, and 41 of `test_kernel64`'s 71
+  tests failed with `Invalid memory write (UC_ERR_WRITE_UNMAPPED) at 0x104e40` - an
+  emulator boundary wearing the clothes of a kernel bug. The fixture now maps
+  `LOW_CONVENTIONAL` alongside the windows it already provided.
+* `tests/test_tss64.py` first reused `tests/test_mem64.py`'s process-wide host region,
+  which is a 16 MiB `ctypes` allocation asserted to sit below 4 GiB. That assertion holds
+  or fails depending on how much heap the process has already touched, so the TSS suite
+  passed alone and failed after `test_mem64` had run and released the region. The suite
+  now owns its backing memory through a fixed-address `mmap` with `MAP_FIXED_NOREPLACE`
+  and refuses to run at all if the mapping does not land exactly where asked.
