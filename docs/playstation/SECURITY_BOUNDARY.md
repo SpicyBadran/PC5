@@ -141,6 +141,8 @@ share, S9's contract-side work), and they are exactly that — partials of steps
 * **S6, S7, S12, S13 — `unknown`:** not "unlikely"; there is no public source. A `UNKNOWN` row may
   not be implemented, and a double for it must return `unsupported` rather than a plausible value —
   the contract rule, kept here so the analysis cannot be read as a licence to guess.
+* **S3 and S4 are what the roadmap itself calls external preconditions.** `PS5_SYSTEM_SOFTWARE_TARGET.md` §4 classifies nine requirements and then states that requirements 2 and 3 — a lawful, authenticated way to obtain the inner components, and a trust anchor equivalent to the console's security processor — are *not* PC5 work; the table files both of them against `M17`. An inventory that reached the same two rows independently and then disagreed with the repository would be the interesting result; here they agree.
+  **[fact, in-repo]**, with the caveat that the classification is the project's own judgement about its scope, not a measurement of the world.
 * **S13 is the one that decides the milestone.** Everything else in the table is either ordinary PC
   engineering or ordinary refusal. S13 asks whether the *software* accepts a modelled platform, and
   the only thing that can answer it is the software itself, run against a model. That is `M19`'s
@@ -176,6 +178,36 @@ requirements (a verified loader path; SoC-level device emulation; a storage and 
 implementation; "a legal basis for using and, if necessary, decrypting material — which PC5 does
 not have and does not assume"), and its step 1 is S4/S5 here. Both documents stand; §4 refines
 their evidence, §7 states the consequence.
+
+### 3.1 The three decompositions of one question, reconciled
+
+The same dependency question is written down three times in this repository, in three different
+grain sizes, and the counts are what confuse people:
+
+| document | how many | items | rows here |
+|---|---|---|---|
+| `BOOT_FEASIBILITY.md` §3 | **3 paths** | A authorisation, B full emulator incl. security processor, C rebuild from leaked sources | the whole of §3 above |
+| `FIRMWARE_ANALYSIS.md` §5 | **4 requirements, in order of dependency** | 1 verified loader path, 2 SoC-level device emulation, 3 a storage and file-system implementation for the package format, 4 a legal basis | 1 → S4/S5 · 2 → S8/S9 and the `M11`–`M16` device layer · 3 → S1/S2 as the package to be read, plus `M13` as the console's storage contract · 4 → §6 |
+| `PS5_SYSTEM_SOFTWARE_TARGET.md` §4 | **9 requirements, classified** | container understanding · lawful authenticated input · trust anchor · platform init · CPU · memory · storage · GPU · audio/USB/services | 1 → S2 · 2 → S3 · 3 → S4 · 4 → S6 · 5–9 → the `M11`–`M16` layer, which is capability rather than trust and is therefore *not* inventory rows here |
+
+The mappings in the right-hand column are **[assessment]** — this document's reading of which row
+answers which question. None of the three source lists says "this maps to S4"; if a reader prefers
+a different pairing, the counts, the classes and the conclusions below are unaffected.
+
+The middle row is the origin of a number that has been misattributed before: four is the count in
+`FIRMWARE_ANALYSIS.md` §5, not in `BOOT_FEASIBILITY.md` §3 (§8.1). Keeping the three lists apart
+matters because their conclusions differ in kind: §3's paths are about whether a lawful route
+exists at all, §5's items are engineering sequence, and §4's nine rows are the only one of the
+three that says which parts are **not PC5's to do** —
+
+> requirements 1–9 are all **PC5 work**, and most of them are useful on their own… requirement 2 and
+> requirement 3 are **not** PC5 work. They are external preconditions.
+
+That sentence is the strongest in-repo corroboration this analysis can have for the two rows that
+carry the whole blocker: S3 (a lawful, authenticated way to obtain the inner components,
+class **restricted**) and S4 (a trust anchor equivalent to the console's security processor, class
+**Sony-specific silicon — may be impossible**). Both are recorded there against `M17` itself. This
+document adds nothing to that conclusion and takes nothing away from it.
 
 ## 4. Falsifiers, assessed against what is actually available
 
@@ -337,11 +369,16 @@ thing that makes the eventual answer worth having.
 
 ## 8. What this document found wrong elsewhere (proposed, not applied)
 
-**8.1 A count of "four" paths where `BOOT_FEASIBILITY.md` §3 lists three.** A follow-up note in
-PR #36 (`evidence/usb-descriptor-remediation-v2/POST-MERGE-RECONCILIATION-20261122.md` §8) refers
-to "the four 'would have to be true' paths of BOOT_FEASIBILITY.md §3". Measured: §3 contains
+**8.1 A count of "four" attributed to `BOOT_FEASIBILITY.md` §3, which lists three.** A follow-up
+note in PR #36 (`evidence/usb-descriptor-remediation-v2/POST-MERGE-RECONCILIATION-20261122.md` §8)
+refers to "the four 'would have to be true' paths of BOOT_FEASIBILITY.md §3". Measured: §3 contains
 `A.`, `B.`, `C.` and no fourth item (`grep -c '\*\*[A-F]\.' docs/playstation/BOOT_FEASIBILITY.md`
-→ 3). The three-path framing is what §3 supports; this document's §3 uses three.
+→ 3; `grep -n '\bD\.'` over the file → no match). The number itself is not invented — four is the
+count in `FIRMWARE_ANALYSIS.md` §5, and nine is the count in `PS5_SYSTEM_SOFTWARE_TARGET.md` §4;
+§3.1 maps all three decompositions. **So the minimal correction is a citation fix, not an arithmetic
+one:** either "the four ordered requirements of `FIRMWARE_ANALYSIS.md` §5" or "the three paths of
+`BOOT_FEASIBILITY.md` §3". Saying "three" alone would fix the sentence while leaving the next reader
+with three lists and no reason to trust any of them.
 
 **8.2 `BOOT_FEASIBILITY.md` §3B's "publicly unattempted in full" is stale.** Public, active,
 large-effort PS5 emulation exists (§4, F-2). The sentence's load-bearing qualifier — emulation
