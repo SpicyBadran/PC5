@@ -35,16 +35,21 @@ The reconciliation, in order, each time:
 
 1. **Detect the merge and name it by its full SHA.**
    `git fetch origin main && git rev-parse origin/main` — never trust a remembered SHA,
-   a local `main`, or a pull-request head. Then
-   `make dashboard-reconcile` (`tools/dashboard_reconcile.py`), which prints every
-   first-parent merge that is newer than the commit at which
-   `docs/assets/pc5-progress-matrix.svg` and the generated README blocks were last
-   written, and exits 1 while any of them is unprocessed.
-2. **Read what actually landed.** `git show --stat <merge>`, `git diff
-   <previous-watermark>..HEAD -- docs/architecture/roadmap.json psm/ docs/evidence/
-   docs/ PS5UPDATE.PUP`. Determine which subsystems, milestones, requirements, tests,
-   evidence records and documentation the merge touched. Judge impact from the diff, not
-   from the merge's title.
+   a local `main`, or a pull-request head. Then `make dashboard-reconcile`
+   (`tools/dashboard_reconcile.py --target origin/main`), which reads the reconciliation
+   receipt at `docs/evidence/dashboard-reconciliation.json` **from `origin/main`**, walks
+   every first-parent commit since the boundary that receipt records, and exits 1 while
+   any of them needs inspecting. Nothing here is inferred from which files a commit
+   touched: the previous watermark model could not clear its own delivery, and merge
+   strategies that add no commit are invisible to `git log --merges`.
+2. **Read what actually landed.** `python3 tools/dashboard_reconcile.py --json` lists the
+   commits in the range with the paths each one brought and which dashboard drivers
+   (`roadmap.json`, the platform contract, `psm/`, `docs/evidence/`, `PS5UPDATE.PUP`,
+   `tools/presentation.py`) it moved. For a merge, `git diff <merge>^1 <merge>` is the
+   diff that matters — what the branch added to `main` — and `git show --stat <merge>`
+   shows it. Judge impact from the diff, not from the merge's title, and never conclude
+   from an empty diff that there was nothing to look at: a no-op merge is still a merge,
+   and it is recorded as reviewed in step 6 rather than skipped.
 3. **Recalculate every affected figure from the authoritative sources** —
    `docs/architecture/roadmap.json` for milestone state, level and deliverables; the
    platform contract's generated tables for modelled operations; `psm/registry.py` for
@@ -59,16 +64,24 @@ The reconciliation, in order, each time:
    honestly show.** A new evidence class, a new gate or a new milestone level is a
    presentation-layer change: extend `tools/presentation.py` and its test in the same
    commit rather than hand-writing a row.
-6. **Verify synchronisation:** the committed figure, the README blocks, `roadmap.json`
-   and the validation records must all agree at the commit you are about to write. The
-   four checks are `make presentation-check`, `make docs-check`,
-   `python3 -m unittest tests.test_progress_matrix tests.test_presentation` and
-   `make dashboard-reconcile` (which must then exit 0).
-7. **Commit the reconciliation** on the established documentation workflow: a focused
-   commit that states the merge SHA it reconciles, then pushing the branch and opening a
-   pull request for a human to merge — exactly like every other change here.
-   Never commit a dashboard update straight to `main`, and never edit the generated
-   regions of `README.md` by hand.
+6. **Record the receipt.** `make post-merge` runs the generator, both read-only checks and
+   `python3 tools/dashboard_reconcile.py --here --record`, which writes
+   `docs/evidence/dashboard-reconciliation.json` naming every commit it inspected, the
+   paths they changed, whether the figures or README moved, and the verification commands
+   with their real exit codes. It refuses to write when a gate fails or when a non-
+   generated file is uncommitted, so a receipt can only ever describe work that has
+   landed. The first receipt on a line of history has to be seeded explicitly —
+   `--record --bootstrap --boundary <full SHA> --inspect <full SHA>` — because there is
+   no earlier record saying what was already read.
+7. **Commit the reconciliation** on the established documentation workflow: one focused
+   commit holding the regenerated figures, the README blocks and the receipt, with a
+   message stating the merge SHA it reconciles; then pushing the branch and opening a pull
+   request for a human to merge — exactly like every other change here. Never commit a dashboard update
+   straight to `main`, and never edit the generated regions of `README.md` by hand.
+   That follow-up commit is *exempt* from inspection by design: it changes only generated
+   output and the receipt, so the next run reports `CURRENT` instead of asking for another
+   receipt, and the loop closes in one step. A merge that also changes a driver is not
+   exempt, and cannot be cleared by anything except being named in a receipt.
 8. **Report it:** the merged commit's full SHA, the dashboard-update commit SHA, the
    files changed, every figure that moved and the figures that did not, the commands run
    with their real exit codes, and what remains unverified.
@@ -77,20 +90,35 @@ The reconciliation, in order, each time:
 
 ### Catching up
 
-If **multiple merges** landed between two sessions, reconcile each of them against the
-current repository state in one pass, and list every merge SHA you processed. If a
-**another person or agent** merged the pull request, the duty is unchanged: the trigger
-is the merge, not who performed it. If this agent itself performs an explicitly
+If **multiple merges** landed between two sessions, they are all in the range: one
+reconciliation pass inspects each of them against the current repository state and the
+receipt names every SHA it read. Do not let a later commit clear an earlier one —
+`--record` lists them individually, and a regenerated figure does not absorb the merge
+that made it stale.
+
+If **another person or agent** merged the pull request, the duty is unchanged: the
+trigger is the merge, not who performed it. If this agent itself performs an explicitly
 authorized merge, the reconciliation is part of that same workflow, in the same turn.
+
+**This is a standing responsibility of whoever is working in the repository, not a
+monitor.** Nothing here runs by itself: there is no CI workflow configured in this
+repository, no Git hook is installed by `make`, and no scheduled job checks `main`. A
+merge that nobody followed with `make post-merge` leaves the dashboard stale and
+`make dashboard-reconcile` exiting 1 — which is the point of making the state
+checkable rather than pretending it is enforced.
 
 ### When the impact cannot be established
 
 Preserve the existing figures, and report the dashboard update as **outstanding** with
-the reason — never quietly skip it, never estimate a number to fill a cell. Typical
-cases: the merge commit is unreachable from the fetched refs, the evidence it cites is
-not in the tree, or a gate it relied on has no committed record. In each of those the
-honest figure is the one already on the page, annotated in the report as unverified
-against the new state. A missing metric is labelled unknown; it is never invented.
+the reason — never quietly skip it, never estimate a number to fill a cell. The tool
+distinguishes the two ways this can fail, and so should the report: *outstanding* (exit
+1) means the change is readable but unreconciled, and *error* (exit 2) means it cannot be
+established at all — the merge commit is unreachable from the fetched refs, `origin/main`
+cannot be resolved, the receipt is malformed or names a commit that has not landed, or
+the clone is shallow so the range cannot be enumerated. Exit 2 never means clean. In each
+of those the honest figure is the one already on the page, annotated in the report as
+unverified against the new state. A missing metric is labelled unknown; it is never
+invented.
 
 ## 2. Hard rails while doing it
 
@@ -114,12 +142,16 @@ against the new state. A missing metric is labelled unknown; it is never invente
 make presentation          # write: the seven SVGs and the six generated README blocks
 make presentation-check    # read: are they current?  run by `make check`
 make docs-check            # read: links, anchors, documented commands and make targets
-make dashboard-reconcile   # read: which merges the dashboard has not caught up with
-make post-merge            # write + read: presentation, then the three checks above
-python3 tools/dashboard_reconcile.py --json
+make dashboard-reconcile   # read: which changes on origin/main the receipt does not cover
+make post-merge            # write + read: presentation, the checks, then --record --here
+python3 tools/dashboard_reconcile.py --json          # the same verdict, machine-readable
+python3 tools/dashboard_reconcile.py --here          # audit the checked-out branch instead
 ```
 
-`make presentation` is the only target in this list that writes, and it writes only the
+`make presentation` is the only target here that writes figures, and it writes only the
 files the presentation layer owns: `docs/assets/*.svg` and the marker-bounded blocks in
 `README.md`. `make check` never runs it, so an ordinary test run cannot rewrite tracked
-documentation.
+documentation. `make post-merge` writes one further file, the receipt at
+`docs/evidence/dashboard-reconciliation.json`, and it writes that receipt only after the
+checks above have exited 0 — which is what makes the receipt evidence rather than a
+claim. See [`docs/PRESENTATION.md`](docs/PRESENTATION.md) §6 for the receipt's fields.

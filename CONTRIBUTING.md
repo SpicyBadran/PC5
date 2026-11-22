@@ -90,9 +90,30 @@ verbatim. A screenshot is not a substitute.
 ## After a merge
 
 `AGENTS.md` requires the dashboard to be reconciled after every successful merge into
-`main`; `make dashboard-reconcile` prints which merges are still unprocessed, and
-`make post-merge` regenerates and re-checks. This is a documentation workflow, not a
-licence to merge anything: merging remains a maintainer decision.
+`main`. Two commands, answering two questions:
+
+```sh
+make presentation    # only if you are the one writing the reconciliation commit
+make post-merge      # regenerate, check, and record `docs/evidence/dashboard-reconciliation.json`
+make dashboard-reconcile   # read: does the committed receipt cover everything on origin/main?
+```
+
+`make post-merge` is what a *local* merge needs: it reconciles the branch you are standing
+on (`--here`) and writes the receipt, which then travels with the commit. Once the change
+is on `main`, `make dashboard-reconcile` reads that receipt **from `origin/main`** and
+lists any first-parent commit since its boundary that no receipt has named — a merge
+commit, a squash, a rebased pair of commits, a direct push, or a merge whose diff turned
+out to be empty. It exits 1 while something is unreconciled and 2 when the question cannot
+be answered at all; it never exits 0 because it could not read the history.
+
+A reconciliation commit that carries nothing but regenerated figures and the receipt does
+not itself require a further reconciliation — that exemption is what keeps the loop closed,
+and it is a rule about file paths, not about who wrote the commit. See
+[`docs/PRESENTATION.md`](docs/PRESENTATION.md) for the receipt's fields.
+
+None of this is enforced by a machine: this repository has no CI workflow and installs no
+Git hook. It is a documentation workflow and a human (or agent) duty, and it is not a
+licence to merge anything — merging remains a maintainer decision.
 
 ## Commit and review
 
