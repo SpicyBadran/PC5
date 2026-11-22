@@ -1,0 +1,332 @@
+[
+  {
+    "scenario": "14. an off-first-parent commit inside a merge is reported by SHA",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 1; the merge's reason names the unreviewed commit rather than hiding it",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [
+      "OUTSTANDING 74fd49c751dc  2026-11-20  [single-parent]  main: nothing that matters",
+      "OUTSTANDING be2427e7bb19  2026-11-20  [merge]  Merge side into main (two parents deep)",
+      "OUTSTANDING \u2014 a successful change on the primary branch has not been reconciled with the dashboard"
+    ],
+    "tree_mutated": false,
+    "actual": "the unreviewed side commit 07bda93130ba must appear in the report",
+    "assertions": [
+      "must contain 'it introduces': ok",
+      "must contain '07bda93130ba': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "15. interrupted regeneration: a truncated figure blocks the record",
+    "command": "python3 tools/dashboard_reconcile.py --json",
+    "expected": "exit 2 from the red gate at record time; the duty state itself is CURRENT because nothing landed, which is the qualification recorded in FINDINGS F-3",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [],
+    "tree_mutated": false,
+    "actual": "the record attempt exited 0: NO REFUSAL; receipt written anyway: {",
+    "assertions": [
+      "must not contain 'CURRENT': ok",
+      "must contain '\"boundary\"': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "15b. a committed broken figure is 'generated output only': CURRENT with a red gate",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "expected by the design: exit 0 CURRENT, because the exemption is by path; the consequence is that CURRENT does not certify the asset, only that nothing is owed",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "actual": "see FINDINGS: the tool's CURRENT and `presentation-check` disagree here",
+    "assertions": [
+      "must contain 'generated output': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "16. presentation-check red on main blocks the record",
+    "command": "--record",
+    "expected": "exit 2, refusing",
+    "exit_code": 0,
+    "expected_exit_code": 2,
+    "key_output": [],
+    "tree_mutated": false,
+    "pass": false,
+    "actual": "refusal text present: False"
+  },
+  {
+    "scenario": "17. docs-check red on main blocks the record",
+    "command": "--record",
+    "expected": "exit 2, refusing",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "key_output": [
+      "ERROR \u2014 refusing to record: documentation links, anchors and commands resolve failed (exit 1): 1 documentation problem(s) across 68 files"
+    ],
+    "tree_mutated": false,
+    "pass": true,
+    "actual": "refusal text present: True"
+  },
+  {
+    "scenario": "18. an uncommitted source file refuses the record",
+    "command": "python3 tools/dashboard_reconcile.py --record",
+    "expected": "exit 2 naming the file; only generated output and the receipt may be dirty",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "key_output": [
+      "ERROR \u2014 the working tree changes boot/new_file.c, which is neither the receipt nor generated output: commit the source change first, then reconcile against it"
+    ],
+    "tree_mutated": false,
+    "actual": "exit 2: ['ERROR \u2014 the working tree changes boot/new_file.c, which is neither the receipt nor generated output: commit the source change first, then reconcile against it']",
+    "assertions": [
+      "must not contain 'refusing to record': ok",
+      "must contain 'the working tree changes boot/new_file.c': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "19. a stale receipt: the new commit is outstanding, the previous boundary is recorded",
+    "command": "python3 tools/dashboard_reconcile.py --json",
+    "expected": "exit 1, and `previous_boundary` shows the chain is not being rewritten",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [],
+    "tree_mutated": false,
+    "actual": "",
+    "pass": true
+  },
+  {
+    "scenario": "20a. receipt carries an unknown key (schema evolution must not break it)",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 0: an unrecognised key is tolerated, not treated as tampering",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "assertions_ok": true,
+    "pass": true,
+    "actual": ""
+  },
+  {
+    "scenario": "20b. receipt has no boundary",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 2",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "key_output": [
+      "ERROR \u2014 docs/evidence/dashboard-reconciliation.json has no full 40-hex `reconciled_at` boundary (got ''); short SHAs are not acceptable because they cannot be proved to be the intended commit"
+    ],
+    "tree_mutated": false,
+    "assertions_ok": true,
+    "pass": true,
+    "actual": ""
+  },
+  {
+    "scenario": "20c. receipt has a short boundary SHA",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 2: short SHAs cannot be honoured",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "key_output": [
+      "ERROR \u2014 docs/evidence/dashboard-reconciliation.json has no full 40-hex `reconciled_at` boundary (got '70b08a04ef69'); short SHAs are not acceptable because they cannot be proved to be the intended commit"
+    ],
+    "tree_mutated": false,
+    "assertions_ok": true,
+    "pass": true,
+    "actual": ""
+  },
+  {
+    "scenario": "20d. receipt declares a different schema",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 2",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "key_output": [
+      "ERROR \u2014 docs/evidence/dashboard-reconciliation.json declares schema 'pc5.dashboard-reconciliation/0', this tool reads 'pc5.dashboard-reconciliation/1'"
+    ],
+    "tree_mutated": false,
+    "assertions_ok": true,
+    "pass": true,
+    "actual": ""
+  },
+  {
+    "scenario": "20e. receipt says the work was incomplete",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 1 OUTSTANDING with the reason",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [
+      "OUTSTANDING \u2014 the receipt on cca4ce032e9ac64f97dc77cf9d2df20a425e2a62 says the reconciliation was incomplete: gate pending"
+    ],
+    "tree_mutated": false,
+    "assertions_ok": true,
+    "pass": true,
+    "actual": ""
+  },
+  {
+    "scenario": "20f. receipt records a failing verification",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 2 (a receipt over a red gate)",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "key_output": [
+      "ERROR \u2014 docs/evidence/dashboard-reconciliation.json records a failing verification (x exit 1): the receipt was written over a red gate"
+    ],
+    "tree_mutated": false,
+    "assertions_ok": true,
+    "pass": true,
+    "actual": ""
+  },
+  {
+    "scenario": "20g. receipt names a malformed SHA",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 2",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "key_output": [
+      "ERROR \u2014 docs/evidence/dashboard-reconciliation.json claims a short or malformed SHA: 'deadbeef'"
+    ],
+    "tree_mutated": false,
+    "assertions_ok": true,
+    "pass": true,
+    "actual": ""
+  },
+  {
+    "scenario": "20h. receipt is a JSON array, not an object",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 2",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "tree_mutated": false,
+    "pass": true,
+    "key_output": [
+      "ERROR \u2014 docs/evidence/dashboard-reconciliation.json at 7fb58f78b8ffe9362f0dc5e39a4188ff08033672 is not an object"
+    ]
+  },
+  {
+    "scenario": "21. receipt naming a commit that has not landed on the target",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 2: a receipt may only name landed commits",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "tree_mutated": false,
+    "key_output": [
+      "ERROR \u2014 docs/evidence/dashboard-reconciliation.json claims to have inspected 17a233d66acf, which is not an ancestor of 1bae11efb6b185b60b807cd94f434d78129ce1db: a receipt may only name commits that have actually landed. This is what stops a receipt from pre-approving an unknown future merge."
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "22. origin/main cannot be resolved",
+    "command": "(no args)",
+    "expected": "exit 2 with the fetch instruction, never a green",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "tree_mutated": false,
+    "key_output": [
+      "ERROR \u2014 cannot resolve the primary branch from origin/main, origin/HEAD: fetch it first (`git fetch origin main`), or name it with --target <ref>. A local branch is deliberately not a fallback \u2014 the checked-out branch says nothing about what has landed on the primary branch, and a stale local copy of `main` says less than nothing. Pass --here to reconcile the checked-out branch on purpose, and read the limits that prints."
+    ],
+    "pass": true,
+    "actual": "22b explicit bad target: exit 2"
+  },
+  {
+    "scenario": "23. shallow clone",
+    "command": "in a --depth 1 clone",
+    "expected": "exit 2: a range that cannot be read is not a clean range",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "tree_mutated": false,
+    "key_output": [
+      "ERROR \u2014 this is a shallow clone, so the commits between the receipt's boundary and the target cannot be enumerated: a range that cannot be read is not a clean range. Fetch the history (`git fetch --unshallow`) or re-clone without --depth"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "24. unlanded feature work is not a duty (default target is origin/main)",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 0 CURRENT about what landed; the branch's own commit is not claimed",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "actual": "; --here exits 1",
+    "assertions": [
+      "must contain 'CURRENT': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "25/26. repeated successful reconciliation, and a second run with no new commits",
+    "command": "--record (twice)",
+    "expected": "exit 0 'nothing to record', receipt unchanged, no write",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "tree_mutated": false,
+    "pass": true,
+    "key_output": [
+      "nothing to record: every change since the boundary is either named in the receipt or confined to generated output"
+    ]
+  },
+  {
+    "scenario": "27. a range commit that edits the receipt to name itself",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "the duty should not be discharged by a commit inside the range naming itself; a `--record` run (which executes the gates) should be the only way names enter the receipt",
+    "exit_code": 0,
+    "expected_exit_code": 1,
+    "tree_mutated": false,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "pass": false,
+    "classification": "defect candidate F-1: expected 1, see FINDINGS.md",
+    "actual": "presentation-check on the same tree exits 1"
+  },
+  {
+    "scenario": "28. a range commit that deletes a generated figure",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "the deletion must be visible: either OUTSTANDING, or CURRENT with a gate that fails on the same tree",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "tree_mutated": false,
+    "pass": true,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "actual": "presentation-check exit 1: 2 presentation problem(s)"
+  },
+  {
+    "scenario": "29. no-op merge (empty diff, two parents)",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 1: a merge with no content is still a merge that must be recorded as reviewed",
+    "exit_code": 0,
+    "expected_exit_code": 1,
+    "tree_mutated": false,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "pass": false,
+    "actual": "after reconcile: exit 0"
+  },
+  {
+    "scenario": "30. `--record --boundary <bogus> --inspect <bogus>` without `--bootstrap`",
+    "command": "--record --boundary 000\u2026 --inspect 000\u2026 --dry-run",
+    "expected": "either the flags are honoured, or the tool says it is ignoring them; silently dropping an explicit boundary is a UX defect",
+    "exit_code": 0,
+    "expected_exit_code": 2,
+    "tree_mutated": false,
+    "key_output": [
+      "nothing to record: every change since the boundary is either named in the receipt or confined to generated output"
+    ],
+    "pass": false,
+    "actual": "ignored flags would show up as exit 0 'nothing to record'"
+  }
+]

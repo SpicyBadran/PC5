@@ -1,0 +1,41 @@
+metric                                                 recomputed                                   displayed                              match
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Milestones (total, in how many workstreams)            35 in 14 workstreams                         35 in 14 workstreams                   yes
+stats: Complete                                        9                                            9                                      yes
+stats: In progress                                     2                                            2                                      yes
+stats: Blocked                                         6                                            6                                      yes
+stats: Not started                                     18                                           18                                     yes
+Milestones verified                                    25.7% (9/35)                                 25.7% (9/35)                           yes
+Levels with a verified milestone                       2/6                                          2/6                                    yes
+Levels, per level                                      L1 4/6 · L2 5/8 · L3 0/5 · L4 0/9 · L5 0/4   L1 4/6 · L2 5/8 · L3 0/5 · L4 0/9 ·    yes
+No verified milestone above L2                         L3..L6 complete: L3=0, L4=0, L5=0, L6=0      0 in the figure                        yes
+Acceptance items inside verified milestones            31/116                                       31/116                                 yes
+Deliverables that exist as named paths                 31/66                                        31/66                                  yes
+…as a second bar in the figure                         41 path-shaped of 66                         41/66                                  yes
+Under a looser rule an auditor would reach by eye      38/66 present, 54 path-shaped                not displayed                          yes
+Cited paths resolve                                    39/39 cited paths resolve, in 19/35 milest   39/39 cited paths resolve, in 19/35    yes
+…counted as distinct paths instead                     30/30                                        30 distinct paths, 39 citation strin   yes
+Unresolvable citations                                 none                                         none                                   yes
+Milestones with a record filed under docs/evidence/    0/35                                         0/35                                   yes
+Blocked milestones                                     6                                            6                                      yes
+Blocked ids                                            `M1b`, `M17`, `M18`, `M19`, `M20`, `M21`     `M1b`, `M17`, `M18`, `M19`, `M20`, `   yes
+Every blocked milestone states a blocker               [(True, 6)]                                  all                                    yes
+Destination                                            `M19`                                        `M19`                                  yes
+Destination state                                      BLOCKED                                      BLOCKED                                yes
+Destination is blocked, with a named reason            blocked on M17 (authenticity boundary) and   a reason in the blockers table         yes
+M17–M21 all blocked                                    M17=blocked, M18=blocked, M19=blocked, M20   all blocked                            yes
+Modelled operations implemented                        87.5% (56/64)                                87.5% (56/64)                          yes
+Interfaces and their declared operations               10 interfaces, 64 ops                        64 op rows in the same document        yes
+Contract claims backed by public documentation         15.8% (6/38)                                 15.8% (6/38)                           yes
+Committed validation records passing                   90.9% (10/11)                                90.9% (10/11)                          yes
+A record that is not a pass is not a failure           {'ovmf-test': 'not-tested'} — counted in t   not-tested                             yes
+Physical-hardware boot evidence                        0 record(s) filed                            0 record(s) filed                      yes
+The record template is not counted as a record         1 template(s) excluded                       0 record(s) filed                      yes
+Nothing claims physical execution                      **BLOCKED** — nothing executed               **BLOCKED** — nothing executed         yes
+Every fraction in the README table also appears in the figure 16 distinct; absent from the figure: none    compared as strings                    yes
+No truncated label in the figure                       no '…' in any of the figure's text nodes     —                                      yes
+The word 'verified' appears in the figure only where a level or region earned it 6 occurrence(s) in the figure's text         —                                      yes
+
+35/35 checks reproduce the displayed value; 0 do not
+
+raw: states {'complete': 9, 'in_progress': 2, 'blocked': 6, 'not_started': 18}; ops {'implemented': 56, '**UNSUPPORTED by design**': 8}; claims {'PUBLIC': 6, 'INFERRED': 9, 'UNKNOWN': 21, 'RESTRICTED': 2}; validation {'boot-test': 'passed', 'check': 'passed', 'docs-check': 'passed', 'kernel64': 'passed', 'ovmf-test': 'not-tested', 'presentation-check': 'passed', 'roadmap': 'passed', 'stubtest': 'passed', 'stubtest64': 'passed', 'uefi64': 'passed', 'verify': 'passed'}

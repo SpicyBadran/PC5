@@ -1,0 +1,385 @@
+[
+  {
+    "scenario": "1. initial state, no receipt on the target",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 1: OUTSTANDING, naming the missing receipt and printing the bootstrap command",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [
+      "OUTSTANDING \u2014 docs/evidence/dashboard-reconciliation.json does not exist on 70b08a04ef694cc4d84e59f1c7a4d0736c7a3cc1 yet: nothing has been recorded as inspected. Bootstrap it with `python3 tools/dashboard_reconcile.py --record --bootstrap --boundary <full SHA> --inspect <full SHA>`"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'does not exist on': ok",
+      "must contain '--bootstrap': ok",
+      "must not contain 'CURRENT': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "2. correct bootstrap after the gates pass, then the next run is CURRENT",
+    "command": "python3 tools/dashboard_reconcile.py --json",
+    "expected": "bootstrap at 70b08a04ef69 landed; the receipt names it; run exits 0 CURRENT",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [],
+    "tree_mutated": false,
+    "actual": "receipt present on origin/main, range empty",
+    "assertions": [
+      "must contain '\"boundary\"': ok",
+      "must not contain 'CURRENT': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "3. bootstrap refused while presentation-check is red; nothing is written",
+    "command": "python3 tools/dashboard_reconcile.py --record --bootstrap --boundary 70b08a04ef694cc4d84e59f1c7a4d0736c7a3cc1 --inspect 70b08a04ef694cc4d84e59f1c7a4d0736c7a3cc1",
+    "expected": "exit 2, the failing gate named, and no receipt in the tree (the refusal above shows both)",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "key_output": [
+      "ERROR \u2014 refusing to record: presentation figures and README blocks are current failed (exit 1): 1 presentation problem(s)"
+    ],
+    "tree_mutated": false,
+    "actual": "first attempt exit 2; receipt file present after refusal: False",
+    "assertions": [
+      "must contain 'refusing to record': ok",
+      "must contain 'presentation figures and README blocks are current': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "4. ordinary merge commit carrying an unreviewed source change",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 1: the merge needs inspection, and the report says what it introduced",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [
+      "OUTSTANDING bdca8fce3e92  2026-11-20  [merge]  Merge pull request 1 from feat",
+      "OUTSTANDING \u2014 a successful change on the primary branch has not been reconciled with the dashboard"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'OUTSTANDING': ok",
+      "must contain 'Merge pull request': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "4c. recording while the figure is stale is refused (this run regenerated, so it passes)",
+    "command": "python3 tools/dashboard_reconcile.py --json",
+    "expected": "exit 0 because step 4 was performed before step 6",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [],
+    "tree_mutated": false,
+    "actual": "",
+    "pass": true
+  },
+  {
+    "scenario": "4b. the same merge, after `--record` and landing the receipt",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 0 CURRENT: the duty is discharged by the record, not by the merge",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'CURRENT': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "5. squash merge: the minted SHA is not in any receipt, so the duty stays open",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 1 with the squash commit named as outstanding",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [
+      "OUTSTANDING e27004fed4de  2026-11-20  [single-parent]  Squash merge of feat (two commits become one new SHA)",
+      "OUTSTANDING \u2014 a successful change on the primary branch has not been reconciled with the dashboard"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'OUTSTANDING': ok",
+      "must contain 'Squash merge of feat': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "5b. squash after the full loop (documented: a squash still has to be recorded)",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "reconcile exit 0 (0 expected: the record happened); then CURRENT",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'CURRENT': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "6. rebase then fast-forward: each rebased commit is a first-parent member",
+    "command": "python3 tools/dashboard_reconcile.py --json",
+    "expected": "exit 1, and both rebased commits are listed",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [],
+    "tree_mutated": false,
+    "actual": "the JSON lists each commit individually; see outstanding count below",
+    "assertions": [
+      "must contain '\"requires_inspection\": true': ok",
+      "must contain 'contract edit': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "6b. after recording, CURRENT",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 0",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'CURRENT': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "7. fast-forward integration: no merge commit exists, the commit itself is the duty",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 1 naming the fast-forwarded commit",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [
+      "OUTSTANDING 6a7a9a77e564  2026-11-20  [single-parent]  feat: single roadmap edit",
+      "OUTSTANDING \u2014 a successful change on the primary branch has not been reconciled with the dashboard"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'OUTSTANDING': ok",
+      "must contain 'single roadmap edit': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "7b. recorded, CURRENT",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 0",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'CURRENT': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "8. direct commit to main: still a duty, no merge required to notice it",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 1",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [
+      "OUTSTANDING a3af467ee3b7  2026-11-20  [single-parent]  main: direct roadmap edit without a PR",
+      "OUTSTANDING \u2014 a successful change on the primary branch has not been reconciled with the dashboard"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'OUTSTANDING': ok",
+      "must contain 'direct roadmap edit': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "8b. recorded, CURRENT",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 0",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'CURRENT': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "9. documentation-only merge (no metric can move): still reported, not hidden",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 1; AGENTS.md step 2 says a no-op merge is recorded as reviewed, not skipped",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [
+      "OUTSTANDING 5015e589daa1  2026-11-20  [merge]  Merge docs-only branch",
+      "OUTSTANDING \u2014 a successful change on the primary branch has not been reconciled with the dashboard"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'OUTSTANDING': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "9b. recorded, CURRENT",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 0",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'CURRENT': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "10. code-only merge touching nothing the dashboard counts",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 1, and the report says it drives nothing rather than dropping the commit",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [
+      "OUTSTANDING 16eb96118def  2026-11-20  [merge]  Merge code-only branch",
+      "OUTSTANDING \u2014 a successful change on the primary branch has not been reconciled with the dashboard"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'OUTSTANDING': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "10b. recorded, CURRENT",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 0",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'CURRENT': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "11. merge that moves a metric: drivers include roadmap.json and the figure",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 1, drivers named",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [
+      "OUTSTANDING 7603116ef42f  2026-11-20  [merge]  Merge metric-moving branch",
+      "OUTSTANDING \u2014 a successful change on the primary branch has not been reconciled with the dashboard"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'OUTSTANDING': ok",
+      "must contain 'drives:': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "11b. recorded, CURRENT",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 0",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'CURRENT': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "12. a change that moves no figure is still outstanding, with empty drivers",
+    "command": "python3 tools/dashboard_reconcile.py --json",
+    "expected": "exit 1; `figures_changed: false` in the receipt after recording",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [],
+    "tree_mutated": false,
+    "actual": "",
+    "pass": true
+  },
+  {
+    "scenario": "12b. recorded, CURRENT",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 0",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "actual": "",
+    "assertions": [
+      "must contain 'CURRENT': ok"
+    ],
+    "pass": true
+  },
+  {
+    "scenario": "13. four commits since the boundary: one pass must list all four",
+    "command": "python3 tools/dashboard_reconcile.py --json",
+    "expected": "exit 1 with four outstanding commits",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "key_output": [],
+    "tree_mutated": false,
+    "actual": "",
+    "pass": true
+  },
+  {
+    "scenario": "13b. one record clears all four",
+    "command": "python3 tools/dashboard_reconcile.py ",
+    "expected": "exit 0 CURRENT",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "key_output": [
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ],
+    "tree_mutated": false,
+    "actual": "after landing, only the landing commit is in range and it is generated-only",
+    "assertions": [
+      "must contain 'CURRENT': ok",
+      "must contain 'commits since then   1': ok"
+    ],
+    "pass": true
+  }
+]
