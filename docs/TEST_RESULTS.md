@@ -3101,8 +3101,9 @@ directly proves the helper, not the gate, and a `try/except` around a `git rev-l
 structural test on `range_commits` (no `try`, no `except`) is what remains when a behaviour cannot
 be produced in a fixture.
 
-Measured on `96d0b9d`, the commit that also carries this entry, by running each command and
-keeping its exit code:
+Measured by running each command and keeping its exit code, on `2cdbc9f`; the three suites and the
+two checks were re-run on the tree that carries this entry, and `make check` was run at `2cdbc9f`
+and again here, where the only difference is this file — which `docs-check` is the check for:
 
 | command | tests | exit | result |
 |---|---|---|---|
