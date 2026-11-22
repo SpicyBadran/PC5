@@ -90,6 +90,11 @@ Legend for **PC?**: `yes` = ordinary documented PC capability, no refusal-list a
 `no-input` = the required input is not lawfully obtainable; `n/a` = console-side step a PC cannot
 perform at all; `unknown` = not classifiable from public sources.
 
+**No row in the table is `yes`.** That is the finding, not an omission: read down the **PC?** column
+and there is not one authentication step on this path that an ordinary, documented PC platform
+capability satisfies end-to-end. §7.3 keeps the two lawful partials in view (S1's file-handling
+share, S9's contract-side work), and they are exactly that — partials of steps, not steps.
+
 | # | Step | What must be authenticated or trusted | Performed by | Depends on | PC? | Class | Conf. |
 |---|---|---|---|---|---|---|---|
 | S1 | Package provenance at install time | the updater must accept only an "official update file provided online by Sony Interactive Entertainment"; files from other sources, or an "altered or modified" console, "might not be able to install the official update data" | the console's updater | the published channel | no-input | `PUBLIC` (Sony's own support page, quoted) | high |

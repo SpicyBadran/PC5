@@ -1,6 +1,6 @@
 Artifact identities — M17 security-boundary workstream, branch `docs/m17-security-boundary-analysis`.
 
-Generated 2026-11-22T01:15:03Z by `evidence/m17-security-boundary-v1/gen_manifest.py`, from the working tree, after every file recorded here
+Generated 2026-11-22T01:19:30Z by `evidence/m17-security-boundary-v1/gen_manifest.py`, from the working tree, after every file recorded here
 was written and before the commit that carries this file.
 
 Base: `main` at `52f682c8435956c8210b3189cad23ebea973d2de` (PR #35's merge commit). This branch adds no change to any production
@@ -19,7 +19,7 @@ the package — so the record count exceeds the distinct-path count on purpose: 
 branch delta and section C is the package. Both are things a reader may want to check separately.
 
 === A — paths this branch adds, against main ===
-docs/playstation/SECURITY_BOUNDARY.md 35663 7cf0be2d16cd269685c0c305b17250a6f0120d34a1a17cd3c3a2527ad1305427
+docs/playstation/SECURITY_BOUNDARY.md 36050 5380c662047f0f9e6366df8436d1fdd12b0418cbfe0f51c17647a7dbb7b7339b
 evidence/m17-security-boundary-v1/AUDIT-PR36-20261122.md 13141 f038e4a2fcf7a6918bb13bfaa4cb0fe6301c804fba36124f4a1c73088d509513
 evidence/m17-security-boundary-v1/FALSIFIER-SOURCE-EXTRACTS-20261122.md 10273 63d74a802b7cea3ae70ecafe2b96b9b39660d5d208135788ea9442160b59e691
 evidence/m17-security-boundary-v1/SCOPE-AND-DEPENDENCY-ASSESSMENT-20261122.md 6965 64fab3448e69b3728dd797c66fd18d5910e33cd29f813aa5a0da5376f7aadee3
