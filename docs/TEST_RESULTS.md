@@ -3103,7 +3103,8 @@ be produced in a fixture.
 
 Measured by running each command and keeping its exit code, on `2cdbc9f`; the three suites and the
 two checks were re-run on the tree that carries this entry, and `make check` was run at `2cdbc9f`
-and again here, where the only difference is this file — which `docs-check` is the check for:
+here were re-run after it, and the only change between the two trees is this file, whose gate is
+`docs-check` (exit 0, re-run on the commit carrying this entry):
 
 | command | tests | exit | result |
 |---|---|---|---|
