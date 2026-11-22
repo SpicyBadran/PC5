@@ -104,6 +104,14 @@ is now byte-exact, `decode_descriptor()` inverts it, and the self-check plus the
 self-check rather than as a new fact about emulators. The trap is generic: a probe of a
 CPU feature measures the *fixture* first, and the fixture needs a control.
 
+## Where this belongs in the record
+
+This directory is the follow-up to
+[`../2026-11-22-tss-and-ist/2026-11-22-emulator-probe-addendum.md`](../2026-11-22-tss-and-ist/2026-11-22-emulator-probe-addendum.md),
+which explains what the earlier `ltr-measurement.md` concluded, what these measurements
+change about it, and the one discrepancy (`sgdt` inside the harness versus inside this
+probe) that was left open rather than smoothed over.
+
 ## What would change the conclusion
 
 Any of these, on a machine where the tool reports them differently:
