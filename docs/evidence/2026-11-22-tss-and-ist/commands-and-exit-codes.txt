@@ -36,6 +36,7 @@ anything, and it is the run to copy.
 Documents and the generated tables:
 
   $ make docs-check                exit 0    DOCS OK: 63 Markdown files, 33 make targets
+  $ python3 -m unittest tests.test_docs_check                      exit 0    Ran 20 tests ... OK
   $ make citations-check           exit 0    CITATIONS OK: 263 commit reference(s) across 11 documents
   $ make presentation-check        exit 0    PRESENTATION OK: 6 figures and 5 blocks current,
                                              13 status rows match roadmap.json, 11 validation record(s) read
@@ -60,18 +61,28 @@ Images and the 32-bit boot:
 
 The full suite, and the legs that this machine cannot close:
 
-  $ python3 -m unittest discover -s tests -p 'test_*.py'      exit 0    Ran 971 tests in 400s ... OK
-  $ make check                                                exit 2    (see the note below)
+  $ make check                                                exit 0    Ran 971 tests in 357s ... OK
+  $ python3 -m unittest discover -s tests -p 'test_*.py'      exit 0    Ran 971 tests in 338s ... OK
   $ make -s ovmf-check                                        exit 2    (recipe exits 1) genuine OVMF firmware and/or QEMU is not available
   $ make ovmf-test                                            exit 2    NOT TESTED: ... Install OVMF (edk2-ovmf / ovmf) and QEMU
 
-`make check` runs `unit psm docs-check citations-check presentation-check brand-check` as
-prerequisites and only then the test suite, so a documentation problem aborts the recipe
-before a single test runs. Here it aborted on the same missing-file link that
-`make docs-check` reports above - by then this file did not exist yet, while the README
-already linked to it. Both legs pass on the tree as committed; the suite line above is the
-same 971 tests `make check` would have run, invoked directly so the ordering cannot hide
-it. The OVMF legs are not failures of the code and are deliberately not recorded as
+Both suite legs were run again after the commit this directory documents, and both were also
+run *during* the work - which is where one shape worth recording showed up. `make check`
+takes `unit psm docs-check citations-check presentation-check brand-check` as prerequisites
+and only then runs the suite, so a documentation problem aborts the recipe before a single
+test has run, and the exit code says nothing about the tests. That happened here: one
+`make check` exited 2 on `docs-check` because this README linked to a file that did not exist
+yet at that moment. The suite was fine; the check was not run. The direct
+`python3 -m unittest discover` line above exists so the same 971 tests are quoted through a
+command that cannot be short-circuited by documentation, and both numbers are recorded
+because they measure slightly different things (one is the gate a reviewer will type, the
+other is the suite itself).
+
+After the commit, `git status --porcelain` is empty: no gate in this list dirties the tracked
+tree. `make -s presentation` / `make roadmap sync` are the writers, and they are deliberately
+not prerequisites of `make check`.
+
+The OVMF legs are not failures of the code and are deliberately not recorded as
 passes either: `docs/evidence/validation/ovmf-test.json` reads `not-tested`, and
 `tests/test_roadmap_dependencies.py` refuses to let any milestone be called `complete`
 while that record says so.
