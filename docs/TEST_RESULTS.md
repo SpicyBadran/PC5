@@ -3066,3 +3066,52 @@ each reported as failures. It establishes nothing about physical hardware, about
 Sony system software, or about any milestone's acceptance. `M17`–`M21` remain `blocked`,
 `M19` remains the unexecuted destination, and no evidence level above host-and-emulator was
 reached by this work.
+
+## 29. The receipt's own loop, and the tests the mutation battery said were missing (2026-11-16)
+
+Followed §28 with three fixes and one correction to §28 itself.
+
+**Correction first.** §28 says the suite "grew to 968 tests". That was true at the moment it was
+written and is not the number now; the entry was never re-measured before being committed, which
+is exactly the class of error this section documents. The measured counts are in the table below.
+
+1. **A reconciliation delivered by a pull-request merge re-opened itself forever.** The merge
+   commit is a SHA no earlier receipt can name. Exempting merges as such would let any merge
+   self-approve, so the rule is about content: `reviewed_ancestry()` clears a merge when every
+   commit it introduces is named in a receipt or consists of reconciliation output. A squash
+   mints new SHAs with no such ancestry and still has to be recorded — scenarios 36, 37, 38.
+2. **`presentation-check` could not see a layout defect.** Byte equality passes whenever the
+   asset matches the render, so changing the drawing code leaves a colliding figure "current".
+   `check()` now refuses a figure that is up to date and colliding, from both test files.
+3. **`overflow()` kept its own width estimate.** If that estimate and the one `fit` uses drift,
+   the guard measures a figure the layout never produced. One test places a label exactly as
+   wide as its room and one character wider, and requires the first to pass and the second to
+   fail; both now go through `measure`.
+
+**How the three were found:** a mutation battery — copy the tree to a scratch directory, swap one
+statement, re-run the suite, and require a failure. Eighteen controls in three rounds; **15 caught,
+3 missed and then fixed**. The misses were the value of the exercise: a test that calls a helper
+directly proves the helper, not the gate, and a `try/except` around a `git rev-list` turns
+"this repository cannot tell me" into "nothing landed". Both holes now have assertions, and the
+structural test on `range_commits` (no `try`, no `except`) is what remains when a behaviour cannot
+be produced in a fixture.
+
+| suite | tests | result |
+|---|---|---|
+| `tests.test_dashboard_reconcile` | 45 | `OK (skipped=1)` |
+| `tests.test_progress_matrix` | 56 | `OK` |
+| `tests.test_presentation` | 66 | `OK` |
+| `make check` | 1037 | `exit=0`, `OK (skipped=110)` |
+
+One control is reported as not-proven: a needle aimed at a report string failed to patch, so that
+behaviour rests on scenario 37's substring assertion alone. Nothing in the figure, README or
+`claims.json` claims more than these lines support.
+
+**Next actions / still open**
+
+* `docs/evidence/dashboard-reconciliation.json` still does not exist: the receipt is recorded on
+  the target, so the first one is bootstrapped on `main` in the merge commit itself.
+* 0 `docs/evidence/` records are filed, so the matrix's "0/35 milestones have a record on file"
+  is an honest reading, not a rendering bug — it changes when evidence is filed, not when the
+  figure is edited.
+
