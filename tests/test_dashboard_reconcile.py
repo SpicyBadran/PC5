@@ -1157,6 +1157,31 @@ class ReconcileScenarioTest(unittest.TestCase):
         del branch_tip
 
 
+    def test_s45_json_mode_parses_when_the_answer_is_a_refusal(self):
+        """`--json` is the machine interface, so a refusal has to be an object too.
+
+        Found while running the tool against a fresh clone: `--json` on a repository with no
+        receipt printed `OUTSTANDING — docs/evidence/…` on stdout, which is not JSON, so
+        `json.load` raised and the caller could not tell "a reconciliation is due" from "the
+        tool crashed". Exit codes were correct all along; only the payload was prose.
+        """
+        fx = self.fixture(bootstrapped=False)
+        done = fx.reconcile("--json")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        try:
+            payload = json.loads(done.stdout)
+        except json.JSONDecodeError as exc:
+            self.fail(f"--json on an unbootstrapped target is not parseable ({exc}): "
+                      f"{done.stdout[:120]!r}")
+        self.assertEqual(payload["status"], "outstanding")
+        self.assertIn("dashboard-reconciliation.json", payload["reason"])
+        self.assertIn("make post-merge", payload["next"])
+        self.assertEqual(fx.reconcile("--json", "--record").returncode, 2,
+                         "a refusal to write is still an error, not an empty success")
+        self.assertEqual(fx.read().stdout.splitlines()[0][:12], "OUTSTANDING ",
+                         "text mode is unchanged: the fix is to the JSON payload only")
+
+
 class TheToolItselfIsSoundTest(unittest.TestCase):
     """Properties of the script that need no repository, checked against its source.
 

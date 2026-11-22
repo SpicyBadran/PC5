@@ -582,7 +582,7 @@ def report(state: dict, json_mode: bool) -> int:
     if state.get("exemption_checked"):
         agreement = state.get("generated_output_agreement") or ""
         wording = (f"does not match its data: {agreement}" if agreement
-                   else "checked against its data: the exemption is earned")
+                   else "checked against its data in this checkout: the exemption is earned")
         print(f"generated output       {wording}")
     print(f"reconciled boundary  {state['boundary'][:12]}  ({state['boundary_date'][:10]})")
     print(f"summary              {state['summary'] or '(none recorded)'}")
@@ -867,10 +867,20 @@ def main(argv=None) -> int:
             return code
         return report(inspect(repo, target_ref, target), args.json_mode)
     except Outstanding as due:
-        print(f"OUTSTANDING — {due}")
-        print("  run: make post-merge")
+        if args.json_mode:
+            # `--json` is the machine interface: prose on stdout where a caller expects an object
+            # is a parse error, and a parse error reads like "the tool is broken" instead of
+            # "a reconciliation is due". The verdict and the exit code were already right.
+            print(json.dumps({"status": "outstanding", "reason": str(due),
+                              "next": "make post-merge"}, indent=2, sort_keys=True))
+        else:
+            print(f"OUTSTANDING — {due}")
+            print("  run: make post-merge")
         return 1
     except ReconcileError as error:
+        if args.json_mode:
+            print(json.dumps({"status": "error", "reason": str(error)},
+                             indent=2, sort_keys=True), file=sys.stderr)
         print(f"ERROR — {error}", file=sys.stderr)
         return 2
 
