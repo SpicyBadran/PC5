@@ -691,6 +691,29 @@ class ArtworkGuardFalsifiabilityTest(unittest.TestCase):
                      + P.text(588, 40, "B" * 20, size=13, anchor="end"), "t", "d")
         self.assertEqual(P.collisions(body), [])
 
+    def test_the_gate_refuses_a_colliding_figure_even_when_it_is_up_to_date(self):
+        """`presentation-check` is the gate CI would be if CI existed, so it needs teeth.
+
+        Byte equality alone cannot see a layout defect: change the drawing code so a heading
+        prints over its own figure, and every regenerated asset still matches its render. The
+        geometry rule therefore has to be enforced inside `check`, not only here — and that
+        claim is only worth making if it can fail, which is what handing `check` a current and
+        colliding figure does.
+        """
+        body = P.svg(1200, 120,
+                     P.text(24, 40, "E" * 70, size=13, weight="bold")
+                     + P.text(588, 40, "F" * 40, size=13, weight="bold", anchor="end"),
+                     "colliding", "a heading and its figure on one line")
+        directory = Path(tempfile.mkdtemp(prefix="pc5-gate-collision-"))
+        self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
+        (directory / "collide.svg").write_text(body, encoding="utf-8")
+        with unittest.mock.patch.object(P, "rendered", return_value={"collide.svg": body}), \
+             unittest.mock.patch.object(P, "ASSETS", directory), \
+             unittest.mock.patch.object(P, "render_blocks", return_value={}):
+            problems = P.check(roadmap(), {})
+        self.assertTrue(any("labels on one baseline overlap" in problem for problem in problems),
+                        f"the gate waved a colliding figure through: {problems}")
+
     def test_region_head_clips_the_title_instead_of_letting_the_pair_overlap(self):
         body, _y = P.region_head(24, 20, 564, "T" * 70, right="R" * 40)
         self.assertIn("\u2026", body, "an over-long title must be clipped, not allowed to collide")

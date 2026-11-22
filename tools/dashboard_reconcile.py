@@ -265,19 +265,92 @@ def outside_generated_blocks(repo: Path, sha: str, parents: list) -> list:
     return sorted(set(offenders))
 
 
-def classify(repo: Path, commit: dict) -> dict:
+def commit_facts(repo: Path, sha: str, cache: dict) -> dict:
+    """Parents and first-parent diff of one commit, fetched at most once per run.
+
+    Off the first-parent line — the commits a merge introduced — SHAs are looked up as often
+    as a rule needs them, and this is a git subprocess per call otherwise.
+    """
+    if sha not in cache:
+        parents = git(repo, "show", "-s", "--format=%P", sha).split()
+        base = parents[0] if parents else None
+        paths = (sorted(set(git(repo, "diff", "--name-only", "--no-commit-id", base,
+                                sha).splitlines()))
+                 if base else sorted(git(repo, "show", "--pretty=", "--name-only",
+                                         sha).splitlines()))
+        cache[sha] = {"sha": sha, "parents": len(parents),
+                      "changed_paths": [line for line in paths if line.strip()]}
+    return cache[sha]
+
+
+def is_generated_output_only(repo: Path, sha: str, cache: dict) -> bool:
+    """Does everything this commit changed consist of reconciliation output?
+
+    The content rule that closes the loop: `docs/assets/**` and the receipt are written by the
+    generator and by `--record`, and a `README.md` line is reconciliation output only when it
+    falls inside a generated span. Hand-writing prose in a generated block fails
+    `presentation-check`, so exempting these paths cannot hide an unreviewed change — while
+    exempting by *commit SHA* or by *message* would.
+    """
+    facts = commit_facts(repo, sha, cache)
+    paths = facts["changed_paths"]
+    if not paths:
+        return False                                   # an empty commit is nothing to exempt
+    parent = git(repo, "show", "-s", "--format=%P", sha).split()[:1]
+    outside = outside_generated_blocks(repo, sha, parent)
+    return all(p.startswith(GENERATED_OUTPUTS) or p == RECEIPT
+               or (p == GENERATED_README and not outside)
+               for p in paths)
+
+
+def reviewed_ancestry(repo: Path, merge: str, named: set, cache: dict) -> tuple:
+    """For a merge: are all the commits it brought in already reviewed?
+
+    This is what lets a pull-request merge that delivers a reconciliation clear at the moment
+    it lands. The merge commit itself is a new SHA that no earlier receipt can name, and
+    forbidding it from ever being satisfied would mean a reconciliation that must be
+    re-recorded forever; accepting it on the strength of "the merge happened" would mean any
+    merge at all is self-approving. So the rule is about its content: every commit the merge
+    introduces must be named in a receipt or consist of reconciliation output. The commits a
+    squash mints are new SHAs with no such ancestry, and still need recording — which is the
+    honest difference between the two strategies, not an accident of history walking.
+    """
+    introduced = [sha for sha in git(repo, "rev-list", f"{merge}^1..{merge}").splitlines()
+                  if sha and sha != merge]
+    if not introduced:
+        return True, []
+    unreviewed = [sha for sha in introduced
+                  if sha not in named and not is_generated_output_only(repo, sha, cache)]
+    return not unreviewed, unreviewed
+
+
+def classify(repo: Path, commit: dict, named: set = frozenset(), cache: dict = None) -> dict:
     """Label one commit in the range: does it need inspecting, and what does it drive?"""
+    cache = {} if cache is None else cache
+    sha = commit["sha"]
     paths = commit["changed_paths"]
     drivers = [p for p in paths if any(p == d or p.startswith(d) for d in DRIVERS)]
-    outside = outside_generated_blocks(repo, commit["sha"],
-                                       git(repo, "show", "-s", "--format=%P",
-                                           commit["sha"]).split())
-    generated_only = bool(paths) and all(
-        p.startswith(GENERATED_OUTPUTS) or p == RECEIPT
-        or (p == GENERATED_README and not outside)
-        for p in paths)
+    parent = git(repo, "show", "-s", "--format=%P", sha).split()[:1]
+    outside = outside_generated_blocks(repo, sha, parent)
+    generated_only = is_generated_output_only(repo, sha, cache)
+    if generated_only:
+        reason, needs = "generated output only", False
+    elif sha in named:
+        reason, needs = "named in the receipt", False
+    elif commit["parents"] > 1:
+        covered, unreviewed = reviewed_ancestry(repo, sha, named, cache)
+        if covered:
+            reason, needs = ("every commit it introduced is already reviewed", False)
+        else:
+            reason = (f"it introduces {len(unreviewed)} unreviewed commit(s): "
+                      + ", ".join(sha[:12] for sha in unreviewed[:6])
+                      + ("" if len(unreviewed) <= 6 else f" (+{len(unreviewed) - 6} more)"))
+            needs = True
+    else:
+        reason, needs = "not recorded by any receipt", True
     return {"kind": "merge" if commit["parents"] > 1 else "single-parent",
-            "requires_inspection": not generated_only,
+            "requires_inspection": needs,
+            "reason": reason,
             "generated_output_only": generated_only,
             "readme_lines_outside_generated_blocks": outside,
             "drivers": drivers}
@@ -361,8 +434,9 @@ def inspect(repo: Path, target_ref: str, target: str) -> dict:
     commits = range_commits(repo, boundary, target)
     outstanding, reviewed, exempt = [], [], []
     named = set(receipt.get("inspected_commits") or [])
+    cache: dict = {}
     for commit in commits:
-        info = commit.setdefault("classification", classify(repo, commit))
+        info = commit.setdefault("classification", classify(repo, commit, named, cache))
         entry = {**commit, **info}
         if not info["requires_inspection"]:
             exempt.append(entry)
@@ -372,6 +446,7 @@ def inspect(repo: Path, target_ref: str, target: str) -> dict:
             outstanding.append(entry)
     figures = [c for c in commits if any(p.startswith(GENERATED_OUTPUTS)
                                          for p in c["changed_paths"])]
+    cleared_by_merge = [c for c in reviewed if c["reason"].startswith("every commit")]
     notes = []
     if target_ref.startswith("origin/"):
         # `origin/main` is a *local* record of what the remote holds; if the branch you are
@@ -403,9 +478,11 @@ def inspect(repo: Path, target_ref: str, target: str) -> dict:
             {"sha": c["sha"], "subject": c["subject"], "date": c["date"],
              "parents": c["parents"], "changed_paths": c["changed_paths"],
              "requires_inspection": c["classification"]["requires_inspection"],
+             "reason": c["classification"]["reason"],
              "drivers": c["classification"]["drivers"]} for c in commits],
         "outstanding": outstanding,
         "recorded_in_receipt": reviewed,
+        "merges_cleared_by_reviewed_content": [c["sha"] for c in cleared_by_merge],
         "exempt_generated_only": exempt,
         "output_touched_by_range": [c["sha"] for c in figures],
         "verification": receipt.get("verification", []),
@@ -454,10 +531,13 @@ def report(state: dict, json_mode: bool) -> int:
     print(f"verifications        " + (", ".join(f"{v['label']}=exit {v['exit_code']}"
                                                 for v in state["verification"]) or "(none)"))
     total = len(state["commits_since_boundary"])
+    via_merge = len(state.get("merges_cleared_by_reviewed_content", []))
     print(f"commits since then   {total} on the first-parent line "
           f"({len(state['outstanding'])} needing inspection, "
-          f"{len(state['recorded_in_receipt'])} already named in the receipt, "
-          f"{len(state['exempt_generated_only'])} generated-output only)")
+          f"{len(state['recorded_in_receipt']) - via_merge} already named in the receipt, "
+          f"{len(state['exempt_generated_only'])} generated-output only"
+          + (f", {via_merge} merge(s) whose every introduced commit is reviewed"
+             if via_merge else "") + ")")
     for entry in state["outstanding"]:
         print(f"  OUTSTANDING {entry['sha'][:12]}  {entry['date'][:10]}  "
               f"[{entry['kind']}]  {entry['subject'][:64]}")
@@ -465,6 +545,8 @@ def report(state: dict, json_mode: bool) -> int:
             print(f"              drives: {', '.join(entry['drivers'][:4])}")
         else:
             print("              drives: nothing the dashboard counts")
+        if entry["kind"] == "merge" and entry["reason"].startswith("it introduces"):
+            print(f"              {entry['reason']}")
     if state["outstanding"]:
         print("OUTSTANDING — a successful change on the primary branch has not been "
               "reconciled with the dashboard")
@@ -499,8 +581,11 @@ def record(repo: Path, target_ref: str, target: str, summary: str, dry_run: bool
             f"no usable receipt at {target}: `--record` only extends an existing boundary. "
             "Bootstrap it explicitly with --record --boundary <full SHA> --inspect <sha>…"
             " so the receipt states what it looked at.")
-    need = [c for c in commits if c.setdefault("classification",
-                                                classify(repo, c))["requires_inspection"]]
+    cache: dict = {}
+    named_all = set((existing.get("inspected_commits") or []))
+    need = [c for c in commits
+            if c.setdefault("classification",
+                            classify(repo, c, named_all, cache))["requires_inspection"]]
     named = set(previous["inspected_commits"])
     unrecorded = [c for c in need if c["sha"] not in named]
     if not unrecorded:
@@ -522,7 +607,7 @@ def record(repo: Path, target_ref: str, target: str, summary: str, dry_run: bool
         "reconciled_at": target,
         "previous_boundary": boundary,
         "boundary_date": git(repo, "show", "-s", "--format=%cI", target),
-        "summary": summary or "",
+        "summary": summary or (f"reconciled {len(unrecorded)} commit(s) since {boundary[:12]}"),
         "inspected_commits": sorted(set(named) | {c["sha"] for c in unrecorded}),
         "commits_inspected_now": [
             {"sha": c["sha"], "subject": c["subject"], "date": c["date"],

@@ -327,6 +327,16 @@ class ReconcileScenarioTest(unittest.TestCase):
         self.assertIn('"schema"', done.stdout)
         self.assertFalse((fx.repo / RECEIPT).exists())
 
+    def test_s06b_every_receipt_says_what_it_did(self):
+        """`--record` without `--note` still produces a summary; a bootstrap does not invent one."""
+        fx = self.fixture()
+        self.assertIn("the seed commit was inspected", fx.receipt()["summary"])
+        fx.write("docs/source.txt", "36 of 35\n")
+        fx.sync_and_commit("roadmap: a milestone closed")
+        fx.record()
+        fx.commit("record the reconciliation")
+        self.assertRegex(fx.receipt()["summary"], r"reconciled 1 commit\(s\) since [0-9a-f]{12}")
+
     def test_s07_after_a_bootstrap_the_branch_reads_current(self):
         fx = self.fixture()
         self.assert_current(fx.read())
@@ -733,6 +743,99 @@ class ReconcileScenarioTest(unittest.TestCase):
         self.assertIn("the SHAs below were resolved here", done.stdout,
                       "and the report says what it did about it")
 
+    def test_s36_a_merge_of_reviewed_content_clears_the_moment_it_lands(self):
+        """The case a receipt cannot pre-name, and must not have to.
+
+        A pull-request merge is a SHA that did not exist when the receipt was written, so a
+        rule of "name every merge" would leave every reconciliation needing a second receipt
+        forever. A rule of "a merge is a merge" would let any merge self-approve. So the
+        exemption is about content: if everything the merge introduces is named or is
+        reconciliation output, the merge brought in nothing unreviewed.
+        """
+        fx = self.fixture()
+        fx.write("docs/source.txt", "36 of 35\n")
+        work = fx.sync_and_commit("roadmap: a milestone closed, figure regenerated")
+        fx.git("checkout", "-q", "-b", "pr/like-40", work)      # the PR *is* this commit
+        fx.git("checkout", "-q", "main")
+        named_before = fx.receipt()["inspected_commits"]
+        self.assertNotIn(work, named_before, "the work was committed after the bootstrap")
+        self.assert_outstanding(fx.read(), work)
+        fx.record()                                              # names `work`
+        fx.commit("record the reconciliation")
+        self.assertIn(work, fx.receipt()["inspected_commits"])
+        # main now moves forward and the reviewed commit arrives as a merge of it
+        fx.write("docs/other.md", "something else on main\n")
+        fx.sync_and_commit("main moves on")
+        merge = fx.git("merge", "--no-ff", "pr/like-40", "-m", "Merge pull request #40",
+                       check=False) or fx.head()
+        if len(fx.git("rev-list", "--parents", "-n1", "HEAD").split()) < 3:
+            self.skipTest("git would not merge a branch already contained in main")
+        merge = fx.head()
+        state = fx.state()
+        self.assertEqual([c["sha"] for c in state["outstanding"]], [],
+                         f"the merge re-opened reviewed work: {merge[:12]}\n{state}")
+        self.assertIn(merge, state["merges_cleared_by_reviewed_content"],
+                      "and the report has to say *why* it is clear, not just that it is")
+        self.assert_current(fx.read())
+
+    def test_s37_a_merge_is_never_exempt_for_being_a_merge(self):
+        """The other side of the rule: one unreviewed commit inside and it is outstanding."""
+        fx = self.fixture()
+        fx.write("docs/source.txt", "37 of 35\n")
+        reviewed = fx.sync_and_commit("roadmap: reviewed change")
+        fx.record()
+        fx.commit("record the reconciliation")
+        fx.git("checkout", "-q", "-b", "mixed")
+        fx.write("boot/kernel.c", "int surprise(void) { return 1; }\n")
+        hidden = fx.commit("a change nobody looked at")
+        fx.git("checkout", "-q", "main")
+        merge = fx.merge("mixed")
+        state = fx.state()
+        self.assertEqual([c["sha"] for c in state["outstanding"]], [merge],
+                         "the first-parent line carries the merge, and the merge is the thing "
+                         "that has to be recorded — the commit it smuggled in is named in its "
+                         "diagnostic rather than invented as a range member")
+        entry = state["outstanding"][0]
+        self.assertIn("1 unreviewed commit", entry["reason"], entry["reason"])
+        report = fx.read().stdout
+        self.assertIn(hidden[:12], report,
+                      "the report has to point at what the merge brought in unreviewed")
+        self.assertIn("it introduces 1 unreviewed commit", report)
+        self.assertNotIn("CURRENT", report)
+        self.assertIn(reviewed, fx.receipt()["inspected_commits"],
+                      "the earlier commit stays named; what changed is that a merge on top of "
+                      "an unreviewed one is not exempt")
+        # recording it clears both, and nothing else
+        fx.sync()
+        self.assertEqual(fx.record().returncode, 0, fx.record().stdout + fx.record().stderr)
+        fx.commit("record the reconciliation")
+        receipt = fx.receipt()
+        self.assertIn(merge, receipt["inspected_commits"],
+                      "a merge with unreviewed content has to be named itself")
+        self.assert_current(fx.read())
+
+    def test_s38_a_squash_of_reviewed_commits_still_has_to_be_recorded(self):
+        """The asymmetry is deliberate: a squash mints a new SHA and destroys the ancestry.
+
+        There is no history to point at, so the honest answer is "one more reconciliation",
+        not "a merge is a merge, so let it through".
+        """
+        fx = self.fixture()
+        fx.write("docs/source.txt", "39 of 35\n")
+        work = fx.sync_and_commit("roadmap: a milestone closed")
+        fx.record()
+        fx.commit("record the reconciliation")
+        self.assertIn(work, fx.receipt()["inspected_commits"])
+        fx.git("checkout", "-q", "-b", "squashed")
+        fx.write("docs/source.txt", "40 of 35\n")
+        fx.sync_and_commit("a second change that will be squashed away")
+        fx.git("checkout", "-q", "main")
+        squash = fx.merge("squashed", how="--squash")
+        self.assert_outstanding(fx.read(), squash,
+                                "the squash is a new SHA; naming its branch is not the same "
+                                "thing, and the tool must not pretend otherwise")
+        self.assertIn(squash, [c["sha"] for c in fx.state()["outstanding"]])
+
     def test_s31_an_up_to_date_merge_creates_no_commit_and_invents_no_work(self):
         """The other half of the no-op story, and the one a watermark could not tell apart.
 
@@ -889,6 +992,19 @@ class TheToolItselfIsSoundTest(unittest.TestCase):
                             f"`git {call}` swallows a failure it should report")
         self.assertNotIn('try_git(repo, "merge-base"', self.source,
                          "ancestry answers by exit code, so it must go through probe()")
+
+    def test_an_unreadable_range_is_never_read_as_an_empty_one(self):
+        """`range_commits` must not swallow anything: an empty range means "nothing landed".
+
+        A `try/except` around the walk would turn "this repository cannot tell me what is in
+        the range" into "the range is empty", which is the CURRENT result this tool exists to
+        make impossible. The rule is structural, so it is checked structurally.
+        """
+        body = self.source[self.source.index("def range_commits"):
+                           self.source.index("def generated_spans")]
+        self.assertNotIn("try:", body, "the range walk may not recover from a git failure")
+        self.assertNotIn("except", body, "\u2026and may not swallow one")
+        self.assertIn('git(repo, "rev-list"', body, "it must go through the raising helper")
 
     def test_no_clock_and_no_network(self):
         for forbidden in ("datetime", "time.time", "urllib", "requests", "socket",

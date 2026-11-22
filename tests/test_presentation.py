@@ -22,6 +22,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -373,6 +374,42 @@ class LayoutGuardTest(unittest.TestCase):
         """
         for name, body in P.rendered(roadmap()).items():
             self.assertEqual(P.collisions(body), [], name)
+
+    def test_check_reports_a_collision_even_when_the_file_is_current(self):
+        """A gate that only detects staleness cannot catch a generator that lays out badly.
+
+        `check` compares bytes *and* geometry: if the artwork is exactly what the generator
+        produces, the byte comparison is satisfied and only the geometry can object — which is
+        the state a figure lands in when someone changes the drawing code.
+        """
+        body = P.svg(1200, 120,
+                     P.text(24, 40, "A" * 70, size=13, weight="bold")
+                     + P.text(588, 40, "B" * 40, size=13, weight="bold", anchor="end"),
+                     "colliding figure", "a title and a figure printed over each other")
+        tmp = Path(tempfile.mkdtemp(prefix="pc5-check-collision-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        (tmp / "collide.svg").write_text(body, encoding="utf-8")
+        with unittest.mock.patch.object(P, "rendered", return_value={"collide.svg": body}), \
+             unittest.mock.patch.object(P, "ASSETS", tmp), \
+             unittest.mock.patch.object(P, "render_blocks", return_value={}):
+            problems = P.check(roadmap())
+        self.assertTrue(any("labels on one baseline overlap" in problem
+                            for problem in problems),
+                        f"check() accepted a colliding-but-current figure: {problems}")
+
+    def test_the_overflow_guard_and_the_layout_share_one_ruler(self):
+        """`overflow` may not keep its own width estimate; that is how a guard goes blind.
+
+        A label exactly as wide as its room passes and one character more fails, which only
+        holds while both `fit` and `overflow` compute room from the same `measure`.
+        """
+        size, x, margin = 13.0, 24.0, 12
+        for extra, expect_problem in ((0, False), (1, True)):
+            characters = int((1200 - margin - x) / (size * P.CHAR_EM)) + extra
+            body = P.svg(1200, 100, P.text(x, 40, "L" * characters, size=size), "t", "d")
+            problems = P.overflow(body, 1200)
+            self.assertEqual(bool(problems), expect_problem,
+                             f"{characters} characters at {size}px: {problems}")
 
     def test_the_collision_guard_fires_and_stays_quiet_when_it_should(self):
         crowded = P.svg(1200, 60, P.text(24, 30, "T" * 60, size=13, weight="bold")
