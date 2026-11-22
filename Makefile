@@ -20,7 +20,10 @@ TAG          ?=
 STAMP_EPOCH  ?= $(or $(SOURCE_DATE_EPOCH),$(shell date -u +%s))
 BUILD_DATE   ?= $(shell date -u -d @$(STAMP_EPOCH) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
 
-BUILD        := build
+# `?=` so a test or a CI job can build into its own directory and leave the
+# developer's `build/` alone -- the release-ESP tests below build both UEFI paths,
+# and they must not do it in a tree the reader is working in.
+BUILD        ?= build
 OBJ          := $(BUILD)/obj
 ISO          := $(BUILD)/pc5.iso
 
@@ -53,6 +56,12 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
 all: iso
 
 iso: $(ISO)
+
+# Build and verify the 64-bit release image in one go, so the artifact checked is
+# the artifact built.  `make PC5_UEFI=64 iso verify` is the same thing; this exists
+# because CI and the release notes should not have to remember two variables.
+iso64:
+	@$(MAKE) --no-print-directory PC5_UEFI=64 iso verify
 
 info:
 	@echo "version   $(VERSION)"
@@ -250,22 +259,82 @@ $(BUILD)/iso/README.TXT: docs/ISO_README.txt | $(BUILD)
 	@mkdir -p $(BUILD)/iso
 	cp $< $@
 
-$(BUILD)/iso/BUILDINFO.TXT: | $(BUILD)
+# Depends on the loader it names, because it quotes that loader's digest: switching
+# PC5_UEFI has to change this file, or a 64-bit ISO would ship a 32-bit label.
+$(BUILD)/iso/BUILDINFO.TXT: $(ESP_LOADER) | $(BUILD)
 	@mkdir -p $(BUILD)/iso
-	@printf 'PC5\nversion: %s\nbuild: %s\ndate: %s\nkernel: %s\n' \
-	 "$(VERSION)" "$(BUILD_ID)" "$(BUILD_DATE)" "32-bit PC5 bring-up kernel" > $@
+	@printf 'PC5\nversion: %s\nbuild: %s\ndate: %s\nkernel: %s\nuefi-path: %s\nesp-loader: %s\n' \
+	 "$(VERSION)" "$(BUILD_ID)" "$(BUILD_DATE)" \
+	 "$(if $(filter 64,$(PC5_UEFI)),64-bit PC5 long-mode kernel,32-bit PC5 bring-up kernel)" \
+	 "$(PC5_UEFI)" "$(shell sha256sum $(ESP_LOADER) 2>/dev/null | cut -c1-16)" > $@
 
 $(BUILD):
 	@mkdir -p $(BUILD)
 
-$(ISO): $(BUILD)/loader.bin $(BUILD)/mbr.bin $(BUILD)/kernel.bin $(BUILD)/efi.img $(BUILD)/iso/README.TXT $(BUILD)/iso/BUILDINFO.TXT tools/mkiso.py
+# ------------------------------------------------- which UEFI path ships? ----
+# The El Torito ESP has exactly one fallback boot file, `EFI/BOOT/BOOTX64.EFI`, so
+# "put the 64-bit path in the release image" is a choice of *which loader sits in
+# that slot*, not an addition.  `PC5_UEFI` makes the choice explicit instead of
+# silently promoting one path over the other:
+#
+#   PC5_UEFI=32 (default)  the bring-up loader, loading KERNEL.BIN in protected
+#                          mode -- the path `make boot-test` and the release notes
+#                          describe, byte-for-byte what `make iso` produced before
+#                          this option existed.
+#   PC5_UEFI=64            the long-mode loader, loading KERNEL64.BIN -- the path
+#                          `make stubtest64` executes and the one the 64-bit
+#                          milestone is about.
+#
+# Both modes are verified the same way: `make verify` compares the ESP's loader and
+# kernel bytes against the *individually built and gated* files, so the release
+# image is provably the artifact the gates ran on.  What differs is which claim is
+# earned: only OVMF can show a path genuinely boots, and `make ovmf-test` keeps
+# saying NOT TESTED until it can run.
+PC5_UEFI ?= 32
+ifeq ($(PC5_UEFI),64)
+ESP_IMAGE       := $(BUILD)/efi64-release.img
+ESP_LOADER      := $(BUILD)/uefi64/BOOTX64.EFI
+ESP_KERNEL      := $(BUILD)/kernel64/KERNEL64.BIN
+ESP_KERNEL_NAME := KERNEL64.BIN
+# Also published into the ISO9660 root, so the flat-file copy the BIOS path uses
+# for KERNEL.BIN has a 64-bit counterpart and `make verify` can cross-check both.
+ISO_ESP_EXTRA   := --file KERNEL64.BIN=$(BUILD)/kernel64/KERNEL64.BIN
+else ifeq ($(PC5_UEFI),32)
+ESP_IMAGE       := $(BUILD)/efi.img
+ESP_LOADER      := $(BUILD)/uefi/BOOTX64.EFI
+ESP_KERNEL      := $(BUILD)/kernel.bin
+ESP_KERNEL_NAME := KERNEL.BIN
+ISO_ESP_EXTRA   :=
+else
+$(error PC5_UEFI must be 32 or 64, got '$(PC5_UEFI)')
+endif
+
+VERIFY_ESP_ARGS := --expect-esp-loader $(ESP_LOADER) \
+                   --expect-esp-file $(ESP_KERNEL_NAME)=$(ESP_KERNEL)
+
+# The release ESP for the 64-bit path.  Distinct from $(BUILD)/efi64.img, which is
+# the bare `make uefi64` artefact used by the stub gate: the release image also
+# carries README.TXT, so `make verify` sees the same ESP shape in both modes and a
+# difference in boot behaviour means a difference in the boot path, not in padding.
+$(BUILD)/efi64-release.img: $(BUILD)/uefi64/BOOTX64.EFI $(BUILD)/kernel64/KERNEL64.BIN \
+                            docs/ISO_README.txt tools/mkefiimg.py
+	python3 tools/mkefiimg.py --size-kb 1440 \
+	  --file $(BUILD)/uefi64/BOOTX64.EFI=EFI/BOOT/BOOTX64.EFI \
+	  --file $(BUILD)/kernel64/KERNEL64.BIN=KERNEL64.BIN \
+	  --file docs/ISO_README.txt=README.TXT \
+	  --output $@ --info $(BUILD)/efi64-release-info.json
+	@sha=$$(sha256sum $@ | cut -d" " -f1); \
+	 echo "RELEASE ESP (64-bit): $$(stat -c %s $@) bytes sha256=$$sha"
+
+$(ISO): $(BUILD)/loader.bin $(BUILD)/mbr.bin $(BUILD)/kernel.bin $(ESP_IMAGE) $(BUILD)/iso/README.TXT $(BUILD)/iso/BUILDINFO.TXT tools/mkiso.py
 	python3 tools/mkiso.py \
 	  --volume-id PC5 \
 	  --boot-image $(BUILD)/loader.bin \
 	  --mbr-code $(BUILD)/mbr.bin \
 	  --desc-offset 0xE00 \
-	  --uefi-image $(BUILD)/efi.img \
+	  --uefi-image $(ESP_IMAGE) \
 	  --file KERNEL.BIN=$(BUILD)/kernel.bin \
+	  $(ISO_ESP_EXTRA) \
 	  --file README.TXT=$(BUILD)/iso/README.TXT \
 	  --file BUILDINFO.TXT=$(BUILD)/iso/BUILDINFO.TXT \
 	  --output $(ISO) \
@@ -422,6 +491,7 @@ manifest: $(ISO)
 
 verify: $(ISO)
 	python3 tools/verify_iso.py $(ISO) --info $(BUILD)/build-info.json \
+	  $(VERIFY_ESP_ARGS) \
 	  --json-out $(BUILD)/verify-report.json
 	python3 tools/iso_manifest.py $(ISO) --output $(BUILD)/pc5.iso.manifest.json
 	python3 tools/iso_manifest.py $(ISO) --verify $(BUILD)/pc5.iso.manifest.json

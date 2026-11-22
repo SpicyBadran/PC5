@@ -154,7 +154,11 @@ Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
     No OVMF run (no TianoCore image, no `qemu-system-x86_64` in this
     environment) and no physical machine has executed them. The success marker
     `PC5-64BIT-LONG-MODE-OK` is therefore evidence of the code path, not of
-    firmware compliance.
+    firmware compliance. Packaging can now be opted into — `make iso64` builds a
+    release ESP carrying `BOOTX64.EFI` and `KERNEL64.BIN`, and `make verify` proves
+    those bytes are the ones the gates executed — which is a statement about the
+    image, not about a machine reaching it. Do not read a passing `make iso64` as
+    "boots on UEFI"; `make ovmf-test` is that gate and it reports NOT TESTED here.
 22b. **The 64-bit kernel is minimal on purpose.** It has no interrupt handling and
     no interrupt delivery. The local APIC is *brought up* - xAPIC MMIO only: identity
     read, TPR cleared, error status read and cleared, spurious-vector enable set and

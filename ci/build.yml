@@ -156,6 +156,23 @@ jobs:
             PC5_CI_RUN_ID="${GITHUB_RUN_ID}" \
             PC5_CI_RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
+      - name: Build and verify the 64-bit release image
+        # `PC5_UEFI=64` is the opt-in that puts the long-mode loader and KERNEL64.BIN in
+        # the release ESP, and `make verify` then proves those bytes are the ones
+        # `make stubtest64` executed.  It runs in CI so the option cannot rot into
+        # something that only works on the machine that added it -- the target is a
+        # recipe line, and nothing else would ever type it.
+        #
+        # It builds into build/iso64 on purpose: the step above stages build/pc5.iso,
+        # and a 64-bit image must not overwrite the artifact that ships.  A subdirectory
+        # of build/ rather than a sibling directory, so the scratch tree is ignored and
+        # deleted by the same rules as the rest of the build output.
+        # This is packaging, not booting; the OVMF job below is what would say firmware
+        # reaches it, and it reports NOT TESTED wherever QEMU and OVMF are missing.
+        run: |
+          set -eu
+          make BUILD=build/iso64 iso64 | tee build/logs/iso64.log
+
       - name: Check the staged assets
         run: |
           set -eu
