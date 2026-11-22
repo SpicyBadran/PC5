@@ -44,10 +44,11 @@ benchmarks, compatibility percentages, or evidence that does not exist.
   the banner carries the sentence the project cannot stop repeating: the ISO boots
   PC5's own loader and kernel, no Sony software is present, physical boot not tested.
 * **Mobile and GitHub first.** Widths are 1000–1200 px with generous internal margins,
-  no text smaller than 11 px, and every figure has `<title>` and `<desc>` for screen
-  readers plus descriptive `alt` text in the README.
+  no text below the 10 px floor that `tests/test_presentation.py` enforces (the matrix
+  needs it to fit a label inside a cell), and every figure has `<title>` and `<desc>` for
+  screen readers plus descriptive `alt` text in the README.
 
-## 3. The six figures
+## 3. The seven figures
 
 | Figure | What it shows | Where the facts come from |
 |---|---|---|
@@ -57,10 +58,11 @@ benchmarks, compatibility percentages, or evidence that does not exist.
 | `docs/assets/pc5-boot-workflow.svg` | six steps from building the image to Sony software executing, each labelled verified, not tested, testing required or blocked | the gates in `Makefile` plus the state of `M1` and `M19` |
 | `docs/assets/pc5-dashboard.svg` | six stat cards (milestones, workstreams, in progress, blocked, not started, destination) and a footer with the latest recorded verification, test run, OVMF result and physical-boot count | `roadmap.json` plus `docs/evidence/validation/*.json` |
 | `docs/assets/pc5-evidence.svg` | the evidence ladder: host tests, ISO verification, emulator, stub firmware, real OVMF, physical boot, Sony execution — each with its own record, never inferred from the rung below | validation records, `docs/evidence/*.json`, and `M19` |
+| `docs/assets/pc5-progress-matrix.svg` | the dense board: milestone states, the six evidence levels with their own counts, acceptance and deliverable ratios, per-workstream cells, claim classifications, modelled operations with what each interface withholds, blocked milestones with the dependency that blocks each one, and one cell per committed validation record stamped with its commit | `roadmap.json`, the contract's generated tables, `psm/registry.py`, the tree for "does this deliverable exist", `docs/evidence/**` |
 
 ### What is generated into the README
 
-Five blocks, each between its own pair of markers, each from one source:
+Six blocks, each between its own pair of markers, each from one source:
 
 | Block | Markers | Source | Shows |
 |---|---|---|---|
@@ -68,6 +70,7 @@ Five blocks, each between its own pair of markers, each from one source:
 | Milestone status | `<!-- pc5:status:begin -->` | `roadmap.json` | thirteen capability rows with derived labels |
 | Validation evidence | `<!-- pc5:evidence:begin -->` | `docs/evidence/validation/*.json` | gate, result, check count, the commit the run happened at, and its date; `no record` when there is none |
 | Blockers | `<!-- pc5:blockers:begin -->` | `roadmap.json` | every blocked milestone with the blocker it records |
+| Progress matrix | `<!-- pc5:matrix:begin -->` | the same counts the matrix draws | the text fallback: every region's fraction and the file its denominator comes from, so the README still works with images switched off |
 | The PUP | `<!-- pc5:pup:begin -->` | the tracked `PS5UPDATE.PUP` | pointer size and hash, declared object size, payload absent, package unverified |
 
 **Statistics outside those blocks are rejected.** `make presentation-check` scans the
@@ -85,11 +88,13 @@ reworded test record cannot leave a VERIFIED chip behind.
 ## 4. Generation and checking
 
 ```sh
-make presentation           # write: six SVGs and five README blocks
+make presentation           # write: seven SVGs and six README blocks
 make presentation-check     # read: are they current?  also run by `make check`
 make docs-check             # read: every link, anchor and documented command in the tree
 make validation             # read: the committed records, and whether they are coherent
 make record-validation      # write: run the gates and replace the records (explicit only)
+make dashboard-reconcile    # read: which merges into `main` the dashboard has not caught up with
+make post-merge             # write then read: presentation, presentation-check, docs-check, reconcile
 ```
 
 `make check` runs `presentation-check` and `docs-check`, never `presentation`, so a test
@@ -107,8 +112,14 @@ overstate itself: "runs PS5 games", "boots on any PC", "Secure Boot supported",
 specific reason recorded in the tool.
 
 Determinism: no timestamps, no random ids, no locale-dependent formatting, sorted
-iteration, integer geometry. The same `roadmap.json` produces byte-identical figures on
-any machine, so a diff means the data changed — which is the point.
+iteration, integer geometry, and no reading of the current commit: a figure that stamped
+`HEAD` into its own artwork would go stale on every commit and teach people to ignore the
+gate (the commit stamp the matrix draws comes from the validation *record*, which is
+immutable). The same `roadmap.json` produces byte-identical figures on any machine, so a
+diff means the data changed — which is the point. `tests/test_progress_matrix.py` asserts
+the byte equality, the 10 px floor, that nothing is drawn outside the canvas, that the
+canvas has no dead band below the last region, and that every percentage printed carries
+the fraction it came from.
 
 ## 4b. Where the numbers come from
 
@@ -120,9 +131,15 @@ docs/architecture/roadmap.json            milestones, states, workstreams, versi
 docs/evidence/validation/<gate>.json      one record per gate: command, exit code, result,
         │                                   check counts, commit, date, dirty flag
 docs/evidence/<machine>.json              physical-boot records, validated by hw_record.py
+docs/architecture/PS5_PLATFORM_CONTRACT.md  the generated psm:begin/end tables: operations
+        │                                   per interface, and which are UNSUPPORTED by design
+psm/registry.py                           claim classifications, as psm/contract.py enforces them
 PS5UPDATE.PUP                             the pointer itself: bytes, hash, declared size
-        ▼
-tools/presentation.py  →  docs/assets/*.svg  +  the five README blocks
+the tracked tree                          "does this deliverable path exist" — a name in the
+        ▼                                 graph is not a file, so it is checked, not assumed
+tools/presentation.py  →  docs/assets/*.svg  +  the six README blocks
+        │
+tools/dashboard_reconcile.py   which merges the generated dashboard has not been reconciled with
 ```
 
 `tools/validation.py` is what writes the records, and it can only write one by *running*
@@ -139,9 +156,17 @@ says so in words: a run at an earlier commit is not evidence for the current tre
 
 * It shows no screenshot of a boot, because no boot on physical hardware has happened
   and an illustration of one would be a fabricated result.
-* It publishes no compatibility percentage: the only counting it does is milestones by
-  state, and it says so under the figure.
+* It publishes no compatibility percentage. Percentages appear only where a finite set in
+  the repository can be counted — milestone states, modelled operations, committed
+  validation records — and each one is printed next to its own `(n/d)` with the
+  denominator named in §4b. Nothing is scored on a scale a file does not define.
 * It does not claim continuous integration. The pipeline definition exists; the
   workflow is not active.
-* It does not make the destination look closer than it is: `M19` is drawn blocked, in
-  red, in three of the four figures.
+* It does not make the destination look closer than it is: `M19` is drawn blocked, in red,
+  in every figure that can show it, and the matrix lists what it is blocked on beside it.
+* It does not let the dense board imply a higher evidence level than a row's own: the
+  matrix draws documentation progress, synthetic or mocked coverage, host and emulator
+  validation, firmware-backed validation, physical-hardware validation and genuine
+  target-system-software execution as separate regions, and the top two contain no green
+  cell because the repository holds no evidence that could put one there. A cell is green
+  only where a file records the thing as done.

@@ -2,7 +2,7 @@
 
 Everything the README shows about status comes from `docs/architecture/roadmap.json`
 and from the evidence records under `docs/evidence/`. This tool renders those facts
-into four original SVG figures, writes the README status table in place between
+into seven original SVG figures, writes the README status table in place between
 markers, and refuses to accept a repository whose figures or status block no longer
 match the data.
 
@@ -492,7 +492,7 @@ def workflow(data) -> str:
 
 # ---------------------------------------------------------------- validation records
 VALIDATION = ROOT / "docs/evidence/validation"
-BLOCKS = ("stats", "status", "evidence", "blockers", "pup")
+BLOCKS = ("stats", "status", "evidence", "blockers", "pup", "matrix")
 
 STATE_LABEL = {"complete": "complete", "in_progress": "in progress",
                "not_started": "not started", "blocked": "blocked"}
@@ -805,6 +805,592 @@ def record_hint(records: dict, gate: str) -> str:
             f" on {record.get('date', '')}{detail}")
 
 
+# ---------------------------------------------------------------- progress matrix
+#
+# A dense, treemap-style status board in the same idiom as the figures above, but
+# counting more of the repository.  The rule that governs every cell: a cell is
+# green only when a *file in this repository* records the thing as done — a
+# milestone state of `complete`, a validation record with `passed`, a deliverable
+# path that exists, an operation the doubles implement.  Nothing here is inferred
+# from a neighbour: documentation progress, synthetic-test coverage, host and
+# emulator validation, firmware-backed validation, physical-hardware validation
+# and genuine target-system-software execution are separate regions with separate
+# denominators, and the last two have no green cells because the repository holds
+# no evidence that could put one there.
+
+CELL = "#2b3646"          # gray: not started, unknown, unverified
+CELL_DIM = "#1b2330"      # darker gray: nothing to count at all
+CELL_STROKE = BG          # the thin separator between cells is the background
+GREEN_INK = "#06251c"     # text on a green cell
+AMBER_INK = "#2a1d02"     # text on an amber cell
+CYAN_INK = "#04222f"
+
+#: fill, ink, extra stroke and a label suffix per milestone state.
+MATRIX_STATE = {
+    "complete": (GREEN, GREEN_INK, None, ""),
+    "in_progress": (CYAN, CYAN_INK, None, ""),
+    "not_started": (CELL, INK, None, ""),
+    "blocked": (CELL, "#f4b9bd", RED, " !"),
+}
+
+MATRIX_CLASSIFICATION = {
+    "PUBLIC": (GREEN, GREEN_INK, None),
+    "INFERRED": (CELL, INK, CYAN),
+    "UNKNOWN": (CELL_DIM, MUTED, None),
+    "RESTRICTED": (AMBER, AMBER_INK, None),
+}
+
+#: the level statements, so the ladder in the figure and the block say the same thing
+LEVEL_SHORT = {
+    1: "boots on qualified PC hardware",
+    2: "controls its own hardware",
+    3: "core platform services work",
+    4: "PS5 interfaces validated",
+    5: "genuine system software",
+    6: "platform experience",
+}
+
+PATH_SHAPED = re.compile(r"^[a-z0-9_][a-z0-9_.-]*/[^\s]+\.(?:md|json|py|c|h|sh|yml)$")
+
+
+#: `M1` < `M1a` < `M1b` < `M2` < `M10`: milestone ids are read as a number and a tail.
+MILESTONE_ID = re.compile(r"^(\D*?)(\d+)(.*)$")
+
+
+def milestone_sort_key(milestone_id: str):
+    match = MILESTONE_ID.match(milestone_id)
+    if not match:
+        return (milestone_id, 0, "")
+    prefix, digits, tail = match.groups()
+    return (prefix, int(digits), tail)
+
+
+def pct(numerator: int, denominator: int) -> str:
+    """One decimal, always with the fraction it came from."""
+    if not denominator:
+        return "n/a (0/0)"
+    return f"{100.0 * numerator / denominator:.1f}% ({numerator}/{denominator})"
+
+
+def progress_metrics(data, records=None) -> dict:
+    """Every number the matrix draws, computed from the files that own it.
+
+    Single source for the figure and for the README block, so the two cannot
+    disagree.  Nothing is cached, dated or environment-dependent: the same
+    `roadmap.json` and the same committed records give the same dict.
+    """
+    records = load_records() if records is None else records
+    milestones = data["milestones"]
+    by_id = {m["id"]: m for m in milestones}
+    states = distribution(data)
+
+    acceptance_total = sum(len(m.get("acceptance") or []) for m in milestones)
+    acceptance_by_state = {state: 0 for state in MATRIX_STATE}
+    for m in milestones:
+        acceptance_by_state[m["state"]] = acceptance_by_state.get(m["state"], 0) + len(
+            m.get("acceptance") or [])
+
+    deliverables = [x for m in milestones for x in (m.get("deliverables") or [])]
+    path_shaped = [x for x in deliverables if PATH_SHAPED.match(x)]
+    existing = [x for x in path_shaped if (ROOT / x).exists()]
+
+    evidence_entries = [e for m in milestones for e in (m.get("evidence") or [])]
+    evidence_present = [e for e in evidence_entries if (ROOT / e.split("#")[0]).exists()]
+
+    levels = {}
+    for level in sorted({m["level"] for m in milestones}):
+        rows = [m for m in milestones if m["level"] == level]
+        levels[level] = {
+            "total": len(rows),
+            "complete": sum(1 for m in rows if m["state"] == "complete"),
+            "ids": [m["id"] for m in sorted(rows, key=lambda m: milestone_sort_key(m["id"]))],
+            "states": {m["id"]: m["state"] for m in rows},
+        }
+
+    streams = []
+    for stream in data["workstreams"]:
+        rows = [m for m in milestones if m.get("workstream") == stream["id"]]
+        counts = {state: sum(1 for m in rows if m["state"] == state)
+                  for state in MATRIX_STATE}
+        streams.append({"id": stream["id"], "name": stream["name"], "total": len(rows),
+                        "complete": counts["complete"], "counts": counts})
+
+    blocked = []
+    for m in sorted([m for m in milestones if m["state"] == "blocked"],
+                    key=lambda m: milestone_sort_key(m["id"])):
+        unmet = []
+        for dep in m.get("depends_on") or []:
+            state = by_id.get(dep, {}).get("state")
+            if state and state != "complete":
+                unmet.append((dep, state))
+        blocked.append({"id": m["id"], "title": m["title"], "unmet": unmet,
+                        "level": m["level"]})
+
+    gates = sorted(records)
+    gate_passed = sum(1 for g in gates if records[g].get("result") == "passed")
+
+    contract = contract_inventory()
+    claims = claim_inventory()
+
+    return {
+        "milestone_total": len(milestones),
+        "states": {state: states.get(state, 0) for state in MATRIX_STATE},
+        "acceptance_total": acceptance_total,
+        "acceptance_by_state": acceptance_by_state,
+        "deliverable_total": len(deliverables),
+        "deliverable_path_shaped": len(path_shaped),
+        "deliverable_existing": len(existing),
+        "evidence_total": len(evidence_entries),
+        "evidence_present": len(evidence_present),
+        "milestones_with_evidence": sum(1 for m in milestones if m.get("evidence")),
+        "levels": levels,
+        "streams": streams,
+        "blocked": blocked,
+        "gates": gates,
+        "gate_records": {g: records[g].get("result", "error") for g in gates},
+        "gate_commits": {g: str(records[g].get("commit", ""))[:7] for g in gates},
+        "gate_passed": gate_passed,
+        "physical_records": len(physical_records()),
+        "destination": data["product"]["destination"]["milestone"],
+        "destination_state": by_id[data["product"]["destination"]["milestone"]]["state"],
+        "package_note": ("package: LFS pointer only, payload absent"
+                         if pup_facts().get("pointer")
+                         else "package: the tracked file is not an LFS pointer"),
+        "contract": contract,
+        "claims": claims,
+    }
+
+
+def contract_inventory() -> dict:
+    """Operations per PSM interface, read from the contract's generated tables.
+
+    The tables between the `psm:begin`/`psm:end` markers are rendered from `psm/`
+    and `python3 -m psm.render --check` fails if they drift, so reading them here
+    is reading the code by way of a mirror the project already verifies.
+    """
+    path = ROOT / "docs/architecture/PS5_PLATFORM_CONTRACT.md"
+    try:
+        document = path.read_text(encoding="utf-8")
+    except OSError:
+        return {"available": False, "interfaces": [], "ops": 0, "unsupported": 0}
+    found = []
+    for name, block in re.findall(
+            r"<!-- psm:begin interfaces-(PSM-[A-Z]+) -->(.*?)<!-- psm:end interfaces-\1 -->",
+            document, re.S):
+        rows = [line for line in block.splitlines() if line.startswith("| `")]
+        unsupported = sum(1 for line in rows if "UNSUPPORTED" in line)
+        found.append({"name": name, "ops": len(rows), "unsupported": unsupported})
+    return {"available": bool(found),
+            "interfaces": sorted(found, key=lambda row: row["name"]),
+            "ops": sum(row["ops"] for row in found),
+            "unsupported": sum(row["unsupported"] for row in found)}
+
+
+def claim_inventory() -> dict:
+    """The classification of every claim in the platform-contract registry."""
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    try:
+        from psm import registry  # noqa: WPS433 -- same repository, no third party
+        rows = [(claim.id, str(getattr(claim, "classification", "")).split(".")[-1])
+                for claim in registry.CONTRACT.claims]
+    except Exception:                                    # pragma: no cover
+        return {"available": False, "total": 0, "counts": {}, "ids": []}
+    counts: dict = {}
+    for _cid, classification in rows:
+        counts[classification] = counts.get(classification, 0) + 1
+    return {"available": True, "total": len(rows), "counts": counts,
+            "ids": [{"id": cid, "classification": classification}
+                    for cid, classification in sorted(rows, key=lambda r: milestone_sort_key(r[0]))]}
+
+
+def region_head(x, y, w, title, right="", caption="", colour=INK):
+    body = text(x, y + 15, title, size=13, weight="bold")
+    if right:
+        body += text(x + w, y + 15, right, size=13, weight="bold", fill=colour,
+                     anchor="end")
+    body += text(x + w, y + 31, caption, size=10, fill=MUTED, anchor="end")
+    return body, y + 40
+
+
+def matrix_cell(x, y, w, h, label, fill=CELL, ink=INK, stroke=None, size=11):
+    outline = stroke or CELL_STROKE
+    body = (f'  <rect x="{x}" y="{y}" width="{w}" height="{h}" rx="3" fill="{fill}" '
+            f'stroke="{outline}" stroke-width="{2 if stroke else 1}"/>\n')
+    body += text(x + w / 2, y + h / 2 + size * 0.36, label, size=size, fill=ink,
+                 anchor="middle")
+    return body
+
+
+def matrix_row(x, y, w, h, parts, gap=3):
+    """A 100%-width stacked bar whose segment widths are the counts, exactly.
+
+    Integer geometry with the remainder carried forward, so the segments always
+    sum to `w` and a bar of the same data is byte-identical on any machine.
+    """
+    total = sum(count for count, _colour in parts)
+    if not total:
+        return (f'  <rect x="{x}" y="{y}" width="{w}" height="{h}" rx="3" '
+                f'fill="{CELL_DIM}" stroke="{CELL_STROKE}"/>\n')
+    drawn = [(count, colour) for count, colour in parts if count]
+    body = ""
+    used = 0
+    cursor = x
+    for index, (count, colour) in enumerate(drawn):
+        last = index == len(drawn) - 1
+        share = w * count / total
+        width = (w - used) if last else max(1, int(round(share)))
+        if last and width <= 0:
+            continue
+        body += (f'  <rect x="{cursor}" y="{y}" width="{width}" height="{h}" rx="3" '
+                 f'fill="{colour}" stroke="{CELL_STROKE}"/>\n')
+        cursor += width + (0 if last else gap)
+        used += width + (0 if last else gap)
+    return body
+
+
+def progress_matrix(data, records) -> str:
+    """The dense status board: one region per countable question, one cell per item.
+
+    Geometry is integer and the drawing is two columns of regions whose height is
+    computed from the content, so the canvas has no dead band at the bottom.
+    """
+    metrics = progress_metrics(data, records)
+    left_x, right_x, col_w = 24, 612, 564
+    body = text(24, 34, "PC5 PROGRESS MATRIX", size=20, weight="bold")
+    body += text(24, 54, "every figure is a count over a named set in this repository; "
+                         "a green cell means a file records it, never that a machine ran it",
+                 size=11, fill=MUTED)
+    body += text(1176, 34, "source: docs/architecture/roadmap.json", size=11, fill=MUTED,
+                 anchor="end")
+
+    # ---------------------------------------------------------- milestones by state
+    y = 76
+    head, y = region_head(
+        left_x, y, col_w, "MILESTONES BY STATE",
+        right=pct(metrics["states"]["complete"], metrics["milestone_total"]),
+        caption="green verified · cyan in progress · gray not started · outlined blocked",
+        colour=GREEN)
+    body += head
+    cells = []
+    for milestone in sorted(data["milestones"],
+                            key=lambda m: (STATE_ORDER.get(m["state"], 9),
+                                           milestone_sort_key(m["id"]))):
+        cells.append((milestone["id"] + MATRIX_STATE[milestone["state"]][3],
+                      milestone["state"]))
+    cols = 7
+    width = (col_w - 3 * (cols - 1)) // cols
+    for index, (label, state) in enumerate(cells):
+        fill, ink, stroke, _suffix = MATRIX_STATE[state]
+        body += matrix_cell(left_x + (index % cols) * (width + 3), y + (index // cols) * 29,
+                            width, 26, label, fill=fill, ink=ink, stroke=stroke)
+    y += ((len(cells) - 1) // cols + 1) * 29 + 16
+
+    # ---------------------------------------------------------- the evidence ladder
+    head, y = region_head(
+        left_x, y, col_w, "EVIDENCE LADDER — ONE ROW PER LEVEL",
+        right=f"{len([1 for level in metrics['levels'] if metrics['levels'][level]['complete']])}"
+              f"/{len(metrics['levels'])} levels hold a verified milestone",
+        caption="a level is reached by its own evidence; the two top levels have none")
+    body += head
+    for level in sorted(metrics["levels"]):
+        info = metrics["levels"][level]
+        body += text(left_x, y + 15, f"L{level}", size=11, weight="bold",
+                     fill=INK if info["complete"] else MUTED)
+        body += text(left_x + 32, y + 15, clip(LEVEL_SHORT.get(level, ""), 30), size=10,
+                     fill=MUTED)
+        area = col_w - 248 - 44
+        cell_w = min(30, int(area / max(1, info["total"])))
+        for index, milestone_id in enumerate(info["ids"]):
+            fill, ink, stroke, suffix = MATRIX_STATE[info["states"][milestone_id]]
+            body += matrix_cell(left_x + 248 + index * (cell_w + 3), y, cell_w, 22,
+                                milestone_id.replace("M", "") + suffix, fill=fill, ink=ink,
+                                stroke=stroke, size=10)
+        body += text(left_x + col_w, y + 15,
+                     f"{info['complete']}/{info['total']}", size=10, anchor="end",
+                     fill=GREEN if info["complete"] else MUTED)
+        y += 27
+    y += 16
+
+    # ------------------------------------- requirements, deliverables, filed evidence
+    head, y = region_head(
+        left_x, y, col_w, "REQUIREMENTS, DELIVERABLES AND FILED EVIDENCE",
+        right=f"{metrics['deliverable_existing']}/{metrics['deliverable_total']} deliverables "
+              f"present", caption="bar segments are the counts named at the right of each row")
+    body += head
+    acceptance = metrics["acceptance_by_state"]
+    parts = [(acceptance.get(state, 0), MATRIX_STATE[state][0]) for state in MATRIX_STATE]
+    body += text(left_x, y + 12, "acceptance items, by the state of the owning milestone",
+                 size=10, fill=MUTED)
+    body += text(left_x + col_w, y + 12,
+                 f"{acceptance.get('complete', 0)}/{metrics['acceptance_total']} verified",
+                 size=10, fill=GREEN, anchor="end")
+    body += matrix_row(left_x, y + 18, col_w, 16, parts)
+    y += 44
+    rows = [
+        ("deliverables named as a path that exists in this checkout",
+         [(metrics["deliverable_existing"], GREEN),
+          (metrics["deliverable_path_shaped"] - metrics["deliverable_existing"], CELL),
+          (metrics["deliverable_total"] - metrics["deliverable_path_shaped"], CELL_DIM)],
+         f"{metrics['deliverable_existing']}/{metrics['deliverable_total']}"),
+        ("deliverables named at all (the rest are prose descriptions)",
+         [(metrics["deliverable_path_shaped"], CYAN),
+          (metrics["deliverable_total"] - metrics["deliverable_path_shaped"], CELL_DIM)],
+         f"{metrics['deliverable_path_shaped']}/{metrics['deliverable_total']}"),
+        ("evidence paths a milestone names that are present in the tree",
+         [(metrics["evidence_present"], GREEN),
+          (metrics["evidence_total"] - metrics["evidence_present"], CELL)],
+         f"{metrics['evidence_present']}/{metrics['evidence_total']}"),
+        ("milestones carrying at least one evidence path",
+         [(metrics["milestones_with_evidence"], CYAN),
+          (metrics["milestone_total"] - metrics["milestones_with_evidence"], CELL)],
+         f"{metrics['milestones_with_evidence']}/{metrics['milestone_total']}"),
+    ]
+    for label, bar, count in rows:
+        body += text(left_x, y + 11, clip(label, 62), size=10, fill=MUTED)
+        body += text(left_x + col_w, y + 11, count, size=10, anchor="end", fill=INK)
+        body += matrix_row(left_x, y + 16, col_w, 10, bar)
+        y += 34
+    y += 10
+
+    # --------------------------------------------------------------- the workstreams
+    head, y = region_head(left_x, y, col_w, "WORKSTREAMS",
+                          right=f"{len([s for s in metrics['streams'] if not s['complete']])}"
+                                f"/{len(metrics['streams'])} with nothing verified",
+                          caption="one cell per milestone, so a one-milestone stream is one cell")
+    body += head
+    for stream in metrics["streams"]:
+        rows_in_stream = [m for m in data["milestones"]
+                          if m.get("workstream") == stream["id"]]
+        rows_in_stream.sort(key=lambda m: milestone_sort_key(m["id"]))
+        cell_w, cell_gap = 16, 3
+        used = len(rows_in_stream) * (cell_w + cell_gap) - cell_gap
+        start = left_x + col_w - 44 - max(used, 0)
+        room = int((start - (left_x + 42) - 10) / 6.2)          # 10px monospace
+        body += text(left_x, y + 13, stream["id"], size=10, weight="bold",  # noqa: E501
+                     fill=INK if stream["complete"] else MUTED)
+        body += text(left_x + 42, y + 13, clip(stream["name"], max(12, room)), size=10,
+                     fill=MUTED)
+        for index, milestone in enumerate(rows_in_stream):
+            state = milestone["state"]
+            fill, ink, stroke, _suffix = MATRIX_STATE[state]
+            body += matrix_cell(start + index * (cell_w + cell_gap), y, cell_w, 20,
+                                "", fill=fill, ink=ink, stroke=stroke)
+        body += text(left_x + col_w, y + 13, f"{stream['complete']}/{stream['total']}",
+                     size=10, anchor="end", fill=GREEN if stream["complete"] else MUTED)
+        y += 24
+    left_bottom = y
+
+    # ------------------------------------------------- right column: claim classes
+    y = 76
+    claims = metrics["claims"]
+    if claims["available"]:
+        counts = claims["counts"]
+        public = counts.get("PUBLIC", 0)
+        head, y = region_head(right_x, y, col_w, "PLATFORM-CONTRACT CLAIMS ABOUT THE CONSOLE",
+                              right=pct(public, claims["total"]),
+                              caption=f"green public · outlined inferred · dim unknown · "
+                                      f"amber restricted ({counts.get('RESTRICTED', 0)})",
+                              colour=CYAN)
+        body += head
+        cols = 10
+        width = (col_w - 3 * (cols - 1)) // cols
+        cells = claims["ids"]
+        for index, entry in enumerate(cells):
+            fill, ink, stroke = MATRIX_CLASSIFICATION.get(
+                entry["classification"], (CELL, INK, None))
+            short = entry["id"].replace("C-", "")
+            body += matrix_cell(right_x + (index % cols) * (width + 3),
+                                y + (index // cols) * 25, width, 22, short,
+                                fill=fill, ink=ink, stroke=stroke, size=10)
+        y += ((len(cells) - 1) // cols + 1) * 25 + 8
+        body += text(right_x, y + 10, "the class says how well a statement is documented, "
+                                       "not whether PC5 built anything",
+                     size=10, fill=MUTED)
+        y += 26
+
+    # ------------------------------------------------------ modelled operations (PSM)
+    contract = metrics["contract"]
+    if contract["available"]:
+        implemented = contract["ops"] - contract["unsupported"]
+        head, y = region_head(right_x, y, col_w, "PLATFORM-MODEL OPERATIONS (PSM)",
+                              right=pct(implemented, contract["ops"]),
+                              caption="an implemented op is PC5's own double; amber is "
+                                      "withheld by design", colour=GREEN)
+        body += head
+        bar_x = right_x + 214
+        bar_w = col_w - 214 - 74
+        for row in contract["interfaces"]:
+            done = row["ops"] - row["unsupported"]
+            body += text(right_x, y + 11, row["name"], size=10, weight="bold", fill=INK)
+            body += text(right_x + 84, y + 11, f"{done}/{row['ops']} implemented", size=10,
+                         fill=MUTED)
+            body += matrix_row(bar_x, y + 3, bar_w, 14, [(done, GREEN),
+                                                          (row["unsupported"], AMBER)])
+            body += text(right_x + col_w, y + 11,
+                         f"{row['unsupported']} withheld" if row["unsupported"] else "—",
+                         size=10, anchor="end",
+                         fill=AMBER if row["unsupported"] else MUTED)
+            y += 24
+        body += text(right_x, y + 10,
+                     f"{len(contract['interfaces'])} interfaces · {contract['ops']} operations · "
+                     f"{contract['unsupported']} refused by design",
+                     size=10, fill=MUTED)
+        y += 26
+
+    # ------------------------------------------------------------------- blocked rows
+    blocked = metrics["blocked"]
+    head, y = region_head(right_x, y, col_w, "BLOCKED, AND WHAT IT IS BLOCKED ON",
+                          right=f"{len(blocked)}/{metrics['milestone_total']} milestones",
+                          caption="a dependency that cannot be met here, not work in progress",
+                          colour=AMBER)
+    body += head
+    for row in blocked:
+        body += (f'  <rect x="{right_x - 8}" y="{y}" width="4" height="24" rx="2" '
+                 f'fill="{AMBER}"/>\n')
+        body += text(right_x, y + 11, row["id"], size=10, weight="bold", fill=INK)
+        body += text(right_x + 38, y + 11, clip(row["title"], 60), size=10, fill=MUTED)
+        deps = (", ".join(f"{dep} {state.replace('_', ' ')}" for dep, state in row["unmet"])
+                if row["unmet"] else "the blocker itself is the reason")
+        body += text(right_x + 38, y + 23, f"blocked on: {clip(deps, 58)}", size=10,
+                     fill="#f4b9bd")
+        body += text(right_x + col_w, y + 11, f"L{row['level']}", size=10, anchor="end",
+                     fill=MUTED)
+        y += 32
+    y += 10
+
+    # ------------------------------------------- committed validation records + rungs
+    gates = metrics["gates"]
+    passed = metrics["gate_passed"]
+    head, y = region_head(right_x, y, col_w, "COMMITTED VALIDATION RECORDS",
+                          right=pct(passed, len(gates)) if gates else "no records",
+                          caption="one cell per gate: its result, and the commit it ran at",
+                          colour=GREEN if gates else AMBER)
+    body += head
+    result_style = {"passed": (GREEN, GREEN_INK), "not-tested": (AMBER, AMBER_INK),
+                    "skipped": (AMBER, AMBER_INK), "failed": (RED, INK),
+                    "error": (RED, INK)}
+    cols = 4
+    width = (col_w - 3 * (cols - 1)) // cols
+    for index, gate in enumerate(gates):
+        result = metrics["gate_records"][gate]
+        fill, ink = result_style.get(result, (CELL, INK))
+        cell_x = right_x + (index % cols) * (width + 3)
+        cell_y = y + (index // cols) * 37
+        body += (f'  <rect x="{cell_x}" y="{cell_y}" width="{width}" height="34" rx="3" '
+                 f'fill="{fill}" stroke="{CELL_STROKE}"/>\n')
+        body += text(cell_x + width / 2, cell_y + 14, clip(gate, 17), size=10, fill=ink,
+                     weight="bold", anchor="middle")
+        body += text(cell_x + width / 2, cell_y + 27, metrics["gate_commits"][gate],
+                     size=10, fill=ink, anchor="middle")
+    y += ((max(0, len(gates) - 1) // cols) + 1) * 37 + 4
+    for label, value, note, colour in [
+            ("physical PC boot",
+             f"{metrics['physical_records']} record(s)" if metrics["physical_records"]
+             else "none filed",
+             "a record from a real machine", AMBER),
+            (f"genuine Sony system software ({metrics['destination']})",
+             STATE_LABEL[metrics["destination_state"]].upper(),
+             "not executed, therefore not counted", RED)]:
+        body += text(right_x, y + 12, label, size=10, fill=INK)
+        body += text(right_x + 232, y + 12, value, size=10, weight="bold", fill=colour)
+        body += text(right_x + 330, y + 12, clip(note, 34), size=10, fill=MUTED)
+        y += 20
+    right_bottom = y
+
+    # ------------------------------------------------------------------- legend/footer
+    bottom = max(left_bottom, right_bottom) + 4
+    body += f'  <line x1="24" y1="{bottom}" x2="1176" y2="{bottom}" stroke="{LINE}"/>\n'
+    legend = [("verified by a file in this repository", GREEN),
+              ("in progress", CYAN),
+              ("not started, unknown or unverified", CELL),
+              ("withheld by design or awaiting a machine", AMBER),
+              ("blocked on a dependency", CELL)]
+    x = 24
+    for label, colour in legend:
+        body += (f'  <rect x="{x}" y="{bottom + 12}" width="12" height="12" rx="3" '
+                 f'fill="{colour}" stroke="{LINE}"/>\n')
+        body += text(x + 18, bottom + 22, label, size=10, fill=MUTED)
+        x += 24 + int(len(label) * 10 * 0.62) + 22
+    body += text(24, bottom + 44, "counted from roadmap.json, the contract and the committed "
+                                  "records — not from a booted machine, not from a PS5, and "
+                                  "not from an open pull request", size=10, fill=MUTED)
+    body += text(1176, bottom + 44, metrics["package_note"], size=10,
+                 fill=MUTED, anchor="end")
+    height = bottom + 58
+    return svg(1200, height, body, "PC5 progress matrix",
+               f"milestones complete {metrics['states']['complete']} of "
+               f"{metrics['milestone_total']}; levels 1 and 2 hold the only verified "
+               f"milestones, levels 3 to 6 none; deliverables present "
+               f"{metrics['deliverable_existing']} of {metrics['deliverable_total']}; "
+               f"{len(metrics['blocked'])} milestones blocked; validation records "
+               f"{metrics['gate_passed']} of {len(metrics['gates'])} passed; physical boot "
+               f"and genuine system-software execution carry no evidence.")
+
+
+def matrix_markdown(data, records) -> str:
+    """The same numbers as text, so the README works with images switched off."""
+    metrics = progress_metrics(data, records)
+    states = metrics["states"]
+    rows = [
+        ("Milestones verified", pct(states["complete"], metrics["milestone_total"]),
+         "milestone `state` in `roadmap.json`"),
+        ("Levels with a verified milestone",
+         f"{len([1 for level in metrics['levels'] if metrics['levels'][level]['complete']])}"
+         f"/{len(metrics['levels'])}",
+         "milestones grouped by their `level` field"),
+        ("Acceptance items inside verified milestones",
+         f"{metrics['acceptance_by_state'].get('complete', 0)}/{metrics['acceptance_total']}",
+         "`acceptance` arrays, counted per owning milestone state"),
+        ("Deliverables that exist as named paths",
+         f"{metrics['deliverable_existing']}/{metrics['deliverable_total']}",
+         "`deliverables` strings matched as a repository path, then read off disk"),
+        ("Milestones carrying a filed evidence path",
+         f"{metrics['milestones_with_evidence']}/{metrics['milestone_total']}",
+         "`evidence` arrays resolved against the tree"),
+    ]
+    contract = metrics["contract"]
+    if contract["available"]:
+        implemented = contract["ops"] - contract["unsupported"]
+        rows.append(("Modelled operations implemented",
+                     pct(implemented, contract["ops"]),
+                     "the generated tables in `docs/architecture/PS5_PLATFORM_CONTRACT.md`"))
+    claims = metrics["claims"]
+    if claims["available"]:
+        rows.append(("Contract claims backed by public documentation",
+                     pct(claims["counts"].get("PUBLIC", 0), claims["total"]),
+                     "`psm/registry.py` classifications, enforced by `psm/contract.py`"))
+    if metrics["gates"]:
+        rows.append(("Committed validation records passing",
+                     pct(metrics["gate_passed"], len(metrics["gates"])),
+                     "`docs/evidence/validation/*.json`"))
+    rows.append(("Blocked milestones", f"{len(metrics['blocked'])}",
+                 "state `blocked` and its `blocker` field"))
+    rows.append(("Physical-hardware boot evidence",
+                 f"{metrics['physical_records']} record(s) filed",
+                 "`docs/evidence/*.json`, validated by `tools/hw_record.py`"))
+    rows.append(("Genuine target-system-software execution",
+                 f"**{STATE_LABEL[metrics['destination_state']].upper()}** — nothing executed",
+                 f"state of `{metrics['destination']}` in `roadmap.json`"))
+    lines = ["<!-- pc5:matrix:begin -->",
+             "| Progress region | Figure | Where the denominator comes from |",
+             "|---|---|---|"]
+    for label, figure, source in rows:
+        lines.append(f"| {label} | {figure} | {source} |")
+    levels = " · ".join(
+        f"L{level} {metrics['levels'][level]['complete']}/{metrics['levels'][level]['total']}"
+        for level in sorted(metrics["levels"]))
+    blocked = ", ".join(f"`{row['id']}`" for row in metrics["blocked"]) or "none"
+    lines.append("")
+    lines.append(f"Levels: {levels}. Blocked: {blocked}. A cell is green in "
+                 "`docs/assets/pc5-progress-matrix.svg` only where a file in this "
+                 "repository records the thing as done: documentation progress, "
+                 "synthetic-test coverage and host or emulator validation are counted "
+                 "separately, and no row above them is inferred from a row below.")
+    lines.append("<!-- pc5:matrix:end -->")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------- block plumbing
 BLOCK_RENDERERS = {
     "stats": lambda data, records: stats_markdown(data, records),
@@ -812,6 +1398,7 @@ BLOCK_RENDERERS = {
     "evidence": lambda data, records: evidence_markdown(records),
     "blockers": lambda data, records: blockers_markdown(data),
     "pup": lambda data, records: pup_markdown(),
+    "matrix": lambda data, records: matrix_markdown(data, records),
 }
 
 
@@ -897,6 +1484,7 @@ FIGURES = {
     "pc5-progress.svg": lambda data, records: progress(data),
     "pc5-boot-workflow.svg": lambda data, records: workflow(data),
     "pc5-evidence.svg": evidence_ladder,
+    "pc5-progress-matrix.svg": progress_matrix,
 }
 
 

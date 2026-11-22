@@ -48,7 +48,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: ovmf-setup ovmf-check all iso uefi kernel64 uefi64 stubtest64 check docs-check citations-check citation-refs presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record brand brand-check
+.PHONY: ovmf-setup ovmf-check dashboard-reconcile post-merge all iso uefi kernel64 uefi64 stubtest64 check docs-check citations-check citation-refs presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record brand brand-check
 
 all: iso
 
@@ -319,6 +319,19 @@ presentation:
 
 presentation-check:
 	python3 tools/presentation.py check
+
+# A merge into `main` is the trigger for a dashboard review, and the review has to be
+# recorded rather than remembered.  `dashboard-reconcile` is read-only: it prints every
+# first-parent merge that has not been reconciled with the generated README and figure
+# yet (AGENTS.md).  `post-merge` runs the whole reconciliation, writing only the files
+# the generator owns.
+dashboard-reconcile:
+	python3 tools/dashboard_reconcile.py
+
+post-merge: presentation
+	python3 tools/presentation.py check
+	python3 tools/docs_check.py
+	python3 tools/dashboard_reconcile.py
 
 # A citation is only evidence while Git can hand the object back, and a rebase
 # rewrites commit ids silently.  `docs-check` validates links, anchors and make
