@@ -1,0 +1,17 @@
+$ git -C /tmp/audit42/repo log --graph --oneline --decorate --first-parent 52f682c..7095814   (main..#42, the whole stacked chain)
+* 7095814 2026-11-22  (upstream/fix/reconcile-exemption-is-verified, pr42, fix/reconcile-premise-and-flags) docs: record the audit branch's own tip and push, as the register requires
+* dd87b22 2026-11-22  docs: the independent audit of #41, and the evidence behind the fix on this branch
+* 52c6f95 2026-11-22  docs: say what the receipt certifies, and that the exemption is tested rather than granted
+* d2c5e43 2026-11-22  fix: `--json` answers with an object when the answer is a refusal, and tests s39–s45 land
+* 20874e9 2026-11-22  fix: test the exemption instead of granting it, and stop clearing what was never reviewed
+* dfb9aaa 2026-11-22  test: six lifecycle scenarios the audit found the tool could not fail
+* 5bc5d5d 2026-11-22  (upstream/fix/dashboard-reconciliation-receipts, pr41) finish the sentence the last edit truncated
+* a81f71c 2026-11-22  do not claim a measurement that was not taken
+* 61ed7a2 2026-11-22  say which tree each number was measured on
+* 2cdbc9f 2026-11-22  measure the counts in the record before committing them
+* 96d0b9d 2026-11-22  record the receipt's loop, and correct the count this document got wrong
+* 4b56a65 2026-11-22  close the loop for a merge, and prove the gate rather than the render
+* 76253f5 2026-11-22  document the receipt, and stop describing the duty as a monitor
+* a29df65 2026-11-22  measure the labels, and prove the drawing against the files it is drawn from
+* c158ef2 2026-11-22  reconcile the dashboard from a committed receipt, not an inferred watermark
+

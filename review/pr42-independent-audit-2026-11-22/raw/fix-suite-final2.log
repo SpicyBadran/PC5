@@ -1,0 +1,137 @@
+.....................................................ssssssssssssssssssssssssssssssssssssssssssssssss................................................................................................................................................................................................................................................................................/tmp/audit42/fix/tests/test_hybrid.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/fix/Makefile' mode='r' encoding='utf-8'>
+  makefile = open(os.path.join(ROOT, "Makefile"), encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+....................ssssssssssssssssssssssssssssssssssssssssssss..........sssssssssssssss............................s.............................................................................................................................................................................................................................................................................../tmp/audit42/fix/tests/test_product_identity.py:214: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/audit42/fix/PS5UPDATE.PUP'>
+  raw = open(self.POINTER, "rb").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+............................................................................................................................/tmp/audit42/fix/tests/test_release.py:224: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/fix/ci/build.yml' mode='r' encoding='utf-8'>
+  text = open(found[0], encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./tmp/audit42/fix/tests/test_release.py:205: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/fix/ci/build.yml' mode='r' encoding='utf-8'>
+  text = open(found[0], encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./tmp/audit42/fix/tests/test_release.py:249: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/fix/ci/README.md' mode='r' encoding='utf-8'>
+  text = open(readme, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+../tmp/audit42/fix/tests/test_release.py:158: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/pc5-publish-950bket7/state/calls.log' mode='r' encoding='utf-8'>
+  return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/audit42/fix/tests/test_release.py:158: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/pc5-publish-950bket7/state/calls.log' mode='r' encoding='utf-8'>
+  return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+............................................................................................/tmp/audit42/fix/tests/test_tools.py:228: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/pc5-meta-oxfz_wd6/pc5.iso'>
+  self.sha = hashlib.sha256(open(self.iso, "rb").read()).hexdigest()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./tmp/audit42/fix/tests/test_tools.py:228: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/pc5-meta-k2cn9mk_/pc5.iso'>
+  self.sha = hashlib.sha256(open(self.iso, "rb").read()).hexdigest()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./tmp/audit42/fix/tests/test_tools.py:228: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/pc5-meta-zlf6gr32/pc5.iso'>
+  self.sha = hashlib.sha256(open(self.iso, "rb").read()).hexdigest()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.s................../tmp/audit42/fix/tests/test_tools.py:339: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/fix/tools/publish_release.sh' mode='r' encoding='utf-8'>
+  script = open(os.path.join(ROOT, "tools", "publish_release.sh"), encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+............................................
+----------------------------------------------------------------------
+Ran 1048 tests in 105.531s
+
+OK (skipped=109)
+image    /tmp/tmpxu92hx9c/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmp3xxyo93i/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture root device
+nothing was written
+image    /tmp/tmpx1badwxt/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdc
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+re-run with --yes to confirm after checking the device path
+image    /tmp/tmpkr8ui5e7/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdz9
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+refusing: became related
+nothing was written
+image    /tmp/tmp7cp9q7k3/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmp7cp9q7k3/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmpbt9apzo0/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpkl389jlp/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpx3apn7d3/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpwj72fp70/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpx66hon5i/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpmjhtxze9/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmplix7tpym/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmptpaeqd77/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpwngaqkdv/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpwngaqkdv/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpc7tyqh41/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdc
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+image    /tmp/tmplb52irqr/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpcjocn62o/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda1: /dev/sda1 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmpcjocn62o/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmpb1s0le5m/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda: /dev/sda is the whole disk carrying the root filesystem (root device 8:1)
+nothing was written
+image    /tmp/tmpb1s0le5m/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmpdpcvtsli/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+exit=0

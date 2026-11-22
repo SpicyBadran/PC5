@@ -1,0 +1,25 @@
+=== activity for 40/41/42 ===
+#40 issue-comments=0 reviews=0 review-comments=0 review-threads={"message":"Discussions are disabled for this repo","documentation_url":"https://docs.github.com/rest/repos/discussions#list-discussions-for-repository","status":"410"}n/a files=9
+#41 issue-comments=0 reviews=0 review-comments=0 review-threads={"message":"Discussions are disabled for this repo","documentation_url":"https://docs.github.com/rest/repos/discussions#list-discussions-for-repository","status":"410"}n/a files=13
+#42 issue-comments=0 reviews=0 review-comments=0 review-threads={"message":"Discussions are disabled for this repo","documentation_url":"https://docs.github.com/rest/repos/discussions#list-discussions-for-repository","status":"410"}n/a files=48
+=== checks ===
+8e3f0b642a92c2d2e27ba6d2a066803a70165697 check-runs=0 check-suites=[{"app":"netlify","conclusion":null,"status":"queued"},{"app":"vercel","conclusion":null,"status":"queued"},{"app":"freebuff-web","conclusion":null,"status":"queued"}] statuses=0
+5bc5d5d4353f2e2c520224fd48711556b0054fc4 check-runs=0 check-suites=[{"app":"netlify","conclusion":null,"status":"queued"},{"app":"vercel","conclusion":null,"status":"queued"},{"app":"freebuff-web","conclusion":null,"status":"queued"}] statuses=0
+709581450f24d61a23f4068c9b9df51e8729fc76 check-runs=0 check-suites=[{"app":"netlify","conclusion":null,"status":"queued"},{"app":"vercel","conclusion":null,"status":"queued"},{"app":"freebuff-web","conclusion":null,"status":"queued"}] statuses=0
+=== workflows / protection ===
+workflows total=0 runs=0
+protection main = {"message":"Resource not accessible by integration","documentation_url":"https://docs.github.com/rest/branches/branch-pr
+=== all open PRs ===
+#42 true fix/dashboard-reconciliation-receipts <- fix/reconcile-exemption-is-verified @ 709581450f24 Test the generated-output exemption instead of
+#41 true feat/readme-progress-dashboard <- fix/dashboard-reconciliation-receipts @ 5bc5d5d4353f Fix #40's false evidence claim, make its post-
+#40 true main <- feat/readme-progress-dashboard @ 8e3f0b642a92 feat(readme): generated progress matrix, and a
+#39 true main <- feat/m18-synthetic-package @ 003bbdcdef29 docs(evidence): M18 synthetic-package acceptan
+#38 true main <- docs/pr37-independent-review @ c7571e4af4bf docs(evidence): independent review of PR #37, 
+#37 true main <- docs/m17-security-boundary-analysis @ d09949226c39 docs: publish the M17 security-boundary analys
+#36 false main <- docs/usb-post-merge-reconciliation @ aed099d4fbf7 docs: reconcile the post-merge record of PR #3
+#34 false main <- m2a/interrupt-foundation @ 547ebd5cff04 M2a: local APIC (xAPIC) bring-up gated on memo
+#31 false main <- feature/ovmf-test64 @ ac17c5d3afa6 Add a dedicated 64-bit OVMF validation path wi
+=== recent commits on main ===
+52f682c8435956c8210b3189cad23ebea973d2de Merge pull request #35 from SpicyBadran/fix/usb-descriptor-bound-remediation
+80fc8615283173fd820d26c5779ad0cb94047736 test(usb): pin the unreadable-relationship guard end to end (F-6)
+20593d5667992d3282d8394c8ca1500564c1f8f7 docs(evidence): cover the four paths the previous commit added to the tip manifest

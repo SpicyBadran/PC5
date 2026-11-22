@@ -1,0 +1,1500 @@
+# $ git clone https://github.com/SpicyBadran/PC5.git && git fetch origin refs/pull/42/head && git checkout FETCH_HEAD
+# head=709581450f24d61a23f4068c9b9df51e8729fc76
+# tree=9e184d7714aeaaa2f0616a536b60cd473c9a5892
+# origin/main=52f682c8435956c8210b3189cad23ebea973d2de
+# $ TMPDIR=/tmp python3 tools/validate_storage_topology.py 2>/dev/null; python3 -m unittest discover -s tests -p 'test_*.py'
+.....................................................ssssssssssssssssssssssssssssssssssssssssssssssss.........................................................................s................................................................................................................................................................................................../tmp/audit42/clones3/pr42/tests/test_hybrid.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/clones3/pr42/Makefile' mode='r' encoding='utf-8'>
+  makefile = open(os.path.join(ROOT, "Makefile"), encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+....................ssssssssssssssssssssssssssssssssssssssssssss..........sssssssssssssss............................s.............................................................................................................................................................................................................................................................................../tmp/audit42/clones3/pr42/tests/test_product_identity.py:214: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/audit42/clones3/pr42/PS5UPDATE.PUP'>
+  raw = open(self.POINTER, "rb").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+............................................................................................................................/tmp/audit42/clones3/pr42/tests/test_release.py:224: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/clones3/pr42/ci/build.yml' mode='r' encoding='utf-8'>
+  text = open(found[0], encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./tmp/audit42/clones3/pr42/tests/test_release.py:205: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/clones3/pr42/ci/build.yml' mode='r' encoding='utf-8'>
+  text = open(found[0], encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./tmp/audit42/clones3/pr42/tests/test_release.py:249: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/clones3/pr42/ci/README.md' mode='r' encoding='utf-8'>
+  text = open(readme, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+../tmp/audit42/clones3/pr42/tests/test_release.py:158: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/pc5-publish-_wys7qhm/state/calls.log' mode='r' encoding='utf-8'>
+  return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/audit42/clones3/pr42/tests/test_release.py:158: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/pc5-publish-_wys7qhm/state/calls.log' mode='r' encoding='utf-8'>
+  return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+............................................................................................/tmp/audit42/clones3/pr42/tests/test_tools.py:228: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/pc5-meta-0zanjkkd/pc5.iso'>
+  self.sha = hashlib.sha256(open(self.iso, "rb").read()).hexdigest()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./tmp/audit42/clones3/pr42/tests/test_tools.py:228: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/pc5-meta-375kvk9i/pc5.iso'>
+  self.sha = hashlib.sha256(open(self.iso, "rb").read()).hexdigest()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+./tmp/audit42/clones3/pr42/tests/test_tools.py:228: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/pc5-meta-hp4jw_qc/pc5.iso'>
+  self.sha = hashlib.sha256(open(self.iso, "rb").read()).hexdigest()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.s................../tmp/audit42/clones3/pr42/tests/test_tools.py:339: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/clones3/pr42/tools/publish_release.sh' mode='r' encoding='utf-8'>
+  script = open(os.path.join(ROOT, "tools", "publish_release.sh"), encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+............................................
+----------------------------------------------------------------------
+Ran 1044 tests in 97.323s
+
+OK (skipped=110)
+image    /tmp/tmpnonrmv6t/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmp_26l296c/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture root device
+nothing was written
+image    /tmp/tmpjd2wglfc/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdc
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+re-run with --yes to confirm after checking the device path
+image    /tmp/tmp3l3hbvkn/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdz9
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+refusing: became related
+nothing was written
+image    /tmp/tmp_cmx04oa/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmp_cmx04oa/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmp5mdidtyz/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp7xpfzp0j/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpdkax3qsm/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpdwah23__/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpc4t8_jan/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp_ob9fmuw/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpo6499shj/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpbg821dr5/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp7f1hukmx/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp7f1hukmx/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp_xonjzqk/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdc
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+image    /tmp/tmp2w0z_egf/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpfq1q1n57/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda1: /dev/sda1 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmpfq1q1n57/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmpk14o5pby/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda: /dev/sda is the whole disk carrying the root filesystem (root device 8:1)
+nothing was written
+image    /tmp/tmpk14o5pby/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmpxx3ry0sz/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+unittest exit=0
+tests/kernel_unit.c: In function 'test_fat32':
+tests/kernel_unit.c:800:35: warning: null character(s) preserved in literal
+  800 |     memcpy(tdir(&d) + 3 * 32 + 1, "O T H E R", 10);
+      |                                   ^
+kernel/mem.c: In function 'mem_detect':
+kernel/mem.c:9:34: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+    9 |     const struct e820_entry *e = (const struct e820_entry *)(u32)bi->e820_addr;
+      |                                  ^
+PASSED: 165 checks, 0 failures
+PS5 platform contract registry, revision r1 (2026-11-16)
+  sources: 4   claims: 38
+  public     6
+  inferred   9
+  unknown    21
+  restricted 2
+registry: OK
+PSM audit: 38 claims, 64 operations, 10 interfaces
+  CPU                    PSM-CPU
+  memory                 PSM-MEM
+  interrupts and timers  PSM-IRQ + PSM-TMR
+  storage and I/O        PSM-STOR
+  graphics               PSM-GFX
+  audio                  PSM-AUD
+  USB and controller     PSM-USB
+  system services        PSM-SVC
+  extra: PSM-IPC — PC5's own message transport, delivered under M16 as part of the interrupts/timers group; it is not claimed to be the console's transport
+audit: OK
+PSM conformance: 261/261 checks passed
+document blocks: OK
+DOCS OK: 76 Markdown files, 36 make targets, links, anchors and commands resolve
+CITATIONS OK: 258 commit reference(s) resolve across 11 documents
+PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+BRAND OK: 11 assets current, no text elements, no external references
+test_makefile_exposes_the_roadmap_check (test_architecture.BuildIntegrationTests.test_makefile_exposes_the_roadmap_check) ... ok
+test_tool_runs_as_a_program (test_architecture.BuildIntegrationTests.test_tool_runs_as_a_program) ... ok
+test_adrs_are_unique_and_present (test_architecture.DocumentationTests.test_adrs_are_unique_and_present) ... ok
+test_deliverables_exist_and_are_substantive (test_architecture.DocumentationTests.test_deliverables_exist_and_are_substantive) ... ok
+test_documents_do_not_claim_ps5_execution (test_architecture.DocumentationTests.test_documents_do_not_claim_ps5_execution) ... ok
+test_index_links_every_document_and_nothing_dangles (test_architecture.DocumentationTests.test_index_links_every_document_and_nothing_dangles) ... ok
+test_readme_links_to_the_architecture (test_architecture.DocumentationTests.test_readme_links_to_the_architecture) ... ok
+test_relative_links_in_architecture_docs_resolve (test_architecture.DocumentationTests.test_relative_links_in_architecture_docs_resolve) ... ok
+test_spec_v2_references_the_deliverables (test_architecture.DocumentationTests.test_spec_v2_references_the_deliverables) ... ok
+test_superseded_decisions_say_so (test_architecture.DocumentationTests.test_superseded_decisions_say_so) ... ok
+test_the_old_spec_is_marked_superseded_and_kept (test_architecture.DocumentationTests.test_the_old_spec_is_marked_superseded_and_kept) ... ok
+test_document_matches_the_data (test_architecture.RealGraphTests.test_document_matches_the_data) ... ok
+test_every_milestone_serves_the_mission (test_architecture.RealGraphTests.test_every_milestone_serves_the_mission) ... ok
+test_every_workstream_owns_a_milestone (test_architecture.RealGraphTests.test_every_workstream_owns_a_milestone) ... ok
+test_level_five_is_blocked_and_says_why (test_architecture.RealGraphTests.test_level_five_is_blocked_and_says_why) ... ok
+test_no_ps5_milestone_is_complete_without_execution_evidence (test_architecture.RealGraphTests.test_no_ps5_milestone_is_complete_without_execution_evidence) ... ok
+test_states_are_honest_about_what_is_complete (test_architecture.RealGraphTests.test_states_are_honest_about_what_is_complete) ... ok
+test_superseded_milestones_point_at_real_milestones (test_architecture.RealGraphTests.test_superseded_milestones_point_at_real_milestones) ... ok
+test_the_completed_milestones_are_the_ones_that_were_measured (test_architecture.RealGraphTests.test_the_completed_milestones_are_the_ones_that_were_measured) ... ok
+test_the_destination_is_genuine_execution_not_a_lookalike (test_architecture.RealGraphTests.test_the_destination_is_genuine_execution_not_a_lookalike) ... ok
+test_the_destination_is_on_the_critical_path (test_architecture.RealGraphTests.test_the_destination_is_on_the_critical_path) ... ok
+test_the_destination_workstream_cannot_be_deleted (test_architecture.RealGraphTests.test_the_destination_workstream_cannot_be_deleted) ... ok
+test_the_product_identity_is_the_mission (test_architecture.RealGraphTests.test_the_product_identity_is_the_mission) ... ok
+test_the_shipped_graph_is_valid (test_architecture.RealGraphTests.test_the_shipped_graph_is_valid) ... ok
+test_the_uefi_milestone_keeps_saying_what_is_not_done (test_architecture.RealGraphTests.test_the_uefi_milestone_keeps_saying_what_is_not_done) ... ok
+test_an_experimental_dependency_of_a_release_is_rejected (test_architecture.ReleaseIsolationTests.test_an_experimental_dependency_of_a_release_is_rejected) ... ok
+test_the_destination_may_depend_on_experiments (test_architecture.ReleaseIsolationTests.test_the_destination_may_depend_on_experiments) ... ok
+test_the_shipped_graph_satisfies_release_isolation (test_architecture.ReleaseIsolationTests.test_the_shipped_graph_satisfies_release_isolation) ... ok
+test_transitive_experimental_dependency_is_rejected (test_architecture.ReleaseIsolationTests.test_transitive_experimental_dependency_is_rejected) ... ok
+test_a_linux_distribution_identity_is_rejected (test_architecture.ValidationRuleTests.test_a_linux_distribution_identity_is_rejected) ... ok
+test_a_workstream_without_work_is_rejected (test_architecture.ValidationRuleTests.test_a_workstream_without_work_is_rejected) ... ok
+test_acceptance_criteria_are_mandatory (test_architecture.ValidationRuleTests.test_acceptance_criteria_are_mandatory) ... ok
+test_bad_id_is_rejected (test_architecture.ValidationRuleTests.test_bad_id_is_rejected) ... ok
+test_blocked_milestone_must_name_its_blocker (test_architecture.ValidationRuleTests.test_blocked_milestone_must_name_its_blocker) ... ok
+test_clean_fixture_passes (test_architecture.ValidationRuleTests.test_clean_fixture_passes) ... ok
+test_complete_milestone_must_cite_evidence (test_architecture.ValidationRuleTests.test_complete_milestone_must_cite_evidence) ... ok
+test_cycles_are_rejected (test_architecture.ValidationRuleTests.test_cycles_are_rejected) ... ok
+test_destination_level_must_match_its_milestone (test_architecture.ValidationRuleTests.test_destination_level_must_match_its_milestone) ... ok
+test_duplicate_ids_are_rejected (test_architecture.ValidationRuleTests.test_duplicate_ids_are_rejected) ... ok
+test_evidence_path_must_exist (test_architecture.ValidationRuleTests.test_evidence_path_must_exist) ... ok
+test_foundation_adr_must_be_recorded (test_architecture.ValidationRuleTests.test_foundation_adr_must_be_recorded) ... ok
+test_missing_destination_is_rejected (test_architecture.ValidationRuleTests.test_missing_destination_is_rejected) ... ok
+test_missing_mission_link_is_rejected (test_architecture.ValidationRuleTests.test_missing_mission_link_is_rejected) ... ok
+test_owner_must_be_a_declared_role (test_architecture.ValidationRuleTests.test_owner_must_be_a_declared_role) ... ok
+test_removing_a_required_milestone_is_rejected (test_architecture.ValidationRuleTests.test_removing_a_required_milestone_is_rejected) ... ok
+test_render_is_deterministic (test_architecture.ValidationRuleTests.test_render_is_deterministic) ... ok
+test_self_dependency_is_rejected (test_architecture.ValidationRuleTests.test_self_dependency_is_rejected) ... ok
+test_the_substrate_may_not_be_declared_the_product (test_architecture.ValidationRuleTests.test_the_substrate_may_not_be_declared_the_product) ... ok
+test_the_substrate_may_not_be_required_for_the_product (test_architecture.ValidationRuleTests.test_the_substrate_may_not_be_required_for_the_product) ... ok
+test_unknown_dependency_is_rejected (test_architecture.ValidationRuleTests.test_unknown_dependency_is_rejected) ... ok
+test_unknown_kind_is_rejected (test_architecture.ValidationRuleTests.test_unknown_kind_is_rejected) ... ok
+test_unknown_state_is_rejected (test_architecture.ValidationRuleTests.test_unknown_state_is_rejected) ... ok
+test_unknown_workstream_is_rejected (test_architecture.ValidationRuleTests.test_unknown_workstream_is_rejected) ... ok
+test_a_failed_allocation_stops_the_boot_before_the_handover (test_boot64_stub.AllocateMaxAddressTests.test_a_failed_allocation_stops_the_boot_before_the_handover) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_maximum_below_the_page_count_cannot_succeed (test_boot64_stub.AllocateMaxAddressTests.test_a_maximum_below_the_page_count_cannot_succeed) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_zero_maximum_verifies_as_unsatisfiable (test_boot64_stub.AllocateMaxAddressTests.test_a_zero_maximum_verifies_as_unsatisfiable)
+The contract the old code violated, asserted directly on the stub. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_allocation_failure_happens_before_exit_boot_services (test_boot64_stub.AllocateMaxAddressTests.test_allocation_failure_happens_before_exit_boot_services)
+Every allocation precedes ExitBootServices, so failure is reportable. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_conforming_firmware_can_satisfy_the_loader (test_boot64_stub.AllocateMaxAddressTests.test_conforming_firmware_can_satisfy_the_loader)
+A, part 1: with a real MaxAddress bound, a correct loader succeeds. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_conforming_firmware_with_no_memory_in_range_fails_safely (test_boot64_stub.AllocateMaxAddressTests.test_conforming_firmware_with_no_memory_in_range_fails_safely)
+A, part 2: an honest bound with no memory under it is refused. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_every_maximum_request_carries_the_identity_limit_as_its_bound (test_boot64_stub.AllocateMaxAddressTests.test_every_maximum_request_carries_the_identity_limit_as_its_bound)
+The bound itself, not just a plausible allocation that came back. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_firmware_that_ignores_the_bound_is_rejected (test_boot64_stub.AllocateMaxAddressTests.test_firmware_that_ignores_the_bound_is_rejected)
+A range whose last byte crosses 4 GiB must stop the boot. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_the_high_allocation_path_also_reports_the_same_bound (test_boot64_stub.AllocateMaxAddressTests.test_the_high_allocation_path_also_reports_the_same_bound)
+The bound is recorded on the branch that honours it, not just the default. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_the_high_allocation_window_is_inside_the_bound (test_boot64_stub.AllocateMaxAddressTests.test_the_high_allocation_window_is_inside_the_bound)
+Firmware may place the handover regions anywhere up to the bound. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_the_loader_passes_a_maximum_that_can_actually_be_satisfied (test_boot64_stub.AllocateMaxAddressTests.test_the_loader_passes_a_maximum_that_can_actually_be_satisfied) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_zero_descriptor_version_is_also_refused (test_boot64_stub.DescriptorVersionTests.test_a_zero_descriptor_version_is_also_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_an_unsupported_descriptor_version_stops_the_boot (test_boot64_stub.DescriptorVersionTests.test_an_unsupported_descriptor_version_stops_the_boot) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_supported_descriptor_version_is_accepted_and_recorded (test_boot64_stub.DescriptorVersionTests.test_supported_descriptor_version_is_accepted_and_recorded) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_the_refusal_happens_before_exit_boot_services (test_boot64_stub.DescriptorVersionTests.test_the_refusal_happens_before_exit_boot_services) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_failed_growth_allocation_stops_the_boot_and_frees_nothing (test_boot64_stub.MemoryMapGrowthTests.test_a_failed_growth_allocation_stops_the_boot_and_frees_nothing)
+Growth fails before the old buffer is released. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_firmware_without_free_pages_still_completes_the_growth (test_boot64_stub.MemoryMapGrowthTests.test_a_firmware_without_free_pages_still_completes_the_growth)
+An older boot-services table may leave FreePages null. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_sufficient_buffer_never_grows_and_never_frees (test_boot64_stub.MemoryMapGrowthTests.test_a_sufficient_buffer_never_grows_and_never_frees) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_every_exit_attempt_uses_the_key_from_its_own_get_memory_map (test_boot64_stub.MemoryMapGrowthTests.test_every_exit_attempt_uses_the_key_from_its_own_get_memory_map)
+No ExitBootServices may be given a key that a free has invalidated. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_growth_then_a_stale_key_retries_with_another_fresh_key (test_boot64_stub.MemoryMapGrowthTests.test_growth_then_a_stale_key_retries_with_another_fresh_key)
+Growth and a firmware-side key race in the same boot. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_one_buffer_too_small_grows_once_and_frees_the_old_buffer (test_boot64_stub.MemoryMapGrowthTests.test_one_buffer_too_small_grows_once_and_frees_the_old_buffer) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_three_buffer_too_small_answers_free_each_abandoned_buffer (test_boot64_stub.MemoryMapGrowthTests.test_three_buffer_too_small_answers_free_each_abandoned_buffer) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_allocate_pages_returns_out_of_resources_when_the_pool_is_empty (test_boot64_stub.PoolExhaustionTests.test_allocate_pages_returns_out_of_resources_when_the_pool_is_empty)
+The service answer is a status, and it is the documented one. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_allocate_pool_returns_out_of_resources_when_the_pool_is_empty (test_boot64_stub.PoolExhaustionTests.test_allocate_pool_returns_out_of_resources_when_the_pool_is_empty) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_exhaustion_is_reported_as_a_status_not_an_exception (test_boot64_stub.PoolExhaustionTests.test_exhaustion_is_reported_as_a_status_not_an_exception)
+Guard against a regression to StubError on the service path. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_the_loader_takes_its_own_failure_path_under_real_exhaustion (test_boot64_stub.PoolExhaustionTests.test_the_loader_takes_its_own_failure_path_under_real_exhaustion)
+The point of the fix: the loader's die() path actually runs. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_bitmask_format_is_classified_unsupported (test_boot64_stub.StubFirmware64Tests.test_a_bitmask_format_is_classified_unsupported) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_a_blt_only_format_is_classified_unsupported (test_boot64_stub.StubFirmware64Tests.test_a_blt_only_format_is_classified_unsupported) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_a_framebuffer_crossing_the_span_is_refused (test_boot64_stub.StubFirmware64Tests.test_a_framebuffer_crossing_the_span_is_refused) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_a_framebuffer_ending_exactly_at_the_span_is_accepted (test_boot64_stub.StubFirmware64Tests.test_a_framebuffer_ending_exactly_at_the_span_is_accepted) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_a_framebuffer_in_every_gibibyte_region_is_reachable (test_boot64_stub.StubFirmware64Tests.test_a_framebuffer_in_every_gibibyte_region_is_reachable) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_a_multiplication_that_wraps_is_refused (test_boot64_stub.StubFirmware64Tests.test_a_multiplication_that_wraps_is_refused) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_a_permanently_stale_key_stops_the_boot_without_the_marker (test_boot64_stub.StubFirmware64Tests.test_a_permanently_stale_key_stops_the_boot_without_the_marker) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_a_pitch_above_the_protocol_field_is_refused (test_boot64_stub.StubFirmware64Tests.test_a_pitch_above_the_protocol_field_is_refused) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_a_stale_memory_map_key_is_retried_not_fatal (test_boot64_stub.StubFirmware64Tests.test_a_stale_memory_map_key_is_retried_not_fatal) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_an_application_loaded_at_the_top_of_the_map_still_hands_over (test_boot64_stub.StubFirmware64Tests.test_an_application_loaded_at_the_top_of_the_map_still_hands_over) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_an_extreme_scan_line_is_refused_for_its_pitch (test_boot64_stub.StubFirmware64Tests.test_an_extreme_scan_line_is_refused_for_its_pitch) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_an_extreme_vertical_resolution_is_refused (test_boot64_stub.StubFirmware64Tests.test_an_extreme_vertical_resolution_is_refused) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_an_unknown_format_is_classified_unsupported (test_boot64_stub.StubFirmware64Tests.test_an_unknown_format_is_classified_unsupported) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_both_direct_colour_formats_are_accepted (test_boot64_stub.StubFirmware64Tests.test_both_direct_colour_formats_are_accepted) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_handoff_regions_placed_just_below_the_span_limit (test_boot64_stub.StubFirmware64Tests.test_handoff_regions_placed_just_below_the_span_limit) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_no_boot_service_is_used_after_exit_boot_services (test_boot64_stub.StubFirmware64Tests.test_no_boot_service_is_used_after_exit_boot_services) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_the_kernel_runs_in_long_mode_with_pc5_page_tables (test_boot64_stub.StubFirmware64Tests.test_the_kernel_runs_in_long_mode_with_pc5_page_tables) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_the_loader_accepts_a_valid_unsorted_map (test_boot64_stub.StubFirmware64Tests.test_the_loader_accepts_a_valid_unsorted_map) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_the_loader_refuses_a_map_with_overlapping_descriptors (test_boot64_stub.StubFirmware64Tests.test_the_loader_refuses_a_map_with_overlapping_descriptors) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_the_loader_replaces_cr3_only_after_validating_its_own_placement (test_boot64_stub.StubFirmware64Tests.test_the_loader_replaces_cr3_only_after_validating_its_own_placement) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_the_whole_boot_path_passes_every_check (test_boot64_stub.StubFirmware64Tests.test_the_whole_boot_path_passes_every_check) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_zero_dimensions_are_refused (test_boot64_stub.StubFirmware64Tests.test_zero_dimensions_are_refused) ... skipped 'unicorn is not installed (pip install unicorn)'
+test_a_dead_citation_still_exits_one (test_commit_citations.CommandLineExitTests.test_a_dead_citation_still_exits_one) ... ok
+test_a_historical_unreachable_citation_still_passes (test_commit_citations.CommandLineExitTests.test_a_historical_unreachable_citation_still_passes)
+No reachability requirement is introduced by the exit-status change. ... ok
+test_a_non_repository_exits_unchecked (test_commit_citations.CommandLineExitTests.test_a_non_repository_exits_unchecked)
+No `.git`: nothing can be resolved, so nothing may be claimed. ... ok
+test_a_shallow_clone_is_reported_as_truncated_not_as_dead_citations (test_commit_citations.CommandLineExitTests.test_a_shallow_clone_is_reported_as_truncated_not_as_dead_citations)
+The condition, not the symptom: a truncated checkout must say so. ... ok
+test_a_tree_or_blob_citation_still_passes (test_commit_citations.CommandLineExitTests.test_a_tree_or_blob_citation_still_passes)
+The documented object-type policy must survive the exit-status change. ... ok
+test_a_valid_repository_with_documents_exits_zero (test_commit_citations.CommandLineExitTests.test_a_valid_repository_with_documents_exits_zero) ... ok
+test_documents_without_any_citation_exit_unchecked (test_commit_citations.CommandLineExitTests.test_documents_without_any_citation_exit_unchecked)
+Documents found, but nothing in them to check -- still not a pass. ... ok
+test_git_unavailable_exits_unchecked_and_does_not_raise (test_commit_citations.CommandLineExitTests.test_git_unavailable_exits_unchecked_and_does_not_raise)
+A missing or unrunnable `git` is an unperformed check, not a crash. ... ok
+test_the_make_target_propagates_a_failure (test_commit_citations.CommandLineExitTests.test_the_make_target_propagates_a_failure)
+`make citations-check` must fail when the guard fails. ... ok
+test_zero_documents_exits_unchecked_and_does_not_claim_success (test_commit_citations.CommandLineExitTests.test_zero_documents_exits_unchecked_and_does_not_claim_success)
+The regression: an empty tree used to print CITATIONS OK and exit 0. ... ok
+test_a_clean_checkout_reports_nothing (test_commit_citations.DeadCitationTests.test_a_clean_checkout_reports_nothing) ... ok
+test_a_dangling_commit_citation_is_reported (test_commit_citations.DeadCitationTests.test_a_dangling_commit_citation_is_reported) ... ok
+test_documents_outside_the_evidence_scope_are_not_checked (test_commit_citations.DeadCitationTests.test_documents_outside_the_evidence_scope_are_not_checked)
+`docs/TEST_RESULTS.md` is a log of runs against revisions history removed. ... ok
+test_every_occurrence_is_reported_not_only_the_first (test_commit_citations.DeadCitationTests.test_every_occurrence_is_reported_not_only_the_first) ... ok
+test_the_report_names_the_file_line_and_context (test_commit_citations.DeadCitationTests.test_the_report_names_the_file_line_and_context) ... ok
+test_every_citation_in_the_shipped_evidence_documents_resolves (test_commit_citations.RealTreeTests.test_every_citation_in_the_shipped_evidence_documents_resolves) ... ok
+test_the_architecture_cross_reference_lands_on_the_right_commit (test_commit_citations.RealTreeTests.test_the_architecture_cross_reference_lands_on_the_right_commit)
+`ARCHITECTURE.md` sends the reader to `TEST_RESULTS.md` §27 for the 4 GiB ... ok
+test_the_documents_cited_by_the_architecture_page_resolve (test_commit_citations.RealTreeTests.test_the_documents_cited_by_the_architecture_page_resolve)
+Every object the architecture page names resolves, including §27's id. ... ok
+test_the_guard_actually_looks_at_the_shipped_documents (test_commit_citations.RealTreeTests.test_the_guard_actually_looks_at_the_shipped_documents)
+A guard that silently checked nothing would pass the test above. ... ok
+test_the_guard_reports_a_dead_citation_in_the_real_tree (test_commit_citations.RealTreeTests.test_the_guard_reports_a_dead_citation_in_the_real_tree)
+Negative control against the shipped tree, then the fixture is restored. ... ok
+test_the_shipped_documents_do_not_cite_the_rebase_invalidated_ids (test_commit_citations.RealTreeTests.test_the_shipped_documents_do_not_cite_the_rebase_invalidated_ids)
+The five ids the PR #28 rebase destroyed must not reappear. ... ok
+test_a_historical_revision_is_accepted_when_the_object_still_exists (test_commit_citations.ResolvingCitationTests.test_a_historical_revision_is_accepted_when_the_object_still_exists)
+Resolvable is the property, not reachable. ... ok
+test_a_tree_hash_is_accepted_as_evidence (test_commit_citations.ResolvingCitationTests.test_a_tree_hash_is_accepted_as_evidence)
+Documents cite tree hashes on purpose ("= `141f91f^{tree}`"). ... ok
+test_abbreviated_and_full_commit_citations_resolve (test_commit_citations.ResolvingCitationTests.test_abbreviated_and_full_commit_citations_resolve) ... ok
+test_an_all_digit_object_id_is_still_a_citation (test_commit_citations.ResolvingCitationTests.test_an_all_digit_object_id_is_still_a_citation)
+A real object id can be all decimal digits. ... ok
+test_an_all_digit_token_that_is_not_an_object_is_skipped (test_commit_citations.ResolvingCitationTests.test_an_all_digit_token_that_is_not_an_object_is_skipped)
+The timestamp case the exemption exists for must keep working. ... ok
+test_timestamps_and_placeholders_are_not_treated_as_citations (test_commit_citations.ResolvingCitationTests.test_timestamps_and_placeholders_are_not_treated_as_citations)
+All-decimal tokens have a SHA's width and are not object ids. ... ok
+test_tokens_shorter_than_an_abbreviation_are_ignored (test_commit_citations.ResolvingCitationTests.test_tokens_shorter_than_an_abbreviation_are_ignored) ... ok
+test_maximum_above_0x8000000a_reads_the_svm_leaf_only_when_svm_is_set (test_cpu64.CpuLeafGatingTests.test_maximum_above_0x8000000a_reads_the_svm_leaf_only_when_svm_is_set) ... ok
+test_maximum_below_0x80000001_reads_no_feature_leaf (test_cpu64.CpuLeafGatingTests.test_maximum_below_0x80000001_reads_no_feature_leaf) ... ok
+test_maximum_below_0x80000007_does_not_read_the_invariant_tsc_leaf (test_cpu64.CpuLeafGatingTests.test_maximum_below_0x80000007_does_not_read_the_invariant_tsc_leaf) ... ok
+test_maximum_below_0x80000008_ignores_a_large_feature_leaf_eax (test_cpu64.CpuLeafGatingTests.test_maximum_below_0x80000008_ignores_a_large_feature_leaf_eax) ... ok
+test_maximum_exactly_0x80000001_reads_features_but_no_address_width (test_cpu64.CpuLeafGatingTests.test_maximum_exactly_0x80000001_reads_features_but_no_address_width) ... ok
+test_maximum_exactly_0x80000007_reads_the_invariant_tsc_leaf (test_cpu64.CpuLeafGatingTests.test_maximum_exactly_0x80000007_reads_the_invariant_tsc_leaf) ... ok
+test_maximum_exactly_0x80000008_reports_the_address_widths (test_cpu64.CpuLeafGatingTests.test_maximum_exactly_0x80000008_reports_the_address_widths) ... ok
+test_nx_is_preserved_from_the_feature_leaf (test_cpu64.CpuLeafGatingTests.test_nx_is_preserved_from_the_feature_leaf) ... ok
+test_svm_leaf_is_not_read_when_svm_is_clear (test_cpu64.CpuLeafGatingTests.test_svm_leaf_is_not_read_when_svm_is_clear) ... ok
+test_s01_a_branch_with_no_receipt_is_outstanding_not_clean (test_dashboard_reconcile.ReconcileScenarioTest.test_s01_a_branch_with_no_receipt_is_outstanding_not_clean) ... ok
+test_s02_record_refuses_to_invent_the_first_boundary (test_dashboard_reconcile.ReconcileScenarioTest.test_s02_record_refuses_to_invent_the_first_boundary) ... ok
+test_s03_a_short_boundary_is_rejected (test_dashboard_reconcile.ReconcileScenarioTest.test_s03_a_short_boundary_is_rejected) ... ok
+test_s04_a_bootstrap_cannot_name_a_commit_that_has_not_landed (test_dashboard_reconcile.ReconcileScenarioTest.test_s04_a_bootstrap_cannot_name_a_commit_that_has_not_landed) ... ok
+test_s05_a_bootstrap_has_to_say_what_it_inspected (test_dashboard_reconcile.ReconcileScenarioTest.test_s05_a_bootstrap_has_to_say_what_it_inspected) ... ok
+test_s06_a_dry_run_prints_the_receipt_without_writing_it (test_dashboard_reconcile.ReconcileScenarioTest.test_s06_a_dry_run_prints_the_receipt_without_writing_it) ... ok
+test_s06b_every_receipt_says_what_it_did (test_dashboard_reconcile.ReconcileScenarioTest.test_s06b_every_receipt_says_what_it_did)
+`--record` without `--note` still produces a summary; a bootstrap does not invent one. ... ok
+test_s07_after_a_bootstrap_the_branch_reads_current (test_dashboard_reconcile.ReconcileScenarioTest.test_s07_after_a_bootstrap_the_branch_reads_current) ... ok
+test_s08_a_metric_changing_commit_must_be_inspected_then_recorded (test_dashboard_reconcile.ReconcileScenarioTest.test_s08_a_metric_changing_commit_must_be_inspected_then_recorded) ... ok
+test_s09_record_is_refused_while_the_generated_output_is_stale (test_dashboard_reconcile.ReconcileScenarioTest.test_s09_record_is_refused_while_the_generated_output_is_stale) ... ok
+test_s10_a_no_op_merge_is_recorded_as_reviewed_not_silently_passed (test_dashboard_reconcile.ReconcileScenarioTest.test_s10_a_no_op_merge_is_recorded_as_reviewed_not_silently_passed) ... ok
+test_s11_a_no_ff_pull_request_merge_is_detected_and_the_loop_closes (test_dashboard_reconcile.ReconcileScenarioTest.test_s11_a_no_ff_pull_request_merge_is_detected_and_the_loop_closes)
+The shape of PR #40's own merge: generator, Makefile and hand-written README prose. ... ok
+test_s12_a_fast_forward_merge_is_just_a_commit_in_the_range (test_dashboard_reconcile.ReconcileScenarioTest.test_s12_a_fast_forward_merge_is_just_a_commit_in_the_range) ... ok
+test_s13_a_squash_merge_is_detected_and_its_stale_figures_are_reported (test_dashboard_reconcile.ReconcileScenarioTest.test_s13_a_squash_merge_is_detected_and_its_stale_figures_are_reported) ... ok
+test_s14_a_rebase_merge_leaves_every_replayed_commit_named (test_dashboard_reconcile.ReconcileScenarioTest.test_s14_a_rebase_merge_leaves_every_replayed_commit_named) ... ok
+test_s15_a_direct_commit_to_main_with_no_figure_change_is_still_inspected (test_dashboard_reconcile.ReconcileScenarioTest.test_s15_a_direct_commit_to_main_with_no_figure_change_is_still_inspected) ... ok
+test_s16_an_interrupted_post_merge_leaves_the_state_outstanding_and_recovers (test_dashboard_reconcile.ReconcileScenarioTest.test_s16_an_interrupted_post_merge_leaves_the_state_outstanding_and_recovers) ... ok
+test_s17_a_regeneration_clears_nothing_it_did_not_inspect (test_dashboard_reconcile.ReconcileScenarioTest.test_s17_a_regeneration_clears_nothing_it_did_not_inspect) ... ok
+test_s18_a_readme_edit_inside_a_generated_block_is_exempt (test_dashboard_reconcile.ReconcileScenarioTest.test_s18_a_readme_edit_inside_a_generated_block_is_exempt) ... ok
+test_s19_a_readme_edit_outside_a_generated_block_must_be_inspected (test_dashboard_reconcile.ReconcileScenarioTest.test_s19_a_readme_edit_outside_a_generated_block_must_be_inspected) ... ok
+test_s20_several_merges_in_one_session_are_each_recorded (test_dashboard_reconcile.ReconcileScenarioTest.test_s20_several_merges_in_one_session_are_each_recorded) ... ok
+test_s21_a_receipt_naming_a_commit_that_has_not_landed_is_an_error (test_dashboard_reconcile.ReconcileScenarioTest.test_s21_a_receipt_naming_a_commit_that_has_not_landed_is_an_error) ... ok
+test_s22_a_receipt_that_admits_incompleteness_stays_outstanding (test_dashboard_reconcile.ReconcileScenarioTest.test_s22_a_receipt_that_admits_incompleteness_stays_outstanding) ... ok
+test_s23_a_receipt_written_over_a_red_gate_is_rejected (test_dashboard_reconcile.ReconcileScenarioTest.test_s23_a_receipt_written_over_a_red_gate_is_rejected) ... ok
+test_s24_a_malformed_or_foreign_receipt_is_an_error_not_a_clean_bill (test_dashboard_reconcile.ReconcileScenarioTest.test_s24_a_malformed_or_foreign_receipt_is_an_error_not_a_clean_bill) ... ok
+test_s25_a_shallow_clone_cannot_claim_the_range_is_clean (test_dashboard_reconcile.ReconcileScenarioTest.test_s25_a_shallow_clone_cannot_claim_the_range_is_clean) ... ok
+test_s26_a_missing_origin_main_is_an_error_that_names_the_fix (test_dashboard_reconcile.ReconcileScenarioTest.test_s26_a_missing_origin_main_is_an_error_that_names_the_fix) ... ok
+test_s27_here_answers_about_the_checked_out_ref_and_says_so (test_dashboard_reconcile.ReconcileScenarioTest.test_s27_here_answers_about_the_checked_out_ref_and_says_so) ... ok
+test_s28_recording_twice_changes_nothing (test_dashboard_reconcile.ReconcileScenarioTest.test_s28_recording_twice_changes_nothing) ... ok
+test_s29_record_refuses_a_dirty_source_file (test_dashboard_reconcile.ReconcileScenarioTest.test_s29_record_refuses_a_dirty_source_file) ... ok
+test_s30_a_receipt_carried_over_from_a_fork_is_audited_not_trusted (test_dashboard_reconcile.ReconcileScenarioTest.test_s30_a_receipt_carried_over_from_a_fork_is_audited_not_trusted) ... ok
+test_s31_an_up_to_date_merge_creates_no_commit_and_invents_no_work (test_dashboard_reconcile.ReconcileScenarioTest.test_s31_an_up_to_date_merge_creates_no_commit_and_invents_no_work)
+The other half of the no-op story, and the one a watermark could not tell apart. ... ok
+test_s32_the_receipt_is_read_from_the_target_not_the_working_tree (test_dashboard_reconcile.ReconcileScenarioTest.test_s32_the_receipt_is_read_from_the_target_not_the_working_tree)
+A dirty, half-written receipt on disk must not be believed as `main`'s state. ... ok
+test_s33_a_docs_only_merge_is_inspected_even_though_no_figure_moves (test_dashboard_reconcile.ReconcileScenarioTest.test_s33_a_docs_only_merge_is_inspected_even_though_no_figure_moves) ... ok
+test_s34_the_report_and_the_json_agree (test_dashboard_reconcile.ReconcileScenarioTest.test_s34_the_report_and_the_json_agree) ... ok
+test_s35_make_post_merge_is_the_whole_round_trip (test_dashboard_reconcile.ReconcileScenarioTest.test_s35_make_post_merge_is_the_whole_round_trip)
+`make post-merge` regenerates, checks and records, and leaves only the receipt dirty. ... ok
+test_s36_a_merge_of_reviewed_content_clears_the_moment_it_lands (test_dashboard_reconcile.ReconcileScenarioTest.test_s36_a_merge_of_reviewed_content_clears_the_moment_it_lands)
+The case a receipt cannot pre-name, and must not have to. ... skipped 'git would not merge a branch already contained in main'
+test_s37_a_merge_is_never_exempt_for_being_a_merge (test_dashboard_reconcile.ReconcileScenarioTest.test_s37_a_merge_is_never_exempt_for_being_a_merge)
+The other side of the rule: one unreviewed commit inside and it is outstanding. ... ok
+test_s38_a_squash_of_reviewed_commits_still_has_to_be_recorded (test_dashboard_reconcile.ReconcileScenarioTest.test_s38_a_squash_of_reviewed_commits_still_has_to_be_recorded)
+The asymmetry is deliberate: a squash mints a new SHA and destroys the ancestry. ... ok
+test_s39_generated_output_only_is_current_only_because_it_was_checked (test_dashboard_reconcile.ReconcileScenarioTest.test_s39_generated_output_only_is_current_only_because_it_was_checked)
+The exemption is a promise about the output, so the output is checked. ... ok
+test_s40_record_verifies_even_when_it_has_nothing_to_write (test_dashboard_reconcile.ReconcileScenarioTest.test_s40_record_verifies_even_when_it_has_nothing_to_write)
+`--record` may not answer 0 about stale output because no receipt update was due. ... ok
+test_s41_a_no_op_merge_is_recorded_as_reviewed_not_skipped (test_dashboard_reconcile.ReconcileScenarioTest.test_s41_a_no_op_merge_is_recorded_as_reviewed_not_skipped)
+AGENTS.md §1 step 2, in code: a merge that introduces nothing is still a merge. ... ok
+test_s42_a_receipt_written_inside_the_range_does_not_certify_itself (test_dashboard_reconcile.ReconcileScenarioTest.test_s42_a_receipt_written_inside_the_range_does_not_certify_itself)
+A commit cannot clear itself by naming itself in the receipt, in either forgery. ... ok
+test_s43_flags_that_belong_to_bootstrap_are_not_silently_ignored (test_dashboard_reconcile.ReconcileScenarioTest.test_s43_flags_that_belong_to_bootstrap_are_not_silently_ignored)
+`--record --boundary X` used to ignore `--boundary` and answer 0. ... ok
+test_s44_the_report_names_the_commits_a_receipt_vouched_for (test_dashboard_reconcile.ReconcileScenarioTest.test_s44_the_report_names_the_commits_a_receipt_vouched_for)
+`recorded_in_receipt` and the merge statistic were always empty, and nothing noticed. ... ok
+test_s45_json_mode_parses_when_the_answer_is_a_refusal (test_dashboard_reconcile.ReconcileScenarioTest.test_s45_json_mode_parses_when_the_answer_is_a_refusal)
+`--json` is the machine interface, so a refusal has to be an object too. ... ok
+test_an_unreadable_range_is_never_read_as_an_empty_one (test_dashboard_reconcile.TheToolItselfIsSoundTest.test_an_unreadable_range_is_never_read_as_an_empty_one)
+`range_commits` must not swallow anything: an empty range means "nothing landed". ... ok
+test_no_clock_and_no_network (test_dashboard_reconcile.TheToolItselfIsSoundTest.test_no_clock_and_no_network) ... ok
+test_no_git_failure_becomes_an_empty_answer (test_dashboard_reconcile.TheToolItselfIsSoundTest.test_no_git_failure_becomes_an_empty_answer) ... ok
+test_the_generated_span_rule_is_stated_once_not_three_times (test_dashboard_reconcile.TheToolItselfIsSoundTest.test_the_generated_span_rule_is_stated_once_not_three_times) ... ok
+test_the_receipt_path_and_the_drivers_are_what_the_docs_claim (test_dashboard_reconcile.TheToolItselfIsSoundTest.test_the_receipt_path_and_the_drivers_are_what_the_docs_claim) ... ok
+test_the_three_exit_codes_are_the_documented_ones (test_dashboard_reconcile.TheToolItselfIsSoundTest.test_the_three_exit_codes_are_the_documented_ones) ... ok
+test_try_git_is_only_used_where_absence_is_meaningful (test_dashboard_reconcile.TheToolItselfIsSoundTest.test_try_git_is_only_used_where_absence_is_meaningful) ... ok
+test_a_clean_tree_passes (test_docs_check.DetectionTest.test_a_clean_tree_passes) ... ok
+test_a_fenced_code_block_is_not_parsed_for_headings (test_docs_check.DetectionTest.test_a_fenced_code_block_is_not_parsed_for_headings) ... ok
+test_a_missing_file_is_caught (test_docs_check.DetectionTest.test_a_missing_file_is_caught) ... ok
+test_a_percent_encoded_nul_is_reported_not_raised (test_docs_check.DetectionTest.test_a_percent_encoded_nul_is_reported_not_raised)
+`a%00b.md` decodes to a path with an embedded NUL. ... ok
+test_a_percent_encoded_nul_with_a_fragment_is_reported_not_raised (test_docs_check.DetectionTest.test_a_percent_encoded_nul_with_a_fragment_is_reported_not_raised) ... ok
+test_a_percent_encoded_path_resolves (test_docs_check.DetectionTest.test_a_percent_encoded_path_resolves)
+GitHub follows `[x](a%20b.md)` to the file `a b.md`; so must this. ... ok
+test_a_percent_encoded_path_to_nowhere_is_still_caught (test_docs_check.DetectionTest.test_a_percent_encoded_path_to_nowhere_is_still_caught) ... ok
+test_a_removed_target_is_caught (test_docs_check.DetectionTest.test_a_removed_target_is_caught) ... ok
+test_a_renamed_heading_is_caught (test_docs_check.DetectionTest.test_a_renamed_heading_is_caught) ... ok
+test_a_variable_assignment_is_not_a_target (test_docs_check.DetectionTest.test_a_variable_assignment_is_not_a_target) ... ok
+test_an_anchor_into_the_same_file_is_checked (test_docs_check.DetectionTest.test_an_anchor_into_the_same_file_is_checked) ... ok
+test_duplicate_headings_get_numeric_suffixes (test_docs_check.DetectionTest.test_duplicate_headings_get_numeric_suffixes) ... ok
+test_external_links_are_not_resolved (test_docs_check.DetectionTest.test_external_links_are_not_resolved) ... ok
+test_other_malformed_escapes_are_still_reported (test_docs_check.DetectionTest.test_other_malformed_escapes_are_still_reported)
+The fix must not have widened into "anything odd is silently fine". ... ok
+test_the_slug_rule_is_github_like (test_docs_check.DetectionTest.test_the_slug_rule_is_github_like) ... ok
+test_every_make_command_in_the_documents_exists (test_docs_check.RepositoryTest.test_every_make_command_in_the_documents_exists) ... ok
+test_issue_forms_have_the_fields_github_requires (test_docs_check.RepositoryTest.test_issue_forms_have_the_fields_github_requires) ... ok
+test_the_contributor_templates_reference_real_documents (test_docs_check.RepositoryTest.test_the_contributor_templates_reference_real_documents) ... ok
+test_the_pull_request_template_keeps_the_levels_apart (test_docs_check.RepositoryTest.test_the_pull_request_template_keeps_the_levels_apart) ... ok
+test_the_real_tree_passes (test_docs_check.RepositoryTest.test_the_real_tree_passes) ... ok
+test_bpb_is_structurally_fat32 (test_fat32.Fat32FixtureTest.test_bpb_is_structurally_fat32) ... ok
+test_cluster_count_is_a_conforming_fat32_volume (test_fat32.Fat32FixtureTest.test_cluster_count_is_a_conforming_fat32_volume) ... ok
+test_fragmented_chain_is_really_fragmented (test_fat32.Fat32FixtureTest.test_fragmented_chain_is_really_fragmented) ... ok
+test_independent_reader_matches_generated_bytes (test_fat32.Fat32FixtureTest.test_independent_reader_matches_generated_bytes) ... ok
+test_partition_table_points_at_the_volume (test_fat32.Fat32FixtureTest.test_partition_table_points_at_the_volume) ... ok
+test_reader_ignores_deleted_entries_and_labels (test_fat32.Fat32FixtureTest.test_reader_ignores_deleted_entries_and_labels) ... ok
+test_reader_refuses_a_directory (test_fat32.Fat32FixtureTest.test_reader_refuses_a_directory) ... ok
+test_a_fat16_bpb_is_refused_not_guessed (test_fat32.KernelModuleTest.test_a_fat16_bpb_is_refused_not_guessed) ... ok
+test_a_missing_boot_signature_is_refused (test_fat32.KernelModuleTest.test_a_missing_boot_signature_is_refused) ... ok
+test_compiles_without_warnings (test_fat32.KernelModuleTest.test_compiles_without_warnings) ... ok
+test_directory_and_missing_entries_are_refused (test_fat32.KernelModuleTest.test_directory_and_missing_entries_are_refused) ... ok
+test_kernel_and_python_reader_agree_on_digests (test_fat32.KernelModuleTest.test_kernel_and_python_reader_agree_on_digests) ... ok
+test_kernel_reads_every_fixture_file_correctly (test_fat32.KernelModuleTest.test_kernel_reads_every_fixture_file_correctly) ... ok
+test_listing_skips_labels_deleted_entries_and_lfn_records (test_fat32.KernelModuleTest.test_listing_skips_labels_deleted_entries_and_lfn_records) ... ok
+test_the_image_is_byte_identical_after_reading (test_fat32.KernelModuleTest.test_the_image_is_byte_identical_after_reading) ... ok
+test_both_build_systems_compile_the_module (test_fat32.WiringTest.test_both_build_systems_compile_the_module) ... ok
+test_device_layer_is_excluded_from_host_builds (test_fat32.WiringTest.test_device_layer_is_excluded_from_host_builds) ... ok
+test_mount_takes_explicit_geometry (test_fat32.WiringTest.test_mount_takes_explicit_geometry) ... ok
+test_read_path_never_touches_the_device_directly (test_fat32.WiringTest.test_read_path_never_touches_the_device_directly) ... ok
+test_status_names_are_stable (test_fat32.WiringTest.test_status_names_are_stable) ... ok
+test_a_directory_that_grew_keeps_the_end_of_directory_marker (test_fat32_expand.DirectoryTests.test_a_directory_that_grew_keeps_the_end_of_directory_marker) ... ok
+test_a_directory_with_no_free_slot_grows_when_a_file_is_created_in_it (test_fat32_expand.DirectoryTests.test_a_directory_with_no_free_slot_grows_when_a_file_is_created_in_it) ... ok
+test_a_full_root_directory_grows_to_hold_a_new_directory (test_fat32_expand.DirectoryTests.test_a_full_root_directory_grows_to_hold_a_new_directory) ... ok
+test_a_new_directory_is_readable_and_accepts_a_file_immediately (test_fat32_expand.DirectoryTests.test_a_new_directory_is_readable_and_accepts_a_file_immediately) ... ok
+test_a_parent_that_cannot_grow_refuses_the_directory (test_fat32_expand.DirectoryTests.test_a_parent_that_cannot_grow_refuses_the_directory) ... ok
+test_creating_a_directory_at_the_root (test_fat32_expand.DirectoryTests.test_creating_a_directory_at_the_root) ... ok
+test_creating_a_directory_inside_an_existing_one (test_fat32_expand.DirectoryTests.test_creating_a_directory_inside_an_existing_one) ... ok
+test_directory_refusals (test_fat32_expand.DirectoryTests.test_directory_refusals) ... ok
+test_nested_directories_three_levels_deep (test_fat32_expand.DirectoryTests.test_nested_directories_three_levels_deep) ... ok
+test_a_failed_directory_growth_leaves_the_parent_unchanged (test_fat32_expand.FaultInjectionTests.test_a_failed_directory_growth_leaves_the_parent_unchanged) ... ok
+test_a_failed_flush_during_an_overwrite_is_an_error (test_fat32_expand.FaultInjectionTests.test_a_failed_flush_during_an_overwrite_is_an_error) ... ok
+test_a_failed_parent_entry_leaves_the_volume_with_a_clean_leak (test_fat32_expand.FaultInjectionTests.test_a_failed_parent_entry_leaves_the_volume_with_a_clean_leak) ... ok
+test_a_failed_reclamation_leaks_the_old_chain_but_keeps_the_new_file (test_fat32_expand.FaultInjectionTests.test_a_failed_reclamation_leaks_the_old_chain_but_keeps_the_new_file) ... ok
+test_a_failed_switch_leaves_the_old_file_completely_intact (test_fat32_expand.FaultInjectionTests.test_a_failed_switch_leaves_the_old_file_completely_intact) ... ok
+test_a_missing_flush_callback_is_reported_not_assumed (test_fat32_expand.FaultInjectionTests.test_a_missing_flush_callback_is_reported_not_assumed) ... ok
+test_corrupted_replacement_data_is_caught_by_the_read_back (test_fat32_expand.FaultInjectionTests.test_corrupted_replacement_data_is_caught_by_the_read_back) ... ok
+test_every_write_failure_during_a_directory_create_is_classified (test_fat32_expand.FaultInjectionTests.test_every_write_failure_during_a_directory_create_is_classified) ... ok
+test_every_write_failure_during_an_overwrite_is_classified (test_fat32_expand.FaultInjectionTests.test_every_write_failure_during_an_overwrite_is_classified) ... ok
+test_failing_one_fat_mirror_is_reported_not_hidden (test_fat32_expand.FaultInjectionTests.test_failing_one_fat_mirror_is_reported_not_hidden) ... ok
+test_a_read_only_mount_still_refuses_every_write (test_fat32_expand.HarnessSafetyTests.test_a_read_only_mount_still_refuses_every_write) ... ok
+test_no_boot_path_calls_a_write (test_fat32_expand.HarnessSafetyTests.test_no_boot_path_calls_a_write) ... ok
+test_only_the_console_commands_reach_the_new_operations (test_fat32_expand.HarnessSafetyTests.test_only_the_console_commands_reach_the_new_operations) ... ok
+test_the_write_entry_points_are_declared_once (test_fat32_expand.HarnessSafetyTests.test_the_write_entry_points_are_declared_once) ... ok
+test_a_hostile_fsinfo_is_neither_trusted_nor_rewritten (test_fat32_expand.InvariantTests.test_a_hostile_fsinfo_is_neither_trusted_nor_rewritten) ... ok
+test_fsinfo_stays_consistent_across_a_mixed_sequence (test_fat32_expand.InvariantTests.test_fsinfo_stays_consistent_across_a_mixed_sequence) ... ok
+test_no_cluster_is_ever_claimed_twice_after_a_mixed_sequence (test_fat32_expand.InvariantTests.test_no_cluster_is_ever_claimed_twice_after_a_mixed_sequence) ... ok
+test_operations_never_write_outside_the_partition (test_fat32_expand.InvariantTests.test_operations_never_write_outside_the_partition) ... ok
+test_the_root_directory_cluster_is_never_allocated_as_data (test_fat32_expand.InvariantTests.test_the_root_directory_cluster_is_never_allocated_as_data) ... ok
+test_a_directory_is_not_a_file (test_fat32_expand.OverwriteTests.test_a_directory_is_not_a_file) ... ok
+test_a_fragmented_chain_is_reclaimed_completely (test_fat32_expand.OverwriteTests.test_a_fragmented_chain_is_reclaimed_completely) ... ok
+test_a_missing_file_is_refused_without_writing (test_fat32_expand.OverwriteTests.test_a_missing_file_is_refused_without_writing) ... ok
+test_a_read_only_entry_is_refused (test_fat32_expand.OverwriteTests.test_a_read_only_entry_is_refused) ... ok
+test_a_read_only_source_refuses_an_overwrite (test_fat32_expand.OverwriteTests.test_a_read_only_source_refuses_an_overwrite) ... ok
+test_a_replacement_too_large_for_the_chain_limit_is_refused (test_fat32_expand.OverwriteTests.test_a_replacement_too_large_for_the_chain_limit_is_refused) ... ok
+test_a_volume_without_room_for_both_versions_is_refused (test_fat32_expand.OverwriteTests.test_a_volume_without_room_for_both_versions_is_refused)
+Overwrite trades space for integrity: it needs both chains at once. ... ok
+test_an_empty_file_can_receive_content (test_fat32_expand.OverwriteTests.test_an_empty_file_can_receive_content) ... ok
+test_empty_replacement_frees_the_whole_chain (test_fat32_expand.OverwriteTests.test_empty_replacement_frees_the_whole_chain) ... ok
+test_fsinfo_matches_the_fat_after_an_overwrite (test_fat32_expand.OverwriteTests.test_fsinfo_matches_the_fat_after_an_overwrite) ... ok
+test_longer_replacement_grows_the_chain (test_fat32_expand.OverwriteTests.test_longer_replacement_grows_the_chain) ... ok
+test_same_size_replacement_changes_content_only (test_fat32_expand.OverwriteTests.test_same_size_replacement_changes_content_only) ... ok
+test_shorter_replacement_shrinks_the_chain_and_frees_the_rest (test_fat32_expand.OverwriteTests.test_shorter_replacement_shrinks_the_chain_and_frees_the_rest) ... ok
+test_the_entry_keeps_its_name_slot_and_attributes (test_fat32_expand.OverwriteTests.test_the_entry_keeps_its_name_slot_and_attributes) ... ok
+test_the_written_sectors_are_inside_the_partition (test_fat32_expand.OverwriteTests.test_the_written_sectors_are_inside_the_partition) ... ok
+test_two_identical_overwrites_produce_identical_images (test_fat32_expand.OverwriteTests.test_two_identical_overwrites_produce_identical_images) ... ok
+test_unrelated_files_and_their_clusters_are_untouched (test_fat32_expand.OverwriteTests.test_unrelated_files_and_their_clusters_are_untouched) ... ok
+test_a_missing_intermediate_directory_is_not_created_implicitly (test_fat32_expand.PathTests.test_a_missing_intermediate_directory_is_not_created_implicitly) ... ok
+test_eight_levels_are_allowed_and_nine_are_not (test_fat32_expand.PathTests.test_eight_levels_are_allowed_and_nine_are_not) ... ok
+test_lookup_is_case_insensitive_in_every_component (test_fat32_expand.PathTests.test_lookup_is_case_insensitive_in_every_component) ... ok
+test_path_rejections_in_the_read_and_write_paths (test_fat32_expand.PathTests.test_path_rejections_in_the_read_and_write_paths) ... ok
+test_reading_a_directory_as_a_file_is_refused (test_fat32_expand.PathTests.test_reading_a_directory_as_a_file_is_refused) ... ok
+test_only_the_put_command_can_create_a_file (test_fat32_write.HarnessSafetyTest.test_only_the_put_command_can_create_a_file) ... ok
+test_the_boot_test_only_attaches_generated_images (test_fat32_write.HarnessSafetyTest.test_the_boot_test_only_attaches_generated_images) ... ok
+test_boot_mount_attaches_no_write_callbacks (test_fat32_write.ReadOnlyRegressionTest.test_boot_mount_attaches_no_write_callbacks) ... ok
+test_creating_requires_an_explicit_call (test_fat32_write.ReadOnlyRegressionTest.test_creating_requires_an_explicit_call) ... ok
+test_existing_read_tests_still_pass_unchanged (test_fat32_write.ReadOnlyRegressionTest.test_existing_read_tests_still_pass_unchanged) ... ok
+test_flush_is_explicit_and_checked (test_fat32_write.ReadOnlyRegressionTest.test_flush_is_explicit_and_checked) ... ok
+test_only_the_device_layer_touches_the_disk (test_fat32_write.ReadOnlyRegressionTest.test_only_the_device_layer_touches_the_disk) ... ok
+test_a_deleted_slot_behind_a_long_name_record_is_skipped (test_fat32_write.WriteDriver.test_a_deleted_slot_behind_a_long_name_record_is_skipped) ... ok
+test_a_deleted_slot_is_reused_and_stays_invisible (test_fat32_write.WriteDriver.test_a_deleted_slot_is_reused_and_stays_invisible) ... ok
+test_a_directory_that_cannot_grow_is_refused_without_writing (test_fat32_write.WriteDriver.test_a_directory_that_cannot_grow_is_refused_without_writing)
+The other half of the new contract: no free cluster, no create. ... ok
+test_a_failed_flush_is_an_error_even_though_the_entry_exists (test_fat32_write.WriteDriver.test_a_failed_flush_is_an_error_even_though_the_entry_exists) ... ok
+test_a_full_root_directory_is_grown_by_one_cluster (test_fat32_write.WriteDriver.test_a_full_root_directory_is_grown_by_one_cluster)
+M1i replaces M1g's refusal here, with a stronger contract. ... ok
+test_a_full_volume_is_refused_without_writing_anything (test_fat32_write.WriteDriver.test_a_full_volume_is_refused_without_writing_anything) ... ok
+test_a_missing_flush_callback_is_reported_not_assumed (test_fat32_write.WriteDriver.test_a_missing_flush_callback_is_reported_not_assumed) ... ok
+test_a_missing_fsinfo_signature_is_survivable (test_fat32_write.WriteDriver.test_a_missing_fsinfo_signature_is_survivable) ... ok
+test_a_read_only_source_refuses_to_write (test_fat32_write.WriteDriver.test_a_read_only_source_refuses_to_write) ... ok
+test_allocation_in_a_nearly_full_volume (test_fat32_write.WriteDriver.test_allocation_in_a_nearly_full_volume) ... ok
+test_an_existing_name_is_refused_and_the_file_is_untouched (test_fat32_write.WriteDriver.test_an_existing_name_is_refused_and_the_file_is_untouched) ... ok
+test_an_implausible_fsinfo_is_not_trusted_and_not_rewritten (test_fat32_write.WriteDriver.test_an_implausible_fsinfo_is_not_trusted_and_not_rewritten) ... ok
+test_changes_are_confined_to_the_regions_a_create_may_touch (test_fat32_write.WriteDriver.test_changes_are_confined_to_the_regions_a_create_may_touch) ... ok
+test_corrupted_data_is_caught_by_the_read_back (test_fat32_write.WriteDriver.test_corrupted_data_is_caught_by_the_read_back) ... ok
+test_creates_a_small_file_that_an_independent_reader_confirms (test_fat32_write.WriteDriver.test_creates_a_small_file_that_an_independent_reader_confirms) ... ok
+test_every_write_failure_still_leaves_the_original_files_readable (test_fat32_write.WriteDriver.test_every_write_failure_still_leaves_the_original_files_readable) ... ok
+test_existing_name_is_matched_case_insensitively (test_fat32_write.WriteDriver.test_existing_name_is_matched_case_insensitively) ... ok
+test_failure_before_the_directory_entry_leaks_only_clusters (test_fat32_write.WriteDriver.test_failure_before_the_directory_entry_leaks_only_clusters) ... ok
+test_failure_between_fat_copies_is_reported_as_a_broken_mirror (test_fat32_write.WriteDriver.test_failure_between_fat_copies_is_reported_as_a_broken_mirror) ... ok
+test_failure_on_the_first_data_write_writes_nothing (test_fat32_write.WriteDriver.test_failure_on_the_first_data_write_writes_nothing) ... ok
+test_file_exactly_one_cluster (test_fat32_write.WriteDriver.test_file_exactly_one_cluster) ... ok
+test_file_smaller_than_a_cluster_is_not_padded_into_its_size (test_fat32_write.WriteDriver.test_file_smaller_than_a_cluster_is_not_padded_into_its_size) ... ok
+test_fragmented_free_space_produces_a_split_chain (test_fat32_write.WriteDriver.test_fragmented_free_space_produces_a_split_chain) ... ok
+test_fsinfo_free_count_is_recomputed_not_trusted (test_fat32_write.WriteDriver.test_fsinfo_free_count_is_recomputed_not_trusted) ... ok
+test_invalid_names_are_refused (test_fat32_write.WriteDriver.test_invalid_names_are_refused) ... ok
+test_multi_cluster_file_chain_is_consistent (test_fat32_write.WriteDriver.test_multi_cluster_file_chain_is_consistent) ... ok
+test_one_cluster_short_is_refused (test_fat32_write.WriteDriver.test_one_cluster_short_is_refused) ... ok
+test_the_root_directory_cluster_is_never_allocated (test_fat32_write.WriteDriver.test_the_root_directory_cluster_is_never_allocated) ... ok
+test_two_identical_creates_produce_identical_images (test_fat32_write.WriteDriver.test_two_identical_creates_produce_identical_images) ... ok
+test_writes_stay_inside_the_partition (test_fat32_write.WriteDriver.test_writes_stay_inside_the_partition) ... ok
+test_zero_length_file (test_fat32_write.WriteDriver.test_zero_length_file) ... ok
+test_a_bad_sha256_is_rejected (test_hw_record.RecordValidationTest.test_a_bad_sha256_is_rejected) ... ok
+test_a_complete_record_validates (test_hw_record.RecordValidationTest.test_a_complete_record_validates) ... ok
+test_a_failed_attempt_is_valid_evidence (test_hw_record.RecordValidationTest.test_a_failed_attempt_is_valid_evidence)
+A failed boot is a result; only dishonesty is rejected. ... ok
+test_a_missing_log_file_is_rejected (test_hw_record.RecordValidationTest.test_a_missing_log_file_is_rejected) ... ok
+test_a_missing_observation_is_rejected (test_hw_record.RecordValidationTest.test_a_missing_observation_is_rejected) ... ok
+test_a_physical_boot_without_a_log_is_rejected (test_hw_record.RecordValidationTest.test_a_physical_boot_without_a_log_is_rejected) ... ok
+test_a_tbd_field_is_rejected (test_hw_record.RecordValidationTest.test_a_tbd_field_is_rejected) ... ok
+test_an_emulator_run_cannot_be_filed_as_a_physical_record (test_hw_record.RecordValidationTest.test_an_emulator_run_cannot_be_filed_as_a_physical_record) ... ok
+test_bad_enumerations_are_rejected (test_hw_record.RecordValidationTest.test_bad_enumerations_are_rejected) ... ok
+test_booted_with_blockers_is_rejected (test_hw_record.RecordValidationTest.test_booted_with_blockers_is_rejected) ... ok
+test_medium_and_image_must_match (test_hw_record.RecordValidationTest.test_medium_and_image_must_match) ... ok
+test_the_cli_reports_both_ways (test_hw_record.RecordValidationTest.test_the_cli_reports_both_ways) ... ok
+test_the_shipped_template_does_not_validate (test_hw_record.RecordValidationTest.test_the_shipped_template_does_not_validate)
+An unfilled template must never pass as evidence. ... ok
+test_the_template_check_cli_passes (test_hw_record.RecordValidationTest.test_the_template_check_cli_passes) ... ok
+test_builds_are_byte_identical (test_hybrid.HybridMbrLayoutTests.test_builds_are_byte_identical) ... ok
+test_chs_saturates_instead_of_wrapping (test_hybrid.HybridMbrLayoutTests.test_chs_saturates_instead_of_wrapping) ... ok
+test_the_build_metadata_records_the_table (test_hybrid.HybridMbrLayoutTests.test_the_build_metadata_records_the_table) ... ok
+test_the_builder_writes_a_signed_sector_at_offset_zero (test_hybrid.HybridMbrLayoutTests.test_the_builder_writes_a_signed_sector_at_offset_zero) ... ok
+test_the_generator_refuses_a_wrong_sized_bootstrap (test_hybrid.HybridMbrLayoutTests.test_the_generator_refuses_a_wrong_sized_bootstrap) ... ok
+test_the_generator_refuses_to_build_without_a_bootstrap (test_hybrid.HybridMbrLayoutTests.test_the_generator_refuses_to_build_without_a_bootstrap) ... ok
+test_the_other_three_entries_are_empty (test_hybrid.HybridMbrLayoutTests.test_the_other_three_entries_are_empty) ... ok
+test_the_partition_describes_this_image (test_hybrid.HybridMbrLayoutTests.test_the_partition_describes_this_image) ... ok
+test_the_partition_helper_rejects_an_empty_partition (test_hybrid.HybridMbrLayoutTests.test_the_partition_helper_rejects_an_empty_partition) ... ok
+test_the_patch_words_point_at_the_el_torito_boot_image (test_hybrid.HybridMbrLayoutTests.test_the_patch_words_point_at_the_el_torito_boot_image) ... ok
+test_the_verifier_accepts_the_image (test_hybrid.HybridMbrLayoutTests.test_the_verifier_accepts_the_image) ... ok
+test_the_verifier_reports_every_hybrid_check (test_hybrid.HybridMbrLayoutTests.test_the_verifier_reports_every_hybrid_check) ... ok
+test_a_boot_image_beyond_the_partition_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_boot_image_beyond_the_partition_is_rejected) ... ok
+test_a_cleared_boot_flag_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_cleared_boot_flag_is_rejected) ... ok
+test_a_foreign_partition_type_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_foreign_partition_type_is_rejected) ... ok
+test_a_missing_bootstrap_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_missing_bootstrap_is_rejected) ... ok
+test_a_partition_past_the_end_of_the_image_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_partition_past_the_end_of_the_image_is_rejected) ... ok
+test_a_partition_that_starts_late_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_partition_that_starts_late_is_rejected) ... ok
+test_a_second_partition_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_second_partition_is_rejected) ... ok
+test_a_short_boot_image_length_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_short_boot_image_length_is_rejected) ... ok
+test_a_short_partition_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_short_partition_is_rejected) ... ok
+test_a_stale_boot_image_lba_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_stale_boot_image_lba_is_rejected) ... ok
+test_a_stale_chs_address_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_stale_chs_address_is_rejected) ... ok
+test_a_wiped_system_area_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_wiped_system_area_is_rejected) ... ok
+test_a_zero_disk_signature_is_rejected (test_hybrid.HybridMbrRejectionTests.test_a_zero_disk_signature_is_rejected) ... ok
+test_an_overlapping_second_partition_is_rejected (test_hybrid.HybridMbrRejectionTests.test_an_overlapping_second_partition_is_rejected) ... ok
+test_non_zero_reserved_bytes_are_rejected (test_hybrid.HybridMbrRejectionTests.test_non_zero_reserved_bytes_are_rejected) ... ok
+test_the_missing_signature_is_rejected (test_hybrid.HybridMbrRejectionTests.test_the_missing_signature_is_rejected) ... ok
+test_the_verifier_rejects_a_table_that_no_longer_matches_the_image (test_hybrid.HybridMbrRejectionTests.test_the_verifier_rejects_a_table_that_no_longer_matches_the_image) ... ok
+test_both_patch_words_are_zero_in_the_source (test_hybrid.HybridMbrSourceTests.test_both_patch_words_are_zero_in_the_source) ... ok
+test_the_bootstrap_addresses_the_patch_words_absolutely (test_hybrid.HybridMbrSourceTests.test_the_bootstrap_addresses_the_patch_words_absolutely) ... ok
+test_the_bootstrap_hands_control_to_the_stage1_loader (test_hybrid.HybridMbrSourceTests.test_the_bootstrap_hands_control_to_the_stage1_loader) ... ok
+test_the_bootstrap_is_exactly_440_bytes (test_hybrid.HybridMbrSourceTests.test_the_bootstrap_is_exactly_440_bytes) ... ok
+test_the_bootstrap_owns_no_disk_signature_or_table (test_hybrid.HybridMbrSourceTests.test_the_bootstrap_owns_no_disk_signature_or_table) ... ok
+test_the_bootstrap_reads_the_image_through_int13h (test_hybrid.HybridMbrSourceTests.test_the_bootstrap_reads_the_image_through_int13h) ... ok
+test_the_bootstrap_reloads_itself_above_the_loader_window (test_hybrid.HybridMbrSourceTests.test_the_bootstrap_reloads_itself_above_the_loader_window) ... ok
+test_the_makefile_builds_and_pins_the_bootstrap (test_hybrid.HybridMbrSourceTests.test_the_makefile_builds_and_pins_the_bootstrap) ... /tmp/audit42/clones3/pr42/tests/test_hybrid.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/clones3/pr42/Makefile' mode='r' encoding='utf-8'>
+  makefile = open(os.path.join(ROOT, "Makefile"), encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_missing_image_exits_two (test_iso_manifest.IndependenceTest.test_a_missing_image_exits_two) ... ok
+test_the_cli_writes_and_checks_a_manifest (test_iso_manifest.IndependenceTest.test_the_cli_writes_and_checks_a_manifest) ... ok
+test_the_reader_does_not_import_the_writer (test_iso_manifest.IndependenceTest.test_the_reader_does_not_import_the_writer) ... ok
+test_a_non_iso_is_refused_with_a_reason (test_iso_manifest.ManifestContentTest.test_a_non_iso_is_refused_with_a_reason) ... ok
+test_an_image_without_a_boot_catalog_is_refused (test_iso_manifest.ManifestContentTest.test_an_image_without_a_boot_catalog_is_refused) ... ok
+test_every_file_is_listed_with_size_and_hash (test_iso_manifest.ManifestContentTest.test_every_file_is_listed_with_size_and_hash) ... ok
+test_the_boot_catalog_names_both_platforms (test_iso_manifest.ManifestContentTest.test_the_boot_catalog_names_both_platforms) ... ok
+test_the_build_record_is_parsed (test_iso_manifest.ManifestContentTest.test_the_build_record_is_parsed) ... ok
+test_the_image_identity_is_recorded (test_iso_manifest.ManifestContentTest.test_the_image_identity_is_recorded) ... ok
+test_the_volume_descriptor_fields_answer_at_the_standard_offsets (test_iso_manifest.ManifestContentTest.test_the_volume_descriptor_fields_answer_at_the_standard_offsets)
+ECMA-119 8.4: the fields an independent reader looks for are where it looks. ... ok
+test_a_changed_boot_catalog_is_caught (test_iso_manifest.ManifestVerificationTest.test_a_changed_boot_catalog_is_caught) ... ok
+test_a_manifest_for_another_image_is_caught (test_iso_manifest.ManifestVerificationTest.test_a_manifest_for_another_image_is_caught) ... ok
+test_an_unchanged_image_verifies (test_iso_manifest.ManifestVerificationTest.test_an_unchanged_image_verifies) ... ok
+test_one_changed_byte_in_a_payload_is_caught (test_iso_manifest.ManifestVerificationTest.test_one_changed_byte_in_a_payload_is_caught) ... ok
+test_the_manifest_is_deterministic_for_the_same_bytes (test_iso_manifest.ManifestVerificationTest.test_the_manifest_is_deterministic_for_the_same_bytes) ... ok
+test_the_writer_produces_a_standard_conformant_descriptor (test_iso_manifest.PvdOffsetRegressionTest.test_the_writer_produces_a_standard_conformant_descriptor) ... ok
+test_verify_iso_rejects_a_shifted_path_table_field (test_iso_manifest.PvdOffsetRegressionTest.test_verify_iso_rejects_a_shifted_path_table_field) ... ok
+test_python_packer_agrees_with_the_header (test_kernel64.BootInfoAbiTests.test_python_packer_agrees_with_the_header) ... ok
+test_struct_size_and_offsets_match_the_documented_protocol (test_kernel64.BootInfoAbiTests.test_struct_size_and_offsets_match_the_documented_protocol) ... ok
+test_a_loader_that_reports_an_unsupported_format_is_believed (test_kernel64.KernelContractTests.test_a_loader_that_reports_an_unsupported_format_is_believed) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_loader_that_says_a_resource_is_unmapped_is_believed (test_kernel64.KernelContractTests.test_a_loader_that_says_a_resource_is_unmapped_is_believed) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_missing_address_width_is_reported_not_assumed (test_kernel64.KernelContractTests.test_a_missing_address_width_is_reported_not_assumed) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_adjacent_and_unsorted_valid_maps_are_accepted (test_kernel64.KernelContractTests.test_adjacent_and_unsorted_valid_maps_are_accepted) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_bad_magic_is_refused (test_kernel64.KernelContractTests.test_bad_magic_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_conventional_memory_is_accepted_for_loader_owned_ranges (test_kernel64.KernelContractTests.test_conventional_memory_is_accepted_for_loader_owned_ranges) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_cpuid_invariant_tsc_is_reported (test_kernel64.KernelContractTests.test_cpuid_invariant_tsc_is_reported) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_cpuid_reported_address_width_reaches_the_environment_check (test_kernel64.KernelContractTests.test_cpuid_reported_address_width_reaches_the_environment_check) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_descriptor_that_wraps_is_refused (test_kernel64.KernelContractTests.test_descriptor_that_wraps_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_descriptor_with_an_impossible_type_is_refused (test_kernel64.KernelContractTests.test_descriptor_with_an_impossible_type_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_empty_descriptor_is_refused (test_kernel64.KernelContractTests.test_empty_descriptor_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_empty_framebuffer_is_unsupported (test_kernel64.KernelContractTests.test_empty_framebuffer_is_unsupported) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_framebuffer_above_the_span_is_never_called_usable (test_kernel64.KernelContractTests.test_framebuffer_above_the_span_is_never_called_usable) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_framebuffer_crossing_the_span_is_unsupported_not_fatal (test_kernel64.KernelContractTests.test_framebuffer_crossing_the_span_is_unsupported_not_fatal) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_framebuffer_format_is_validated (test_kernel64.KernelContractTests.test_framebuffer_format_is_validated) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_framebuffer_with_a_short_pitch_is_unsupported (test_kernel64.KernelContractTests.test_framebuffer_with_a_short_pitch_is_unsupported) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_huge_framebuffer_is_classified_not_dereferenced (test_kernel64.KernelContractTests.test_huge_framebuffer_is_classified_not_dereferenced) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_identity_span_above_the_limit_is_refused (test_kernel64.KernelContractTests.test_identity_span_above_the_limit_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_identity_span_must_match_the_tables_that_were_built (test_kernel64.KernelContractTests.test_identity_span_must_match_the_tables_that_were_built) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_kernel_loaded_anywhere_else_is_refused (test_kernel64.KernelContractTests.test_kernel_loaded_anywhere_else_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_kernel_refuses_a_handover_without_a_stack (test_kernel64.KernelContractTests.test_kernel_refuses_a_handover_without_a_stack) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_kernel_size_that_does_not_match_the_image_is_refused (test_kernel64.KernelContractTests.test_kernel_size_that_does_not_match_the_image_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_loader_image_outside_the_map_is_refused (test_kernel64.KernelContractTests.test_loader_image_outside_the_map_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_loader_image_that_wraps_is_refused (test_kernel64.KernelContractTests.test_loader_image_that_wraps_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_marker_follows_the_checks_not_the_banner (test_kernel64.KernelContractTests.test_marker_follows_the_checks_not_the_banner) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_memory_map_size_must_be_a_multiple_of_the_stride (test_kernel64.KernelContractTests.test_memory_map_size_must_be_a_multiple_of_the_stride) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_misaligned_memory_map_is_refused (test_kernel64.KernelContractTests.test_misaligned_memory_map_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_misaligned_stack_is_refused (test_kernel64.KernelContractTests.test_misaligned_stack_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_missing_memory_map_is_refused (test_kernel64.KernelContractTests.test_missing_memory_map_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_no_conventional_memory_is_refused (test_kernel64.KernelContractTests.test_no_conventional_memory_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_overlapping_descriptors_are_refused_before_any_coverage (test_kernel64.KernelContractTests.test_overlapping_descriptors_are_refused_before_any_coverage) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_page_table_description_is_validated (test_kernel64.KernelContractTests.test_page_table_description_is_validated) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_page_tables_at_the_top_of_the_span_are_refused (test_kernel64.KernelContractTests.test_page_tables_at_the_top_of_the_span_are_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_paging_disabled_stops_the_kernel (test_kernel64.KernelContractTests.test_paging_disabled_stops_the_kernel) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_rsdp_outside_the_map_is_invalid (test_kernel64.KernelContractTests.test_rsdp_outside_the_map_is_invalid) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_rsdp_without_the_signature_is_invalid (test_kernel64.KernelContractTests.test_rsdp_without_the_signature_is_invalid) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_stack_in_memory_the_map_calls_unusable_is_refused (test_kernel64.KernelContractTests.test_stack_in_memory_the_map_calls_unusable_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_stack_outside_the_span_is_refused (test_kernel64.KernelContractTests.test_stack_outside_the_span_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_stack_size_is_validated (test_kernel64.KernelContractTests.test_stack_size_is_validated) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_stack_that_underflows_is_refused (test_kernel64.KernelContractTests.test_stack_that_underflows_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_unknown_version_is_refused (test_kernel64.KernelContractTests.test_unknown_version_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_valid_handover_boots_and_prints_the_marker_last (test_kernel64.KernelContractTests.test_valid_handover_boots_and_prints_the_marker_last) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_wrong_descriptor_size_is_refused (test_kernel64.KernelContractTests.test_wrong_descriptor_size_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_wrong_size_is_refused (test_kernel64.KernelContractTests.test_wrong_size_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_kernel_binary_starts_with_its_entry_point (test_kernel64.KernelImageTests.test_kernel_binary_starts_with_its_entry_point) ... ok
+test_kernel_has_no_unresolved_symbols (test_kernel64.KernelImageTests.test_kernel_has_no_unresolved_symbols) ... ok
+test_kernel_is_elf64_for_x86_64 (test_kernel64.KernelImageTests.test_kernel_is_elf64_for_x86_64) ... ok
+test_link_address_is_the_protocol_address (test_kernel64.KernelImageTests.test_link_address_is_the_protocol_address) ... ok
+test_efi_image_passes_the_efi_checker (test_kernel64.LoaderImageTests.test_efi_image_passes_the_efi_checker) ... ok
+test_handover_record_states_the_protocol_it_emits (test_kernel64.LoaderImageTests.test_handover_record_states_the_protocol_it_emits) ... ok
+test_placement_at_and_around_the_top_of_the_span (test_kernel64.PlacementPolicyTests.test_placement_at_and_around_the_top_of_the_span) ... ok
+test_dry_run_of_the_release_build_does_not_build_64_bit_artifacts (test_kernel64.ReleaseIsolationTests.test_dry_run_of_the_release_build_does_not_build_64_bit_artifacts) ... ok
+test_release_iso_target_has_no_64_bit_prerequisites (test_kernel64.ReleaseIsolationTests.test_release_iso_target_has_no_64_bit_prerequisites) ... ok
+test_the_two_boot_paths_are_separate_sources (test_kernel64.ReleaseIsolationTests.test_the_two_boot_paths_are_separate_sources) ... ok
+test_a_declared_length_below_the_structure_minimum_is_refused (test_kernel64.RsdpValidationTests.test_a_declared_length_below_the_structure_minimum_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_length_above_the_supported_maximum_is_refused (test_kernel64.RsdpValidationTests.test_a_length_above_the_supported_maximum_is_refused)
+A declared length that is not an RSDP at all is refused on its face. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_length_the_map_cannot_cover_is_refused_without_reading_past_it (test_kernel64.RsdpValidationTests.test_a_length_the_map_cannot_cover_is_refused_without_reading_past_it)
+The declared length is checked before any of it is summed. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_loader_marked_unmapped_rsdp_is_distinct_again (test_kernel64.RsdpValidationTests.test_a_loader_marked_unmapped_rsdp_is_distinct_again) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_malformed_signature_is_refused_before_any_checksum (test_kernel64.RsdpValidationTests.test_a_malformed_signature_is_refused_before_any_checksum) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_null_rsdp_with_the_flag_set_is_reported_null (test_kernel64.RsdpValidationTests.test_a_null_rsdp_with_the_flag_set_is_reported_null) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_valid_legacy_rsdp_passes_the_legacy_checksum_only (test_kernel64.RsdpValidationTests.test_a_valid_legacy_rsdp_passes_the_legacy_checksum_only) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_valid_revision_2_rsdp_passes_both_checksums (test_kernel64.RsdpValidationTests.test_a_valid_revision_2_rsdp_passes_both_checksums) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_an_absent_rsdp_is_distinct_from_an_invalid_one (test_kernel64.RsdpValidationTests.test_an_absent_rsdp_is_distinct_from_an_invalid_one) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_an_invalid_extended_checksum_is_reported (test_kernel64.RsdpValidationTests.test_an_invalid_extended_checksum_is_reported) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_an_invalid_legacy_checksum_is_reported_and_the_boot_continues (test_kernel64.RsdpValidationTests.test_an_invalid_legacy_checksum_is_reported_and_the_boot_continues) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_an_rsdp_at_the_end_of_the_map_is_refused (test_kernel64.RsdpValidationTests.test_an_rsdp_at_the_end_of_the_map_is_refused)
+A table may not be the last 20 bytes of the address space the map covers. ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_an_rsdp_not_covered_by_firmware_memory_is_refused (test_kernel64.RsdpValidationTests.test_an_rsdp_not_covered_by_firmware_memory_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_an_rsdp_wholly_below_a_short_span_is_accepted (test_kernel64.RsdpValidationTests.test_an_rsdp_wholly_below_a_short_span_is_accepted) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_an_undefined_revision_is_refused (test_kernel64.RsdpValidationTests.test_an_undefined_revision_is_refused) ... skipped 'unicorn is not installed (pip install -r requirements-harness.txt)'
+test_a_missing_width_is_not_treated_as_unlimited (test_map64.AddressWidthTests.test_a_missing_width_is_not_treated_as_unlimited) ... ok
+test_byte_size_rejects_zero_dimensions_and_short_pitch (test_map64.FramebufferGeometryTests.test_byte_size_rejects_zero_dimensions_and_short_pitch) ... ok
+test_line_pitch_is_checked_and_bounded_by_the_protocol_field (test_map64.FramebufferGeometryTests.test_line_pitch_is_checked_and_bounded_by_the_protocol_field) ... ok
+test_checked_multiplication_matches_the_boundary (test_map64.MultiplyOverflowTests.test_checked_multiplication_matches_the_boundary) ... ok
+test_adjacent_and_unsorted_valid_maps_are_accepted (test_map64.OverlapTests.test_adjacent_and_unsorted_valid_maps_are_accepted) ... ok
+test_arithmetic_boundary_ranges_are_rejected (test_map64.OverlapTests.test_arithmetic_boundary_ranges_are_rejected) ... ok
+test_conflicting_types_overlap_is_rejected (test_map64.OverlapTests.test_conflicting_types_overlap_is_rejected) ... ok
+test_duplicate_descriptor_is_rejected (test_map64.OverlapTests.test_duplicate_descriptor_is_rejected) ... ok
+test_nested_range_is_rejected (test_map64.OverlapTests.test_nested_range_is_rejected) ... ok
+test_pairwise_overlap_detection (test_map64.OverlapTests.test_pairwise_overlap_detection) ... ok
+test_same_type_overlap_is_rejected (test_map64.OverlapTests.test_same_type_overlap_is_rejected) ... ok
+test_only_the_two_direct_colour_layouts_are_supported (test_map64.PixelFormatTests.test_only_the_two_direct_colour_layouts_are_supported) ... ok
+test_a_missing_marker_is_none_not_zero (test_ovmf_harness.BootContractMarkerTests.test_a_missing_marker_is_none_not_zero) ... ok
+test_exit_boot_services_evidence_is_read (test_ovmf_harness.BootContractMarkerTests.test_exit_boot_services_evidence_is_read) ... ok
+test_handoff_evidence_is_read (test_ovmf_harness.BootContractMarkerTests.test_handoff_evidence_is_read) ... ok
+test_memory_map_evidence_is_read (test_ovmf_harness.BootContractMarkerTests.test_memory_map_evidence_is_read) ... ok
+test_the_kernels_own_memory_view_is_read_separately (test_ovmf_harness.BootContractMarkerTests.test_the_kernels_own_memory_view_is_read_separately) ... ok
+test_watchdog_evidence_is_read (test_ovmf_harness.BootContractMarkerTests.test_watchdog_evidence_is_read) ... ok
+test_a_loader_failure_code_is_extracted (test_ovmf_harness.ClassificationTests.test_a_loader_failure_code_is_extracted) ... ok
+test_a_seabios_boot_is_not_uefi (test_ovmf_harness.ClassificationTests.test_a_seabios_boot_is_not_uefi) ... ok
+test_a_uefi_boot_is_recognised (test_ovmf_harness.ClassificationTests.test_a_uefi_boot_is_recognised) ... ok
+test_firmware_refusal_text_is_recognised (test_ovmf_harness.ClassificationTests.test_firmware_refusal_text_is_recognised) ... ok
+test_a_bogus_firmware_file_is_refused (test_ovmf_harness.ExitCodeTests.test_a_bogus_firmware_file_is_refused) ... ok
+test_missing_firmware_is_not_tested_not_passed (test_ovmf_harness.ExitCodeTests.test_missing_firmware_is_not_tested_not_passed) ... ok
+test_accepts_a_firmware_volume (test_ovmf_harness.FirmwareAcceptanceTests.test_accepts_a_firmware_volume) ... ok
+test_refuses_a_file_that_is_really_the_loader (test_ovmf_harness.FirmwareAcceptanceTests.test_refuses_a_file_that_is_really_the_loader) ... ok
+test_refuses_a_file_without_a_volume_header (test_ovmf_harness.FirmwareAcceptanceTests.test_refuses_a_file_without_a_volume_header) ... ok
+test_refuses_an_implausibly_sized_file (test_ovmf_harness.FirmwareAcceptanceTests.test_refuses_an_implausibly_sized_file) ... ok
+test_the_real_esp_is_not_firmware (test_ovmf_harness.FirmwareAcceptanceTests.test_the_real_esp_is_not_firmware) ... skipped 'build/efi.img is not built'
+test_nothing_in_the_repository_is_a_firmware_image (test_ovmf_harness.IsolationTests.test_nothing_in_the_repository_is_a_firmware_image) ... ok
+test_the_gate_is_separate_from_the_other_gates (test_ovmf_harness.IsolationTests.test_the_gate_is_separate_from_the_other_gates) ... ok
+test_a_failed_cold_boot_marks_them_not_tested (test_ovmf_harness.MatrixTests.test_a_failed_cold_boot_marks_them_not_tested) ... ok
+test_a_good_cold_boot_marks_the_boot_rows_verified (test_ovmf_harness.MatrixTests.test_a_good_cold_boot_marks_the_boot_rows_verified) ... ok
+test_a_negative_run_that_booted_is_a_failure_row (test_ovmf_harness.MatrixTests.test_a_negative_run_that_booted_is_a_failure_row) ... ok
+test_external_rows_name_another_gate_and_never_say_verified (test_ovmf_harness.MatrixTests.test_external_rows_name_another_gate_and_never_say_verified) ... ok
+test_the_low_memory_row_exists (test_ovmf_harness.MatrixTests.test_the_low_memory_row_exists) ... ok
+test_without_runs_every_executed_row_is_not_tested (test_ovmf_harness.MatrixTests.test_without_runs_every_executed_row_is_not_tested) ... ok
+test_a_failure_fails_the_report (test_ovmf_harness.ReportTests.test_a_failure_fails_the_report) ... ok
+test_not_applicable_is_neither_pass_nor_fail (test_ovmf_harness.ReportTests.test_not_applicable_is_neither_pass_nor_fail) ... ok
+test_skipped_checks_never_carry_a_pass_state (test_ovmf_harness.ReportTests.test_skipped_checks_never_carry_a_pass_state) ... ok
+test_a_boot_with_the_policy_on_is_a_failure (test_ovmf_harness.SecureBootTests.test_a_boot_with_the_policy_on_is_a_failure) ... ok
+test_a_refused_image_is_the_expected_result (test_ovmf_harness.SecureBootTests.test_a_refused_image_is_the_expected_result) ... ok
+test_character_doubling_is_not_silently_repaired (test_ovmf_harness.SerialLogTests.test_character_doubling_is_not_silently_repaired) ... ok
+test_consecutive_duplicates_are_collapsed (test_ovmf_harness.SerialLogTests.test_consecutive_duplicates_are_collapsed) ... ok
+test_repeated_lines_that_are_not_adjacent_survive (test_ovmf_harness.SerialLogTests.test_repeated_lines_that_are_not_adjacent_survive) ... ok
+test_a_no_op_mutant_is_rejected (test_pagetables64.AdversarialCoverageTests.test_a_no_op_mutant_is_rejected)
+Attack 5: replace the mutant with a no-op and require detection. ... ok
+test_a_valid_physical_address_is_not_mistaken_for_a_canary (test_pagetables64.AdversarialCoverageTests.test_a_valid_physical_address_is_not_mistaken_for_a_canary)
+The tail check must be word-level, not byte-level. ... ok
+test_emptying_spans_makes_the_suite_fail (test_pagetables64.AdversarialCoverageTests.test_emptying_spans_makes_the_suite_fail)
+Attack 1: SPANS = () must break the suite, not pass it. ... ok
+test_expectations_edited_to_match_the_weakened_collection (test_pagetables64.AdversarialCoverageTests.test_expectations_edited_to_match_the_weakened_collection)
+Attack 4: EXPECTED_UNUSED rewritten to fit a thinned SPANS. ... ok
+test_removing_one_required_span_is_detected (test_pagetables64.AdversarialCoverageTests.test_removing_one_required_span_is_detected)
+Attack 2: dropping the rounding case alone must be detected. ... ok
+test_the_l1_stale_tail_defect_is_still_detected (test_pagetables64.AdversarialCoverageTests.test_the_l1_stale_tail_defect_is_still_detected)
+Attack 7: reintroduce the stale unused PD tail. ... ok
+test_the_original_d1_defect_is_still_detected (test_pagetables64.AdversarialCoverageTests.test_the_original_d1_defect_is_still_detected)
+Attack 6: reintroduce the 1 GiB-only identity map. ... ok
+test_thinning_while_keeping_three_gibibyte_spans_is_detected (test_pagetables64.AdversarialCoverageTests.test_thinning_while_keeping_three_gibibyte_spans_is_detected)
+Attack 3: the exact review scenario, through the shipped guard. ... ok
+test_all_four_gibibyte_regions_are_reachable (test_pagetables64.IdentityHierarchyTests.test_all_four_gibibyte_regions_are_reachable) ... ok
+test_every_active_structure_is_zero_beyond_the_span (test_pagetables64.IdentityHierarchyTests.test_every_active_structure_is_zero_beyond_the_span) ... ok
+test_every_pdpt_entry_points_at_its_own_page_directory (test_pagetables64.IdentityHierarchyTests.test_every_pdpt_entry_points_at_its_own_page_directory) ... ok
+test_invalid_inputs_leave_the_block_untouched (test_pagetables64.IdentityHierarchyTests.test_invalid_inputs_leave_the_block_untouched) ... ok
+test_lookup_disagrees_with_a_leaked_pd_entry (test_pagetables64.IdentityHierarchyTests.test_lookup_disagrees_with_a_leaked_pd_entry)
+pc5_pt_lookup must report reachability, not the existence of a PD entry. ... ok
+test_mark_uncached_reaches_entries_in_every_pdpt_region (test_pagetables64.IdentityHierarchyTests.test_mark_uncached_reaches_entries_in_every_pdpt_region) ... ok
+test_marking_a_range_above_the_span_changes_nothing (test_pagetables64.IdentityHierarchyTests.test_marking_a_range_above_the_span_changes_nothing) ... ok
+test_pml4_points_at_the_pdpt_and_nowhere_else (test_pagetables64.IdentityHierarchyTests.test_pml4_points_at_the_pdpt_and_nowhere_else) ... ok
+test_returned_count_is_what_the_hierarchy_actually_reaches (test_pagetables64.IdentityHierarchyTests.test_returned_count_is_what_the_hierarchy_actually_reaches) ... ok
+test_short_spans_install_only_the_pdpt_entries_they_need (test_pagetables64.IdentityHierarchyTests.test_short_spans_install_only_the_pdpt_entries_they_need) ... ok
+test_the_last_two_mib_page_below_the_span_is_mapped (test_pagetables64.IdentityHierarchyTests.test_the_last_two_mib_page_below_the_span_is_mapped) ... ok
+test_the_span_boundary_is_exclusive (test_pagetables64.IdentityHierarchyTests.test_the_span_boundary_is_exclusive) ... ok
+test_every_mapped_page_is_present_writable_and_2mib (test_pagetables64.IdentityMapTests.test_every_mapped_page_is_present_writable_and_2mib) ... ok
+test_identity_map_covers_four_gib_with_2mib_pages (test_pagetables64.IdentityMapTests.test_identity_map_covers_four_gib_with_2mib_pages) ... ok
+test_invalid_bases_are_refused_without_touching_memory (test_pagetables64.IdentityMapTests.test_invalid_bases_are_refused_without_touching_memory) ... ok
+test_lookup_finds_the_leaf_and_rejects_unmapped_space (test_pagetables64.IdentityMapTests.test_lookup_finds_the_leaf_and_rejects_unmapped_space) ... ok
+test_oversized_or_empty_spans_are_refused (test_pagetables64.IdentityMapTests.test_oversized_or_empty_spans_are_refused) ... ok
+test_span_is_rounded_down_to_whole_2mib_pages (test_pagetables64.IdentityMapTests.test_span_is_rounded_down_to_whole_2mib_pages) ... ok
+test_stale_pd_tail_is_detected (test_pagetables64.UnusedPdTailMutationTests.test_stale_pd_tail_is_detected) ... ok
+test_the_mutant_anchor_is_present_and_unique (test_pagetables64.UnusedPdTailMutationTests.test_the_mutant_anchor_is_present_and_unique) ... ok
+test_the_shipped_short_span_tests_reject_the_mutant (test_pagetables64.UnusedPdTailMutationTests.test_the_shipped_short_span_tests_reject_the_mutant)
+The real shipped test must fail on the mutant - not a copy of it. ... ok
+test_empty_and_overflowing_ranges_are_not_supported (test_pagetables64.RangeSupportedTests.test_empty_and_overflowing_ranges_are_not_supported) ... ok
+test_ranges_inside_the_span_are_supported (test_pagetables64.RangeSupportedTests.test_ranges_inside_the_span_are_supported) ... ok
+test_ranges_outside_the_span_are_not_supported (test_pagetables64.RangeSupportedTests.test_ranges_outside_the_span_are_not_supported) ... ok
+test_a_removed_required_span_is_detected (test_pagetables64.ShortSpanCoverageIntegrityTests.test_a_removed_required_span_is_detected)
+Negative: drop ONE required case and the guard must fail. ... ok
+test_consistent_thinning_is_detected (test_pagetables64.ShortSpanCoverageIntegrityTests.test_consistent_thinning_is_detected)
+Negative: the exact review attack - thin SPANS and EXPECTED_UNUSED ... ok
+test_empty_spans_would_be_detected (test_pagetables64.ShortSpanCoverageIntegrityTests.test_empty_spans_would_be_detected)
+Negative: prove the guard fails when the coverage is removed. ... ok
+test_every_iterated_span_leaves_a_non_empty_tail (test_pagetables64.ShortSpanCoverageIntegrityTests.test_every_iterated_span_leaves_a_non_empty_tail)
+A span consuming all 2048 entries cannot test the tail at all. ... ok
+test_every_required_span_is_present (test_pagetables64.ShortSpanCoverageIntegrityTests.test_every_required_span_is_present) ... ok
+test_redefining_expected_unused_is_detected (test_pagetables64.ShortSpanCoverageIntegrityTests.test_redefining_expected_unused_is_detected)
+Negative: leave SPANS intact but rewrite EXPECTED_UNUSED to fit it. ... ok
+test_the_collection_crosses_several_pdpt_entries (test_pagetables64.ShortSpanCoverageIntegrityTests.test_the_collection_crosses_several_pdpt_entries) ... ok
+test_the_required_set_is_non_empty_and_justified (test_pagetables64.ShortSpanCoverageIntegrityTests.test_the_required_set_is_non_empty_and_justified)
+A guard that requires nothing would always pass. ... ok
+test_the_two_expectation_tables_agree (test_pagetables64.ShortSpanCoverageIntegrityTests.test_the_two_expectation_tables_agree)
+EXPECTED_UNUSED and REQUIRED_UNUSED must not be able to drift apart. ... ok
+test_a_poisoned_tail_is_cleared_not_merely_ignored (test_pagetables64.ShortSpanInitialisationTests.test_a_poisoned_tail_is_cleared_not_merely_ignored)
+A tail pre-filled with present-looking entries must be cleared too. ... ok
+test_all_six_pages_are_initialised_deterministically (test_pagetables64.ShortSpanInitialisationTests.test_all_six_pages_are_initialised_deterministically)
+Same span, different prior contents -> identical block. ... ok
+test_every_installed_pdpt_entry_points_inside_the_block (test_pagetables64.ShortSpanInitialisationTests.test_every_installed_pdpt_entry_points_inside_the_block)
+No PDPT entry may reference a page outside the six-page block. ... ok
+test_every_reachable_leaf_is_initialised_for_every_short_span (test_pagetables64.ShortSpanInitialisationTests.test_every_reachable_leaf_is_initialised_for_every_short_span) ... ok
+test_invalid_spans_leave_the_block_completely_untouched (test_pagetables64.ShortSpanInitialisationTests.test_invalid_spans_leave_the_block_completely_untouched)
+A refused span must not partially initialise the block. ... ok
+test_lookup_rejects_addresses_outside_the_configured_span (test_pagetables64.ShortSpanInitialisationTests.test_lookup_rejects_addresses_outside_the_configured_span) ... ok
+test_no_write_escapes_the_six_page_block (test_pagetables64.ShortSpanInitialisationTests.test_no_write_escapes_the_six_page_block) ... ok
+test_the_full_production_span_still_maps_everything (test_pagetables64.ShortSpanInitialisationTests.test_the_full_production_span_still_maps_everything) ... ok
+test_unused_pd_entries_are_zero_for_every_short_span (test_pagetables64.ShortSpanInitialisationTests.test_unused_pd_entries_are_zero_for_every_short_span)
+The defect: a stale PD tail below the full span must be cleared. ... ok
+test_unused_pdpt_entries_are_zero_for_every_short_span (test_pagetables64.ShortSpanInitialisationTests.test_unused_pdpt_entries_are_zero_for_every_short_span) ... ok
+test_empty_inverted_and_overflowing_ranges_change_nothing (test_pagetables64.UncachedBoundaryTests.test_empty_inverted_and_overflowing_ranges_change_nothing) ... ok
+test_framebuffer_crossing_the_span_marks_only_the_mapped_part (test_pagetables64.UncachedBoundaryTests.test_framebuffer_crossing_the_span_marks_only_the_mapped_part) ... ok
+test_framebuffer_ending_exactly_at_the_span (test_pagetables64.UncachedBoundaryTests.test_framebuffer_ending_exactly_at_the_span) ... ok
+test_framebuffer_entirely_above_the_span_changes_nothing (test_pagetables64.UncachedBoundaryTests.test_framebuffer_entirely_above_the_span_changes_nothing) ... ok
+test_framebuffer_entirely_below_the_span (test_pagetables64.UncachedBoundaryTests.test_framebuffer_entirely_below_the_span) ... ok
+test_invalid_bases_are_refused_without_touching_the_canary (test_pagetables64.UncachedBoundaryTests.test_invalid_bases_are_refused_without_touching_the_canary) ... ok
+test_marking_an_unmapped_span_reports_zero (test_pagetables64.UncachedBoundaryTests.test_marking_an_unmapped_span_reports_zero) ... ok
+test_the_guard_page_after_the_block_is_untouched (test_pagetables64.UncachedBoundaryTests.test_the_guard_page_after_the_block_is_untouched) ... ok
+test_the_return_value_counts_what_changed_not_what_was_asked (test_pagetables64.UncachedBoundaryTests.test_the_return_value_counts_what_changed_not_what_was_asked) ... ok
+test_unaligned_start_and_end_mark_every_overlapping_page (test_pagetables64.UncachedBoundaryTests.test_unaligned_start_and_end_mark_every_overlapping_page) ... ok
+test_stale_pd_tail_is_detected (test_pagetables64.UnusedPdTailMutationTests.test_stale_pd_tail_is_detected) ... ok
+test_the_mutant_anchor_is_present_and_unique (test_pagetables64.UnusedPdTailMutationTests.test_the_mutant_anchor_is_present_and_unique) ... ok
+test_the_shipped_short_span_tests_reject_the_mutant (test_pagetables64.UnusedPdTailMutationTests.test_the_shipped_short_span_tests_reject_the_mutant)
+The real shipped test must fail on the mutant - not a copy of it. ... ok
+test_backup_header_is_at_the_last_sector (test_partitions.FixtureTests.test_backup_header_is_at_the_last_sector) ... ok
+test_corruption_only_touches_the_entry_array (test_partitions.FixtureTests.test_corruption_only_touches_the_entry_array) ... ok
+test_entry_array_crc_verifies_and_names_are_utf16le (test_partitions.FixtureTests.test_entry_array_crc_verifies_and_names_are_utf16le) ... ok
+test_mbr_fixture (test_partitions.FixtureTests.test_mbr_fixture) ... ok
+test_primary_header_crc_verifies (test_partitions.FixtureTests.test_primary_header_crc_verifies) ... ok
+test_protective_mbr_is_a_real_mbr (test_partitions.FixtureTests.test_protective_mbr_is_a_real_mbr) ... ok
+test_boot_calls_the_scan_without_making_it_fatal (test_partitions.KernelWiringTests.test_boot_calls_the_scan_without_making_it_fatal) ... ok
+test_boot_test_uses_the_shared_fixture_builder (test_partitions.KernelWiringTests.test_boot_test_uses_the_shared_fixture_builder) ... ok
+test_bounds_in_header_are_the_ones_the_parser_enforces (test_partitions.KernelWiringTests.test_bounds_in_header_are_the_ones_the_parser_enforces) ... ok
+test_optical_devices_are_refused_before_any_read (test_partitions.KernelWiringTests.test_optical_devices_are_refused_before_any_read) ... ok
+test_partition_module_is_read_only (test_partitions.KernelWiringTests.test_partition_module_is_read_only) ... ok
+test_scan_takes_an_explicit_device_index (test_partitions.KernelWiringTests.test_scan_takes_an_explicit_device_index) ... ok
+test_unit_target_compiles_the_partition_parser (test_partitions.KernelWiringTests.test_unit_target_compiles_the_partition_parser) ... ok
+test_1_absent_image_is_refused_before_the_device_is_considered (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_1_absent_image_is_refused_before_the_device_is_considered) ... ok
+test_2_checksum_mismatch_refuses_before_any_descriptor_is_taken (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_2_checksum_mismatch_refuses_before_any_descriptor_is_taken) ... ok
+test_3_device_outside_dev_is_refused_without_topology_or_open (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_3_device_outside_dev_is_refused_without_topology_or_open) ... ok
+test_4_missing_dd_refuses_before_the_descriptor_is_taken (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_4_missing_dd_refuses_before_the_descriptor_is_taken) ... ok
+test_5_without_yes_the_command_stops_at_confirmation (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_5_without_yes_the_command_stops_at_confirmation) ... ok
+test_6_yes_cannot_bypass_a_refusal_even_with_a_writable_descriptor (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_6_yes_cannot_bypass_a_refusal_even_with_a_writable_descriptor) ... ok
+test_7_argv_keeps_the_image_input_and_the_descriptor_output_distinct (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_7_argv_keeps_the_image_input_and_the_descriptor_output_distinct) ... ok
+test_8_descriptor_is_closed_once_on_both_paths_and_never_a_std_stream (test_pc5ctl_usb_cli_boundaries.UsbCliBoundaryTests.test_8_descriptor_is_closed_once_on_both_paths_and_never_a_std_stream) ... ok
+test_25_real_dd_writes_through_the_inherited_descriptor (test_pc5ctl_usb_descriptor_identity.RealChildWrites.test_25_real_dd_writes_through_the_inherited_descriptor) ... ok
+test_26_real_dd_cannot_write_when_inheritance_is_dropped (test_pc5ctl_usb_descriptor_identity.RealChildWrites.test_26_real_dd_cannot_write_when_inheritance_is_dropped)
+The contract `pass_fds` carries, measured rather than argued. ... ok
+test_01_valid_descriptor_and_matching_identity_writes_through_the_fd (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_01_valid_descriptor_and_matching_identity_writes_through_the_fd) ... ok
+test_02_descriptor_closed_before_the_child_launches (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_02_descriptor_closed_before_the_child_launches) ... ok
+test_03_missing_descriptor_inheritance_is_explicit (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_03_missing_descriptor_inheritance_is_explicit) ... ok
+test_04_invalid_descriptor_number_is_refused_without_closing_a_standard_stream (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_04_invalid_descriptor_number_is_refused_without_closing_a_standard_stream) ... ok
+test_05_descriptor_redirected_to_a_different_object (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_05_descriptor_redirected_to_a_different_object) ... ok
+test_06_descriptor_identity_mismatch_against_the_named_target (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_06_descriptor_identity_mismatch_against_the_named_target) ... ok
+test_07_pathname_replaced_after_opening (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_07_pathname_replaced_after_opening) ... ok
+test_08_symlink_substitution_after_opening_cannot_authorize_the_write (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_08_symlink_substitution_after_opening_cannot_authorize_the_write)
+THE CRITICAL CASE (pathname-based validation, variant 1). ... ok
+test_09_path_replaced_between_the_identity_check_and_final_validation (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_09_path_replaced_between_the_identity_check_and_final_validation)
+THE CRITICAL CASE (the exact shipped-code timeline). ... ok
+test_10_root_descriptor_with_a_substituted_safe_name_still_refuses (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_10_root_descriptor_with_a_substituted_safe_name_still_refuses)
+The name never looks dangerous at all; the object always is. ... ok
+test_11_topology_change_immediately_before_the_final_safety_decision (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_11_topology_change_immediately_before_the_final_safety_decision) ... ok
+test_12_failed_descriptor_read (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_12_failed_descriptor_read) ... ok
+test_13_child_startup_failure_never_falls_back_to_the_pathname (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_13_child_startup_failure_never_falls_back_to_the_pathname) ... ok
+test_14_final_validation_failure_immediately_before_writing (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_14_final_validation_failure_immediately_before_writing) ... ok
+test_15_valid_non_destructive_control_with_a_populated_root (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_15_valid_non_destructive_control_with_a_populated_root) ... ok
+test_16_child_receives_exactly_the_validated_descriptor (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_16_child_receives_exactly_the_validated_descriptor) ... ok
+test_16b_inherited_descriptor_number_is_the_closed_one (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_16b_inherited_descriptor_number_is_the_closed_one) ... ok
+test_17_descriptor_not_open_for_write_is_refused (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_17_descriptor_not_open_for_write_is_refused) ... ok
+test_18_missing_procfs_entry_cannot_fall_back_to_the_pathname (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_18_missing_procfs_entry_cannot_fall_back_to_the_pathname) ... ok
+test_19_unlinked_referent_is_refused (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_19_unlinked_referent_is_refused) ... ok
+test_20_unreadable_sysfs_relationship_data (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_20_unreadable_sysfs_relationship_data) ... ok
+test_21_unreadable_holders_directory (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_21_unreadable_holders_directory) ... ok
+test_22_partial_topology_followed_by_an_enumeration_error (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_22_partial_topology_followed_by_an_enumeration_error)
+A listing that stops describing the device must not become an answer. ... ok
+test_23_target_open_failure_refuses_before_any_descriptor_exists (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_23_target_open_failure_refuses_before_any_descriptor_exists)
+A refused ``os.open`` on the target must not become anything else. ... ok
+test_24_unknown_topology_never_becomes_a_write_even_with_yes (test_pc5ctl_usb_descriptor_identity.UsbIdentityBoundaryTests.test_24_unknown_topology_never_becomes_a_write_even_with_yes) ... ok
+test_root_outside_sysfs_cannot_be_closed_over (test_pc5ctl_usb_safety.AmbiguityFailsClosed.test_root_outside_sysfs_cannot_be_closed_over) ... ok
+test_target_without_a_device_number_is_refused (test_pc5ctl_usb_safety.AmbiguityFailsClosed.test_target_without_a_device_number_is_refused) ... ok
+test_tmpfs_root_has_no_backing_device (test_pc5ctl_usb_safety.AmbiguityFailsClosed.test_tmpfs_root_has_no_backing_device) ... ok
+test_unresolvable_root_is_refused (test_pc5ctl_usb_safety.AmbiguityFailsClosed.test_unresolvable_root_is_refused) ... ok
+test_refusal_never_becomes_a_write_even_if_target_opens (test_pc5ctl_usb_safety.CommandRefusesBeforeWriting.test_refusal_never_becomes_a_write_even_if_target_opens)
+The decisive --yes test: a refusal must not become dd. ... ok
+test_root_device_refused_and_no_dd_called (test_pc5ctl_usb_safety.CommandRefusesBeforeWriting.test_root_device_refused_and_no_dd_called) ... ok
+test_safe_target_passes_check_without_writing (test_pc5ctl_usb_safety.CommandRefusesBeforeWriting.test_safe_target_passes_check_without_writing)
+A resolvable, unrelated device reaches the confirmation and stops. ... ok
+test_target_that_becomes_related_before_the_write_is_refused (test_pc5ctl_usb_safety.CommandRefusesBeforeWriting.test_target_that_becomes_related_before_the_write_is_refused)
+TOCTOU: a device that joins the root topology is caught. ... ok
+test_yes_cannot_bypass_the_guard (test_pc5ctl_usb_safety.CommandRefusesBeforeWriting.test_yes_cannot_bypass_the_guard) ... ok
+test_host_mountinfo_is_not_consulted_when_a_fixture_is_given (test_pc5ctl_usb_safety.MountinfoIsInjectable.test_host_mountinfo_is_not_consulted_when_a_fixture_is_given) ... ok
+test_missing_mountinfo_falls_through_to_mounts_source (test_pc5ctl_usb_safety.MountinfoIsInjectable.test_missing_mountinfo_falls_through_to_mounts_source) ... ok
+test_root_devnum_uses_the_supplied_mountinfo (test_pc5ctl_usb_safety.MountinfoIsInjectable.test_root_devnum_uses_the_supplied_mountinfo) ... ok
+test_unreadable_fixture_actually_denies_reads (test_pc5ctl_usb_safety.MountinfoIsInjectable.test_unreadable_fixture_actually_denies_reads)
+Guards the tests themselves: chmod must really block the read. ... ok
+test_absent_partition_attribute_stays_absent (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_absent_partition_attribute_stays_absent) ... ok
+test_device_disappearing_during_enumeration_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_device_disappearing_during_enumeration_is_unknown) ... ok
+test_failed_directory_listing_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_failed_directory_listing_is_unknown)
+A disk directory that cannot be listed at all is UNKNOWN. ... ok
+test_failure_after_entries_discovered_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_failure_after_entries_discovered_is_unknown)
+The same property holds when the failure is an error, not a status. ... ok
+test_malformed_partition_metadata_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_malformed_partition_metadata_is_unknown) ... ok
+test_malformed_partition_number_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_malformed_partition_number_is_unknown) ... ok
+test_partial_list_never_permits_a_write (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_partial_list_never_permits_a_write) ... ok
+test_three_discovered_fourth_unreadable_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_three_discovered_fourth_unreadable_is_unknown)
+Atomicity: three partitions resolve, the fourth cannot be read. ... ok
+test_unreadable_partition_attribute_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_unreadable_partition_attribute_is_unknown) ... ok
+test_unreadable_partition_directory_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_unreadable_partition_directory_is_unknown) ... ok
+test_unresolvable_devnum_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_unresolvable_devnum_is_unknown) ... ok
+test_unresolvable_sysfs_link_is_unknown (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_unresolvable_sysfs_link_is_unknown) ... ok
+test_yes_cannot_bypass_unknown_enumeration (test_pc5ctl_usb_safety.PartitionEnumerationFailsClosed.test_yes_cannot_bypass_unknown_enumeration) ... ok
+test_dev_root_alias_resolves_to_the_same_device (test_pc5ctl_usb_safety.RootDiskRefused.test_dev_root_alias_resolves_to_the_same_device) ... ok
+test_device_mapper_backing_the_root_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_device_mapper_backing_the_root_is_refused) ... ok
+test_holder_of_a_root_member_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_holder_of_a_root_member_is_refused) ... ok
+test_lvm_physical_volume_under_the_root_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_lvm_physical_volume_under_the_root_is_refused) ... ok
+test_multi_layer_dm_stack_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_multi_layer_dm_stack_is_refused) ... ok
+test_other_partition_on_the_root_disk_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_other_partition_on_the_root_disk_is_refused) ... ok
+test_parent_disk_of_root_partition_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_parent_disk_of_root_partition_is_refused) ... ok
+test_partition_containing_root_is_refused (test_pc5ctl_usb_safety.RootDiskRefused.test_partition_containing_root_is_refused) ... ok
+test_target_is_the_root_disk_itself (test_pc5ctl_usb_safety.RootDiskRefused.test_target_is_the_root_disk_itself) ... ok
+test_second_disk_on_a_multidisk_root_is_allowed (test_pc5ctl_usb_safety.SafeTargetAccepted.test_second_disk_on_a_multidisk_root_is_allowed) ... ok
+test_separate_usb_disk_is_allowed (test_pc5ctl_usb_safety.SafeTargetAccepted.test_separate_usb_disk_is_allowed) ... ok
+test_usb_partition_is_allowed_when_unrelated (test_pc5ctl_usb_safety.SafeTargetAccepted.test_usb_partition_is_allowed_when_unrelated) ... ok
+test_dd_is_written_through_the_held_descriptor (test_pc5ctl_usb_safety.TopologyConsistency.test_dd_is_written_through_the_held_descriptor) ... ok
+test_absent_partition_attribute_means_whole_disk (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_absent_partition_attribute_means_whole_disk) ... ok
+test_empty_slaves_is_an_empty_list_not_unknown (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_empty_slaves_is_an_empty_list_not_unknown) ... ok
+test_holder_only_relationship_refuses (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_holder_only_relationship_refuses) ... ok
+test_malformed_partition_metadata_is_unknown_not_whole_disk (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_malformed_partition_metadata_is_unknown_not_whole_disk) ... ok
+test_malformed_slaves_entry_refuses (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_malformed_slaves_entry_refuses) ... ok
+test_unreadable_partition_attribute_is_unknown_not_absent (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_unreadable_partition_attribute_is_unknown_not_absent) ... ok
+test_unreadable_partition_metadata_refuses_the_parent_disk (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_unreadable_partition_metadata_refuses_the_parent_disk) ... ok
+test_unreadable_slaves_is_unknown_not_empty (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_unreadable_slaves_is_unknown_not_empty) ... ok
+test_unreadable_slaves_refuses_the_physical_backing_partition (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_unreadable_slaves_refuses_the_physical_backing_partition) ... ok
+test_unresolvable_parent_refuses_instead_of_falling_back (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_unresolvable_parent_refuses_instead_of_falling_back) ... ok
+test_yes_does_not_rescue_unknown_topology (test_pc5ctl_usb_safety.UnknownTopologyRefuses.test_yes_does_not_rescue_unknown_topology) ... ok
+test_closure_includes_disk_and_both_partitions (test_pc5ctl_usb_safety.WholeDiskRootProtectsPartitions.test_closure_includes_disk_and_both_partitions) ... ok
+test_each_partition_refused_through_cmd_usb (test_pc5ctl_usb_safety.WholeDiskRootProtectsPartitions.test_each_partition_refused_through_cmd_usb) ... ok
+test_partition_root_protects_parent_and_all_siblings (test_pc5ctl_usb_safety.WholeDiskRootProtectsPartitions.test_partition_root_protects_parent_and_all_siblings) ... ok
+test_sibling_partition_refused (test_pc5ctl_usb_safety.WholeDiskRootProtectsPartitions.test_sibling_partition_refused) ... ok
+test_three_partitions_all_protected (test_pc5ctl_usb_safety.WholeDiskRootProtectsPartitions.test_three_partitions_all_protected) ... ok
+test_unrelated_device_still_permitted (test_pc5ctl_usb_safety.WholeDiskRootProtectsPartitions.test_unrelated_device_still_permitted) ... ok
+test_the_same_fixture_writes_when_the_directories_are_readable (test_pc5ctl_usb_topology_unknown.UnreadableRelationshipEndToEnd.test_the_same_fixture_writes_when_the_directories_are_readable) ... ok
+test_unreadable_relationship_below_the_target_is_not_the_root_guard (test_pc5ctl_usb_topology_unknown.UnreadableRelationshipEndToEnd.test_unreadable_relationship_below_the_target_is_not_the_root_guard) ... ok
+test_unreadable_root_partition_holders_refuses_end_to_end (test_pc5ctl_usb_topology_unknown.UnreadableRelationshipEndToEnd.test_unreadable_root_partition_holders_refuses_end_to_end) ... ok
+test_unreadable_root_partition_slaves_refuses_end_to_end (test_pc5ctl_usb_topology_unknown.UnreadableRelationshipEndToEnd.test_unreadable_root_partition_slaves_refuses_end_to_end) ... ok
+test_a_banned_claim_is_caught (test_presentation.CheckTest.test_a_banned_claim_is_caught) ... ok
+test_a_broken_image_path_is_caught (test_presentation.CheckTest.test_a_broken_image_path_is_caught) ... ok
+test_a_figure_dropped_from_the_readme_is_caught (test_presentation.CheckTest.test_a_figure_dropped_from_the_readme_is_caught) ... ok
+test_a_hand_edited_status_row_is_caught (test_presentation.CheckTest.test_a_hand_edited_status_row_is_caught) ... ok
+test_a_missing_honesty_token_is_caught (test_presentation.CheckTest.test_a_missing_honesty_token_is_caught) ... ok
+test_a_percent_encoded_nul_link_is_caught_not_raised (test_presentation.CheckTest.test_a_percent_encoded_nul_link_is_caught_not_raised)
+`a%00b.md` decodes to a path with an embedded NUL. ... ok
+test_a_stale_figure_is_caught (test_presentation.CheckTest.test_a_stale_figure_is_caught) ... ok
+test_an_image_without_alt_text_is_caught (test_presentation.CheckTest.test_an_image_without_alt_text_is_caught) ... ok
+test_the_real_repository_passes (test_presentation.CheckTest.test_the_real_repository_passes) ... ok
+test_check_does_not_modify_the_repository (test_presentation.CommandContractTest.test_check_does_not_modify_the_repository) ... ok
+test_every_documented_presentation_command_is_phony (test_presentation.CommandContractTest.test_every_documented_presentation_command_is_phony) ... ok
+test_generation_is_deterministic_byte_for_byte (test_presentation.CommandContractTest.test_generation_is_deterministic_byte_for_byte) ... ok
+test_generation_updates_stale_output_and_check_notices (test_presentation.CommandContractTest.test_generation_updates_stale_output_and_check_notices) ... ok
+test_make_check_uses_the_read_only_target (test_presentation.CommandContractTest.test_make_check_uses_the_read_only_target) ... ok
+test_presentation_check_reads (test_presentation.CommandContractTest.test_presentation_check_reads) ... ok
+test_presentation_writes (test_presentation.CommandContractTest.test_presentation_writes) ... ok
+test_the_old_alias_is_gone (test_presentation.CommandContractTest.test_the_old_alias_is_gone) ... ok
+test_a_changed_record_updates_the_evidence_block (test_presentation.DynamicDashboardTest.test_a_changed_record_updates_the_evidence_block) ... ok
+test_an_old_record_is_stamped_with_its_own_commit (test_presentation.DynamicDashboardTest.test_an_old_record_is_stamped_with_its_own_commit)
+It is a snapshot, never a statement about the current tree. ... ok
+test_blocked_milestones_are_listed_with_their_blocker (test_presentation.DynamicDashboardTest.test_blocked_milestones_are_listed_with_their_blocker) ... ok
+test_changing_a_milestone_changes_the_statistics (test_presentation.DynamicDashboardTest.test_changing_a_milestone_changes_the_statistics) ... ok
+test_changing_a_workstream_changes_the_dashboard (test_presentation.DynamicDashboardTest.test_changing_a_workstream_changes_the_dashboard) ... ok
+test_changing_the_destination_state_changes_the_figures (test_presentation.DynamicDashboardTest.test_changing_the_destination_state_changes_the_figures) ... ok
+test_every_block_states_the_numbers_the_data_holds (test_presentation.DynamicDashboardTest.test_every_block_states_the_numbers_the_data_holds) ... ok
+test_missing_evidence_never_becomes_verified (test_presentation.DynamicDashboardTest.test_missing_evidence_never_becomes_verified) ... ok
+test_the_physical_row_follows_the_filed_records (test_presentation.DynamicDashboardTest.test_the_physical_row_follows_the_filed_records) ... ok
+test_the_pup_block_is_read_from_the_pointer (test_presentation.DynamicDashboardTest.test_the_pup_block_is_read_from_the_pointer) ... ok
+test_a_milestone_change_changes_the_drawing (test_presentation.FigureTest.test_a_milestone_change_changes_the_drawing)
+Derivation, proven: no SVG is edited by hand for a status change. ... ok
+test_every_figure_is_well_formed_svg (test_presentation.FigureTest.test_every_figure_is_well_formed_svg) ... ok
+test_figures_are_deterministic (test_presentation.FigureTest.test_figures_are_deterministic) ... ok
+test_figures_carry_no_external_references (test_presentation.FigureTest.test_figures_carry_no_external_references) ... ok
+test_firmware_is_not_drawn_as_verified (test_presentation.FigureTest.test_firmware_is_not_drawn_as_verified)
+M1h completing must not promote firmware on a real machine. ... ok
+test_long_workstream_names_are_clipped_not_overflowing (test_presentation.FigureTest.test_long_workstream_names_are_clipped_not_overflowing) ... ok
+test_the_destination_is_drawn_as_blocked (test_presentation.FigureTest.test_the_destination_is_drawn_as_blocked) ... ok
+test_the_progress_figure_counts_states_from_the_graph (test_presentation.FigureTest.test_the_progress_figure_counts_states_from_the_graph) ... ok
+test_a_heading_and_its_figure_are_split_by_measurement_not_by_assumption (test_presentation.LayoutGuardTest.test_a_heading_and_its_figure_are_split_by_measurement_not_by_assumption) ... ok
+test_check_reports_a_collision_even_when_the_file_is_current (test_presentation.LayoutGuardTest.test_check_reports_a_collision_even_when_the_file_is_current)
+A gate that only detects staleness cannot catch a generator that lays out badly. ... ok
+test_every_figure_scales_for_mobile (test_presentation.LayoutGuardTest.test_every_figure_scales_for_mobile) ... ok
+test_no_text_runs_outside_a_figure (test_presentation.LayoutGuardTest.test_no_text_runs_outside_a_figure) ... ok
+test_no_two_labels_share_a_line_in_any_figure (test_presentation.LayoutGuardTest.test_no_two_labels_share_a_line_in_any_figure)
+Overflow asks whether a label left the canvas; that is not the only way to collide. ... ok
+test_the_collision_guard_fires_and_stays_quiet_when_it_should (test_presentation.LayoutGuardTest.test_the_collision_guard_fires_and_stays_quiet_when_it_should) ... ok
+test_the_overflow_guard_actually_fires (test_presentation.LayoutGuardTest.test_the_overflow_guard_actually_fires) ... ok
+test_the_overflow_guard_and_the_layout_share_one_ruler (test_presentation.LayoutGuardTest.test_the_overflow_guard_and_the_layout_share_one_ruler)
+`overflow` may not keep its own width estimate; that is how a guard goes blind. ... ok
+test_the_ruler_and_the_clipper_agree (test_presentation.LayoutGuardTest.test_the_ruler_and_the_clipper_agree) ... ok
+test_workstream_labels_stay_clear_of_the_bars (test_presentation.LayoutGuardTest.test_workstream_labels_stay_clear_of_the_bars) ... ok
+test_no_screenshots_are_shipped_as_evidence (test_presentation.PresentationHygieneTest.test_no_screenshots_are_shipped_as_evidence)
+There is no physical boot to photograph, so there are no photographs. ... ok
+test_the_build_targets_exist (test_presentation.PresentationHygieneTest.test_the_build_targets_exist) ... ok
+test_the_presentation_document_explains_the_generation (test_presentation.PresentationHygieneTest.test_the_presentation_document_explains_the_generation) ... ok
+test_a_filed_physical_record_promotes_the_row (test_presentation.StatusTableTest.test_a_filed_physical_record_promotes_the_row)
+The row is evidence-driven: the label follows the records, not the prose. ... ok
+test_labels_come_from_the_roadmap (test_presentation.StatusTableTest.test_labels_come_from_the_roadmap) ... ok
+test_one_row_per_declared_capability (test_presentation.StatusTableTest.test_one_row_per_declared_capability) ... ok
+test_physical_boot_is_not_tested_and_not_verified (test_presentation.StatusTableTest.test_physical_boot_is_not_tested_and_not_verified) ... ok
+test_the_block_lists_every_row (test_presentation.StatusTableTest.test_the_block_lists_every_row) ... ok
+test_the_readme_block_matches_the_generator (test_presentation.StatusTableTest.test_the_readme_block_matches_the_generator) ... ok
+test_a_typed_byte_count_is_caught (test_presentation.StrayStatisticTest.test_a_typed_byte_count_is_caught) ... ok
+test_a_typed_check_count_is_caught (test_presentation.StrayStatisticTest.test_a_typed_check_count_is_caught) ... ok
+test_a_typed_milestone_count_is_caught (test_presentation.StrayStatisticTest.test_a_typed_milestone_count_is_caught) ... ok
+test_numbers_inside_a_generated_block_are_fine (test_presentation.StrayStatisticTest.test_numbers_inside_a_generated_block_are_fine) ... ok
+test_the_real_readme_has_no_stray_statistics (test_presentation.StrayStatisticTest.test_the_real_readme_has_no_stray_statistics) ... ok
+test_a_failed_result_with_exit_zero_is_caught (test_presentation.ValidationRecordTest.test_a_failed_result_with_exit_zero_is_caught) ... ok
+test_a_missing_dependency_is_not_a_pass (test_presentation.ValidationRecordTest.test_a_missing_dependency_is_not_a_pass) ... ok
+test_a_record_cannot_claim_passed_without_exit_zero (test_presentation.ValidationRecordTest.test_a_record_cannot_claim_passed_without_exit_zero) ... ok
+test_an_uncommitted_or_malformed_sha_is_caught (test_presentation.ValidationRecordTest.test_an_uncommitted_or_malformed_sha_is_caught) ... ok
+test_committed_records_are_internally_consistent (test_presentation.ValidationRecordTest.test_committed_records_are_internally_consistent) ... ok
+test_test_counts_are_read_from_the_run_line (test_presentation.ValidationRecordTest.test_test_counts_are_read_from_the_run_line) ... ok
+test_the_summary_prefers_the_test_verdict (test_presentation.ValidationRecordTest.test_the_summary_prefers_the_test_verdict) ... ok
+test_current_documents_do_not_carry_forbidden_claims (test_product_identity.ForbiddenClaimTests.test_current_documents_do_not_carry_forbidden_claims) ... ok
+test_every_forbidden_claim_has_a_reason_and_an_exemption_list (test_product_identity.ForbiddenClaimTests.test_every_forbidden_claim_has_a_reason_and_an_exemption_list) ... ok
+test_the_exemption_list_only_names_historical_documents (test_product_identity.ForbiddenClaimTests.test_the_exemption_list_only_names_historical_documents) ... ok
+test_the_identity_documents_are_outside_every_exemption (test_product_identity.ForbiddenClaimTests.test_the_identity_documents_are_outside_every_exemption) ... ok
+test_every_identity_document_links_the_architecture_authority (test_product_identity.IdentityTests.test_every_identity_document_links_the_architecture_authority) ... ok
+test_every_identity_document_states_the_destination (test_product_identity.IdentityTests.test_every_identity_document_states_the_destination) ... ok
+test_pc5_is_not_described_as_the_operating_system (test_product_identity.IdentityTests.test_pc5_is_not_described_as_the_operating_system)
+The mission's central distinction must survive an edit. ... ok
+test_the_destination_is_not_what_the_foundation_provides (test_product_identity.IdentityTests.test_the_destination_is_not_what_the_foundation_provides) ... ok
+test_the_foundation_is_not_the_product_and_not_required (test_product_identity.IdentityTests.test_the_foundation_is_not_the_product_and_not_required) ... ok
+test_the_identity_is_what_the_mission_says (test_product_identity.IdentityTests.test_the_identity_is_what_the_mission_says) ... ok
+test_a_workstream_exists_for_ps5_platform_compatibility (test_product_identity.MissionCoverageTests.test_a_workstream_exists_for_ps5_platform_compatibility) ... ok
+test_no_milestone_claims_a_level_above_its_evidence (test_product_identity.MissionCoverageTests.test_no_milestone_claims_a_level_above_its_evidence) ... ok
+test_the_destination_workstream_holds_the_destination (test_product_identity.MissionCoverageTests.test_the_destination_workstream_holds_the_destination) ... ok
+test_the_game_execution_workstream_is_represented (test_product_identity.MissionCoverageTests.test_the_game_execution_workstream_is_represented) ... ok
+test_the_levels_are_complete_and_level_five_is_not_satisfied_by_a_model (test_product_identity.MissionCoverageTests.test_the_levels_are_complete_and_level_five_is_not_satisfied_by_a_model) ... ok
+test_nothing_in_the_tree_is_a_sony_binary (test_product_identity.Ps5PackageTests.test_nothing_in_the_tree_is_a_sony_binary) ... ok
+test_the_declared_size_is_recorded_in_the_documents (test_product_identity.Ps5PackageTests.test_the_declared_size_is_recorded_in_the_documents) ... ok
+test_the_file_in_the_tree_is_a_pointer_not_a_payload (test_product_identity.Ps5PackageTests.test_the_file_in_the_tree_is_a_pointer_not_a_payload) ... /tmp/audit42/clones3/pr42/tests/test_product_identity.py:214: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/audit42/clones3/pr42/PS5UPDATE.PUP'>
+  raw = open(self.POINTER, "rb").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_the_rules_of_engagement_are_written_down (test_product_identity.Ps5PackageTests.test_the_rules_of_engagement_are_written_down) ... ok
+test_measure_fit_and_the_guard_share_one_ruler (test_progress_matrix.ArtworkGuardFalsifiabilityTest.test_measure_fit_and_the_guard_share_one_ruler) ... ok
+test_region_head_clips_the_title_instead_of_letting_the_pair_overlap (test_progress_matrix.ArtworkGuardFalsifiabilityTest.test_region_head_clips_the_title_instead_of_letting_the_pair_overlap) ... ok
+test_the_collision_guard_fires_on_two_labels_that_share_a_line (test_progress_matrix.ArtworkGuardFalsifiabilityTest.test_the_collision_guard_fires_on_two_labels_that_share_a_line) ... ok
+test_the_collision_guard_stays_quiet_when_the_pair_fits (test_progress_matrix.ArtworkGuardFalsifiabilityTest.test_the_collision_guard_stays_quiet_when_the_pair_fits) ... ok
+test_the_gate_refuses_a_colliding_figure_even_when_it_is_up_to_date (test_progress_matrix.ArtworkGuardFalsifiabilityTest.test_the_gate_refuses_a_colliding_figure_even_when_it_is_up_to_date)
+`presentation-check` is the gate CI would be if CI existed, so it needs teeth. ... ok
+test_the_rules_catch_a_green_cell_the_data_does_not_support (test_progress_matrix.ArtworkGuardFalsifiabilityTest.test_the_rules_catch_a_green_cell_the_data_does_not_support)
+A doctored figure, built rather than string-surgically edited, must be reported. ... ok
+test_a_deleted_figure_is_rejected (test_progress_matrix.DriftIsCaughtTest.test_a_deleted_figure_is_rejected) ... ok
+test_a_figure_painted_greener_than_the_data_is_rejected (test_progress_matrix.DriftIsCaughtTest.test_a_figure_painted_greener_than_the_data_is_rejected) ... ok
+test_a_hand_edited_readme_block_is_rejected (test_progress_matrix.DriftIsCaughtTest.test_a_hand_edited_readme_block_is_rejected) ... ok
+test_check_does_not_rewrite_the_tree (test_progress_matrix.DriftIsCaughtTest.test_check_does_not_rewrite_the_tree) ... ok
+test_sync_repairs_a_stale_figure_and_check_then_passes (test_progress_matrix.DriftIsCaughtTest.test_sync_repairs_a_stale_figure_and_check_then_passes) ... ok
+test_the_untampered_scratch_passes (test_progress_matrix.DriftIsCaughtTest.test_the_untampered_scratch_passes) ... ok
+test_a_filed_record_is_counted_apart_from_a_citation (test_progress_matrix.EvidenceCensusIsFalsifiableTest.test_a_filed_record_is_counted_apart_from_a_citation) ... ok
+test_deleting_a_cited_path_lowers_the_count_by_one (test_progress_matrix.EvidenceCensusIsFalsifiableTest.test_deleting_a_cited_path_lowers_the_count_by_one) ... ok
+test_the_counted_sets_are_not_interchangeable (test_progress_matrix.EvidenceCensusIsFalsifiableTest.test_the_counted_sets_are_not_interchangeable) ... ok
+test_the_figure_draws_the_unresolved_citation_as_unresolved (test_progress_matrix.EvidenceCensusIsFalsifiableTest.test_the_figure_draws_the_unresolved_citation_as_unresolved) ... ok
+test_a_missing_source_data_file_is_reported_not_invented (test_progress_matrix.GeneratedNotGuessedTest.test_a_missing_source_data_file_is_reported_not_invented)
+The generator degrades to an absent region instead of drawing a zero as a result. ... ok
+test_claim_classes_sum_to_the_registry (test_progress_matrix.GeneratedNotGuessedTest.test_claim_classes_sum_to_the_registry) ... ok
+test_generation_is_deterministic_to_the_byte (test_progress_matrix.GeneratedNotGuessedTest.test_generation_is_deterministic_to_the_byte) ... ok
+test_operations_are_counted_from_the_contract_document_itself (test_progress_matrix.GeneratedNotGuessedTest.test_operations_are_counted_from_the_contract_document_itself) ... ok
+test_promoting_a_milestone_changes_the_drawing_without_editting_the_drawing (test_progress_matrix.GeneratedNotGuessedTest.test_promoting_a_milestone_changes_the_drawing_without_editting_the_drawing) ... ok
+test_the_committed_figure_is_a_fresh_render (test_progress_matrix.GeneratedNotGuessedTest.test_the_committed_figure_is_a_fresh_render) ... ok
+test_the_workstream_cells_count_milestones_and_not_effort (test_progress_matrix.GeneratedNotGuessedTest.test_the_workstream_cells_count_milestones_and_not_effort) ... ok
+test_no_text_is_smaller_than_the_mobile_floor (test_progress_matrix.LayoutGuardTest.test_no_text_is_smaller_than_the_mobile_floor) ... ok
+test_the_canvas_has_no_dead_band_below_the_last_region (test_progress_matrix.LayoutGuardTest.test_the_canvas_has_no_dead_band_below_the_last_region) ... ok
+test_the_canvas_is_the_size_github_renders_without_shrinking (test_progress_matrix.LayoutGuardTest.test_the_canvas_is_the_size_github_renders_without_shrinking) ... ok
+test_the_figure_explains_itself_to_a_screen_reader (test_progress_matrix.LayoutGuardTest.test_the_figure_explains_itself_to_a_screen_reader) ... ok
+test_the_figure_is_dense_enough_to_be_the_dashboard_it_claims_to_be (test_progress_matrix.LayoutGuardTest.test_the_figure_is_dense_enough_to_be_the_dashboard_it_claims_to_be) ... ok
+test_the_readme_embeds_the_image_with_descriptive_alt_text (test_progress_matrix.LayoutGuardTest.test_the_readme_embeds_the_image_with_descriptive_alt_text) ... ok
+test_the_readme_still_carries_the_text_fallback (test_progress_matrix.LayoutGuardTest.test_the_readme_still_carries_the_text_fallback) ... ok
+test_the_region_heads_are_titled_and_counted (test_progress_matrix.LayoutGuardTest.test_the_region_heads_are_titled_and_counted) ... ok
+test_host_work_being_verified_does_not_lift_the_levels_above_it (test_progress_matrix.NothingIsGreenWithoutAFileTest.test_host_work_being_verified_does_not_lift_the_levels_above_it) ... ok
+test_levels_that_need_a_target_hold_no_verified_milestone (test_progress_matrix.NothingIsGreenWithoutAFileTest.test_levels_that_need_a_target_hold_no_verified_milestone) ... ok
+test_no_row_of_the_block_claims_physical_or_genuine_execution (test_progress_matrix.NothingIsGreenWithoutAFileTest.test_no_row_of_the_block_claims_physical_or_genuine_execution) ... ok
+test_only_a_verified_state_is_painted_verified (test_progress_matrix.NothingIsGreenWithoutAFileTest.test_only_a_verified_state_is_painted_verified) ... ok
+test_the_figure_marks_every_blocked_milestone_in_both_relevant_regions (test_progress_matrix.NothingIsGreenWithoutAFileTest.test_the_figure_marks_every_blocked_milestone_in_both_relevant_regions) ... ok
+test_the_package_row_still_says_the_payload_is_absent (test_progress_matrix.NothingIsGreenWithoutAFileTest.test_the_package_row_still_says_the_payload_is_absent) ... ok
+test_every_percentage_in_the_figure_carries_its_fraction (test_progress_matrix.PercentageTraceabilityTest.test_every_percentage_in_the_figure_carries_its_fraction) ... ok
+test_every_percentage_in_the_readme_block_carries_its_fraction (test_progress_matrix.PercentageTraceabilityTest.test_every_percentage_in_the_readme_block_carries_its_fraction) ... ok
+test_pct_formats_one_decimal_and_refuses_an_empty_denominator (test_progress_matrix.PercentageTraceabilityTest.test_pct_formats_one_decimal_and_refuses_an_empty_denominator) ... ok
+test_the_fractions_are_what_an_independent_count_gives (test_progress_matrix.PercentageTraceabilityTest.test_the_fractions_are_what_an_independent_count_gives) ... ok
+test_the_readme_block_agrees_with_the_data_row_by_row (test_progress_matrix.PercentageTraceabilityTest.test_the_readme_block_agrees_with_the_data_row_by_row) ... ok
+test_no_competing_instruction_file_was_invented (test_progress_matrix.PostMergePolicyTest.test_no_competing_instruction_file_was_invented) ... ok
+test_the_policy_covers_merges_the_agent_did_not_make (test_progress_matrix.PostMergePolicyTest.test_the_policy_covers_merges_the_agent_did_not_make) ... ok
+test_the_policy_forbids_inflating_the_figure (test_progress_matrix.PostMergePolicyTest.test_the_policy_forbids_inflating_the_figure) ... ok
+test_the_policy_names_the_trigger_and_every_action (test_progress_matrix.PostMergePolicyTest.test_the_policy_names_the_trigger_and_every_action) ... ok
+test_the_policy_states_that_a_merge_is_the_only_trigger (test_progress_matrix.PostMergePolicyTest.test_the_policy_states_that_a_merge_is_the_only_trigger) ... ok
+test_the_repository_carries_an_agents_instruction_file (test_progress_matrix.PostMergePolicyTest.test_the_repository_carries_an_agents_instruction_file) ... ok
+test_the_rule_is_reachable_from_the_contributor_entry_point (test_progress_matrix.PostMergePolicyTest.test_the_rule_is_reachable_from_the_contributor_entry_point) ... ok
+test_a_citation_and_a_filed_record_are_not_labelled_the_same_thing (test_progress_matrix.TheFigureSaysWhatTheFilesSayTest.test_a_citation_and_a_filed_record_are_not_labelled_the_same_thing) ... ok
+test_every_green_milestone_cell_is_a_milestone_the_roadmap_calls_complete (test_progress_matrix.TheFigureSaysWhatTheFilesSayTest.test_every_green_milestone_cell_is_a_milestone_the_roadmap_calls_complete) ... ok
+test_every_ratio_in_the_text_fallback_is_drawn_in_the_figure (test_progress_matrix.TheFigureSaysWhatTheFilesSayTest.test_every_ratio_in_the_text_fallback_is_drawn_in_the_figure)
+The README table and the SVG are the same census, so neither may carry a stray count. ... ok
+test_levels_three_to_six_cannot_show_a_verified_cell (test_progress_matrix.TheFigureSaysWhatTheFilesSayTest.test_levels_three_to_six_cannot_show_a_verified_cell) ... ok
+test_nothing_in_the_figure_is_clipped_or_collides (test_progress_matrix.TheFigureSaysWhatTheFilesSayTest.test_nothing_in_the_figure_is_clipped_or_collides) ... ok
+test_the_artwork_agrees_with_the_data_it_claims_to_be_drawn_from (test_progress_matrix.TheFigureSaysWhatTheFilesSayTest.test_the_artwork_agrees_with_the_data_it_claims_to_be_drawn_from) ... ok
+test_the_verified_cell_count_is_the_verified_milestone_count (test_progress_matrix.TheFigureSaysWhatTheFilesSayTest.test_the_verified_cell_count_is_the_verified_milestone_count) ... ok
+test_no_archive_at_the_repository_root (test_project_independence.NoThirdPartyProjectReferenceTest.test_no_archive_at_the_repository_root) ... ok
+test_no_tracked_path_names_the_third_party_project (test_project_independence.NoThirdPartyProjectReferenceTest.test_no_tracked_path_names_the_third_party_project) ... ok
+test_no_tracked_text_mentions_the_third_party_project (test_project_independence.NoThirdPartyProjectReferenceTest.test_no_tracked_text_mentions_the_third_party_project) ... ok
+test_only_the_guard_itself_carries_the_removed_object_id (test_project_independence.NoThirdPartyProjectReferenceTest.test_only_the_guard_itself_carries_the_removed_object_id) ... ok
+test_the_removed_archive_cannot_return_as_an_lfs_pointer (test_project_independence.NoThirdPartyProjectReferenceTest.test_the_removed_archive_cannot_return_as_an_lfs_pointer) ... ok
+test_the_vendor_directory_is_gone (test_project_independence.NoThirdPartyProjectReferenceTest.test_the_vendor_directory_is_gone) ... ok
+test_the_cleanup_is_recorded_where_the_audit_recorded_the_problem (test_project_independence.Pc5OwnsItsIdentityTest.test_the_cleanup_is_recorded_where_the_audit_recorded_the_problem) ... ok
+test_the_licence_is_pc5_s_own (test_project_independence.Pc5OwnsItsIdentityTest.test_the_licence_is_pc5_s_own) ... ok
+test_the_no_vendoring_decision_is_recorded (test_project_independence.Pc5OwnsItsIdentityTest.test_the_no_vendoring_decision_is_recorded) ... ok
+test_the_readme_states_the_destination_in_pc5_s_own_words (test_project_independence.Pc5OwnsItsIdentityTest.test_the_readme_states_the_destination_in_pc5_s_own_words) ... ok
+test_a_transcript_records_every_call_in_order (test_psm_conformance.ConformanceRunTest.test_a_transcript_records_every_call_in_order) ... ok
+test_an_unknown_operation_name_is_unsupported_not_an_attribute_error (test_psm_conformance.ConformanceRunTest.test_an_unknown_operation_name_is_unsupported_not_an_attribute_error) ... ok
+test_call_arguments_must_match_the_documented_inputs (test_psm_conformance.ConformanceRunTest.test_call_arguments_must_match_the_documented_inputs) ... ok
+test_errors_raised_by_a_double_become_statuses (test_psm_conformance.ConformanceRunTest.test_errors_raised_by_a_double_become_statuses)
+A PsmError is a status, not a traceback. ... ok
+test_every_check_carries_a_label_and_an_interface (test_psm_conformance.ConformanceRunTest.test_every_check_carries_a_label_and_an_interface) ... ok
+test_every_interface_is_exercised (test_psm_conformance.ConformanceRunTest.test_every_interface_is_exercised) ... ok
+test_every_operation_answers_with_a_documented_status (test_psm_conformance.ConformanceRunTest.test_every_operation_answers_with_a_documented_status) ... ok
+test_runs_are_deterministic (test_psm_conformance.ConformanceRunTest.test_runs_are_deterministic)
+Two fresh runs: identical checks in identical order, identical transcripts. ... ok
+test_the_suite_has_meaningful_size (test_psm_conformance.ConformanceRunTest.test_the_suite_has_meaningful_size) ... ok
+test_the_suite_passes (test_psm_conformance.ConformanceRunTest.test_the_suite_passes) ... ok
+test_undocumented_operation_in_the_table_is_a_construction_error (test_psm_conformance.ConformanceRunTest.test_undocumented_operation_in_the_table_is_a_construction_error) ... ok
+test_unknown_operations_are_refused_without_a_value (test_psm_conformance.ConformanceRunTest.test_unknown_operations_are_refused_without_a_value) ... ok
+test_every_rendered_block_matches_its_renderer (test_psm_document.DocumentBlocksTest.test_every_rendered_block_matches_its_renderer) ... ok
+test_every_subsystem_has_its_claim_table (test_psm_document.DocumentBlocksTest.test_every_subsystem_has_its_claim_table) ... ok
+test_no_block_marker_is_left_unbalanced (test_psm_document.DocumentBlocksTest.test_no_block_marker_is_left_unbalanced) ... ok
+test_the_document_exists (test_psm_document.DocumentBlocksTest.test_the_document_exists) ... ok
+test_the_document_has_the_sections_the_contract_requires (test_psm_document.DocumentBlocksTest.test_the_document_has_the_sections_the_contract_requires) ... ok
+test_the_document_distinguishes_pc5_conformance_from_sony_acceptance (test_psm_document.DocumentHonestyTest.test_the_document_distinguishes_pc5_conformance_from_sony_acceptance) ... ok
+test_the_document_does_not_cite_the_dead_specs_page (test_psm_document.DocumentHonestyTest.test_the_document_does_not_cite_the_dead_specs_page) ... ok
+test_the_document_does_not_claim_genuine_ps5_execution_evidence (test_psm_document.DocumentHonestyTest.test_the_document_does_not_claim_genuine_ps5_execution_evidence) ... ok
+test_the_document_forbids_the_same_things_the_roadmap_forbids (test_psm_document.DocumentHonestyTest.test_the_document_forbids_the_same_things_the_roadmap_forbids) ... ok
+test_the_document_names_its_adrs (test_psm_document.DocumentHonestyTest.test_the_document_names_its_adrs) ... ok
+test_the_document_states_that_no_sony_software_has_run (test_psm_document.DocumentHonestyTest.test_the_document_states_that_no_sony_software_has_run) ... ok
+test_a_mutation_is_reported_with_its_check_name (test_psm_mutations.MutationTest.test_a_mutation_is_reported_with_its_check_name) ... ok
+test_every_mutation_is_caught (test_psm_mutations.MutationTest.test_every_mutation_is_caught) ... ok
+test_the_baseline_is_green_so_failures_mean_something (test_psm_mutations.MutationTest.test_the_baseline_is_green_so_failures_mean_something) ... ok
+test_a_dangling_claim_reference_is_detected (test_psm_registry.LinkageAuditTest.test_a_dangling_claim_reference_is_detected)
+Prove the audit fails when an operation cites a claim that does not exist. ... ok
+test_a_fabricated_success_for_an_unknown_operation_is_detected (test_psm_registry.LinkageAuditTest.test_a_fabricated_success_for_an_unknown_operation_is_detected) ... ok
+test_a_required_group_without_an_interface_is_detected (test_psm_registry.LinkageAuditTest.test_a_required_group_without_an_interface_is_detected) ... ok
+test_an_operation_citing_a_foreign_subsystem_is_detected (test_psm_registry.LinkageAuditTest.test_an_operation_citing_a_foreign_subsystem_is_detected) ... ok
+test_audit_has_no_problems (test_psm_registry.LinkageAuditTest.test_audit_has_no_problems) ... ok
+test_every_operation_cites_a_claim_or_a_decision (test_psm_registry.LinkageAuditTest.test_every_operation_cites_a_claim_or_a_decision) ... ok
+test_every_required_group_has_an_interface (test_psm_registry.LinkageAuditTest.test_every_required_group_has_an_interface) ... ok
+test_no_implemented_operation_cites_a_restricted_claim (test_psm_registry.LinkageAuditTest.test_no_implemented_operation_cites_a_restricted_claim) ... ok
+test_ten_interfaces_cover_eight_groups (test_psm_registry.LinkageAuditTest.test_ten_interfaces_cover_eight_groups) ... ok
+test_unsupported_operations_cite_an_unknown_or_restricted_claim (test_psm_registry.LinkageAuditTest.test_unsupported_operations_cite_an_unknown_or_restricted_claim) ... ok
+test_decisions_are_not_claims (test_psm_registry.RegistryRulesTest.test_decisions_are_not_claims)
+A PC5 decision must never be presented as evidence about the console. ... ok
+test_every_claim_names_an_engineering_decision_and_conformance_case (test_psm_registry.RegistryRulesTest.test_every_claim_names_an_engineering_decision_and_conformance_case) ... ok
+test_every_classification_is_in_the_vocabulary (test_psm_registry.RegistryRulesTest.test_every_classification_is_in_the_vocabulary) ... ok
+test_every_subsystem_has_at_least_one_claim (test_psm_registry.RegistryRulesTest.test_every_subsystem_has_at_least_one_claim) ... ok
+test_no_unknown_or_restricted_claim_carries_a_value (test_psm_registry.RegistryRulesTest.test_no_unknown_or_restricted_claim_carries_a_value) ... ok
+test_public_claims_cite_a_verified_or_located_source (test_psm_registry.RegistryRulesTest.test_public_claims_cite_a_verified_or_located_source) ... ok
+test_registry_has_no_problems (test_psm_registry.RegistryRulesTest.test_registry_has_no_problems) ... ok
+test_registry_is_not_empty (test_psm_registry.RegistryRulesTest.test_registry_is_not_empty) ... ok
+test_security_is_restricted_and_has_no_interface (test_psm_registry.RegistryRulesTest.test_security_is_restricted_and_has_no_interface) ... ok
+test_sources_are_https_and_never_the_dead_specs_page (test_psm_registry.RegistryRulesTest.test_sources_are_https_and_never_the_dead_specs_page) ... ok
+test_a_source_without_a_date_is_rejected (test_psm_registry.RuleEngineTest.test_a_source_without_a_date_is_rejected) ... ok
+test_a_verified_source_without_a_location_is_rejected (test_psm_registry.RuleEngineTest.test_a_verified_source_without_a_location_is_rejected) ... ok
+test_claim_citing_an_unknown_source_is_rejected (test_psm_registry.RuleEngineTest.test_claim_citing_an_unknown_source_is_rejected) ... ok
+test_duplicate_claim_ids_are_rejected (test_psm_registry.RuleEngineTest.test_duplicate_claim_ids_are_rejected) ... ok
+test_inferred_claim_without_an_assumption_is_rejected (test_psm_registry.RuleEngineTest.test_inferred_claim_without_an_assumption_is_rejected) ... ok
+test_missing_revision_is_rejected (test_psm_registry.RuleEngineTest.test_missing_revision_is_rejected) ... ok
+test_public_claim_without_a_source_is_rejected (test_psm_registry.RuleEngineTest.test_public_claim_without_a_source_is_rejected) ... ok
+test_public_claim_without_a_value_is_rejected (test_psm_registry.RuleEngineTest.test_public_claim_without_a_value_is_rejected) ... ok
+test_unknown_claim_with_a_value_is_rejected (test_psm_registry.RuleEngineTest.test_unknown_claim_with_a_value_is_rejected) ... ok
+test_unknown_claim_without_a_reason_is_rejected (test_psm_registry.RuleEngineTest.test_unknown_claim_without_a_reason_is_rejected) ... ok
+test_harness_dependency_is_installed_into_a_venv (test_release.CiLayoutTests.test_harness_dependency_is_installed_into_a_venv)
+A bare `pip install` aborts the job on PEP 668 runners. ... /tmp/audit42/clones3/pr42/tests/test_release.py:224: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/clones3/pr42/ci/build.yml' mode='r' encoding='utf-8'>
+  text = open(found[0], encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_pipeline_file_is_present_and_complete (test_release.CiLayoutTests.test_pipeline_file_is_present_and_complete) ... /tmp/audit42/clones3/pr42/tests/test_release.py:205: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/clones3/pr42/ci/build.yml' mode='r' encoding='utf-8'>
+  text = open(found[0], encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_readme_explains_activation_when_not_installed (test_release.CiLayoutTests.test_readme_explains_activation_when_not_installed) ... /tmp/audit42/clones3/pr42/tests/test_release.py:249: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/clones3/pr42/ci/README.md' mode='r' encoding='utf-8'>
+  text = open(readme, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_venv_is_gitignored (test_release.CiLayoutTests.test_venv_is_gitignored) ... ok
+test_publishes_three_assets_and_is_idempotent (test_release.PublishScriptTests.test_publishes_three_assets_and_is_idempotent) ... /tmp/audit42/clones3/pr42/tests/test_release.py:158: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/pc5-publish-c5hvvp9r/state/calls.log' mode='r' encoding='utf-8'>
+  return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/audit42/clones3/pr42/tests/test_release.py:158: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/pc5-publish-c5hvvp9r/state/calls.log' mode='r' encoding='utf-8'>
+  return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_refuses_a_bad_checksum (test_release.PublishScriptTests.test_refuses_a_bad_checksum) ... ok
+test_refuses_a_failing_verdict (test_release.PublishScriptTests.test_refuses_a_failing_verdict) ... ok
+test_refuses_missing_assets (test_release.PublishScriptTests.test_refuses_missing_assets) ... ok
+test_notes_never_invent_a_number (test_release.ReleaseNotesTests.test_notes_never_invent_a_number) ... ok
+test_notes_state_every_measured_result (test_release.ReleaseNotesTests.test_notes_state_every_measured_result) ... ok
+test_long_mode_does_not_depend_on_the_driver_milestone (test_roadmap_dependencies.DependencyOrderTests.test_long_mode_does_not_depend_on_the_driver_milestone) ... ok
+test_memory_management_depends_on_both (test_roadmap_dependencies.DependencyOrderTests.test_memory_management_depends_on_both) ... ok
+test_the_cpu_and_long_mode_milestone_comes_before_pcie_and_nvme (test_roadmap_dependencies.DependencyOrderTests.test_the_cpu_and_long_mode_milestone_comes_before_pcie_and_nvme) ... ok
+test_the_destination_still_depends_on_all_three (test_roadmap_dependencies.DependencyOrderTests.test_the_destination_still_depends_on_all_three) ... ok
+test_the_graph_is_still_acyclic_and_valid (test_roadmap_dependencies.DependencyOrderTests.test_the_graph_is_still_acyclic_and_valid) ... ok
+test_a_foundation_pointing_at_missing_evidence_is_rejected (test_roadmap_dependencies.FoundationTests.test_a_foundation_pointing_at_missing_evidence_is_rejected) ... ok
+test_a_foundation_without_a_completion_statement_is_rejected (test_roadmap_dependencies.FoundationTests.test_a_foundation_without_a_completion_statement_is_rejected) ... ok
+test_foundations_are_recorded_without_awarding_milestone_credit (test_roadmap_dependencies.FoundationTests.test_foundations_are_recorded_without_awarding_milestone_credit) ... ok
+test_the_long_mode_work_is_a_foundation_not_a_completed_milestone (test_roadmap_dependencies.FoundationTests.test_the_long_mode_work_is_a_foundation_not_a_completed_milestone) ... ok
+test_a_roadmap_with_an_ambiguous_version_is_rejected (test_roadmap_dependencies.VersionTests.test_a_roadmap_with_an_ambiguous_version_is_rejected) ... ok
+test_the_product_version_has_exactly_one_source (test_roadmap_dependencies.VersionTests.test_the_product_version_has_exactly_one_source) ... ok
+test_the_readme_shows_the_makefile_version_and_says_where_it_comes_from (test_roadmap_dependencies.VersionTests.test_the_readme_shows_the_makefile_version_and_says_where_it_comes_from) ... ok
+test_the_roadmap_version_is_not_presented_as_the_product_version (test_roadmap_dependencies.VersionTests.test_the_roadmap_version_is_not_presented_as_the_product_version) ... ok
+test_a_case_with_no_result_keeps_its_directory (test_scratch_isolation.CleanupLifecycleTest.test_a_case_with_no_result_keeps_its_directory) ... ok
+test_a_case_without_an_outcome_keeps_its_directory (test_scratch_isolation.CleanupLifecycleTest.test_a_case_without_an_outcome_keeps_its_directory) ... ok
+test_a_failing_case_keeps_only_its_own_directory (test_scratch_isolation.CleanupLifecycleTest.test_a_failing_case_keeps_only_its_own_directory) ... ok
+test_a_failing_subtest_keeps_its_directory (test_scratch_isolation.CleanupLifecycleTest.test_a_failing_subtest_keeps_its_directory) ... ok
+test_a_genuine_expected_failure_removes_its_directory (test_scratch_isolation.CleanupLifecycleTest.test_a_genuine_expected_failure_removes_its_directory)
+The inverse: a met expectation is a pass and keeps nothing. ... ok
+test_a_pass_after_a_failure_still_cleans_up (test_scratch_isolation.CleanupLifecycleTest.test_a_pass_after_a_failure_still_cleans_up)
+One failing case must not retain another case's directory. ... ok
+test_a_passing_case_removes_its_directory (test_scratch_isolation.CleanupLifecycleTest.test_a_passing_case_removes_its_directory) ... ok
+test_a_setup_failure_leaves_no_case_directory (test_scratch_isolation.CleanupLifecycleTest.test_a_setup_failure_leaves_no_case_directory) ... ok
+test_an_erroring_case_keeps_its_directory (test_scratch_isolation.CleanupLifecycleTest.test_an_erroring_case_keeps_its_directory) ... ok
+test_cleanup_ordering_decides_whether_evidence_survives (test_scratch_isolation.CleanupLifecycleTest.test_cleanup_ordering_decides_whether_evidence_survives)
+The LIFO hazard documented on ``register_cleanup``. ... ok
+test_keep_env_keeps_an_unexpected_success_too (test_scratch_isolation.CleanupLifecycleTest.test_keep_env_keeps_an_unexpected_success_too) ... ok
+test_keep_env_keeps_everything (test_scratch_isolation.CleanupLifecycleTest.test_keep_env_keeps_everything) ... ok
+test_the_class_cleanup_runs_when_set_up_class_fails (test_scratch_isolation.CleanupLifecycleTest.test_the_class_cleanup_runs_when_set_up_class_fails) ... ok
+test_the_root_is_removed_at_interpreter_exit (test_scratch_isolation.CleanupLifecycleTest.test_the_root_is_removed_at_interpreter_exit) ... ok
+test_unexpected_success_does_not_retain_an_ordinary_pass (test_scratch_isolation.CleanupLifecycleTest.test_unexpected_success_does_not_retain_an_ordinary_pass)
+Attribution stays per case; the new clause must not leak across cases. ... ok
+test_unexpected_success_keeps_its_directory (test_scratch_isolation.CleanupLifecycleTest.test_unexpected_success_keeps_its_directory)
+A clean exit is not a pass when the case promised to fail. ... ok
+test_a_deeply_nested_parent_cannot_be_escaped_by_a_prefix (test_scratch_isolation.ContainmentTest.test_a_deeply_nested_parent_cannot_be_escaped_by_a_prefix)
+Enough traversal to climb out of a nested parent, not just the root. ... ok
+test_a_default_prefix_still_works (test_scratch_isolation.ContainmentTest.test_a_default_prefix_still_works) ... ok
+test_a_normal_prefix_still_works (test_scratch_isolation.ContainmentTest.test_a_normal_prefix_still_works)
+``prefix`` is public API; guarding it must not remove it. ... ok
+test_a_nul_component_is_rejected (test_scratch_isolation.ContainmentTest.test_a_nul_component_is_rejected) ... ok
+test_a_nul_or_non_string_prefix_is_rejected (test_scratch_isolation.ContainmentTest.test_a_nul_or_non_string_prefix_is_rejected) ... ok
+test_a_rejected_prefix_creates_nothing (test_scratch_isolation.ContainmentTest.test_a_rejected_prefix_creates_nothing)
+Refusal must happen before ``mkdtemp``, not after it. ... ok
+test_a_rejected_traversal_creates_nothing (test_scratch_isolation.ContainmentTest.test_a_rejected_traversal_creates_nothing)
+The refusal must happen before anything is created on disk. ... ok
+test_a_symlinked_component_cannot_be_used_to_escape (test_scratch_isolation.ContainmentTest.test_a_symlinked_component_cannot_be_used_to_escape)
+Containment is checked on resolved paths, so a symlink cannot defeat it. ... ok
+test_absolute_and_drive_paths_are_rejected (test_scratch_isolation.ContainmentTest.test_absolute_and_drive_paths_are_rejected) ... ok
+test_absolute_prefixes_are_rejected (test_scratch_isolation.ContainmentTest.test_absolute_prefixes_are_rejected) ... ok
+test_dotted_names_that_are_not_traversal_still_work (test_scratch_isolation.ContainmentTest.test_dotted_names_that_are_not_traversal_still_work)
+``a..b`` and ``..a`` are ordinary names; only ``..`` is traversal. ... ok
+test_embedded_separators_in_a_prefix_are_rejected (test_scratch_isolation.ContainmentTest.test_embedded_separators_in_a_prefix_are_rejected) ... ok
+test_every_created_directory_is_inside_the_root (test_scratch_isolation.ContainmentTest.test_every_created_directory_is_inside_the_root) ... ok
+test_nested_owners_still_work (test_scratch_isolation.ContainmentTest.test_nested_owners_still_work) ... ok
+test_nested_parts_with_a_prefix_still_work (test_scratch_isolation.ContainmentTest.test_nested_parts_with_a_prefix_still_work) ... ok
+test_non_string_components_are_rejected (test_scratch_isolation.ContainmentTest.test_non_string_components_are_rejected) ... ok
+test_repeated_rejected_prefixes_never_create_anything (test_scratch_isolation.ContainmentTest.test_repeated_rejected_prefixes_never_create_anything)
+Ten attempts, since a guard that fires once may not fire again. ... ok
+test_repeated_rejection_never_creates_an_outside_directory (test_scratch_isolation.ContainmentTest.test_repeated_rejection_never_creates_an_outside_directory)
+Ten attempts in a row, since a guard that fires once may not fire again. ... ok
+test_traversal_components_are_rejected (test_scratch_isolation.ContainmentTest.test_traversal_components_are_rejected) ... ok
+test_traversal_prefixes_are_rejected (test_scratch_isolation.ContainmentTest.test_traversal_prefixes_are_rejected)
+The prefix is joined onto the parent exactly as a part is. ... ok
+test_a_component_swapped_at_the_creation_boundary_cannot_escape (test_scratch_isolation.DescriptorRelativeCreationTest.test_a_component_swapped_at_the_creation_boundary_cannot_escape)
+E1: swap the parent at the leaf ``mkdir``, which is the exact window. ... ok
+test_a_component_swapped_before_the_walk_is_refused (test_scratch_isolation.DescriptorRelativeCreationTest.test_a_component_swapped_before_the_walk_is_refused)
+A symlinked component is refused, and the outside target stays empty. ... ok
+test_a_symlinked_component_is_refused_for_nested_parts_too (test_scratch_isolation.DescriptorRelativeCreationTest.test_a_symlinked_component_is_refused_for_nested_parts_too) ... ok
+test_descriptors_are_not_leaked (test_scratch_isolation.DescriptorRelativeCreationTest.test_descriptors_are_not_leaked)
+A rejected call must close what it opened (``finally`` on every path). ... ok
+test_normal_nested_creation_still_works (test_scratch_isolation.DescriptorRelativeCreationTest.test_normal_nested_creation_still_works) ... ok
+test_relocating_a_component_is_a_documented_limitation (test_scratch_isolation.DescriptorRelativeCreationTest.test_relocating_a_component_is_a_documented_limitation)
+``E1'``: a *renamed* component is not a symlink, and is not prevented. ... ok
+test_repeated_creation_under_one_owner_is_distinct (test_scratch_isolation.DescriptorRelativeCreationTest.test_repeated_creation_under_one_owner_is_distinct) ... ok
+test_support_probe_is_true_here (test_scratch_isolation.DescriptorRelativeCreationTest.test_support_probe_is_true_here)
+The premise of every test below: this platform can do it safely. ... ok
+test_support_probe_survives_a_patched_os_mkdir (test_scratch_isolation.DescriptorRelativeCreationTest.test_support_probe_survives_a_patched_os_mkdir)
+The probe must answer about the platform, not about a test double. ... ok
+test_the_refusal_message_names_the_missing_capability (test_scratch_isolation.DescriptorRelativeCreationTest.test_the_refusal_message_names_the_missing_capability)
+If the platform cannot do this safely, it says so instead of degrading. ... ok
+test_unexpected_errors_are_not_masked_as_containment_rejections (test_scratch_isolation.DescriptorRelativeCreationTest.test_unexpected_errors_are_not_masked_as_containment_rejections)
+``PermissionError`` is a real problem and must surface as itself. ... ok
+test_the_driver_does_not_use_the_old_fixed_directory (test_scratch_isolation.Fat32HarnessIsolationTest.test_the_driver_does_not_use_the_old_fixed_directory) ... ok
+test_the_manifest_test_no_longer_writes_into_build (test_scratch_isolation.Fat32HarnessIsolationTest.test_the_manifest_test_no_longer_writes_into_build) ... ok
+test_the_module_still_runs_its_real_operations (test_scratch_isolation.Fat32HarnessIsolationTest.test_the_module_still_runs_its_real_operations)
+Isolation must not have been bought by skipping the work. ... ok
+test_the_unit_binary_is_not_a_single_shared_name (test_scratch_isolation.Fat32HarnessIsolationTest.test_the_unit_binary_is_not_a_single_shared_name) ... ok
+test_the_write_driver_uses_per_case_storage (test_scratch_isolation.Fat32HarnessIsolationTest.test_the_write_driver_uses_per_case_storage) ... ok
+test_a_shared_directory_corrupts_concurrent_runs (test_scratch_isolation.OldSchemeCollisionControl.test_a_shared_directory_corrupts_concurrent_runs) ... ok
+test_the_isolated_scheme_does_not_corrupt_concurrent_runs (test_scratch_isolation.OldSchemeCollisionControl.test_the_isolated_scheme_does_not_corrupt_concurrent_runs) ... ok
+test_a_competing_process_gets_a_different_root (test_scratch_isolation.ScratchIsolationTest.test_a_competing_process_gets_a_different_root)
+Two interpreters must not share the per-process root. ... ok
+test_a_second_call_for_the_same_owner_still_gets_a_fresh_directory (test_scratch_isolation.ScratchIsolationTest.test_a_second_call_for_the_same_owner_still_gets_a_fresh_directory) ... ok
+test_distinct_cases_get_distinct_directories (test_scratch_isolation.ScratchIsolationTest.test_distinct_cases_get_distinct_directories) ... ok
+test_the_root_is_outside_the_repository (test_scratch_isolation.ScratchIsolationTest.test_the_root_is_outside_the_repository) ... ok
+test_the_root_is_stable_within_a_process (test_scratch_isolation.ScratchIsolationTest.test_the_root_is_stable_within_a_process) ... ok
+test_harness_can_only_attach_a_file_it_was_given (test_storage.ExplicitnessTests.test_harness_can_only_attach_a_file_it_was_given) ... ok
+test_no_boot_path_runs_the_write_test (test_storage.ExplicitnessTests.test_no_boot_path_runs_the_write_test) ... ok
+test_runner_writes_the_copy_not_the_input (test_storage.ExplicitnessTests.test_runner_writes_the_copy_not_the_input) ... ok
+test_serial_help_lists_the_command (test_storage.ExplicitnessTests.test_serial_help_lists_the_command) ... ok
+test_the_write_test_is_reachable_only_from_the_console (test_storage.ExplicitnessTests.test_the_write_test_is_reachable_only_from_the_console) ... ok
+test_ata_write_requires_an_explicit_device_index (test_storage.KernelWiringTests.test_ata_write_requires_an_explicit_device_index) ... ok
+test_atapi_is_refused_before_any_range_check (test_storage.KernelWiringTests.test_atapi_is_refused_before_any_range_check) ... ok
+test_optical_and_disk_units_are_documented_as_distinct (test_storage.KernelWiringTests.test_optical_and_disk_units_are_documented_as_distinct) ... ok
+test_unit_target_compiles_the_host_testable_units (test_storage.KernelWiringTests.test_unit_target_compiles_the_host_testable_units) ... ok
+test_host_pattern_matches_the_kernel_vector (test_storage.ScratchWindowTests.test_host_pattern_matches_the_kernel_vector) ... ok
+test_scratch_window_matches_between_kernel_and_test (test_storage.ScratchWindowTests.test_scratch_window_matches_between_kernel_and_test) ... ok
+test_test_disk_is_disposable_and_bigger_than_the_window (test_storage.ScratchWindowTests.test_test_disk_is_disposable_and_bigger_than_the_window) ... ok
+test_window_is_4k_of_512_byte_sectors (test_storage.ScratchWindowTests.test_window_is_4k_of_512_byte_sectors) ... ok
+test_window_starts_far_enough_into_the_disk (test_storage.ScratchWindowTests.test_window_starts_far_enough_into_the_disk) ... ok
+test_adds_metadata_and_rechecks_hash (test_tools.BuildMetaTests.test_adds_metadata_and_rechecks_hash) ... /tmp/audit42/clones3/pr42/tests/test_tools.py:228: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/pc5-meta-owt3dq9n/pc5.iso'>
+  self.sha = hashlib.sha256(open(self.iso, "rb").read()).hexdigest()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_refuses_a_failing_verification (test_tools.BuildMetaTests.test_refuses_a_failing_verification) ... /tmp/audit42/clones3/pr42/tests/test_tools.py:228: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/pc5-meta-qfpa98ag/pc5.iso'>
+  self.sha = hashlib.sha256(open(self.iso, "rb").read()).hexdigest()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_refuses_an_image_that_does_not_match_the_record (test_tools.BuildMetaTests.test_refuses_an_image_that_does_not_match_the_record) ... /tmp/audit42/clones3/pr42/tests/test_tools.py:228: ResourceWarning: unclosed file <_io.BufferedReader name='/tmp/pc5-meta-d0ctkq3r/pc5.iso'>
+  self.sha = hashlib.sha256(open(self.iso, "rb").read()).hexdigest()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_built_iso_verifies (test_tools.BuiltImageTests.test_built_iso_verifies) ... skipped 'build/pc5.iso not built'
+test_identifies_finalised_package (test_tools.FirmwareToolTests.test_identifies_finalised_package) ... ok
+test_identifies_slb2_container (test_tools.FirmwareToolTests.test_identifies_slb2_container) ... ok
+test_manifest_round_trip (test_tools.FirmwareToolTests.test_manifest_round_trip) ... ok
+test_unidentified_is_reported_honestly (test_tools.FirmwareToolTests.test_unidentified_is_reported_honestly) ... ok
+test_kernel_unit_binary (test_tools.KernelUnitTests.test_kernel_unit_binary) ... ok
+test_boot_catalog_checksum (test_tools.MkIsoTests.test_boot_catalog_checksum) ... ok
+test_boot_descriptor_is_patched (test_tools.MkIsoTests.test_boot_descriptor_is_patched) ... ok
+test_layout_is_deterministic (test_tools.MkIsoTests.test_layout_is_deterministic) ... ok
+test_source_date_epoch_makes_builds_byte_identical (test_tools.MkIsoTests.test_source_date_epoch_makes_builds_byte_identical)
+The image must not embed the wall clock when SOURCE_DATE_EPOCH is set. ... ok
+test_verifier_accepts_good_image (test_tools.MkIsoTests.test_verifier_accepts_good_image) ... ok
+test_verifier_rejects_broken_catalog (test_tools.MkIsoTests.test_verifier_rejects_broken_catalog) ... ok
+test_volume_descriptors (test_tools.MkIsoTests.test_volume_descriptors) ... ok
+test_command_line_epoch_pins_the_build_date (test_tools.ReproducibilityTests.test_command_line_epoch_pins_the_build_date)
+A make command-line variable is not exported to the shell; the build ... ok
+test_actions_are_pinned_to_commit_shas (test_tools.WorkflowTests.test_actions_are_pinned_to_commit_shas) ... ok
+test_checksums_are_verified_before_publishing (test_tools.WorkflowTests.test_checksums_are_verified_before_publishing) ... ok
+test_never_uses_pull_request_target (test_tools.WorkflowTests.test_never_uses_pull_request_target) ... ok
+test_no_secrets_are_referenced (test_tools.WorkflowTests.test_no_secrets_are_referenced) ... ok
+test_only_the_release_job_can_write (test_tools.WorkflowTests.test_only_the_release_job_can_write) ... ok
+test_publishes_the_three_assets_idempotently (test_tools.WorkflowTests.test_publishes_the_three_assets_idempotently) ... /tmp/audit42/clones3/pr42/tests/test_tools.py:339: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/audit42/clones3/pr42/tools/publish_release.sh' mode='r' encoding='utf-8'>
+  script = open(os.path.join(ROOT, "tools", "publish_release.sh"), encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_release_is_restricted_to_tags (test_tools.WorkflowTests.test_release_is_restricted_to_tags) ... ok
+test_reproducibility_is_enforced (test_tools.WorkflowTests.test_reproducibility_is_enforced) ... ok
+test_accepts_a_well_formed_efi_application (test_uefi.EfiCheckTests.test_accepts_a_well_formed_efi_application) ... ok
+test_max_bytes_is_enforced (test_uefi.EfiCheckTests.test_max_bytes_is_enforced) ... ok
+test_rejects_a_32_bit_optional_header (test_uefi.EfiCheckTests.test_rejects_a_32_bit_optional_header) ... ok
+test_rejects_a_console_application_subsystem (test_uefi.EfiCheckTests.test_rejects_a_console_application_subsystem) ... ok
+test_rejects_a_dll (test_uefi.EfiCheckTests.test_rejects_a_dll) ... ok
+test_rejects_a_missing_relocation_table (test_uefi.EfiCheckTests.test_rejects_a_missing_relocation_table) ... ok
+test_rejects_a_non_zero_timestamp (test_uefi.EfiCheckTests.test_rejects_a_non_zero_timestamp) ... ok
+test_rejects_an_entry_point_outside_the_first_section (test_uefi.EfiCheckTests.test_rejects_an_entry_point_outside_the_first_section) ... ok
+test_rejects_the_wrong_machine (test_uefi.EfiCheckTests.test_rejects_the_wrong_machine) ... ok
+test_reports_the_number_of_fixups (test_uefi.EfiCheckTests.test_reports_the_number_of_fixups) ... ok
+test_both_fat_copies_are_identical (test_uefi.FatImageTests.test_both_fat_copies_are_identical) ... ok
+test_build_is_deterministic (test_uefi.FatImageTests.test_build_is_deterministic) ... ok
+test_command_line_writes_info (test_uefi.FatImageTests.test_command_line_writes_info) ... ok
+test_directory_tree_round_trips (test_uefi.FatImageTests.test_directory_tree_round_trips) ... ok
+test_image_is_floppy_sized_with_a_valid_boot_sector (test_uefi.FatImageTests.test_image_is_floppy_sized_with_a_valid_boot_sector) ... ok
+test_rejects_an_image_too_small_for_its_files (test_uefi.FatImageTests.test_rejects_an_image_too_small_for_its_files) ... ok
+test_rejects_names_that_are_not_8_3 (test_uefi.FatImageTests.test_rejects_names_that_are_not_8_3) ... ok
+test_seventeen_megabyte_image_becomes_fat16 (test_uefi.FatImageTests.test_seventeen_megabyte_image_becomes_fat16) ... ok
+test_source_date_epoch_pins_directory_timestamps (test_uefi.FatImageTests.test_source_date_epoch_pins_directory_timestamps) ... ok
+test_subdirectory_has_dot_entries_pointing_at_itself_and_parent (test_uefi.FatImageTests.test_subdirectory_has_dot_entries_pointing_at_itself_and_parent) ... ok
+test_volume_label_entry_is_present_and_first (test_uefi.FatImageTests.test_volume_label_entry_is_present_and_first) ... ok
+test_kernel_signature_is_checked_at_the_documented_offset (test_uefi.LoaderRegressionTests.test_kernel_signature_is_checked_at_the_documented_offset) ... ok
+test_verifier_and_loader_read_the_same_header (test_uefi.LoaderRegressionTests.test_verifier_and_loader_read_the_same_header) ... ok
+test_volume_search_does_not_keep_a_status_from_a_failed_probe (test_uefi.LoaderRegressionTests.test_volume_search_does_not_keep_a_status_from_a_failed_probe) ... ok
+test_gnu_as_and_microsoft_abi_are_checked_not_assumed (test_uefi.StubFirmwareContractTests.test_gnu_as_and_microsoft_abi_are_checked_not_assumed) ... ok
+test_harness_is_not_presented_as_firmware_emulation (test_uefi.StubFirmwareContractTests.test_harness_is_not_presented_as_firmware_emulation) ... ok
+test_makefile_exposes_the_suite_and_gates_test_on_it (test_uefi.StubFirmwareContractTests.test_makefile_exposes_the_suite_and_gates_test_on_it) ... ok
+test_missing_dependency_exits_two_with_instructions (test_uefi.StubFirmwareContractTests.test_missing_dependency_exits_two_with_instructions) ... ok
+test_bios_only_image_has_the_default_entry_at_32 (test_uefi.UefiIsoTests.test_bios_only_image_has_the_default_entry_at_32) ... ok
+test_uefi_entry_points_at_the_fat_image (test_uefi.UefiIsoTests.test_uefi_entry_points_at_the_fat_image) ... ok
+test_uefi_layout_is_deterministic (test_uefi.UefiIsoTests.test_uefi_layout_is_deterministic) ... ok
+test_uefi_section_follows_the_bios_default_entry (test_uefi.UefiIsoTests.test_uefi_section_follows_the_bios_default_entry) ... ok
+test_verifier_finds_the_esp_and_the_efi_application (test_uefi.UefiIsoTests.test_verifier_finds_the_esp_and_the_efi_application) ... ok
+test_verifier_rejects_a_non_pe_boot_application (test_uefi.UefiIsoTests.test_verifier_rejects_a_non_pe_boot_application) ... ok
+test_verifier_rejects_a_truncated_esp (test_uefi.UefiIsoTests.test_verifier_rejects_a_truncated_esp) ... ok
+test_entry_point_geometry_matches_the_bios_loader (test_uefi.UefiSourceContractTests.test_entry_point_geometry_matches_the_bios_loader) ... ok
+test_entry_stub_uses_the_ms_abi_slot_registers (test_uefi.UefiSourceContractTests.test_entry_stub_uses_the_ms_abi_slot_registers) ... ok
+test_loader_includes_the_kernel_boot_contract (test_uefi.UefiSourceContractTests.test_loader_includes_the_kernel_boot_contract) ... ok
+test_loader_pins_every_offset_the_kernel_reads (test_uefi.UefiSourceContractTests.test_loader_pins_every_offset_the_kernel_reads) ... ok
+test_loader_reports_no_font_and_no_iso_descriptor (test_uefi.UefiSourceContractTests.test_loader_reports_no_font_and_no_iso_descriptor) ... ok
+test_makefile_builds_and_embeds_the_uefi_image (test_uefi.UefiSourceContractTests.test_makefile_builds_and_embeds_the_uefi_image) ... ok
+
+----------------------------------------------------------------------
+Ran 1044 tests in 96.969s
+
+OK (skipped=110)
+image    /tmp/tmptgeqh4w7/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmpw2lafd8o/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture root device
+nothing was written
+image    /tmp/tmp2nfo3lxh/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdc
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+re-run with --yes to confirm after checking the device path
+image    /tmp/tmpdhx_qwoj/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdz9
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+refusing: became related
+nothing was written
+image    /tmp/tmpeaiaog_a/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmpeaiaog_a/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing: fixture
+nothing was written
+image    /tmp/tmpnqlz7jjh/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp88grz0hd/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp_xgm60tw/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpb15z8rh_/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpahpgab1t/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpm4o2vcj0/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp8j9t6b9l/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp26p25t8z/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp_5ztkov1/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp_5ztkov1/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmp798jyfg4/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+target   /dev/sdc
+
+THIS ERASES EVERYTHING ON THE TARGET DEVICE.
+image    /tmp/tmp0lgjut9d/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+cannot establish the full storage topology under '/' (unreadable or malformed device relationship): refusing to write, because the target cannot be proved distinct from the root storage
+nothing was written
+image    /tmp/tmpr8ox4ka_/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda1: /dev/sda1 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmpr8ox4ka_/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmpvyzz17py/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda: /dev/sda is the whole disk carrying the root filesystem (root device 8:1)
+nothing was written
+image    /tmp/tmpvyzz17py/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+image    /tmp/tmp0mpz3pmw/pc5.iso
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+make check exit=0
+git status exit=0

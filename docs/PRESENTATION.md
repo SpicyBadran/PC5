@@ -112,6 +112,12 @@ run cannot rewrite tracked documentation. Writing is always an explicit act.
 ```sh
 make dashboard-reconcile    # read: does the receipt cover everything that has landed?
 make post-merge             # write: presentation, the checks, then the receipt (--here)
+
+`--json` stream rule, so a caller can rely on it: stdout carries the answer object when there is
+one — the full state on a read, and `{"status": "written" | "nothing-to-record" | "dry-run",
+"exit": …, "lines": […]}` on a recording run. When the question cannot be answered at all, the
+error object goes to stderr and stdout stays empty, with exit 2. An empty stdout with exit 2 is
+therefore "no answer", never "nothing outstanding".
 ```
 
 `check` fails on: a stale figure (bytes differ from a fresh render), a hand-edited

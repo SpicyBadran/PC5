@@ -1,0 +1,320 @@
+{
+  "matrix": [
+    {
+      "combo": "(read only)",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "repository           pc5life-mx-1-every-flag-comb-1b91w9p2/origin",
+      "err_first": "",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--record",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "verify presentation figures and README blocks are current: exit 0",
+      "err_first": "",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--bootstrap",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "repository           pc5life-mx-1-every-flag-comb-1b91w9p2/origin",
+      "err_first": "",
+      "suspected_silent": true
+    },
+    {
+      "combo": "--boundary",
+      "exit": 2,
+      "answered": false,
+      "refused": true,
+      "flag_mentioned": true,
+      "first_line": "",
+      "err_first": "ERROR \u2014 --boundary and --inspect belong to --bootstrap: they say where the *first* receipt on a line of history starts a",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--inspect",
+      "exit": 2,
+      "answered": false,
+      "refused": true,
+      "flag_mentioned": true,
+      "first_line": "",
+      "err_first": "ERROR \u2014 --boundary and --inspect belong to --bootstrap: they say where the *first* receipt on a line of history starts a",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--note",
+      "exit": 2,
+      "answered": false,
+      "refused": true,
+      "flag_mentioned": true,
+      "first_line": "",
+      "err_first": "ERROR \u2014 --note writes into a receipt, and this run writes none: pass --record (or --record --bootstrap) with --note",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--dry-run",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "repository           pc5life-mx-1-every-flag-comb-1b91w9p2/origin",
+      "err_first": "",
+      "suspected_silent": true
+    },
+    {
+      "combo": "--json",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "{",
+      "err_first": "",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--here",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": true,
+      "first_line": "repository           pc5life-mx-1-every-flag-comb-1b91w9p2/origin",
+      "err_first": "",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--target",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "repository           pc5life-mx-1-every-flag-comb-1b91w9p2/origin",
+      "err_first": "",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--bootstrap --boundary",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "repository           pc5life-mx-1-every-flag-comb-1b91w9p2/origin",
+      "err_first": "",
+      "suspected_silent": true
+    },
+    {
+      "combo": "--bootstrap --inspect",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "repository           pc5life-mx-1-every-flag-comb-1b91w9p2/origin",
+      "err_first": "",
+      "suspected_silent": true
+    },
+    {
+      "combo": "--bootstrap --boundary --inspect",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "repository           pc5life-mx-1-every-flag-comb-1b91w9p2/origin",
+      "err_first": "",
+      "suspected_silent": true
+    },
+    {
+      "combo": "--record --bootstrap",
+      "exit": 2,
+      "answered": false,
+      "refused": true,
+      "flag_mentioned": false,
+      "first_line": "",
+      "err_first": "ERROR \u2014 the boundary '' is not a full 40-hex SHA",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--record --boundary",
+      "exit": 2,
+      "answered": false,
+      "refused": true,
+      "flag_mentioned": true,
+      "first_line": "",
+      "err_first": "ERROR \u2014 --boundary and --inspect belong to --bootstrap: they say where the *first* receipt on a line of history starts a",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--record --inspect",
+      "exit": 2,
+      "answered": false,
+      "refused": true,
+      "flag_mentioned": true,
+      "first_line": "",
+      "err_first": "ERROR \u2014 --boundary and --inspect belong to --bootstrap: they say where the *first* receipt on a line of history starts a",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--record --note",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "verify presentation figures and README blocks are current: exit 0",
+      "err_first": "",
+      "suspected_silent": true
+    },
+    {
+      "combo": "--record --dry-run",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "verify presentation figures and README blocks are current: exit 0",
+      "err_first": "",
+      "suspected_silent": true
+    },
+    {
+      "combo": "--record --json",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "verify presentation figures and README blocks are current: exit 0",
+      "err_first": "",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--record --bootstrap --note",
+      "exit": 2,
+      "answered": false,
+      "refused": true,
+      "flag_mentioned": false,
+      "first_line": "",
+      "err_first": "ERROR \u2014 the boundary '' is not a full 40-hex SHA",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--record --bootstrap --dry-run",
+      "exit": 2,
+      "answered": false,
+      "refused": true,
+      "flag_mentioned": false,
+      "first_line": "",
+      "err_first": "ERROR \u2014 the boundary '' is not a full 40-hex SHA",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--record --bootstrap --json",
+      "exit": 2,
+      "answered": false,
+      "refused": true,
+      "flag_mentioned": false,
+      "first_line": "",
+      "err_first": "{",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--here --target",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": true,
+      "first_line": "repository           pc5life-mx-1-every-flag-comb-1b91w9p2/origin",
+      "err_first": "",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--dry-run --here",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": true,
+      "first_line": "repository           pc5life-mx-1-every-flag-comb-1b91w9p2/origin",
+      "err_first": "",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--json --target",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": false,
+      "first_line": "{",
+      "err_first": "",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--bootstrap --here",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": true,
+      "first_line": "repository           pc5life-mx-1-every-flag-comb-1b91w9p2/origin",
+      "err_first": "",
+      "suspected_silent": false
+    },
+    {
+      "combo": "--bootstrap --record --boundary --inspect --note --dry-run --json --here",
+      "exit": 0,
+      "answered": true,
+      "refused": false,
+      "flag_mentioned": true,
+      "first_line": "dry run: receipt not written",
+      "err_first": "",
+      "suspected_silent": false
+    }
+  ],
+  "cases": [
+    {
+      "name": "MX-1  every flag combination: honoured or refused, never silently ignored",
+      "exit": 0,
+      "matches_expected": true,
+      "matches_ideal": true,
+      "stdout": "",
+      "stderr": "",
+      "status": [],
+      "note": "see the `matrix` array in this file's JSON: one row per combination"
+    },
+    {
+      "name": "MV-1  a missing verifier with an exempt-only range: category and wording",
+      "exit": 1,
+      "matches_expected": false,
+      "matches_ideal": false,
+      "stdout": "{\n  \"boundary\": \"99402c2eb254751c2732b21c36730cb6e4484512\",\n  \"boundary_date\": \"2026-11-20T12:00:00+00:00\",\n  \"commits_since_boundary\": [\n    {\n      \"changed_paths\": [\n        \"docs/evidence/dashboard-reconciliation.json\"\n      ],\n      \"date\": \"2026-11-20T12:00:00+00:00\",\n      \"drivers\": [\n        \"docs/evidence/dashboard-reconciliation.json\"\n      ],\n      \"parents\": 1,\n      \"reason\": \"generated output only\",\n      \"requires_inspection\": false,\n      \"sha\": \"c71090f2515a2091f71967ce087df9efc1ba8f5b\",\n      \"subject\": \"record the reconciliation\"\n    },\n    {\n      \"changed_paths\": [\n        \"docs/assets/pc5-dashboard.svg\"\n      ],\n      \"date\": \"2026-11-20T12:00:00+00:00\",\n      \"drivers",
+      "stderr": "",
+      "status": [
+        "D tools/docs_check.py"
+      ],
+      "note": "is a verifier that cannot run an *outstanding inspection* (exit 1) or a *cannot-answer* (exit 2)? the record path calls it exit 2, the read path folds it into the exemption string and exits 1"
+    },
+    {
+      "name": "MV-2  a docs-check-only failure with an exempt-only range: what does the header blame?",
+      "exit": 1,
+      "matches_expected": true,
+      "matches_ideal": true,
+      "stdout": "repository           pc5life-mv-2-a-docs-check-on-i3jh1zmw/origin\ntarget               origin/main @ 79902cadfb9d\nreceipt              docs/evidence/dashboard-reconciliation.json\ngenerated output       does not match its data: its generated output no longer matches the data it renders (refusing to record: presentation figures and README blocks are current failed (exit 1): 1 presentation problem(s))\nreconciled boundary  63c7f46af772  (2026-11-20)\nsummary              audit reconciliation\nfigures changed      False   README changed: False\nverifications        presentation figures and README blocks are current=exit 0, documentation links, anchors and commands resolve=exit 0\ncommits since then  ",
+      "stderr": "",
+      "status": [
+        "?? docs/BROKEN-LINK.md"
+      ],
+      "note": "the header says the range is confined to generated output and *that output* does not match its data, while the actual failure is a broken link in an untracked markdown file"
+    },
+    {
+      "name": "MV-3  a corrupted committed asset with the exemption load-bearing, measured on the tool",
+      "exit": 1,
+      "matches_expected": true,
+      "matches_ideal": true,
+      "stdout": "repository           pc5life-mv-3-a-corrupted-com-cmx06uu_/origin\ntarget               origin/main @ 41084c3dc840\nreceipt              docs/evidence/dashboard-reconciliation.json\ngenerated output       does not match its data: its generated output no longer matches the data it renders (refusing to record: presentation figures and README blocks are current failed (exit 1): 2 presentation problem(s))\nreconciled boundary  b9a1908078fc  (2026-11-20)\nsummary              audit reconciliation\nfigures changed      False   README changed: False\nverifications        presentation figures and README blocks are current=exit 0, documentation links, anchors and commands resolve=exit 0\ncommits since then  ",
+      "stderr": "",
+      "status": [],
+      "note": "the tool itself, not `make`: an earlier pass through `make dashboard-reconcile` showed exit 2, which is make's own recipe-failure status (Makefile:324) and not a misattribution"
+    }
+  ]
+}

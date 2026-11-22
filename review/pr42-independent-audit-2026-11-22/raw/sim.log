@@ -1,0 +1,177 @@
+########## A. realistic fresh clone (remote 'origin'), one per ref ##########
+### main  head=52f682c8435956c8210b3189cad23ebea973d2de  origin/main=52f682c  remote=https://github.com/SpicyBadran/PC5.git
+  $ make -s dashboard-reconcile  -> exit=2
+      make: *** No rule to make target 'dashboard-reconcile'.  Stop.
+  $ python3 tools/dashboard_reconcile.py  -> exit=2
+      python3: can't open file '/tmp/audit42/clones2/main/tools/dashboard_reconcile.py': [Errno 2] No such file or directory
+  $ python3 tools/dashboard_reconcile.py --here  -> exit=2
+      python3: can't open file '/tmp/audit42/clones2/main/tools/dashboard_reconcile.py': [Errno 2] No such file or directory
+  $ python3 tools/dashboard_reconcile.py --here --record  -> exit=2
+      python3: can't open file '/tmp/audit42/clones2/main/tools/dashboard_reconcile.py': [Errno 2] No such file or directory
+  $ git status --porcelain  -> exit=0
+### pr40  head=8e3f0b642a92c2d2e27ba6d2a066803a70165697  origin/main=52f682c  remote=https://github.com/SpicyBadran/PC5.git
+  $ make -s dashboard-reconcile  -> exit=0
+      HEAD                 8e3f0b642a92
+      dashboard written at 8e3f0b642a92
+      CURRENT — every merge on the first-parent line is reflected in the dashboard
+  $ python3 tools/dashboard_reconcile.py  -> exit=0
+      HEAD                 8e3f0b642a92
+      dashboard written at 8e3f0b642a92
+      CURRENT — every merge on the first-parent line is reflected in the dashboard
+  $ python3 tools/dashboard_reconcile.py --here  -> exit=2
+      usage: dashboard_reconcile.py [-h] [--repo REPO] [--json]
+      dashboard_reconcile.py: error: unrecognized arguments: --here
+  $ python3 tools/dashboard_reconcile.py --here --record  -> exit=2
+      usage: dashboard_reconcile.py [-h] [--repo REPO] [--json]
+      dashboard_reconcile.py: error: unrecognized arguments: --here --record
+  $ git status --porcelain  -> exit=0
+### pr41  head=5bc5d5d4353f2e2c520224fd48711556b0054fc4  origin/main=52f682c  remote=https://github.com/SpicyBadran/PC5.git
+  $ make -s dashboard-reconcile  -> exit=2
+      OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 52f682c8435956c8210b3189cad23ebea973d2de yet: nothing has been recorded as inspected. Bootstrap it with `python3 tools/dashboard_reconcile.py --record --bootstrap --boundary <full SHA> --inspect <full SHA>`
+        run: make post-merge
+      make: *** [Makefile:324: dashboard-reconcile] Error 1
+  $ python3 tools/dashboard_reconcile.py  -> exit=1
+      OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 52f682c8435956c8210b3189cad23ebea973d2de yet: nothing has been recorded as inspected. Bootstrap it with `python3 tools/dashboard_reconcile.py --record --bootstrap --boundary <full SHA> --inspect <full SHA>`
+        run: make post-merge
+  $ python3 tools/dashboard_reconcile.py --here  -> exit=1
+      warning: --here on a detached HEAD; the receipt will name the SHA only
+      OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 5bc5d5d4353f2e2c520224fd48711556b0054fc4 yet: nothing has been recorded as inspected. Bootstrap it with `python3 tools/dashboard_reconcile.py --record --bootstrap --boundary <full SHA> --inspect <full SHA>`
+        run: make post-merge
+  $ python3 tools/dashboard_reconcile.py --here --record  -> exit=2
+      warning: --here on a detached HEAD; the receipt will name the SHA only
+      ERROR — no usable receipt at 5bc5d5d4353f2e2c520224fd48711556b0054fc4: `--record` only extends an existing boundary. Bootstrap it explicitly with --record --boundary <full SHA> --inspect <sha>… so the receipt states what it looked at.
+  $ git status --porcelain  -> exit=0
+### pr42  head=709581450f24d61a23f4068c9b9df51e8729fc76  origin/main=52f682c  remote=https://github.com/SpicyBadran/PC5.git
+  $ make -s dashboard-reconcile  -> exit=2
+      OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 52f682c8435956c8210b3189cad23ebea973d2de yet: nothing has been recorded as inspected. Bootstrap it with `python3 tools/dashboard_reconcile.py --record --bootstrap --boundary <full SHA> --inspect <full SHA>`
+        run: make post-merge
+      make: *** [Makefile:324: dashboard-reconcile] Error 1
+  $ python3 tools/dashboard_reconcile.py  -> exit=1
+      OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 52f682c8435956c8210b3189cad23ebea973d2de yet: nothing has been recorded as inspected. Bootstrap it with `python3 tools/dashboard_reconcile.py --record --bootstrap --boundary <full SHA> --inspect <full SHA>`
+        run: make post-merge
+  $ python3 tools/dashboard_reconcile.py --here  -> exit=1
+      warning: --here on a detached HEAD; the receipt will name the SHA only
+      OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 709581450f24d61a23f4068c9b9df51e8729fc76 yet: nothing has been recorded as inspected. Bootstrap it with `python3 tools/dashboard_reconcile.py --record --bootstrap --boundary <full SHA> --inspect <full SHA>`
+        run: make post-merge
+  $ python3 tools/dashboard_reconcile.py --here --record  -> exit=2
+      warning: --here on a detached HEAD; the receipt will name the SHA only
+      ERROR — no usable receipt at 709581450f24d61a23f4068c9b9df51e8729fc76: `--record` only extends an existing boundary. Bootstrap it explicitly with --record --boundary <full SHA> --inspect <sha>… so the receipt states what it looked at.
+  $ git status --porcelain  -> exit=0
+
+########## B. §8 integration simulation in a disposable clone ##########
+start: main=52f682c8435956c8210b3189cad23ebea973d2de  trees: main=a209faad4d765f3da7bdb891a30444fcf689a6f6
+       #40=40:0 d041fd836726c6432beaf60bce4663a5a094103c
+
+--- method: git merge of #40 then #41 then #42 (sequential, then the bootstrap attempt) ---
+  after #40: head=52f682c tree=a209faad4d765f3da7bdb891a30444fcf689a6f6
+            #40 head tree=d041fd836726c6432beaf60bce4663a5a094103c  equal=no
+  $ make -s dashboard-reconcile  -> exit=2
+      make: *** No rule to make target 'dashboard-reconcile'.  Stop.
+  after #41: head=52f682c tree=a209faad4d765f3da7bdb891a30444fcf689a6f6 vs #41's own tree=e9d2c7073b3cada4c836fb767161e0877e2cd8a7
+  after #42: head=52f682c tree=a209faad4d765f3da7bdb891a30444fcf689a6f6 vs #42's own tree=9e184d7714aeaaa2f0616a536b60cd473c9a5892
+  content identical to #42's head?  56 files changed, 22 insertions(+), 13302 deletions(-)
+  $ make -s presentation-check  -> exit=0
+      PRESENTATION OK: 6 figures and 5 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+  $ make -s docs-check  -> exit=0
+      DOCS OK: 67 Markdown files, 34 make targets, links, anchors and commands resolve
+  $ make -s dashboard-reconcile  -> exit=2
+      make: *** No rule to make target 'dashboard-reconcile'.  Stop.
+  first-parent range origin/main..HEAD = 0 commit(s)
+  bootstrap with no boundary: 
+  $ python3 tools/dashboard_reconcile.py --record --bootstrap  -> exit=2
+      python3: can't open file '/tmp/audit42/simrepo/tools/dashboard_reconcile.py': [Errno 2] No such file or directory
+  bootstrap --boundary 52f682c8435956c8210b3189cad23ebea973d2de --inspect <each merge>: 
+  $ python3 tools/dashboard_reconcile.py --record --bootstrap --boundary 52f682c8435956c8210b3189cad23ebea973d2de  -> exit=2
+      python3: can't open file '/tmp/audit42/simrepo/tools/dashboard_reconcile.py': [Errno 2] No such file or directory
+  $ git status --porcelain  -> exit=0
+  $ make -s dashboard-reconcile  -> exit=2
+      make: *** No rule to make target 'dashboard-reconcile'.  Stop.
+
+--- method: git squash of #40 then #41 then #42 (sequential, then the bootstrap attempt) ---
+  after #40: head=52f682c tree=a209faad4d765f3da7bdb891a30444fcf689a6f6
+            #40 head tree=d041fd836726c6432beaf60bce4663a5a094103c  equal=no
+  $ make -s dashboard-reconcile  -> exit=2
+      HEAD                 52f682c84359
+      dashboard written at 80fc86152831
+      merges since then      1
+        52f682c84359  2026-11-21  [into main]  Merge pull request #35 from SpicyBadran/fix/usb-descriptor-bound-remediation
+      OUTSTANDING — 1 merge commit(s) on the first-parent line since the dashboard was written
+        run: make presentation && make presentation-check && make docs-check
+        then commit the regenerated README and figure (AGENTS.md, rule 1)
+      make: *** [Makefile:320: dashboard-reconcile] Error 1
+  after #41: head=52f682c tree=a209faad4d765f3da7bdb891a30444fcf689a6f6 vs #41's own tree=e9d2c7073b3cada4c836fb767161e0877e2cd8a7
+  after #42: head=52f682c tree=a209faad4d765f3da7bdb891a30444fcf689a6f6 vs #42's own tree=9e184d7714aeaaa2f0616a536b60cd473c9a5892
+  content identical to #42's head?  56 files changed, 22 insertions(+), 13302 deletions(-)
+  $ make -s presentation-check  -> exit=0
+      PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+  $ make -s docs-check  -> exit=0
+      DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve
+  $ make -s dashboard-reconcile  -> exit=2
+      HEAD                 52f682c84359
+      dashboard written at 80fc86152831
+      merges since then      1
+        52f682c84359  2026-11-21  [into main]  Merge pull request #35 from SpicyBadran/fix/usb-descriptor-bound-remediation
+      OUTSTANDING — 1 merge commit(s) on the first-parent line since the dashboard was written
+        run: make presentation && make presentation-check && make docs-check
+        then commit the regenerated README and figure (AGENTS.md, rule 1)
+      make: *** [Makefile:320: dashboard-reconcile] Error 1
+  first-parent range origin/main..HEAD = 0 commit(s)
+  bootstrap with no boundary: 
+  $ python3 tools/dashboard_reconcile.py --record --bootstrap  -> exit=2
+      usage: dashboard_reconcile.py [-h] [--repo REPO] [--json]
+      dashboard_reconcile.py: error: unrecognized arguments: --record --bootstrap
+  bootstrap --boundary 52f682c8435956c8210b3189cad23ebea973d2de --inspect <each merge>: 
+  $ python3 tools/dashboard_reconcile.py --record --bootstrap --boundary 52f682c8435956c8210b3189cad23ebea973d2de  -> exit=2
+      usage: dashboard_reconcile.py [-h] [--repo REPO] [--json]
+      dashboard_reconcile.py: error: unrecognized arguments: --record --bootstrap --boundary 52f682c8435956c8210b3189cad23ebea973d2de
+  $ git status --porcelain  -> exit=0
+      M  CONTRIBUTING.md
+      M  Makefile
+      M  README.md
+      M  docs/PRESENTATION.md
+      A  docs/assets/pc5-progress-matrix.svg
+      A  tests/test_progress_matrix.py
+      A  tools/dashboard_reconcile.py
+      M  tools/presentation.py
+  $ make -s dashboard-reconcile  -> exit=2
+      HEAD                 52f682c84359
+      dashboard written at 80fc86152831
+      merges since then      1
+        52f682c84359  2026-11-21  [into main]  Merge pull request #35 from SpicyBadran/fix/usb-descriptor-bound-remediation
+      OUTSTANDING — 1 merge commit(s) on the first-parent line since the dashboard was written
+        run: make presentation && make presentation-check && make docs-check
+        then commit the regenerated README and figure (AGENTS.md, rule 1)
+      make: *** [Makefile:320: dashboard-reconcile] Error 1
+
+--- method: git rebase of #40 then #41 then #42 (sequential, then the bootstrap attempt) ---
+  after #40: head=8e3f0b6 tree=d041fd836726c6432beaf60bce4663a5a094103c
+            #40 head tree=d041fd836726c6432beaf60bce4663a5a094103c  equal=YES
+  $ make -s dashboard-reconcile  -> exit=0
+      HEAD                 8e3f0b642a92
+      dashboard written at 8e3f0b642a92
+      CURRENT — every merge on the first-parent line is reflected in the dashboard
+  after #41: head=5bc5d5d tree=e9d2c7073b3cada4c836fb767161e0877e2cd8a7 vs #41's own tree=e9d2c7073b3cada4c836fb767161e0877e2cd8a7
+  after #42: head=7095814 tree=9e184d7714aeaaa2f0616a536b60cd473c9a5892 vs #42's own tree=9e184d7714aeaaa2f0616a536b60cd473c9a5892
+  content identical to #42's head? 
+  $ make -s presentation-check  -> exit=0
+      PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+  $ make -s docs-check  -> exit=0
+      DOCS OK: 76 Markdown files, 36 make targets, links, anchors and commands resolve
+  $ make -s dashboard-reconcile  -> exit=2
+      OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 52f682c8435956c8210b3189cad23ebea973d2de yet: nothing has been recorded as inspected. Bootstrap it with `python3 tools/dashboard_reconcile.py --record --bootstrap --boundary <full SHA> --inspect <full SHA>`
+        run: make post-merge
+      make: *** [Makefile:324: dashboard-reconcile] Error 1
+  first-parent range origin/main..HEAD = 16 commit(s)
+  bootstrap with no boundary: 
+  $ python3 tools/dashboard_reconcile.py --record --bootstrap  -> exit=2
+      ERROR — the boundary '' is not a full 40-hex SHA
+  bootstrap --boundary 52f682c8435956c8210b3189cad23ebea973d2de --inspect <each merge>: 
+  $ python3 tools/dashboard_reconcile.py --record --bootstrap --boundary 52f682c8435956c8210b3189cad23ebea973d2de --inspect 709581450f24d61a23f4068c9b9df51e8729fc76 --inspect dd87b22e17c2aaa7991133771765f497495b7e33 --inspect 52c6f95bd416cbabc6633f0cf2a7d434334bcb87  -> exit=2
+      ERROR — an inspected commit 709581450f24 is not an ancestor of the target: a receipt may only name commits that have already landed, so it cannot pre-approve a merge that has not happened yet
+  $ git status --porcelain  -> exit=0
+  $ make -s dashboard-reconcile  -> exit=2
+      OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 52f682c8435956c8210b3189cad23ebea973d2de yet: nothing has been recorded as inspected. Bootstrap it with `python3 tools/dashboard_reconcile.py --record --bootstrap --boundary <full SHA> --inspect <full SHA>`
+        run: make post-merge
+      make: *** [Makefile:324: dashboard-reconcile] Error 1
+
+DONE 2026-11-22T06:36:16Z

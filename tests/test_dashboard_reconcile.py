@@ -743,40 +743,58 @@ class ReconcileScenarioTest(unittest.TestCase):
         self.assertIn("the SHAs below were resolved here", done.stdout,
                       "and the report says what it did about it")
 
-    def test_s36_a_merge_of_reviewed_content_clears_the_moment_it_lands(self):
-        """The case a receipt cannot pre-name, and must not have to.
+    def test_s36_a_merge_of_a_branch_main_already_contains_is_the_no_op_case(self):
+        """The merge GitHub publishes for an already-contained branch: recorded, not waved through.
 
-        A pull-request merge is a SHA that did not exist when the receipt was written, so a
-        rule of "name every merge" would leave every reconciliation needing a second receipt
-        forever. A rule of "a merge is a merge" would let any merge self-approve. So the
-        exemption is about content: if everything the merge introduces is named or is
-        reconciliation output, the merge brought in nothing unreviewed.
+        This scenario used to `skipTest` when git declined to merge a branch `main` already
+        contained — which is every time, because `git merge --no-ff` answers "Already up to date."
+        and creates no commit at all. Its two assertions therefore never ran, and the suite still
+        reported a pass. `commit-tree` mints the same two-parent commit the API would, so the case
+        is reachable; and once it is reachable the answer is the one s41 documents: a merge that
+        introduces no commit of its own is outstanding until it is recorded, and it must not be
+        swept into `merges_cleared_by_reviewed_content`, because nothing about it was cleared by
+        *content*. Both halves are asserted here — the refusal and the repair — because s41 stops
+        at naming it.
         """
         fx = self.fixture()
         fx.write("docs/source.txt", "36 of 35\n")
         work = fx.sync_and_commit("roadmap: a milestone closed, figure regenerated")
         fx.git("checkout", "-q", "-b", "pr/like-40", work)      # the PR *is* this commit
         fx.git("checkout", "-q", "main")
-        named_before = fx.receipt()["inspected_commits"]
-        self.assertNotIn(work, named_before, "the work was committed after the bootstrap")
+        self.assertNotIn(work, fx.receipt()["inspected_commits"],
+                         "the work was committed after the bootstrap")
         self.assert_outstanding(fx.read(), work)
         fx.record()                                              # names `work`
         fx.commit("record the reconciliation")
-        self.assertIn(work, fx.receipt()["inspected_commits"])
-        # main now moves forward and the reviewed commit arrives as a merge of it
         fx.write("docs/other.md", "something else on main\n")
-        fx.sync_and_commit("main moves on")
-        merge = fx.git("merge", "--no-ff", "pr/like-40", "-m", "Merge pull request #40",
-                       check=False) or fx.head()
+        moved = fx.sync_and_commit("main moves on")
+        parent = fx.head()
+        fx.git("merge", "--no-ff", "pr/like-40", "-m", "Merge pull request #40", check=False)
         if len(fx.git("rev-list", "--parents", "-n1", "HEAD").split()) < 3:
-            self.skipTest("git would not merge a branch already contained in main")
-        merge = fx.head()
+            merge = fx.git("commit-tree", fx.rev_parse("HEAD^{tree}"), "-p", parent, "-p", work,
+                           "-m", "Merge pull request #40 (constructed, as the API would)")
+            fx.git("update-ref", "refs/heads/main", merge)
+        else:
+            merge = fx.head()
+        self.assertGreaterEqual(len(fx.git("rev-list", "--parents", "-n1", "HEAD").split()), 3,
+                                "this has to be a merge commit: a fast-forward is not a landing")
         state = fx.state()
-        self.assertEqual([c["sha"] for c in state["outstanding"]], [],
-                         f"the merge re-opened reviewed work: {merge[:12]}\n{state}")
-        self.assertIn(merge, state["merges_cleared_by_reviewed_content"],
-                      "and the report has to say *why* it is clear, not just that it is")
+        self.assertEqual({c["sha"] for c in state["outstanding"]}, {moved, merge},
+                         "the merge introduces nothing, so it is the no-op case, and the "
+                         "unrecorded commit on main is still due")
+        entry = next(c for c in state["outstanding"] if c["sha"] == merge)
+        self.assertIn("no-op merge is recorded as reviewed", entry["reason"], entry["reason"])
+        self.assertEqual(state["merges_cleared_by_reviewed_content"], [],
+                         "attribution matters: a no-op merge is not 'cleared because its content "
+                         "was reviewed', and reporting it that way would hide the duty")
+        report = fx.read().stdout
+        self.assertIn(merge[:12], report, "the report has to name the merge being asked about")
+        self.assertNotIn("CURRENT", report)
+        self.assertEqual(fx.record().returncode, 0, "recording it is allowed: the gates pass")
+        fx.commit("record the merge of a contained branch")
         self.assert_current(fx.read())
+        self.assertIn(merge, fx.receipt()["inspected_commits"],
+                      "and the record names it, so the next reader can see which merge was read")
 
     def test_s37_a_merge_is_never_exempt_for_being_a_merge(self):
         """The other side of the rule: one unreviewed commit inside and it is outstanding."""
@@ -981,7 +999,6 @@ class ReconcileScenarioTest(unittest.TestCase):
         self.assertTrue(state["generated_output_agreement"],
                         "the JSON has to carry the refusal the text mode reports, or a script "
                         "reading --json would see a clean range")
-        self.assert_current(fx.read()) if False else None
         fx.sync_and_commit("regenerate the figure from its data")
         self.assert_current(fx.read())
         self.assertEqual(fx.state()["generated_output_agreement"], "",
@@ -1180,6 +1197,166 @@ class ReconcileScenarioTest(unittest.TestCase):
                          "a refusal to write is still an error, not an empty success")
         self.assertEqual(fx.read().stdout.splitlines()[0][:12], "OUTSTANDING ",
                          "text mode is unchanged: the fix is to the JSON payload only")
+
+
+    # ------------------------------- the premise's own categories, and the flags that carry it
+    def test_s46_a_verifier_that_cannot_run_is_not_an_outstanding_inspection(self):
+        """A missing gate is `cannot answer` (exit 2), not "go and inspect something" (exit 1).
+
+        The read path folded a missing verifier into the exemption's failure string, so deleting
+        `tools/docs_check.py` printed "OUTSTANDING — … that output is not what its data produces"
+        at the exit code reserved for a duty an inspection can discharge.  Nothing had been
+        measured: the sentence asserted a mismatch nobody established, and a recording run of the
+        same tree already answers 2.
+        """
+        fx = self.fixture()
+        fx.write("docs/source.txt", "46 of 35\n")
+        fx.sync_and_commit("feat: a milestone closes, figure regenerated")
+        fx.record()
+        fx.commit("record the reconciliation")
+        fx.write("docs/assets/fig.txt", "hand-written\n")
+        fx.commit("docs: a figure touched by hand")
+        fx.sync()
+        fx.commit("docs: and regenerated from its data")     # exempt again: the gates can pass
+        self.assert_current(fx.read())     # both gates pass, so the exemption is earned
+        (fx.repo / "tools" / "docs_check.py").unlink()
+        done = fx.read()
+        self.assertEqual(done.returncode, 2,
+                         f"a gate that cannot run was reported as an outstanding inspection:\n"
+                         f"{done.stdout}{done.stderr}")
+        self.assertIn("verifier tools/docs_check.py is missing", done.stderr)
+        self.assertNotIn("not what its data produces", done.stdout + done.stderr,
+                         "and no claim about the output may be printed, because the check that "
+                         "would establish it never ran")
+        self.assertNotIn("CURRENT", done.stdout)
+        dirty = fx.record()
+        self.assertEqual(dirty.returncode, 2, dirty.stdout + dirty.stderr)
+        self.assertIn("the working tree changes tools/docs_check.py", dirty.stdout + dirty.stderr,
+                      "a recording run refuses earlier when the verifier is missing *uncommitted*:"
+                      " a receipt may not vouch for a tree that exists in no commit")
+        fx.commit("build: remove the documentation verifier")     # the deletion has landed
+        refused = fx.record()
+        self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
+        self.assertIn("refusing to record a receipt over an unverifiable tree",
+                      refused.stdout + refused.stderr,
+                      "once the deletion is committed, the same missing gate is answered with the "
+                      "write path's own sentence; both paths say 2, each saying what it was doing")
+        self.assertLessEqual(len(fx.git("status", "--porcelain").splitlines()), 1,
+                             "a refusal leaves nothing half-written: " + fx.git("status", "--porcelain"))
+
+    def test_s47_a_documentation_failure_is_not_reported_as_a_figure_problem(self):
+        """The header has to name the gate that refused; only presentation-check is about output.
+
+        With a generated-output-only range, a passing `presentation-check` and a failing
+        `docs-check`, the report used to say "the range is confined to generated output, and that
+        output is not what its data produces" — sending the operator to `make presentation`, a
+        command that changes nothing, because the figures were never the problem.
+        """
+        fx = self.fixture()
+        fx.write("docs/source.txt", "47 of 35\n")
+        fx.sync_and_commit("feat: a milestone closes, figure regenerated")
+        fx.record()
+        fx.commit("record the reconciliation")
+        fx.write("docs/BROKEN", "a link that goes nowhere\n")        # the fixture's docs gate
+        done = fx.read()
+        self.assertEqual(done.returncode, 1,
+                         f"a failing gate with a clear range must still be a duty:\n"
+                         f"{done.stdout}{done.stderr}")
+        self.assertIn("documentation links, anchors and commands resolve failed", done.stdout)
+        self.assertIn("the check that earns that exemption says no", done.stdout)
+        self.assertNotIn("not what its data produces", done.stdout,
+                         "the figures match their data; saying otherwise is a false lead")
+        state = fx.state()
+        self.assertEqual(state["outstanding"], [],
+                         "no commit is blamed for a gate failure, whatever the gate")
+        self.assertEqual(state["agreement_gate"],
+                         "documentation links, anchors and commands resolve",
+                         "the JSON carries the same attribution the text mode prints")
+        self.assertIs(state["exemption_checked"], True)
+        (fx.repo / "docs/BROKEN").unlink()
+        self.assert_current(fx.read())     # and it is clean again once the failing gate passes
+
+    def test_s48_a_flag_that_cannot_apply_is_refused_rather_than_ignored(self):
+        """The rule #42 wrote for --boundary/--inspect/--note, finished for the flags left out.
+
+        `--bootstrap` and `--dry-run` without `--record`, and `--here` together with `--target`,
+        were accepted and then had no effect: the run answered the ordinary read and exited 0, so
+        the operator kept believing they had seeded a receipt, previewed a write, or chosen a
+        target. An ignored flag is worse than a refused one.
+        """
+        fx = self.fixture(bootstrapped=False)
+        for argv in (("--bootstrap",), ("--dry-run",), ("--bootstrap", "--dry-run")):
+            done = fx.reconcile(*argv)
+            self.assertEqual(done.returncode, 2,
+                             f"{' '.join(argv)} without --record was ignored:\n{done.stdout}")
+            self.assertIn("would have been ignored", done.stderr)
+            self.assertIn("no effect without --record", done.stderr)
+            for flag in argv:
+                self.assertIn(flag, done.stderr,
+                              "the refusal names every flag it is refusing, and says what each means")
+            self.assertNotIn("CURRENT", done.stdout)
+            as_json = fx.reconcile(*argv, "--json")
+            self.assertEqual(as_json.returncode, 2, as_json.stdout + as_json.stderr)
+            self.assertEqual(as_json.stdout, "",
+                             "stdout stays empty on a refusal, so an empty answer with exit 2 can "
+                             "only mean 'no answer' — never 'nothing outstanding'")
+            try:
+                payload = json.loads(as_json.stderr)
+            except json.JSONDecodeError as exc:
+                self.fail(f"--json on a refused flag combination is not parseable ({exc}): "
+                          f"{as_json.stderr[:160]!r}")
+            self.assertEqual(payload["status"], "error")
+            self.assertIn("no effect without --record", payload["reason"])
+        fx.bootstrap()
+        here = fx.reconcile("--here")
+        self.assertEqual(here.returncode, 0, here.stdout + here.stderr)
+        both = fx.reconcile("--here", "--target", "origin/main")
+        self.assertEqual(both.returncode, 2,
+                         f"two contradictory selections, and one of them won anyway:\n"
+                         f"{both.stdout}{both.stderr}")
+        self.assertIn("--here and --target name different things", both.stderr)
+        self.assertNotIn("target               main (--here)", both.stdout)
+
+    def test_s49_record_answers_in_json_when_it_is_asked_to(self):
+        """`--json` on the write path, so a caller never has to parse prose out of a receipt run.
+
+        `--json` was honoured by the reader and by a refusal, and ignored by a recording run that
+        succeeded. The status word comes from the writer rather than from the wording of a log
+        line: a summary is a bad thing to program against, and "nothing written" and "a receipt was
+        written" have to be tellable apart without string matching.
+        """
+        fx = self.fixture()
+        fx.write("docs/source.txt", "49 of 35\n")
+        fx.sync_and_commit("feat: a milestone closes, figure regenerated")
+        done = fx.reconcile("--record", "--json")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        try:
+            payload = json.loads(done.stdout)
+        except json.JSONDecodeError as exc:
+            self.fail(f"a successful --record --json is not parseable ({exc}): "
+                      f"{done.stdout[:160]!r}")
+        self.assertEqual(payload["status"], "written")
+        self.assertEqual(payload["exit"], 0)
+        self.assertEqual(payload["target_ref"], "origin/main")
+        self.assertTrue(any("wrote " in line for line in payload["lines"]), payload["lines"])
+        fx.commit("land the receipt")
+        self.assertEqual(json.loads(fx.reconcile("--record", "--json").stdout)["status"],
+                         "nothing-to-record",
+                         "a run that writes no receipt says so in the same vocabulary")
+        fx.write("docs/source.txt", "49b of 35\n")
+        fx.sync_and_commit("feat: a second milestone closes")
+        preview = json.loads(fx.reconcile("--record", "--json", "--dry-run").stdout)
+        self.assertEqual(preview["status"], "dry-run",
+                         "a preview of a real write is not reported as a write")
+        self.assertEqual(fx.git("status", "--porcelain"), "", "a preview writes nothing")
+        wrote = json.loads(fx.reconcile("--record", "--json").stdout)
+        self.assertEqual(wrote["status"], "written")
+        fx.commit("land the second receipt")
+        noted = json.loads(fx.reconcile("--record", "--json", "--note", "x").stdout)
+        self.assertEqual(noted["status"], "nothing-to-record",
+                         "a note alone does not manufacture a write, and does not rewrite the "
+                         "summary of a receipt that has already landed")
+
 
 
 class TheToolItselfIsSoundTest(unittest.TestCase):

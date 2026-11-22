@@ -1,0 +1,99 @@
+HASHES — PR #42 independent review, generated 2026-11-22T07:07:40.446574Z
+Every command below was run in this sandbox; exit codes are the program's own (no pipes).
+
+## full commit SHAs (re-read live at 07:02:15Z, identical to the 05:55:10Z read)
+  main  52f682c8435956c8210b3189cad23ebea973d2de
+  #40   8e3f0b642a92c2d2e27ba6d2a066803a70165697
+  #41   5bc5d5d4353f2e2c520224fd48711556b0054fc4
+  #42   709581450f24d61a23f4068c9b9df51e8729fc76
+  #42 branch ref 709581450f24d61a23f4068c9b9df51e8729fc76 (== head: still stacked, not retargeted)
+  #41 branch ref 5bc5d5d4353f2e2c520224fd48711556b0054fc4
+  #40 branch ref 8e3f0b642a92c2d2e27ba6d2a066803a70165697
+
+## trees
+  main            a209faad4d765f3da7bdb891a30444fcf689a6f6
+  #40 head        d041fd836726c6432beaf60bce4663a5a094103c
+  #41 head        e9d2c7073b3cada4c836fb767161e0877e2cd8a7
+  #42 head        9e184d7714aeaaa2f0616a536b60cd473c9a5892
+  merged main (sim, merge)  after #40/#41/#42: same three trees in turn; #42 step tree 9e184d7714ae
+  corrective branch: built on 7095814, 4 files changed (see below)
+
+## sha256 of the artefacts this review quotes
+
+| file | #41 | #42 | fix branch |
+|---|---|---|---|
+| `tools/dashboard_reconcile.py` | 4a08650e6d86abf0 | e04e95bb73a50ddb | f23c5ff5267ec5c3 |  (differs)
+| `tests/test_dashboard_reconcile.py` | e27b9880ca7759dc | 7de7b746af783639 | 6660a0a885b5b508 |  (differs)
+| `README.md` | 1e8bd015eee4c943 | 1e8bd015eee4c943 | b622e50a5be59712 |  (differs)
+| `Makefile` | 1acac158d3767ab3 | 1acac158d3767ab3 | a9e35b5db017090a |  (differs)
+| `AGENTS.md` | 43b87b17db29beed | 5b704296250519e2 | 5b704296250519e2 |  (differs)
+| `CONTRIBUTING.md` | 588fb7c752a745c3 | b24d26a053bec454 | b24d26a053bec454 |  (differs)
+| `docs/PRESENTATION.md` | cb64f5f9c4798823 | 2f0b83195c86806d | 2f0b83195c86806d |  (differs)
+| `tools/presentation.py` | 7454361c1b76902d | 7454361c1b76902d | 7454361c1b76902d |  (identical)
+| `docs/assets/pc5-dashboard.svg` | 8c0ac61aed05e35c | 8c0ac61aed05e35c | 8c0ac61aed05e35c |  (identical)
+| `docs/assets/pc5-progress.svg` | 010ace0a364991a5 | 010ace0a364991a5 | 010ace0a364991a5 |  (identical)
+| `docs/assets/pc5-progress-matrix.svg` | c520fe55d053ce9a | c520fe55d053ce9a | c520fe55d053ce9a |  (identical)
+| `docs/assets/pc5-banner.svg` | d17a1e60f5334268 | d17a1e60f5334268 | d17a1e60f5334268 |  (identical)
+| `docs/architecture/roadmap.json` | 433148fe2142161c | 433148fe2142161c | 433148fe2142161c |  (identical)
+
+The four `docs/assets/*.svg`, `tools/presentation.py`, and on #41 vs #42 also `README.md` and the
+Makefile are byte-identical: #42 changes no visual artefact and no generated block.
+
+## visual palette, counted from docs/assets/pc5-progress-matrix.svg at 7095814
+  viewBox 0 0 1200 1223 · font-family 'JetBrains Mono','SFMono-Regular',Consolas… · font sizes 10, 11, 13, 20
+  fills: #8b98a8 x126 (muted), #e6edf3 x103 (fg), #2b3646 x88 (panel), #34d399 x65 (green),
+         #06251c x53 (green panel), #fbbf24 x24 (amber), #f4b9bd x24 (blocked), #1b2330 x23 (row)
+
+## gates, fresh clone per ref (each program's own exit status, no pipeline)
+
+| ref | `python3 -m unittest discover -s tests -p 'test_*.py'` | `make check` | `make -s presentation-check` | `make -s docs-check` | `make -s citations-check` | `make -s dashboard-reconcile` | tool directly |
+|---|---|---|---|---|---|---|---|
+| `main` | Ran 929, OK (skipped=109), exit 0 | exit 0 | exit 0 | exit 0 | exit 0 | **no such target** (tool absent) | exit 2 (file not found) |
+| #40 | Ran 968, OK (skipped=109), exit 0 | exit 0 | exit 0 | exit 0 | exit 0 | **exit 0 `CURRENT`** | exit 0; `--here`/`--record` unrecognised |
+| #41 | Ran 1037, OK (skipped=110), exit 0 | exit 0 | exit 0 | exit 0 | exit 0 | exit 2 (tool says 1) | exit 1 `OUTSTANDING … bootstrap it` |
+| #42 | Ran 1044, OK (skipped=110), exit 0 | exit 0 | exit 0 | exit 0 | exit 0 | exit 2 (tool says 1) | exit 1 `OUTSTANDING … bootstrap it` |
+| fix branch `34f5223…` | Ran 1048, OK (**skipped=109**), exit 0 | exit 0 | exit 0 | exit 0 | exit 0 | exit 2 (tool says 1) | exit 1 |
+
+`make presentation` then `git status --porcelain` is empty on all five (`git status exit=0`).
+Clones used `git clone https://github.com/SpicyBadran/PC5.git` + `git fetch origin <ref>`; two
+independent clones of #42 produced the same head and tree (9e184d7714ae).
+
+## probe harnesses (raw/)
+  probe.py   24 falsification probes            → probe-results-{pr41,pr42}.json
+  probe2.py  15 history / remote / flag probes  → probe2-results-{pr41,pr42}.json
+  probe3.py  27 flag combinations + 3 attribution cases → probe3-results-{pr41,pr42}.json
+  r2.py      the missing-verifier before/after, verbatim → r2-{pr41,pr42}.json
+  lib.py     fixture builder: bare origin, real commits/merges, fingerprint(), run()
+  sim.sh / sim2.log / sim3.log  §8 simulation per merge method
+  run-gates.sh, run-suite.sh     the gate table above
+  live-probes.txt, live-final.txt, commit-graph.txt, clone.log  the GitHub API reads
+
+## reproduction
+  AUDIT_TREE=/tmp/audit42/pr42 AUDIT_LABEL=pr42 TMPDIR=/tmp python3 raw/probe.py
+(set AUDIT_TREE to the tree under test; the harness overwrites lib.REAL/lib.TOOL with it, so the
+same batch runs against any head without editing the cases).
+
+## measured on this branch's head, through the public command (not through a fixture)
+
+  python3 tools/dashboard_reconcile.py --bootstrap                  -> exit 2  "--bootstrap has no effect without --record: …"
+  python3 tools/dashboard_reconcile.py --dry-run                    -> exit 2  "--dry-run has no effect without --record: …"
+  python3 tools/dashboard_reconcile.py --bootstrap --dry-run        -> exit 2  "…have no effect without --record…"
+  python3 tools/dashboard_reconcile.py --here --target origin/main  -> exit 2  "--here and --target name different things to reconcile…"
+  python3 tools/dashboard_reconcile.py --note x                      -> exit 2  (as #42)
+  python3 tools/dashboard_reconcile.py --boundary <sha>              -> exit 2  (as #42)
+  python3 tools/dashboard_reconcile.py --record --boundary <sha>     -> exit 2  (as #42)
+  tools/docs_check.py deleted, exempt range, read   -> #41 exit 0 CURRENT · #42 exit 1 "not what its data
+                                                        produces (verifier … is missing)" · this branch exit 2,
+                                                        and --record exit 2 "refusing to record a receipt over
+                                                        an unverifiable tree"
+  docs-only gate failure, exempt range              -> #41 exit 0 CURRENT · #42 blames generated output ·
+                                                        this branch exit 1 "the check that earns that
+                                                        exemption says no … documentation links … failed"
+  --json on a refused combination: stdout empty, stderr a single parseable object (fixed here; #42
+  appended "ERROR — …" after the object, so a caller reading the stream could not parse it)
+
+## re-read of GitHub after pushing this branch (07:1xZ, 2026-11-22)
+
+  #40 8e3f0b642a92c2d2e27ba6d2a066803a70165697 · #41 5bc5d5d4353f2e2c520224fd48711556b0054fc4
+  #42 709581450f24d61a23f4068c9b9df51e8729fc76 · main 52f682c8435956c8210b3189cad23ebea973d2de
+  all three still open/draft/mergeable-clean; this branch is #43, draft, based on #42's branch ref

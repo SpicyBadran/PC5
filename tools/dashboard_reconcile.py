@@ -23,6 +23,15 @@ Exit codes, deliberately: 0 current, 1 outstanding, 2 error.  Anything that cann
 established is an error or an outstanding state, never a green result — a tool that answers
 "nothing to do" when it could not read the history is worse than no tool.
 
+Nothing runs this command for you.  There is no CI workflow in this repository, no Git hook is
+installed by `make`, and no scheduled job reads `main`: reconciling the dashboard after a merge
+into `main` is a duty of whoever merged, discharged with `make post-merge` and read back with
+`make dashboard-reconcile`.  Those two targets report exit 2 whenever this tool says anything
+other than 0, because that is how `make` reports a failed recipe; the distinction between "an
+inspection is due" (1) and "the question cannot be answered" (2) lives in the tool's own status
+and in `--json`.
+
+
 Merge strategy does not matter.  The tool walks `git rev-list --first-parent <boundary>..<target>`
 and classifies each commit by the paths its diff to its first parent touched, so a merge
 commit, a squash, a rebase-merge, a fast-forward and a direct commit to `main` are all just
@@ -78,8 +87,9 @@ DRIVERS = (
 )
 
 #: commands a recording run must pass, in order, before a receipt may be written
+PRESENTATION_GATE = "presentation figures and README blocks are current"
 VERIFICATIONS = (
-    ("presentation figures and README blocks are current",
+    (PRESENTATION_GATE,
      ["{python}", "tools/presentation.py", "check"]),
     ("documentation links, anchors and commands resolve",
      ["{python}", "tools/docs_check.py"]),
@@ -92,6 +102,24 @@ MARKER = re.compile(r"<!-- pc5:([a-z-]+):(begin|end) -->")
 
 class ReconcileError(Exception):
     """Anything that cannot be established. Reported as exit 2, never as a green result."""
+
+
+class VerifierMissing(ReconcileError):
+    """A gate that cannot run at all, so nothing about the tree was measured.
+
+    A different fact from "a gate ran and said no". Conflating them makes the read path demand an
+    inspection that no amount of inspecting can satisfy — and lets the report assert a mismatch
+    nobody established — while making the write path sound as though it had checked something.
+    """
+
+
+class GateFailure(ReconcileError):
+    """A gate that ran and refused. It carries its label, so each caller can say *which* gate."""
+
+    def __init__(self, label: str, exit_code: int, detail: str):
+        super().__init__(f"{label} failed (exit {exit_code}): {detail}")
+        self.label = label
+        self.detail = detail
 
 
 def git(repo: Path, *args: str) -> str:
@@ -365,20 +393,32 @@ def classify(repo: Path, commit: dict, named: set = frozenset(), cache: dict = N
             "drivers": drivers}
 
 
-def generated_output_agrees(repo: Path) -> str:
-    """Return "" when the checkout's generated output matches its data, else why it does not.
+def generated_output_agrees(repo: Path) -> tuple:
+    """Return (why the exemption is not earned, which gate said so), or ("", "") when it is earned.
 
     This is the premise under the generated-output exemption, tested rather than assumed. It runs
     the same two verifiers a recording run would, against the tree the operator is standing in —
     which is the tree `make post-merge` regenerates, and the one a receipt would be written from.
-    A failure is reported as an outstanding inspection, not as an error: the range is readable, the
-    dashboard in it is simply not reconciled, which is exit 1's meaning.
+
+    Three outcomes, and they are not interchangeable:
+
+      * both gates pass — the exemption is earned, exit 0 is available;
+      * a gate ran and refused — an inspection is due, which is exit 1's meaning, and the sentence
+        has to name the gate that refused. Only the presentation gate speaks about the figures:
+        a documentation gate saying "this output is not what its data produces" sends the operator
+        to `make presentation`, a command that would change nothing;
+      * a gate cannot run — nothing was measured, so the answer is `cannot answer` (exit 2),
+        which is exactly how a recording run treats the same tree. `VerifierMissing` therefore
+        propagates rather than being folded into a finding about content.
     """
     try:
         verify(repo, lambda line: None)
-    except ReconcileError as exc:
-        return f"its generated output no longer matches the data it renders ({exc})"
-    return ""
+    except GateFailure as exc:
+        if exc.label == PRESENTATION_GATE:
+            return (f"its generated output no longer matches the data it renders ({exc.detail})",
+                    exc.label)
+        return (f"the check behind the exemption did not pass ({exc})", exc.label)
+    return "", ""
 
 
 # ---------------------------------------------------------------- the receipt
@@ -478,7 +518,7 @@ def inspect(repo: Path, target_ref: str, target: str) -> dict:
             exempt.append(entry)
         else:
             outstanding.append(entry)
-    exemption = ""
+    exemption, gate = "", ""
     if commits and not outstanding:
         # Whether a clear answer comes from generated output or from a name in the receipt, it
         # comes from a premise, and the premise is that the figures match their data: that what is on disk is what the
@@ -493,7 +533,7 @@ def inspect(repo: Path, target_ref: str, target: str) -> dict:
         # commit at all) made stale. Blaming the exempt commits would send the operator to inspect
         # a commit that changed nothing but generated output. It is reported as its own finding, in
         # `generated_output_agreement`, and `report` refuses to call the state CURRENT because of it.
-        exemption = generated_output_agrees(repo)
+        exemption, gate = generated_output_agrees(repo)
     figures = [c for c in commits if any(p.startswith(GENERATED_OUTPUTS)
                                          for p in c["changed_paths"])]
     notes = []
@@ -531,6 +571,7 @@ def inspect(repo: Path, target_ref: str, target: str) -> dict:
              "drivers": c["classification"]["drivers"]} for c in commits],
         "outstanding": outstanding,
         "generated_output_agreement": exemption,
+        "agreement_gate": gate,
         "exemption_checked": bool(commits) and not outstanding,
         "recorded_in_receipt": reviewed,
         "merges_cleared_by_reviewed_content": [c["sha"] for c in cleared],
@@ -581,8 +622,10 @@ def report(state: dict, json_mode: bool) -> int:
     print(f"receipt              {state['receipt_path']}")
     if state.get("exemption_checked"):
         agreement = state.get("generated_output_agreement") or ""
-        wording = (f"does not match its data: {agreement}" if agreement
-                   else "checked against its data in this checkout: the exemption is earned")
+        figures = state.get("agreement_gate") == PRESENTATION_GATE
+        wording = (f"does not match its data: {agreement}" if agreement and figures else
+                   f"could not be confirmed by the gates: {agreement}" if agreement else
+                   "checked against its data in this checkout: the exemption is earned")
         print(f"generated output       {wording}")
     print(f"reconciled boundary  {state['boundary'][:12]}  ({state['boundary_date'][:10]})")
     print(f"summary              {state['summary'] or '(none recorded)'}")
@@ -610,8 +653,13 @@ def report(state: dict, json_mode: bool) -> int:
             print(f"              {entry['reason']}")
     if verdict:
         if not state["outstanding"]:
-            print("OUTSTANDING — the range is confined to generated output, and that output is "
-                  f"not what its data produces: {state['generated_output_agreement']}")
+            if state.get("agreement_gate") == PRESENTATION_GATE:
+                print("OUTSTANDING — the range is confined to generated output, and that output "
+                      f"is not what its data produces: {state['generated_output_agreement']}")
+            else:
+                print("OUTSTANDING — the range is confined to generated output, and the check "
+                      "that earns that exemption says no: "
+                      f"{state['generated_output_agreement']}")
         else:
             print("OUTSTANDING — a successful change on the primary branch has not been "
                   "reconciled with the dashboard")
@@ -658,15 +706,16 @@ def record(repo: Path, target_ref: str, target: str, summary: str, dry_run: bool
     # exempt from inspection by definition (the gate just proved it matches the data), so a dirty
     # figure is not a reason to refuse the receipt — a dirty source file is.
     figures_pending = sorted({p for p in pending if p.startswith(GENERATED_OUTPUTS)})
-    results = verify(repo, log.append)
+    results = verify_for_record(repo, log.append)
     if not unrecorded:
         # Verification runs first, and it runs even when there is nothing to write. A range of
         # generated-output-only commits used to return here untouched, which meant a stale or
         # hand-written figure could be "reconciled" by the absence of a receipt update: the gates
         # the receipt exists to attest were never run. Nothing is written on this path, so
         # nothing is claimed — but the answer is only honest if the gates were checked.
-        return 0, log + ["nothing to record: every change since the boundary is either named in "
-                         "the receipt or confined to generated output, and the gates above pass"]
+        return (0, log + ["nothing to record: every change since the boundary is either named in "
+                          "the receipt or confined to generated output, and the gates above pass"],
+                "nothing-to-record")
     paths = sorted({p for c in unrecorded for p in c["changed_paths"]})
     for commit in commits:                      # a second pass would re-diff every commit
         commit.setdefault("classification", classify(repo, commit))
@@ -700,7 +749,7 @@ def record(repo: Path, target_ref: str, target: str, summary: str, dry_run: bool
     payload = json.dumps(receipt, indent=2, sort_keys=True) + "\n"
     if dry_run:
         log.append("  dry run: receipt not written")
-        return 0, log + [payload]
+        return 0, log + [payload], "dry-run"
     path = repo / RECEIPT
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(payload, encoding="utf-8")
@@ -708,7 +757,7 @@ def record(repo: Path, target_ref: str, target: str, summary: str, dry_run: bool
                f"{len(receipt['commits_inspected_now'])} commit(s) inspected, "
                f"figures changed: {receipt['figures_changed']}")
     log.append("  commit the receipt (with any regenerated figures) and open a pull request")
-    return 0, log
+    return 0, log, "written"
 
 
 # ---------------------------------------------------------------- writing a receipt
@@ -744,17 +793,29 @@ def verify(repo: Path, note=lambda line: None) -> list:
         cmd = [sys.executable if a == "{python}" else a for a in argv]
         for part in cmd:
             if part.endswith(".py") and not (repo / part).exists():
-                raise ReconcileError(f"verifier {part} is missing; refusing to record a "
-                                     "receipt over an unverifiable tree")
+                raise VerifierMissing(f"verifier {part} is missing from this checkout")
         done = subprocess.run(cmd, cwd=repo, capture_output=True, text=True)
         results.append({"label": label, "argv": argv, "exit_code": done.returncode})
         note(f"  verify {label}: exit {done.returncode}")
         if done.returncode != 0:
             tail = (done.stdout + done.stderr).strip().splitlines()
-            raise ReconcileError(
-                f"refusing to record: {label} failed (exit {done.returncode}): "
-                f"{tail[-1] if tail else 'no output'}")
+            raise GateFailure(label, done.returncode, tail[-1] if tail else "no output")
     return results
+
+
+def verify_for_record(repo: Path, note=lambda line: None) -> list:
+    """`verify()`, phrased for the run that is about to claim something in a receipt.
+
+    The verdict is identical; only the sentence differs. A read run must not be told "refusing to
+    record" when nothing was being recorded, and a recording run has to say what it declined to do
+    and why the tree is unverifiable.
+    """
+    try:
+        return verify(repo, note)
+    except VerifierMissing as exc:
+        raise ReconcileError(f"{exc}: refusing to record a receipt over an unverifiable tree")
+    except GateFailure as exc:
+        raise ReconcileError(f"refusing to record: {exc}")
 
 
 def must_be_on_target(repo: Path, sha: str, target: str, what: str) -> None:
@@ -786,7 +847,7 @@ def bootstrap(repo: Path, target_ref: str, target: str, boundary: str, inspected
     for sha in inspected:
         must_be_on_target(repo, sha, target, f"an inspected commit")
     uncommitted_changes(repo)
-    results = verify(repo, lambda line: None)
+    results = verify_for_record(repo, lambda line: None)
     receipt = {
         "schema": SCHEMA,
         "repository": repository_id(repo),
@@ -809,12 +870,12 @@ def bootstrap(repo: Path, target_ref: str, target: str, boundary: str, inspected
     }
     payload = json.dumps(receipt, indent=2, sort_keys=True) + "\n"
     if dry_run:
-        return 0, ["  dry run: receipt not written", payload]
+        return 0, ["  dry run: receipt not written", payload], "dry-run"
     path = repo / RECEIPT
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(payload, encoding="utf-8")
     return 0, [f"  bootstrapped {RECEIPT} at boundary {boundary[:12]} naming "
-               f"{len(inspected)} commit(s); commit it and open a pull request"]
+               f"{len(inspected)} commit(s); commit it and open a pull request"], "written"
 
 
 def main(argv=None) -> int:
@@ -838,8 +899,10 @@ def main(argv=None) -> int:
                         help="write the first receipt on a line of history: needs --boundary "
                              "and --inspect, and runs the same verification gates")
     parser.add_argument("--note", default="", help="one-line summary stored in the receipt")
-    parser.add_argument("--dry-run", action="store_true", help="print, do not write")
-    parser.add_argument("--json", action="store_true", dest="json_mode")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="with --record: print the receipt, do not write it")
+    parser.add_argument("--json", action="store_true", dest="json_mode",
+                        help="answer with one JSON object, on the read path and on --record")
     args = parser.parse_args(argv)
 
     repo = Path(args.repo).resolve()
@@ -853,17 +916,43 @@ def main(argv=None) -> int:
         if args.note and not args.record:
             raise ReconcileError("--note writes into a receipt, and this run writes none: pass "
                                  "--record (or --record --bootstrap) with --note")
+        if (args.bootstrap or args.dry_run) and not args.record:
+            flagged = [(" --bootstrap", args.bootstrap), (" --dry-run", args.dry_run)]
+            flagged = [name.strip() for name, given in flagged if given]
+            meaning = []
+            if args.bootstrap:
+                meaning.append("--bootstrap seeds the first receipt on a line of history")
+            if args.dry_run:
+                meaning.append("--dry-run prints the receipt a recording run would write")
+            which = " and ".join(flagged)
+            plural = len(flagged) > 1
+            raise ReconcileError(
+                f"{which} {'have' if plural else 'has'} no effect without --record: "
+                f"{'; '.join(meaning)}. This run writes no receipt, so the flag"
+                f"{'s' if plural else ''} would have been ignored and the answer would have been "
+                f"the ordinary read. Pass --record, or drop {which}.")
+        if args.here and args.target:
+            raise ReconcileError(
+                f"--here and --target name different things to reconcile: the branch you are "
+                f"standing on, and {args.target}. One of them would have been ignored silently, "
+                "and a receipt written against a ref nobody meant to name is worse than no "
+                "receipt: pick one (`make post-merge` uses --here, before the push).")
         target_ref, target = resolve_target(repo, args.target, args.here)
         if args.record:
+            # `--json` is the machine interface, so it is honoured here too: a caller that asked
+            # for JSON must never be handed prose to guess at. The status word comes from the
+            # writer, which knows whether it wrote, previewed, or had nothing to do.
             if args.bootstrap:
-                code, log = bootstrap(repo, target_ref, target, args.boundary or "",
-                                      args.inspect, args.note, args.dry_run)
+                code, log, status = bootstrap(repo, target_ref, target, args.boundary or "",
+                                              args.inspect, args.note, args.dry_run)
+            else:
+                code, log, status = record(repo, target_ref, target, args.note, args.dry_run)
+            if args.json_mode:
+                print(json.dumps({"status": status, "exit": code, "target_ref": target_ref,
+                                  "target": target, "lines": log}, indent=2, sort_keys=True))
+            else:
                 for line in log:
                     print(line)
-                return code
-            code, log = record(repo, target_ref, target, args.note, args.dry_run)
-            for line in log:
-                print(line)
             return code
         return report(inspect(repo, target_ref, target), args.json_mode)
     except Outstanding as due:
@@ -879,9 +968,13 @@ def main(argv=None) -> int:
         return 1
     except ReconcileError as error:
         if args.json_mode:
+            # In machine mode the object *is* the answer: appending the prose line after it would
+            # leave a caller that redirects 2>&1 (or reads stderr, where errors belong) with an
+            # unparseable stream. The reason is already inside the object.
             print(json.dumps({"status": "error", "reason": str(error)},
                              indent=2, sort_keys=True), file=sys.stderr)
-        print(f"ERROR — {error}", file=sys.stderr)
+        else:
+            print(f"ERROR — {error}", file=sys.stderr)
         return 2
 
 

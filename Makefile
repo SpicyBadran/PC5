@@ -317,7 +317,13 @@ presentation-check:
 #   dashboard-reconcile  audits what has LANDED — reads the receipt from `origin/main` and
 #                        lists every first-parent change since its boundary (AGENTS.md).
 #   post-merge           performs the duty on the branch you just merged into, which is not
-#                        on origin/main yet.  Reconciling the local HEAD is the only honest
+#                        on origin/main yet.
+#
+# Nothing runs either target.  This repository has no CI workflow, `make` installs no Git hook,
+# and no scheduled job reads `main`: the duty belongs to whoever merged.  A failed recipe makes
+# `make` itself exit 2, so `make dashboard-reconcile` cannot tell you "a reconciliation is due"
+# (the tool's 1) apart from "the question cannot be answered" (its 2) — run
+# `python3 tools/dashboard_reconcile.py`, or read `--json`, when that distinction matters.  Reconciling the local HEAD is the only honest
 #                        target at that moment; `--here` records that fact in the receipt.
 #                        It regenerates, checks, and writes the receipt and nothing else.
 dashboard-reconcile:

@@ -1,0 +1,22 @@
+{
+  "1_clean_exempt_range": {
+    "exit": 0,
+    "head": "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+  },
+  "2_verifier_deleted_read": {
+    "exit": 0,
+    "last": "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output",
+    "line_with_outstanding": "",
+    "stderr": ""
+  },
+  "3_verifier_deleted_json": {
+    "exit": 0,
+    "outstanding": 0,
+    "agreement": "<field does not exist in this version>",
+    "exemption_checked": "<absent>"
+  },
+  "4_verifier_deleted_record": {
+    "exit": 0,
+    "err": "nothing to record: every change since the boundary is either named in the receipt or confined to generated output"
+  }
+}
