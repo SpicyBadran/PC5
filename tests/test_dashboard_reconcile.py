@@ -956,6 +956,207 @@ class ReconcileScenarioTest(unittest.TestCase):
         self.assertIn("nothing to record", again.stdout + again.stderr)
 
 
+    # --------------------------------------- the exemption is tested, not assumed
+    def test_s39_generated_output_only_is_current_only_because_it_was_checked(self):
+        """The exemption is a promise about the output, so the output is checked.
+
+        The path test came with a premise attached — "presentation-check proves this content is
+        what the generator produces" — and this command never ran presentation-check. So a commit
+        that writes a figure by hand, or deletes one, read as CURRENT, and a receipt naming its
+        own unreviewed work walked away green. Both are the exact false green this tool exists to
+        remove, and the audit that found them ran them as scenarios, not as opinions.
+        """
+        fx = self.fixture()
+        fx.write("docs/assets/fig.txt", "written by hand, not by the generator\n")
+        fx.commit("docs: a hand-written figure")
+        done = fx.read()
+        self.assertEqual(done.returncode, 1,
+                         f"a hand-written figure was reported as CURRENT:\n{done.stdout}"
+                         f"{done.stderr}")
+        self.assertIn("not what its data produces", done.stdout)
+        state = fx.state()
+        self.assertEqual(state["outstanding"], [],
+                         "the commits are exempt on their paths; what fails is the output itself, "
+                         "and it is reported as its own finding rather than blamed on a commit")
+        self.assertTrue(state["generated_output_agreement"],
+                        "the JSON has to carry the refusal the text mode reports, or a script "
+                        "reading --json would see a clean range")
+        self.assert_current(fx.read()) if False else None
+        fx.sync_and_commit("regenerate the figure from its data")
+        self.assert_current(fx.read())
+        self.assertEqual(fx.state()["generated_output_agreement"], "",
+                         "the exemption is earned once the generator has run: same commits, "
+                         "same paths, different answer")
+
+    def test_s40_record_verifies_even_when_it_has_nothing_to_write(self):
+        """`--record` may not answer 0 about stale output because no receipt update was due.
+
+        The early return used to sit above `verify()`, so a range of generated-output-only commits
+        exited 0 with the gates never run — the one path where the receipt's own claim
+        ("verification: exit 0") was not being earned by anything.
+        """
+        fx = self.fixture()
+        before = fx.git("show", f"HEAD:{RECEIPT}")
+        fx.write("docs/assets/fig.txt", "hand-written again\n")
+        fx.commit("docs: a hand-written figure, nothing else in range")
+        done = fx.record()
+        self.assertEqual(done.returncode, 2,
+                         f"`--record` accepted a stale figure:\n{done.stdout}{done.stderr}")
+        self.assertIn("refusing to record", done.stdout + done.stderr)
+        self.assertNotIn(RECEIPT, fx.git("status", "--porcelain"),
+                         "a refusal writes nothing, not even a half-finished receipt")
+        self.assertEqual(fx.git("show", f"HEAD:{RECEIPT}"), before,
+                         "the receipt on main is untouched by a refused run")
+
+    def test_s41_a_no_op_merge_is_recorded_as_reviewed_not_skipped(self):
+        """AGENTS.md §1 step 2, in code: a merge that introduces nothing is still a merge.
+
+        `reviewed_ancestry` cleared any merge whose introduced set was empty. That is every
+        already-contained branch merged with `--no-ff`, so a merge nobody had looked at closed the
+        duty on the strength of having happened — which is the self-approval the content rule was
+        written to prevent, arriving from the other side.
+        """
+        fx = self.fixture()
+        tree = fx.git("rev-parse", "HEAD^{tree}")
+        ancestor = fx.git("rev-parse", "HEAD~1")
+        merge = fx.git("commit-tree", tree, "-p", fx.head(), "-p", ancestor, "-m",
+                       "Merge a branch that had nothing main did not already have")
+        fx.git("update-ref", "refs/heads/main", merge)
+        done = fx.read()
+        self.assertEqual(done.returncode, 1,
+                         f"a no-op merge was waved through:\n{done.stdout}{done.stderr}")
+        self.assertIn("no-op merge is recorded as reviewed", done.stdout)
+        self.assertEqual(fx.state()["outstanding"][0]["sha"], merge,
+                         "and it is named, so the operator can see which merge is being asked about")
+        self.assertEqual(fx.record().returncode, 0, "recording it is allowed: the gates pass")
+        fx.commit("record the no-op merge")
+        self.assert_current(fx.read())
+        self.assertIn(merge, fx.receipt()["inspected_commits"])
+
+    def test_s42_a_receipt_written_inside_the_range_does_not_certify_itself(self):
+        """A commit cannot clear itself by naming itself in the receipt, in either forgery.
+
+        The receipt is read from the target, which is right for staleness and wrong for
+        self-certification: a landing commit that edits the receipt used to report CURRENT with no
+        gate run at all. Two forgeries are tested. Naming the commit, leaving the boundary alone,
+        makes the unreviewed source commit read as "named in the receipt". Moving the boundary
+        past it removes the commit from the range entirely. In both, the only thing still holding
+        the answer up is the exemption's premise — that generated output matches its data — and
+        the premise is now tested, so both come back OUTSTANDING. What remains is governance: a
+        hand-written receipt whose figures *do* match is a claim a human made, and AGENTS.md says
+        the receipt is auditable rather than trusted.
+        """
+        def assert_refused(fx, note):
+            done = fx.read()
+            self.assertEqual(done.returncode, 1, f"{note}: {done.stdout}{done.stderr}")
+            self.assertIn("not what its data produces", done.stdout, note)
+            state = fx.state()
+            self.assertEqual(state["outstanding"], [],
+                             f"{note}: no commit is blamed; the exemption itself is what fails, "
+                             "and the report says so rather than sending the operator to inspect "
+                             "a commit that only touched generated output")
+            self.assertTrue(state["generated_output_agreement"], note)
+
+        fx = self.fixture()
+        fx.write("docs/source.txt", "42 of 35\n")
+        fx.commit("feat: a milestone closed, and the receipt names it")
+        landing = fx.head()
+        fx.forge_receipt(lambda receipt: dict(
+            receipt, inspected_commits=sorted(set(receipt["inspected_commits"]) | {landing}),
+            summary="hand-written: names the commit that delivered it"))
+        assert_refused(fx, "the naming forgery")
+        state = fx.state()
+        self.assertIn(landing, [c["sha"] for c in state["recorded_in_receipt"]],
+                      "the self-naming is honoured as a classification — a receipt that names a "
+                      "commit says it was read — and the verdict turns on the premise instead")
+        self.assertIn(landing, [c["sha"] for c in state["commits_since_boundary"]])
+
+        other = self.fixture()
+        other.write("docs/source.txt", "42 of 35\n")
+        other.commit("feat: the same change, with the boundary moved past it")
+        moved = other.head()
+        other.forge_receipt(lambda receipt: dict(
+            receipt, reconciled_at=moved,
+            inspected_commits=sorted(set(receipt["inspected_commits"]) | {moved})))
+        assert_refused(other, "the boundary forgery")
+        self.assertEqual([c["sha"] for c in other.state()["commits_since_boundary"]],
+                         [other.head()],
+                         "moving the boundary past a commit really does take it out of the range: "
+                         "that is why the exemption cannot go untested")
+        # and the honest round trip still closes, so the refusal is about the stale output only
+        other.sync()
+        other.commit("regenerate the figure")
+        self.assert_current(other.read())
+
+    def test_s43_flags_that_belong_to_bootstrap_are_not_silently_ignored(self):
+        """`--record --boundary X` used to ignore `--boundary` and answer 0.
+
+        An ignored flag is worse than a refused one: the operator believes they set a boundary.
+        """
+        fx = self.fixture()
+        zeros = "0" * 40
+        done = fx.reconcile("--record", "--boundary", zeros, "--inspect", zeros)
+        self.assertEqual(done.returncode, 2, f"--boundary without --bootstrap was ignored: "
+                                            f"{done.stdout}{done.stderr}")
+        self.assertIn("--bootstrap", done.stdout + done.stderr)
+        self.assertNotIn("nothing to record", done.stdout + done.stderr)
+        note = fx.reconcile("--note", "a summary nobody asked for")
+        self.assertEqual(note.returncode, 2,
+                         f"--note without --record wrote nothing and said nothing: {note.stdout}")
+        self.assertIn("--note writes into a receipt", note.stdout + note.stderr)
+
+
+    def test_s44_the_report_names_the_commits_a_receipt_vouched_for(self):
+        """`recorded_in_receipt` and the merge statistic were always empty, and nothing noticed.
+
+        Both lists are filled from a classification that clears a commit, and the code tested
+        `requires_inspection` first — so every named commit and every ancestry-cleared merge was
+        swept into `exempt_generated_only` instead. The report line then read "0 already named in
+        the receipt" while the receipt named several, and `merges_cleared_by_reviewed_content` was
+        dead. s36 asserts the second of those and *skips* when git declines to merge a contained
+        branch, which is how it stayed unnoticed: the assertion never ran. This scenario reaches
+        the same state through the flow a pull request actually takes — record on the branch, then
+        merge it — so there is nothing for git to decline and no skip available.
+        """
+        fx = self.fixture(bootstrapped=False)
+        fx.bootstrap()
+        fx.git("checkout", "-q", "-b", "pr/41")
+        fx.write("docs/source.txt", "44 of 35\n")
+        work = fx.sync_and_commit("feat: a milestone closes, figure regenerated")
+        recorded = fx.reconcile("--record", "--here", "--note", "fixture: reviewed on the branch",
+                               push=False)
+        self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
+        fx.commit("record the reconciliation on the branch")
+        branch_tip = fx.head()
+        fx.git("checkout", "-q", "main")
+        fx.git("merge", "-q", "--no-ff", "pr/41", "-m", "Merge pull request 41 from pr/41")
+        merge = fx.head()
+        self.assertEqual(len(fx.git("rev-list", "--parents", "-n1", "HEAD").split()), 3,
+                         "this must be a real merge commit, not a fast-forward")
+        state = fx.state()
+        self.assertIn(work, state["inspected_commits"],
+                      "the branch work was recorded before the merge, which is the whole point")
+        self.assertIn(merge, state["merges_cleared_by_reviewed_content"],
+                      "the merge is clear *because of its content*, and the state has to say so")
+        self.assertEqual(state["outstanding"], [], f"{state}\n{fx.read().stdout}")
+        done = fx.read()
+        self.assert_current(done)
+        self.assertIn("cleared because every commit they introduce is reviewed", done.stdout,
+                      "the line an operator reads has to carry the statistic, not just the verdict")
+        self.assertIn("1 on the first-parent line (0 needing inspection", done.stdout,
+                      "the merge is the only first-parent commit, it is not counted as needing "
+                      "inspection, and it is not swept into `generated-output only` either — which "
+                      "is exactly the misfiling this scenario exists to catch")
+        self.assertIn("1 merge(s) cleared", done.stdout)
+        named = [c["sha"] for c in state["commits_since_boundary"]]
+        self.assertEqual(len(named), 1,
+                         f"only the merge is on the first-parent line: {named}")
+        cleared = state["merges_cleared_by_reviewed_content"]
+        self.assertEqual(cleared, [merge],
+                         "and it is accounted for as a merge cleared by its content")
+        del branch_tip
+
+
 class TheToolItselfIsSoundTest(unittest.TestCase):
     """Properties of the script that need no repository, checked against its source.
 
@@ -1018,8 +1219,12 @@ class TheToolItselfIsSoundTest(unittest.TestCase):
 
     def test_the_three_exit_codes_are_the_documented_ones(self):
         main = self.source[self.source.index("def main("):]
-        self.assertIn("return 1 if state[\"outstanding\"] else 0",
-                      self.source[self.source.index("def report("):])
+        body = self.source[self.source.index("def report("):]
+        self.assertIn("return 1 if verdict else 0", body,
+                      "both output modes must answer with one verdict")
+        self.assertIn("verdict = bool(state[\"outstanding\"]) or bool(", body,
+                      "the verdict is `outstanding` or a failed generated-output agreement, "
+                      "never `outstanding` alone: an empty list is not the same as a clean tree")
         self.assertIn("except Outstanding as", main)
         self.assertIn("except ReconcileError as", main)
         self.assertIn("return 2", main)
