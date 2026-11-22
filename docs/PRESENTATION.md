@@ -236,6 +236,7 @@ inferred, in a tracked file: `docs/evidence/dashboard-reconciliation.json`, sche
 | `figures_changed`, `readme_changed` | whether the reconciliation moved the artwork or only confirmed it; "nothing displayed changed" is a result, and it is recorded as one |
 | `generated_output_pending_commit` | the figures and README blocks `--record` found uncommitted, which the follow-up commit is expected to carry |
 | `verification` | each command, its argv and the exit code it really returned; a non-zero entry makes the receipt unusable, so a receipt cannot be written over a red gate |
+| `generated_output_agreement` | read-side only, not a receipt field: when a range would be cleared by the generated-output exemption, the reconciler runs both gates against the checkout and records the result here. Non-empty means the output does not match its data, and the run is `OUTSTANDING` for that reason alone — the exemption is a premise, and it is tested rather than assumed. It is tested against **this checkout**, which is why the duty says to run it where `HEAD` is the target |
 | `complete`, `incomplete_reason` | the explicit incomplete marker: an unfinished reconciliation reads as outstanding, never as clean |
 
 **How a merge is detected.** `git rev-list --first-parent <boundary>..<target>` and, for

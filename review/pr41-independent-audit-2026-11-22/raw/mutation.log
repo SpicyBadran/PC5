@@ -1,0 +1,19 @@
+control                                                        patch        pres-check   docs-check  tests      caught by
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+1. force every ladder cell green (the original M1 class)       applied      exit 0       exit 0      exit 1     CAUGHT: tests exit 1
+2. not_started rendered with the complete colour               applied      exit 0       exit 0      exit 1     CAUGHT: tests exit 1
+3. the blocked marker removed, so blocked reads as not start   applied      exit 0       exit 0      exit 1     CAUGHT: tests exit 1
+3b. a state label in the legend changed to a neutral word      applied      exit 2       exit 0      exit 1     CAUGHT: presentation-check exit 2; tests exit 1
+4. inflate the milestones-verified metric in the README tabl   applied      exit 0       exit 0      exit 1     CAUGHT: tests exit 1
+5. count a citation as a filed evidence record                 applied      exit 0       exit 0      exit 1     CAUGHT: tests exit 1
+6. skip the filesystem check of cited paths                    applied      exit 0       exit 0      exit 1     CAUGHT: tests exit 1
+7. an SVG text collision introduced into the committed asset   applied      exit 2       exit 0      exit 1     CAUGHT: presentation-check exit 2; tests exit 1
+8. a truncated label (ellipsis) in the committed figure        applied      exit 2       exit 0      exit 1     CAUGHT: presentation-check exit 2; tests exit 1
+9. the dashboard asset deleted                                 applied      exit 2       exit 2      exit 1     CAUGHT: presentation-check exit 2; docs-check exit 2; tests exit 1
+10. the generator itself made to fail                          applied      exit 2       exit 0      exit 0     CAUGHT: presentation-check exit 2
+11. a Git subprocess fails and the answer is swallowed         applied      exit 0       exit 0      exit 1     CAUGHT: tests exit 1
+12. verification removed from the record path altogether       applied      exit 0       exit 0      exit 1     CAUGHT: tests exit 1
+13. generated output no longer exempted, so the loop never c   applied      exit 0       exit 0      exit 1     CAUGHT: tests exit 1
+
+14/14 controls caught; 0 missed; 0 needles failed to patch
+battery exit=0

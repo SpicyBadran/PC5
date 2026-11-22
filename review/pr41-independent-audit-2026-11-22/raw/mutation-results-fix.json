@@ -1,0 +1,349 @@
+[
+  {
+    "control": "1. force every ladder cell green (the original M1 class)",
+    "patch": "applied",
+    "resync": true,
+    "presentation_check": {
+      "exit": 0,
+      "out": "PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links "
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (failures=2)",
+      "suites": [
+        "tests.test_progress_matrix"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "tests exit 1"
+    ]
+  },
+  {
+    "control": "2. not_started rendered with the complete colour",
+    "patch": "applied",
+    "resync": true,
+    "presentation_check": {
+      "exit": 0,
+      "out": "PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links "
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (failures=5)",
+      "suites": [
+        "tests.test_progress_matrix",
+        "tests.test_presentation"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "tests exit 1"
+    ]
+  },
+  {
+    "control": "3. the blocked marker removed, so blocked reads as not started",
+    "patch": "applied",
+    "resync": true,
+    "presentation_check": {
+      "exit": 0,
+      "out": "PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links "
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (failures=4)",
+      "suites": [
+        "tests.test_progress_matrix"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "tests exit 1"
+    ]
+  },
+  {
+    "control": "3b. a state label in the legend changed to a neutral word",
+    "patch": "applied",
+    "resync": false,
+    "presentation_check": {
+      "exit": 2,
+      "out": "make: *** [Makefile:312: presentation-check] Error 1"
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (failures=1)",
+      "suites": [
+        "tests.test_progress_matrix",
+        "tests.test_presentation"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "presentation-check exit 2",
+      "tests exit 1"
+    ]
+  },
+  {
+    "control": "4. inflate the milestones-verified metric in the README table",
+    "patch": "applied",
+    "resync": true,
+    "presentation_check": {
+      "exit": 0,
+      "out": "PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links "
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (failures=2)",
+      "suites": [
+        "tests.test_progress_matrix",
+        "tests.test_presentation"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "tests exit 1"
+    ]
+  },
+  {
+    "control": "5. count a citation as a filed evidence record",
+    "patch": "applied",
+    "resync": true,
+    "presentation_check": {
+      "exit": 0,
+      "out": "PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links "
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (failures=1)",
+      "suites": [
+        "tests.test_progress_matrix",
+        "tests.test_presentation"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "tests exit 1"
+    ]
+  },
+  {
+    "control": "6. skip the filesystem check of cited paths",
+    "patch": "applied",
+    "resync": true,
+    "presentation_check": {
+      "exit": 0,
+      "out": "PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links "
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (failures=2)",
+      "suites": [
+        "tests.test_progress_matrix"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "tests exit 1"
+    ]
+  },
+  {
+    "control": "7. an SVG text collision introduced into the committed asset",
+    "patch": "applied",
+    "resync": false,
+    "presentation_check": {
+      "exit": 2,
+      "out": "make: *** [Makefile:312: presentation-check] Error 1"
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (failures=3)",
+      "suites": [
+        "tests.test_progress_matrix",
+        "tests.test_presentation"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "presentation-check exit 2",
+      "tests exit 1"
+    ]
+  },
+  {
+    "control": "8. a truncated label (ellipsis) in the committed figure",
+    "patch": "applied",
+    "resync": false,
+    "presentation_check": {
+      "exit": 2,
+      "out": "make: *** [Makefile:312: presentation-check] Error 1"
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (failures=5)",
+      "suites": [
+        "tests.test_progress_matrix"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "presentation-check exit 2",
+      "tests exit 1"
+    ]
+  },
+  {
+    "control": "9. the dashboard asset deleted",
+    "patch": "applied",
+    "resync": false,
+    "presentation_check": {
+      "exit": 2,
+      "out": "make: *** [Makefile:312: presentation-check] Error 1"
+    },
+    "docs_check": {
+      "exit": 2,
+      "out": "make: *** [Makefile:379: docs-check] Error 1"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (errors=11)",
+      "suites": [
+        "tests.test_progress_matrix",
+        "tests.test_presentation"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "presentation-check exit 2",
+      "docs-check exit 2",
+      "tests exit 1"
+    ]
+  },
+  {
+    "control": "10. the generator itself made to fail",
+    "patch": "applied",
+    "resync": false,
+    "presentation_check": {
+      "exit": 2,
+      "out": "make: *** [Makefile:312: presentation-check] Error 1"
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 0,
+      "out": "OK",
+      "suites": [
+        "tests.test_presentation"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "presentation-check exit 2"
+    ]
+  },
+  {
+    "control": "11. a Git subprocess fails and the answer is swallowed",
+    "patch": "applied",
+    "resync": false,
+    "presentation_check": {
+      "exit": 0,
+      "out": "PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links "
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (failures=47)",
+      "suites": [
+        "tests.test_dashboard_reconcile"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "tests exit 1"
+    ]
+  },
+  {
+    "control": "12. verification removed from the record path altogether",
+    "patch": "applied",
+    "resync": false,
+    "presentation_check": {
+      "exit": 0,
+      "out": "PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links "
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (failures=5, skipped=1)",
+      "suites": [
+        "tests.test_dashboard_reconcile"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "tests exit 1"
+    ]
+  },
+  {
+    "control": "13. generated output no longer exempted, so the loop never closes",
+    "patch": "applied",
+    "resync": false,
+    "presentation_check": {
+      "exit": 0,
+      "out": "PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links "
+    },
+    "docs_check": {
+      "exit": 0,
+      "out": "DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve"
+    },
+    "tests": {
+      "exit": 1,
+      "out": "FAILED (failures=4, skipped=1)",
+      "suites": [
+        "tests.test_dashboard_reconcile"
+      ]
+    },
+    "verdict": "CAUGHT",
+    "caught_by": [
+      "tests exit 1"
+    ]
+  }
+]

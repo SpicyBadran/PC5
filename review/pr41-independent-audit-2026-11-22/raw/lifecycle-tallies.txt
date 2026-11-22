@@ -1,0 +1,24 @@
+part A (scenarios 1-13, 36 assertions): 24 scenario results, 24 as documented
+part B (14-30): 24 scenario results, 20 as documented
+   DIVERGES  16. presentation-check red on main blocks the record
+     command : --record
+     expected: exit 2 :: exit 2, refusing
+     actual  : exit 0 :: refusal text present: False
+     tree_mutated: False   key_output: []
+   DIVERGES  27. a range commit that edits the receipt to name itself
+     command : python3 tools/dashboard_reconcile.py
+     expected: exit 1 :: the duty should not be discharged by a commit inside the range naming itself; a `--record` run (which executes the gates) should be the only way names
+     actual  : exit 0 :: presentation-check on the same tree exits 1
+     tree_mutated: False   key_output: ["CURRENT — every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"]
+   DIVERGES  29. no-op merge (empty diff, two parents)
+     command : python3 tools/dashboard_reconcile.py
+     expected: exit 1 :: exit 1: a merge with no content is still a merge that must be recorded as reviewed
+     actual  : exit 0 :: after reconcile: exit 0
+     tree_mutated: False   key_output: ["CURRENT — every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"]
+   DIVERGES  30. `--record --boundary <bogus> --inspect <bogus>` without `--bootstrap`
+     command : --record --boundary 000… --inspect 000… --dry-run
+     expected: exit 2 :: either the flags are honoured, or the tool says it is ignoring them; silently dropping an explicit boundary is a UX defect
+     actual  : exit 0 :: ignored flags would show up as exit 0 'nothing to record'
+     tree_mutated: False   key_output: ['nothing to record: every change since the boundary is either named in the receipt or confined to generated output']
+part C (31-36): 6 scenario results, 6 as documented
+TOTAL 50/54 assertions as documented

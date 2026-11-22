@@ -1,0 +1,49 @@
+=== verify1.log (fresh clone, PR #41 head) ===
+1252:Ran 1037 tests in 104.066s
+1254:OK (skipped=110)
+1353:make check exit=0
+HEAD=5bc5d5d4353f2e2c520224fd48711556b0054fc4
+python3 -m psm.contract
+python3 tools/docs_check.py
+
+=== fix-check.log (fix branch) ===
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+nothing was written
+make check exit=0
+
+=== metrics.py ===
+metrics exit=0
+35/35 checks reproduce the displayed value; 0 do not
+
+raw: states {'complete': 9, 'in_progress': 2, 'blocked': 6, 'not_started': 18}; ops {'implemented': 56, '**UNSUPPORTED by design**': 8}; claims {'PUBLIC': 6, 'INFERRED': 9, 'UNKNOWN': 21, 'RESTRICTED': 2}; validation {'boot-test': 'passed', 'check': 'passed', 'docs-check': 'passed', 'kernel64': 'passed', 'ovmf-test': 'not-tested', 'presentation-check': 'passed', 'roadmap': 'passed', 'stubtest': 'passed', 'stubtest64': 'passed', 'uefi64': 'passed', 'verify': 'passed'}
+
+=== lifecycle tallies ===
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "<string>", line 3, in <listcomp>
+KeyError: 'label'
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "<string>", line 3, in <listcomp>
+KeyError: 'label'
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "<string>", line 3, in <listcomp>
+KeyError: 'label'
+
+=== #41 diff, file by file ===
+ .github/PULL_REQUEST_TEMPLATE.md    |    3 +-
+ AGENTS.md                           |  100 ++--
+ CONTRIBUTING.md                     |   27 +-
+ Makefile                            |   16 +-
+ README.md                           |   18 +-
+ docs/PRESENTATION.md                |  107 +++-
+ docs/TEST_RESULTS.md                |  151 +++++
+ docs/assets/pc5-progress-matrix.svg |  289 +++++-----
+ tests/test_dashboard_reconcile.py   | 1052 +++++++++++++++++++++++++++++++++++
+ tests/test_presentation.py          |   86 ++-
+ tests/test_progress_matrix.py       |  384 +++++++++++++
+ tools/dashboard_reconcile.py        |  843 ++++++++++++++++++++++++----
+ tools/presentation.py               |  172 +++++-
+ 13 files changed, 2928 insertions(+), 320 deletions(-)

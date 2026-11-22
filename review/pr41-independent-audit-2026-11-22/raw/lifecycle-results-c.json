@@ -1,0 +1,81 @@
+[
+  {
+    "scenario": "31. a foreign receipt is annotated, not silently trusted, and not silently rejected",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 0 about this repository's state, with the NOTE printed",
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "tree_mutated": false,
+    "pass": true,
+    "actual": "NOTE present: True",
+    "key_output": [
+      "NOTE the receipt vouches for 'somebody/else', and this checkout's origin is 'pc5life-s31-xusoo_i4/origin': the SHAs below were resolved here, so a commit that exists in a fork is honoured even though the receipt was written elsewhere. That is auditable, not trusted.",
+      "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+    ]
+  },
+  {
+    "scenario": "32. git is not runnable (PATH stripped)",
+    "command": "python3 tools/dashboard_reconcile.py with PATH=/nonexistent",
+    "expected": "exit 2 with a diagnostic; not a traceback, not a green",
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "tree_mutated": false,
+    "pass": true,
+    "key_output": [
+      "ERROR \u2014 cannot resolve the primary branch from origin/main, origin/HEAD: fetch it first (`git fetch origin main`), or name it with --target <ref>. A local branch is deliberately not a fallback \u2014 the checked-out branch says nothing about what has landed on the primary branch, and a stale local copy of `main` says less than nothing. Pass --here to reconcile the checked-out branch on purpose, and read the limits that prints."
+    ]
+  },
+  {
+    "scenario": "33. a second merge after a legitimate record is still reported",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 1 naming the second merge's unreviewed content",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "tree_mutated": false,
+    "pass": true,
+    "actual": "first merge cleared by the record; names e023d83e1739: True",
+    "key_output": [
+      "OUTSTANDING 04b291231bdf  2026-11-20  [merge]  Merge b",
+      "OUTSTANDING \u2014 a successful change on the primary branch has not been reconciled with the dashboard"
+    ]
+  },
+  {
+    "scenario": "34. an octopus merge: both introduced lines are scrutinised",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "exit 1; neither side commit is waved through",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "tree_mutated": false,
+    "pass": true,
+    "actual": "names x 83dc6a3eac0c: True | y 240cfef09bf8: True",
+    "key_output": [
+      "OUTSTANDING 3a479241efea  2026-11-20  [merge]  Merge x and y (octopus)",
+      "OUTSTANDING \u2014 a successful change on the primary branch has not been reconciled with the dashboard"
+    ]
+  },
+  {
+    "scenario": "35. reverse-oriented merge fast-forwarded onto main",
+    "command": "python3 tools/dashboard_reconcile.py",
+    "expected": "the branch commit is on the first-parent line (it is the fast-forward target) and the landed docs commit is still unreviewed: exit 1 listing both",
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "tree_mutated": false,
+    "pass": true,
+    "actual": "range members: ['fbc809af8e6f', 'dd2cbfccc39f', '06b2f937c1fe']",
+    "key_output": [
+      "OUTSTANDING dd2cbfccc39f  2026-11-20  [single-parent]  main: a landed docs change",
+      "OUTSTANDING 06b2f937c1fe  2026-11-20  [single-parent]  feat: a roadmap change",
+      "OUTSTANDING \u2014 a successful change on the primary branch has not been reconciled with the dashboard"
+    ]
+  },
+  {
+    "scenario": "36. --target accepts refs, and a commit-ish must still resolve to a branch-like ref for the receipt",
+    "command": "--target <short sha> / --target HEAD",
+    "expected": "documented behaviour: --target takes any rev the operator names explicitly (AGENTS.md passes origin/main); a short SHA resolves, and no claim anywhere says commits are refused",
+    "exit_code": 0,
+    "expected_exit_code": 2,
+    "tree_mutated": false,
+    "pass": true,
+    "actual": "--target <short sha> exits 0, --target HEAD exits 0; both resolve. The author's report claim that '--target cannot point at a commit' is therefore not supported (see FINDINGS F-6)"
+  }
+]

@@ -1,0 +1,96 @@
+# SHA and artifact register — PR #41 independent audit, 2026-11-22
+
+All four SHAs re-read from GitHub at 2026-11-22T05:24:13Z (raw/probed-at.txt, raw/refs.txt).
+
+## Commits and refs (GitHub, live)
+main                                        52f682c8435956c8210b3189cad23ebea973d2de
+#40 head = feat/readme-progress-dashboard   8e3f0b642a92c2d2e27ba6d2a066803a70165697
+#41 head = fix/dashboard-reconciliation-receipts  5bc5d5d4353f2e2c520224fd48711556b0054fc4
+#37 head d09949226c39052fa04827c2c9b440129735a312
+#38 head c7571e4af4bf329daa0bbffdc6b4fd4ad97e5c46
+#39 head 003bbdcdef29bdeada06b029828487caa8f6b058
+git merge-base(5bc5d5d, 8e3f0b6)             8e3f0b642a92c2d2e27ba6d2a066803a70165697
+git rev-list --count 8e3f0b6..5bc5d5d        9
+git rev-list --count 5bc5d5d..8e3f0b6         0
+PR #41 diff: 13 files, +2928/-320
+
+## Corrective branch (this work, pushed as a draft PR against #41's head ref)
+
+  dd87b22e17c2aaa7991133771765f497495b7e33  docs: the independent audit of #41, and the evidence behind the fix on this branch   <- tip, pushed
+  52c6f95bd416cbabc6633f0cf2a7d434334bcb87  docs: say what the receipt certifies, and that the exemption is tested rather than granted
+  d2c5e43c598e8a64ffce8bd910efb801a7a9d102  fix: `--json` answers with an object when the answer is a refusal, and tests s39–s45 land
+  20874e9c91decd52fd83a7dea201fed959549f22  fix: test the exemption instead of granting it, and stop clearing what was never reviewed
+  dfb9aaa7009ecc1d9d906810df795b2722ed2c07  test: six lifecycle scenarios the audit found the tool could not fail
+  5bc5d5d4353f2e2c520224fd48711556b0054fc4  (base = #41's head, untouched)
+
+  Pushed as a *new* ref: `git push -u origin fix/reconcile-exemption-is-verified` (exit 0), verified
+  with `git ls-remote origin refs/heads/fix/reconcile-exemption-is-verified`. No existing branch was
+  pushed to, `main` was not touched, and no force-push was used — the tip above is a fast-forward
+  from `5bc5d5d`.
+
+## Content hashes: reviewed head (5bc5d5d) vs the fix branch
+
+| file | sha256 @ 5bc5d5d | sha256 on the fix branch | |
+|---|---|---|---|
+| `tools/dashboard_reconcile.py` | `4a08650e6d86abf0…` | `e04e95bb73a50ddb…` | changed by the fix |
+| `tests/test_dashboard_reconcile.py` | `e27b9880ca7759dc…` | `7de7b746af783639…` | changed by the fix |
+| `tools/presentation.py` | `7454361c1b76902d…` | `7454361c1b76902d…` | IDENTICAL |
+| `docs/assets/pc5-progress-matrix.svg` | `c520fe55d053ce9a…` | `c520fe55d053ce9a…` | IDENTICAL |
+| `docs/assets/pc5-dashboard.svg` | `8c0ac61aed05e35c…` | `8c0ac61aed05e35c…` | IDENTICAL |
+| `README.md` | `1e8bd015eee4c943…` | `1e8bd015eee4c943…` | IDENTICAL |
+| `AGENTS.md` | `43b87b17db29beed…` | `5b704296250519e2…` | changed by the fix |
+| `CONTRIBUTING.md` | `588fb7c752a745c3…` | `b24d26a053bec454…` | changed by the fix |
+| `docs/PRESENTATION.md` | `cb64f5f9c4798823…` | `2f0b83195c86806d…` | changed by the fix |
+| `Makefile` | `1acac158d3767ab3…` | `1acac158d3767ab3…` | IDENTICAL |
+
+The artwork and the generator are byte-identical on the fix branch — `tools/presentation.py`,
+both SVGs, `Makefile` and `README.md` are untouched, which is what `presentation-check` exiting 0
+on this branch asserts from the other direction. Only the reconciler, its test module, and the three
+documentation files differ.
+## Evidence files (raw/)
+
+| file | bytes | sha256 (first 16) | |
+|---|---|---|---|
+| `ahead-behind.txt` | 613 | `5e81cd1b8a5457dd…` | api/text |
+| `cs41.json` | 24312 | `0fde00677f759188…` | json |
+| `fix-check.log` | 177659 | `208f57dba7158f6d…` | log |
+| `fix-check3.log` | 177898 | `69e66cf5452cf6e1…` | log |
+| `gh-probes.txt` | 1552 | `dd9c61ba56b8c4ec…` | api/text |
+| `lifecycle-results-b.json` | 13664 | `c76f2d3d8d8e1cb4…` | json |
+| `lifecycle-results-c.json` | 4242 | `96fe881961cc3880…` | json |
+| `lifecycle-results.json` | 13673 | `ad5b869ec077333e…` | json |
+| `lifecycle-tallies.txt` | 1973 | `31b9cc3dabd7108f…` | api/text |
+| `lifecycle_a.py` | 11314 | `a3a224303c6cbba6…` | harness |
+| `lifecycle_b.py` | 22770 | `acaf42cdef7a3fb0…` | harness |
+| `lifecycle_c.py` | 7884 | `dd23ecd5c06bb5ec…` | harness |
+| `lifecycle_lib.py` | 11509 | `02fb3fbff252269f…` | harness |
+| `metrics-output.txt` | 5923 | `e9061627387e1d57…` | api/text |
+| `metrics.py` | 15448 | `1d3df5d15b0bc8d0…` | harness |
+| `mutate.py` | 8616 | `200c62256ad3c926…` | harness |
+| `mutation-fix.log` | 2355 | `ab0eeb4cbf859a5c…` | log |
+| `mutation-results-fix.json` | 9294 | `b6400bdcebcfaa43…` | json |
+| `mutation-results.json` | 9294 | `107894cbbf571dbc…` | json |
+| `mutation.log` | 2355 | `ab0eeb4cbf859a5c…` | log |
+| `pr37.err` | 0 | `e3b0c44298fc1c14…` | api/text |
+| `pr37.json` | 26668 | `e267a30f461d558a…` | json |
+| `pr38.err` | 0 | `e3b0c44298fc1c14…` | api/text |
+| `pr38.json` | 19432 | `ac7562fd91eff0d1…` | json |
+| `pr39.err` | 0 | `e3b0c44298fc1c14…` | api/text |
+| `pr39.json` | 20514 | `c4447ab4e23e1571…` | json |
+| `pr40.err` | 0 | `e3b0c44298fc1c14…` | api/text |
+| `pr40.json` | 21776 | `5acd6b7c86fcc838…` | json |
+| `pr41.err` | 0 | `e3b0c44298fc1c14…` | api/text |
+| `pr41.json` | 29102 | `0523c2b087ff6336…` | json |
+| `probed-at.txt` | 21 | `4481389e165c576e…` | api/text |
+| `refs.txt` | 515 | `324c682b2a85d473…` | api/text |
+| `summary.txt` | 2229 | `1ba9e8fc98feba36…` | api/text |
+| `verify1.log` | 176208 | `e353e86ade2cec1f…` | log |
+## Reproduction
+  cd /tmp/audit41 && TMPDIR=/tmp python3 lifecycle_a.py   # part A, 24 checks
+  cd /tmp/audit41 && TMPDIR=/tmp python3 lifecycle_b.py   # part B, 24 checks (4 divergences)
+  cd /tmp/audit41 && TMPDIR=/tmp python3 lifecycle_c.py   # part C, 6 checks
+  cd /tmp/audit41 && TMPDIR=/tmp python3 metrics.py /tmp/audit41/pr41    # 35/35 recomputations
+  cd /tmp/audit41 && TMPDIR=/tmp python3 mutate.py        # 14 controls vs 5bc5d5d
+  cd /tmp/audit41 && TMPDIR=/tmp python3 mutate_fix.py    # 14 controls vs the fix branch
+  Scratch trees live under /tmp (pc5life-*, mut, mutfix, before, verify1, fixhead) and are
+  disposable; none of them is a user workspace, and /home/user/* was not written by this audit.

@@ -1,0 +1,18 @@
+=== protection (main) ===
+{"message":"Resource not accessible by integration","documentation_url":"https://docs.github.com/rest/branches/branch-protection#get-branch-protection","status":"403"}gh: Resource not accessible by integration (HTTP 403)
+=== protection enabled ===
+{"message":"Branch not found","documentation_url":"https://docs.github.com/rest/branches/branches#get-a-branch","status":"404"}gh: Branch not found (HTTP 404)
+=== workflows on main ===
+{"message":"Not Found","documentation_url":"https://docs.github.com/rest/repos/contents#get-repository-content","status":"404"}gh: Not Found (HTTP 404)
+=== actions/workflows ===
+0
+=== runs for each head ===
+8e3f0b642a92c2d2e27ba6d2a066803a70165697 check-runs=0 status=8e3f0b642a92c2d2e27ba6d2a066803a70165697
+5bc5d5d4353f2e2c520224fd48711556b0054fc4 check-runs=0 status=5bc5d5d4353f2e2c520224fd48711556b0054fc4
+=== reviews/comments ===
+#40 comments=0 reviews=0 review-comments=0
+#41 comments=0 reviews=0 review-comments=0
+=== receipt on each ref ===
+main -> {"message":"Not Found","documentation_url":"https://docs.github.com/rest/repos/contents#get-repository-content","status":"404"}gh: Not Found (HTTP 404)
+feat%2Freadme-progress-dashboard -> {"message":"Not Found","documentation_url":"https://docs.github.com/rest/repos/contents#get-repository-content","status":"404"}gh: Not Found (HTTP 404)
+fix%2Fdashboard-reconciliation-receipts -> {"message":"Not Found","documentation_url":"https://docs.github.com/rest/repos/contents#get-repository-content","status":"404"}gh: Not Found (HTTP 404)
