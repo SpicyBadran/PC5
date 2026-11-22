@@ -43,35 +43,47 @@ timeout 260 "$QEMU" -machine q35 -m 512 \
 `build/pc5.iso` here is the **release artifact**, produced by `make PC5_UEFI=64 iso` with
 `BOOTX64.EFI` = `build/uefi64/bootx64.efi` and `KERNEL64.BIN` = `build/kernel64.bin`:
 
+The ISO whose boot is on file in this directory, and the three digests measured while getting this
+right:
+
+| Built from | `pc5.iso` SHA-256 (`SOURCE_DATE_EPOCH=1700000000`) | Booted here? |
+| --- | --- | --- |
+| `4a3e69c` | `d8e4e2a70f195abca8c33a0f6f8ffee8f4d403630cccef9690e600ea20248caf` | yes — first genuine 64-bit boot; log differed only in `spins=5377` |
+| `e784f66` (tree = `main` `964b61e`) | `d6778d0efa4ff6e450c9272a423ce33618d84d5f081cb41f8034dfe0dc060396` | yes — 68 lines, `spins=9583` |
+| `main` `2a5b206` | `370a85f9be90bdea3207b1f81d25f43a0165fcf236813d75749962a046c6c94f` | **yes, and [`ovmf64-serial.log`](ovmf64-serial.log) is this boot** |
+
+All three are 1806336 bytes, all three reached `PC5-64BIT-LONG-MODE-OK` / `PC5-64-DONE` with no
+`PC5-64-LOADER-FAIL` line, and any two differ in exactly one line of 68: `PC5-64-TIMER spins=`
+(5377 / 9583 / 9174), which is TCG scheduling and not a property of the image.
+
 ```
-# fresh clone of main at 964b61e (tree identical to e784f66), two BUILD directories
-$ SOURCE_DATE_EPOCH=1700000000 make BUILD=/tmp/m1 PC5_UEFI=64 iso
-$ sha256sum /tmp/m1/pc5.iso
-d6778d0efa4ff6e450c9272a423ce33618d84d5f081cb41f8034dfe0dc060396  /tmp/m1/pc5.iso   (1806336 bytes)
+$ SOURCE_DATE_EPOCH=1700000000 make BUILD=/tmp/m2 PC5_UEFI=64 iso      # fresh clone of 2a5b206
+$ sha256sum /tmp/m2/pc5.iso
+370a85f9be90bdea3207b1f81d25f43a0165fcf236813d75749962a046c6c94f  /tmp/m2/pc5.iso
 ```
 
-`ovmf64-serial.log` is the boot of *that* file: 68 lines, no `PC5-64-LOADER-FAIL`, ending
-`PC5-64BIT-LONG-MODE-OK` / `PC5-64-DONE`.
+**Why the digests differ while nothing relevant changed, and the limit that follows from it.**
+`BUILDINFO.TXT` carries the source commit, and `docs/BUILDING.md`'s reproducibility claim is
+therefore "this commit reproduces byte for byte", never "this hash is PC5's release hash". Two
+builds of one commit agree across separate `BUILD=` directories; builds of different commits
+cannot, even when only tests and prose differ. One consequence is worth stating instead of
+discovering: **this file can never quote the digest of the commit it is committed in** — editing
+it changes the commit, which changes the ISO. What is reproducible is the recipe: check out the
+commit you care about, run the `make` line above, boot it with the QEMU command above, then run
 
-Two things a reader reproducing this needs to know about the digest, because both bit me while
-writing this file:
+```
+$ bash docs/evidence/2026-11-23-64bit-genuine-ovmf-boot/verification.sh   # expect: OK
+```
 
-* **The clock is in the image.** Built without `SOURCE_DATE_EPOCH` the same tree yields
-  `ff1c2baab92f7a4959346d22112c8a4b10f13644701e3d5e988be0c8701dbec1` — same 1806336 bytes —
-  because the FAT volume's timestamp and serial number come from the clock. So "the release hash"
-  is only meaningful as *the pinned-epoch form*, which is the claim `docs/BUILDING.md` makes and
-  `test_each_mode_rebuilds_byte_identically` in `tests/test_release_esp.py` pins.
-* **The source commit is in the image too**, via `BUILDINFO.TXT`. An ISO built the same way from
-  `4a3e69c` — two commits earlier, when this boot was first obtained — is
-  `d8e4e2a70f195abca8c33a0f6f8ffee8f4d403630cccef9690e600ea20248caf`, and no file that goes into
-  the image changed between them. Two builds of one commit agree byte for byte (verified across
-  two `BUILD=` directories); builds of *different* commits must not be quoted as if they were the
-  same artifact. The 2026-11-23 boot at `4a3e69c` differed from this one by a single line,
-  `PC5-64-TIMER spins=5377` against `spins=9583` — TCG scheduling, nothing more.
-
-Two independent boots of the path are on file in this directory's log and in the notes: apart from
-one timing line (`PC5-64-TIMER spins=701` against `spins=5377`, TCG scheduling), the 68 lines of
-serial output are byte-identical between two separate builds and boots.
+which re-derives 11 assertions from the log in this directory — including that the frame
+allocator's counts follow from the memory map, and that `tr=loaded` is *absent*. A second caveat
+sits alongside, and it is the one that made an earlier draft of this file quote a number nobody
+could reproduce: with no `SOURCE_DATE_EPOCH`, a build of this same loader plus `bootx64.S`
+working tree produced `ff1c2baab92f7a4959346d22112c8a4b10f13644701e3d5e988be0c8701dbec1` —
+measured on 2026-11-23 while the evidence prose was still uncommitted, so it is named here as an
+example of the mechanism (FAT timestamp and serial number come from the clock) and not as a
+reproducible artifact of any commit. Quote a digest with the epoch and the commit, or quote
+neither.
 
 ## The log, and what each line proves
 
