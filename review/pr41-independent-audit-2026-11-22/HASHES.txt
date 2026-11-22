@@ -15,11 +15,18 @@ git rev-list --count 5bc5d5d..8e3f0b6         0
 PR #41 diff: 13 files, +2928/-320
 
 ## Corrective branch (this work, pushed as a draft PR against #41's head ref)
-  52c6f95bd416cbabc6633f0cf2a7d434334bcb87 docs: say what the receipt certifies, and that the exemption is tested rather than granted
-  d2c5e43c598e8a64ffce8bd910efb801a7a9d102 fix: `--json` answers with an object when the answer is a refusal, and tests s39–s45 land
-  20874e9c91decd52fd83a7dea201fed959549f22 fix: test the exemption instead of granting it, and stop clearing what was never reviewed
-  dfb9aaa7009ecc1d9d906810df795b2722ed2c07 test: six lifecycle scenarios the audit found the tool could not fail
-  tip                                   52c6f95bd416cbabc6633f0cf2a7d434334bcb87
+
+  dd87b22e17c2aaa7991133771765f497495b7e33  docs: the independent audit of #41, and the evidence behind the fix on this branch   <- tip, pushed
+  52c6f95bd416cbabc6633f0cf2a7d434334bcb87  docs: say what the receipt certifies, and that the exemption is tested rather than granted
+  d2c5e43c598e8a64ffce8bd910efb801a7a9d102  fix: `--json` answers with an object when the answer is a refusal, and tests s39–s45 land
+  20874e9c91decd52fd83a7dea201fed959549f22  fix: test the exemption instead of granting it, and stop clearing what was never reviewed
+  dfb9aaa7009ecc1d9d906810df795b2722ed2c07  test: six lifecycle scenarios the audit found the tool could not fail
+  5bc5d5d4353f2e2c520224fd48711556b0054fc4  (base = #41's head, untouched)
+
+  Pushed as a *new* ref: `git push -u origin fix/reconcile-exemption-is-verified` (exit 0), verified
+  with `git ls-remote origin refs/heads/fix/reconcile-exemption-is-verified`. No existing branch was
+  pushed to, `main` was not touched, and no force-push was used — the tip above is a fast-forward
+  from `5bc5d5d`.
 
 ## Content hashes: reviewed head (5bc5d5d) vs the fix branch
 
