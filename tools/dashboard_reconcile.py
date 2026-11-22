@@ -318,7 +318,12 @@ def reviewed_ancestry(repo: Path, merge: str, named: set, cache: dict) -> tuple:
     introduced = [sha for sha in git(repo, "rev-list", f"{merge}^1..{merge}").splitlines()
                   if sha and sha != merge]
     if not introduced:
-        return True, []
+        # A merge that introduces nothing — `--no-ff` over an already-contained branch, a sync
+        # merge with no new content — is still a merge that landed. AGENTS.md §1 step 2 says so in
+        # as many words ("a no-op merge is still a merge, and it is recorded as reviewed in step 6
+        # rather than skipped"), so this must not be cleared here: clearing it would be the tool
+        # deciding quietly that a successful merge needs no look.
+        return False, []
     unreviewed = [sha for sha in introduced
                   if sha not in named and not is_generated_output_only(repo, sha, cache)]
     return not unreviewed, unreviewed
@@ -341,6 +346,10 @@ def classify(repo: Path, commit: dict, named: set = frozenset(), cache: dict = N
         covered, unreviewed = reviewed_ancestry(repo, sha, named, cache)
         if covered:
             reason, needs = ("every commit it introduced is already reviewed", False)
+        elif not unreviewed:
+            reason = ("it introduces no commit of its own: a no-op merge is recorded as reviewed "
+                      "rather than skipped (AGENTS.md §1 step 2)")
+            needs = True
         else:
             reason = (f"it introduces {len(unreviewed)} unreviewed commit(s): "
                       + ", ".join(sha[:12] for sha in unreviewed[:6])
@@ -354,6 +363,22 @@ def classify(repo: Path, commit: dict, named: set = frozenset(), cache: dict = N
             "generated_output_only": generated_only,
             "readme_lines_outside_generated_blocks": outside,
             "drivers": drivers}
+
+
+def generated_output_agrees(repo: Path) -> str:
+    """Return "" when the checkout's generated output matches its data, else why it does not.
+
+    This is the premise under the generated-output exemption, tested rather than assumed. It runs
+    the same two verifiers a recording run would, against the tree the operator is standing in —
+    which is the tree `make post-merge` regenerates, and the one a receipt would be written from.
+    A failure is reported as an outstanding inspection, not as an error: the range is readable, the
+    dashboard in it is simply not reconciled, which is exit 1's meaning.
+    """
+    try:
+        verify(repo, lambda line: None)
+    except ReconcileError as exc:
+        return f"its generated output no longer matches the data it renders ({exc})"
+    return ""
 
 
 # ---------------------------------------------------------------- the receipt
@@ -432,21 +457,45 @@ def inspect(repo: Path, target_ref: str, target: str) -> dict:
     receipt = validate_receipt(repo, read_receipt(repo, target), target)
     boundary = receipt["reconciled_at"]
     commits = range_commits(repo, boundary, target)
-    outstanding, reviewed, exempt = [], [], []
+    outstanding, reviewed, exempt, cleared = [], [], [], []
     named = set(receipt.get("inspected_commits") or [])
     cache: dict = {}
     for commit in commits:
         info = commit.setdefault("classification", classify(repo, commit, named, cache))
         entry = {**commit, **info}
-        if not info["requires_inspection"]:
-            exempt.append(entry)
-        elif commit["sha"] in named:
+        # The order matters, and the previous version had it backwards: `named in the receipt` and
+        # `every commit it introduced is already reviewed` both clear a commit, so testing
+        # `requires_inspection` first swept them into `exempt_generated_only`. The effect was that
+        # `recorded_in_receipt` and `merges_cleared_by_reviewed_content` were always empty, and the
+        # report's "N already named in the receipt" line always read 0 — a receipt whose whole
+        # purpose is to say *which* commits were read, reporting that none were.
+        reason = info["reason"]
+        if reason == "named in the receipt":
             reviewed.append(entry)
+        elif reason == "every commit it introduced is already reviewed":
+            cleared.append(entry)
+        elif not info["requires_inspection"]:
+            exempt.append(entry)
         else:
             outstanding.append(entry)
+    exemption = ""
+    if commits and not outstanding:
+        # Whether a clear answer comes from generated output or from a name in the receipt, it
+        # comes from a premise, and the premise is that the figures match their data: that what is on disk is what the
+        # generator produces from the data. `presentation-check` is the only thing that proves it,
+        # and this tool used to exempt by path and then never ask — which let a hand-written
+        # figure, a corrupted one, or a deleted one read as CURRENT, and let a commit that edited
+        # the receipt name its own unreviewed work and walk away green. So the premise is tested
+        # whenever it is load-bearing.
+        #
+        # A failed premise is *not* moved onto the commits: the receipt-only commit in a delivery is
+        # genuinely exempt, and what went stale is the output, which some other commit (or no
+        # commit at all) made stale. Blaming the exempt commits would send the operator to inspect
+        # a commit that changed nothing but generated output. It is reported as its own finding, in
+        # `generated_output_agreement`, and `report` refuses to call the state CURRENT because of it.
+        exemption = generated_output_agrees(repo)
     figures = [c for c in commits if any(p.startswith(GENERATED_OUTPUTS)
                                          for p in c["changed_paths"])]
-    cleared_by_merge = [c for c in reviewed if c["reason"].startswith("every commit")]
     notes = []
     if target_ref.startswith("origin/"):
         # `origin/main` is a *local* record of what the remote holds; if the branch you are
@@ -481,8 +530,10 @@ def inspect(repo: Path, target_ref: str, target: str) -> dict:
              "reason": c["classification"]["reason"],
              "drivers": c["classification"]["drivers"]} for c in commits],
         "outstanding": outstanding,
+        "generated_output_agreement": exemption,
+        "exemption_checked": bool(commits) and not outstanding,
         "recorded_in_receipt": reviewed,
-        "merges_cleared_by_reviewed_content": [c["sha"] for c in cleared_by_merge],
+        "merges_cleared_by_reviewed_content": [c["sha"] for c in cleared],
         "exempt_generated_only": exempt,
         "output_touched_by_range": [c["sha"] for c in figures],
         "verification": receipt.get("verification", []),
@@ -510,9 +561,13 @@ def repository_id(repo: Path) -> str:
 
 # ---------------------------------------------------------------- reporting and writing
 def report(state: dict, json_mode: bool) -> int:
+    # One verdict, two output modes. `outstanding` alone would let `--json` answer 0 about a
+    # range whose generated output disagrees with its data, which is the false green the
+    # exemption check exists to close — and a script reading the exit code would never know.
+    verdict = bool(state["outstanding"]) or bool(state.get("generated_output_agreement"))
     if json_mode:
         print(json.dumps(state, indent=2, sort_keys=True))
-        return 1 if state["outstanding"] else 0
+        return 1 if verdict else 0
     print(f"repository           {state['repository_id']}")
     if not state["repository_matches"]:
         print(f"  NOTE the receipt vouches for {state['receipt_repository']!r}, and this "
@@ -524,6 +579,11 @@ def report(state: dict, json_mode: bool) -> int:
     for line in state.get("notes", []):
         print(f"  {line}")
     print(f"receipt              {state['receipt_path']}")
+    if state.get("exemption_checked"):
+        agreement = state.get("generated_output_agreement") or ""
+        wording = (f"does not match its data: {agreement}" if agreement
+                   else "checked against its data: the exemption is earned")
+        print(f"generated output       {wording}")
     print(f"reconciled boundary  {state['boundary'][:12]}  ({state['boundary_date'][:10]})")
     print(f"summary              {state['summary'] or '(none recorded)'}")
     print(f"figures changed      {state['figures_changed']}   README changed: "
@@ -534,9 +594,9 @@ def report(state: dict, json_mode: bool) -> int:
     via_merge = len(state.get("merges_cleared_by_reviewed_content", []))
     print(f"commits since then   {total} on the first-parent line "
           f"({len(state['outstanding'])} needing inspection, "
-          f"{len(state['recorded_in_receipt']) - via_merge} already named in the receipt, "
+          f"{len(state['recorded_in_receipt'])} already named in the receipt, "
           f"{len(state['exempt_generated_only'])} generated-output only"
-          + (f", {via_merge} merge(s) whose every introduced commit is reviewed"
+          + (f", {via_merge} merge(s) cleared because every commit they introduce is reviewed"
              if via_merge else "") + ")")
     for entry in state["outstanding"]:
         print(f"  OUTSTANDING {entry['sha'][:12]}  {entry['date'][:10]}  "
@@ -545,11 +605,16 @@ def report(state: dict, json_mode: bool) -> int:
             print(f"              drives: {', '.join(entry['drivers'][:4])}")
         else:
             print("              drives: nothing the dashboard counts")
-        if entry["kind"] == "merge" and entry["reason"].startswith("it introduces"):
+        if entry["reason"] not in ("not recorded by any receipt", "generated output only",
+                                   "named in the receipt"):
             print(f"              {entry['reason']}")
-    if state["outstanding"]:
-        print("OUTSTANDING — a successful change on the primary branch has not been "
-              "reconciled with the dashboard")
+    if verdict:
+        if not state["outstanding"]:
+            print("OUTSTANDING — the range is confined to generated output, and that output is "
+                  f"not what its data produces: {state['generated_output_agreement']}")
+        else:
+            print("OUTSTANDING — a successful change on the primary branch has not been "
+                  "reconciled with the dashboard")
         print("  run: make post-merge        # regenerate, verify, and record the receipt")
         print("  then commit the regenerated figures and the receipt together (AGENTS.md)")
         return 1
@@ -588,15 +653,20 @@ def record(repo: Path, target_ref: str, target: str, summary: str, dry_run: bool
                             classify(repo, c, named_all, cache))["requires_inspection"]]
     named = set(previous["inspected_commits"])
     unrecorded = [c for c in need if c["sha"] not in named]
-    if not unrecorded:
-        return 0, ["nothing to record: every change since the boundary is either named in "
-                   "the receipt or confined to generated output"]
-    # A reconciliation writes generated output and the receipt together. Generated output
-    # is exempt from inspection by definition (presentation-check just proved it matches the
-    # data), so a dirty figure is not a reason to refuse the receipt — a dirty source file is.
     pending = uncommitted_changes(repo)
+    # A reconciliation writes generated output and the receipt together. Generated output is
+    # exempt from inspection by definition (the gate just proved it matches the data), so a dirty
+    # figure is not a reason to refuse the receipt — a dirty source file is.
     figures_pending = sorted({p for p in pending if p.startswith(GENERATED_OUTPUTS)})
     results = verify(repo, log.append)
+    if not unrecorded:
+        # Verification runs first, and it runs even when there is nothing to write. A range of
+        # generated-output-only commits used to return here untouched, which meant a stale or
+        # hand-written figure could be "reconciled" by the absence of a receipt update: the gates
+        # the receipt exists to attest were never run. Nothing is written on this path, so
+        # nothing is claimed — but the answer is only honest if the gates were checked.
+        return 0, log + ["nothing to record: every change since the boundary is either named in "
+                         "the receipt or confined to generated output, and the gates above pass"]
     paths = sorted({p for c in unrecorded for p in c["changed_paths"]})
     for commit in commits:                      # a second pass would re-diff every commit
         commit.setdefault("classification", classify(repo, commit))
@@ -774,6 +844,15 @@ def main(argv=None) -> int:
 
     repo = Path(args.repo).resolve()
     try:
+        if (args.boundary or args.inspect) and not args.bootstrap:
+            raise ReconcileError(
+                "--boundary and --inspect belong to --bootstrap: they say where the *first* "
+                "receipt on a line of history starts and what it read. Without --bootstrap this "
+                "run would have ignored them and extended the receipt already on the target, "
+                "which is not what naming a boundary means. Add --bootstrap, or drop the flags.")
+        if args.note and not args.record:
+            raise ReconcileError("--note writes into a receipt, and this run writes none: pass "
+                                 "--record (or --record --bootstrap) with --note")
         target_ref, target = resolve_target(repo, args.target, args.here)
         if args.record:
             if args.bootstrap:
