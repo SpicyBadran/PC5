@@ -90,6 +90,7 @@ Legend for **PC?**: `yes` = ordinary documented PC capability, no refusal-list a
 `no-input` = the required input is not lawfully obtainable; `n/a` = console-side step a PC cannot
 perform at all; `unknown` = not classifiable from public sources.
 
+Rows score the step **as a whole**; a step that is partly satisfiable is not a `yes` row.
 **No row in the table is `yes`.** That is the finding, not an omission: read down the **PC?** column
 and there is not one authentication step on this path that an ordinary, documented PC platform
 capability satisfies end-to-end. §7.3 keeps the two lawful partials in view (S1's file-handling
@@ -113,9 +114,15 @@ share, S9's contract-side work), and they are exactly that — partials of steps
 
 ### 2.1 Why each "no" is a "no"
 
-* **S3, S11 and anything keyed to Sony's keys — `no-input`:** the input required is a key or a
+* **S3 and anything keyed to Sony's keys — `no-input`:** the input required is a key or a
   decrypted artifact. There is no lawful channel that provides it, and acquiring it is on the §6
-  refusal list, so this analysis records the requirement and stops. The repository's own tool says
+  refusal list, so this analysis records the requirement and stops.
+* **S11 and S12 are scored `unknown`, not `no-input`, and the difference is deliberate:** for S3
+  we know what the missing input is (a key) and refuse it; for the entitlement and attestation
+  steps we do not know the interface well enough to name the input at all. Nothing is gained by
+  marking them `RESTRICTED` on a guess, and nothing would be gained by marking them
+  `no-input`: an `unknown` row may not be implemented either, but it also stays open to being
+  answered by a public source later, which a refusal is not. The repository's own tool says
   the same thing at the code level: `tools/firmware.py` notes "The PFS image is AES-XTS encrypted;
   PC5 does not decrypt it." **[fact]**
 * **S2, S4–S10 — `no-anchor` or `n/a`:** a conventional PC *does* have an authenticated boot chain,
