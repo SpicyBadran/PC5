@@ -42,6 +42,7 @@ struct efi_device_path;
 #define EFI_UNSUPPORTED 0x8000000000000003ULL
 #define EFI_BUFFER_TOO_SMALL 0x8000000000000005ULL
 #define EFI_NOT_FOUND 0x800000000000000EULL
+#define EFI_OUT_OF_RESOURCES 0x8000000000000009ULL
 
 #define EFI_ERROR(status) ((s64)(status) < 0)
 #define EFI_WARN_UNKNOWN_GLYPH 1ULL
@@ -210,11 +211,27 @@ struct efi_boot_services {
                                         void **interface);            /* +152 */
     void *reserved;
     void *register_protocol_notify;
-    /* LocateHandle: BufferSize, SearchType, SearchKey, *Buffer.
-     * SearchType 2 = ByProtocol + ByRegisterNotify (all handles on the
-     * device path), which is how the ISO9660 volume is found. */
-    efi_status(EFIAPI *locate_handle)(u64 *buffer_size, u32 search_type,
-                                      void *search_key, efi_handle *buffer);
+    /* LocateHandle, in the order UEFI 2.10 7.3.6 defines it:
+     *
+     *     LocateHandle(SearchType, Protocol, SearchKey, BufferSize, Buffer)
+     *
+     * SearchType comes FIRST and BufferSize FOURTH.  This declaration used to
+     * have BufferSize and SearchType swapped, and every caller was written to
+     * match, so the two errors cancelled inside this tree and the stub firmware
+     * - which mirrors this header - agreed with them.
+     *
+     * Under real OVMF the consequence was EFI_INVALID_PARAMETER on every call:
+     * the size pointer's address arrived as SearchType, and SearchType 2 arrived
+     * as the BufferSize pointer.  Volume enumeration never worked on genuine
+     * firmware in either the 32-bit or the 64-bit loader; the 64-bit boot died
+     * as "kernel-not-found" with the kernel on the volume it had just been
+     * loaded from.
+     *
+     * SearchType 2 = ByProtocol; the protocol is passed in `Protocol`, which is
+     * the second argument and non-NULL for that search type. */
+    efi_status(EFIAPI *locate_handle)(u32 search_type, struct efi_guid *protocol,
+                                      void *search_key, u64 *buffer_size,
+                                      efi_handle *buffer);
     efi_status(EFIAPI *locate_device_path)(struct efi_guid *protocol,
                                            struct efi_device_path **device_path,
                                            efi_handle *device);       /* +184 */

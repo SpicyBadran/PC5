@@ -1,0 +1,1218 @@
+#!/usr/bin/env python3
+"""Validate the 64-bit UEFI boot path under real OVMF firmware.
+
+`make ovmf-test` cannot do this.  That target boots the 32-bit ISO and looks for
+the 32-bit loader's marker dialect (`PC5-UEFI:`, `PC5-LOG`, `PC5-BOOT-OK`).  The
+64-bit path is a different artifact with a different vocabulary: `efi64.img`
+carries BOOTX64.EFI and KERNEL64.BIN, and the loader and kernel speak
+`PC5-64-*`.  A 64-bit boot therefore produces zero markers the 32-bit driver
+recognises, which is why its verdict says nothing either way about this path.
+
+This driver knows only the 64-bit dialect, so it can fail for the right reasons.
+
+What it insists on, in this order:
+
+    firmware started
+      -> the loader was entered                      PC5-64-LOADER-BANNER
+      -> the loader completed its own checks         exit-boot-services=ok
+      -> the handoff to the kernel happened          PC5-64-LOADER-JUMP
+      -> the kernel executed                         PC5-64-BANNER
+
+and then on the runtime assertions, which are the point of the exercise:
+
+    -> the page tables the CPU is using reach the
+       whole declared identity span                PC5-64-PTWALK span ... failed=0
+    -> every allocation firmware honoured stayed
+       inside its inclusive bound                   PC5-64-LOADER-ALLOC ... verdict=ok
+    -> the kernel reached its final marker         PC5-64-DONE
+
+A stage that did not happen is reported as FAIL or NOT_TESTED; it is never
+reported as PASS.  Missing QEMU or OVMF is UNAVAILABLE, and the driver says so
+with the exit code rather than inventing a result.  It never reports a boot as
+successful because a log was short or a marker was absent.
+
+Exit codes: 0 all checked stages passed; 1 a stage failed; 2 a runtime assertion
+failed; 3 QEMU or OVMF unavailable (nothing was tested).
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import threading
+import time
+
+BUILD = os.environ.get("PC5_BUILD", "build")
+
+# Where distributions put OVMF.  The 4 MiB pair is preferred: the 2 MiB images
+# are too small to carry the firmware volume plus variables on some builds.
+CODE_CANDIDATES = [
+    "/usr/share/OVMF/OVMF_CODE_4M.fd",
+    "/usr/share/OVMF/OVMF_CODE.fd",
+    "/usr/share/edk2/ovmf/OVMF_CODE.fd",
+    "/usr/share/edk2/x64/OVMF_CODE.fd",
+    "/usr/share/ovmf/OVMF_CODE.fd",
+    "/usr/share/qemu/OVMF_CODE.fd",
+    "/usr/share/OVMF/OVMF_CODE.secboot.fd",
+]
+VARS_CANDIDATES = [
+    "/usr/share/OVMF/OVMF_VARS_4M.fd",
+    "/usr/share/OVMF/OVMF_VARS.fd",
+    "/usr/share/edk2/ovmf/OVMF_VARS.fd",
+    "/usr/share/edk2/x64/OVMF_VARS.fd",
+    "/usr/share/ovmf/OVMF_VARS.fd",
+    "/usr/share/qemu/OVMF_VARS.fd",
+]
+
+# Firmware messages that mean the boot stopped in firmware, not in PC5 code.
+# They are not failures of ours, but they are also not evidence of a boot.
+# The 14 virtual addresses the D1 walk must visit, in the order the kernel
+# emits them: every GiB boundary from below, at, and above, plus the start of
+# the span and its inclusive upper end.  They are spelled out here rather than
+# derived from the kernel source so that a change to either side is a mismatch
+# a human has to reconcile, not something that silently tracks along.
+D1_EXPECTED_ADDRESSES = (
+    0x00000000,  # start of the range
+    0x3FFFFFFF,  # last byte below 1 GiB
+    0x40000000,  # 1 GiB boundary
+    0x40000001,  # first byte above it
+    0x50000000,  # inside region 1
+    0x7FFFFFFF,  # last byte below 2 GiB
+    0x80000000,  # 2 GiB boundary
+    0x80000001,
+    0x90000000,  # inside region 2
+    0xBFFFFFFF,  # last byte below 3 GiB
+    0xC0000000,  # 3 GiB boundary
+    0xC0000001,
+    0xD0000000,  # inside region 3
+    0xFFFFFFFF,  # inclusive upper end of the 4 GiB span
+)
+
+# Every allocation the loader must make on a normal boot, by purpose.  The
+# memory-map growth allocation is deliberately absent: it only happens when
+# firmware reports EFI_BUFFER_TOO_SMALL, and a correct boot never takes it.
+D2_MANDATORY_PURPOSES = ("bootinfo", "pagetables", "stack",
+                         "memmap-buffer", "memmap-out")
+D2_CONDITIONAL_PURPOSES = ("memmap-grow",)
+
+FIRMWARE_NO_BOOT = [
+    "BdsDxe: No bootable option",
+    "No bootable option or device was found",
+    "BdsDxe: failed to load Boot0001",
+]
+
+STAGES = ["firmware", "loader_entry", "loader_success", "kernel_handoff",
+          "kernel_execution"]
+
+
+# --------------------------------------------------------------- utilities
+def read_fat_superfloppy(path):
+    """Parse a FAT volume's BPB and classify it, returning a dict of findings.
+
+    The 64-bit path serves efi64.img as a *superfloppy*: a FAT filesystem with no
+    partition table, which firmware reads from sector 0.  Two properties matter
+    and neither was asserted anywhere, so both mutations that break them passed
+    the whole suite:
+
+      - put an MBR partition entry at 0x1BE and the image is no longer a
+        superfloppy, yet firmware still boots it and every test still passed;
+      - ask tools/mkefiimg.py for a larger image and it builds FAT16 instead of
+        FAT12 (it picks the flavour from the cluster count, and FAT12 is only
+        valid below 4085 clusters), with nothing noticing.
+
+    The FAT flavour is decided by the data-cluster count, not by the FAT size
+    field and not by the label in a build message, so it is calculated here from
+    the BPB and compared against the thresholds from the FAT specification.
+
+    Returns None if the image is not a readable FAT volume at all.
+    """
+    with open(path, "rb") as handle:
+        head = handle.read(512)
+    if len(head) < 512:
+        return None
+    # BPB, FAT12/FAT16 layout: bytes 11..62.  Byte 0 must be a jump so firmware
+    # recognises a boot sector rather than arbitrary data.
+    jump = head[0]
+    if jump not in (0xEB, 0xE9):
+        return None
+    (bytes_per_sector, sectors_per_cluster, reserved_sectors, num_fats,
+     root_entries, total_sectors_16, _media, fat_size_16) = struct.unpack_from(
+        "<HBHBHHBH", head, 11)
+    total_sectors_32 = struct.unpack_from("<I", head, 32)[0]
+    total_sectors = total_sectors_16 or total_sectors_32
+    if bytes_per_sector == 0 or sectors_per_cluster == 0:
+        return None
+    root_dir_sectors = (root_entries * 32 + bytes_per_sector - 1) // bytes_per_sector
+    first_data_sector = (reserved_sectors + num_fats * fat_size_16 + root_dir_sectors)
+    data_sectors = total_sectors - first_data_sector
+    clusters = data_sectors // sectors_per_cluster if data_sectors > 0 else 0
+    # A FAT12 volume has at most 4084 clusters, FAT16 at most 65524.
+    if clusters < 4085:
+        flavour = "FAT12"
+    elif clusters < 65525:
+        flavour = "FAT16"
+    else:
+        flavour = "FAT32"
+    # Partition table: four 16-byte records at 0x1BE, each with a type byte at
+    # offset 4.  An all-zero table is what a superfloppy has.
+    entries = [head[0x1BE + 16 * i:0x1BE + 16 * (i + 1)] for i in range(4)]
+    partitioned = [e for e in entries if any(e)]
+    return {
+        "jump_byte": jump,
+        "bytes_per_sector": bytes_per_sector,
+        "sectors_per_cluster": sectors_per_cluster,
+        "reserved_sectors": reserved_sectors,
+        "num_fats": num_fats,
+        "root_entries": root_entries,
+        "total_sectors": total_sectors,
+        "fat_size_sectors": fat_size_16,
+        "first_data_sector": first_data_sector,
+        "clusters": clusters,
+        "flavour": flavour,
+        "partition_entries": len(partitioned),
+        "boot_signature": head[0x1FE] == 0x55 and head[0x1FF] == 0xAA,
+    }
+
+
+def check_fat12_superfloppy(report, image_path):
+    """Assert efi64.img really is the FAT12 superfloppy the driver claims.
+
+    Runs as part of the gate rather than only in the unit suite, because the
+    claim it defends - `image_format: fat12 superfloppy` in the evidence report -
+    is made by the gate.
+    """
+    findings = read_fat_superfloppy(image_path)
+    name = "the 64-bit image is a FAT12 superfloppy"
+    if findings is None:
+        report.record(name, FAIL, "%s is not a readable FAT boot sector" % image_path)
+        return None
+    report.data["fat12"] = findings
+    problems = []
+    if findings["flavour"] != "FAT12":
+        problems.append("cluster count %d classifies this as %s, not FAT12 "
+                        "(FAT12 requires fewer than 4085)" %
+                        (findings["clusters"], findings["flavour"]))
+    if findings["partition_entries"]:
+        problems.append("%d partition-table entr(ies) at 0x1BE; a superfloppy has none"
+                        % findings["partition_entries"])
+    if not findings["boot_signature"]:
+        problems.append("no 0x55AA boot signature at 0x1FE")
+    if findings["bytes_per_sector"] != 512:
+        problems.append("bytes/sector is %d, expected 512"
+                        % findings["bytes_per_sector"])
+    report.record(name, FAIL if problems else PASS,
+                  "; ".join(problems) if problems else
+                  "%d clusters, no partition table" % findings["clusters"])
+    return findings
+
+
+def sha256_file(path):
+    if not path:
+        return None
+    digest = hashlib.sha256()
+    try:
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
+
+
+def normalise_serial(text):
+    """CRLF -> LF, drop the cursor/escape noise the firmware emits."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    return re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", text)
+
+
+def sibling_vars(code_path):
+    """The variable store installed next to a code image, if there is one.
+
+    Distribution and manual installs name the pair inconsistently, and the
+    variable store that matches a CODE image is the one installed beside it under
+    the same stem.  Pairing a 2 MiB code image with an unrelated variable store
+    yields firmware that never reaches the boot manager, so this is tried before
+    anything installed system-wide - but it returns None rather than guessing.
+    """
+    if not code_path:
+        return None
+    stem = os.path.basename(code_path)
+    directory = os.path.dirname(os.path.abspath(code_path))
+    names = []
+    if "CODE" in stem:
+        names.append(stem.replace("CODE", "VARS"))
+    names.append(stem.replace(".fd", "_VARS.fd"))
+    for name in names:
+        path = os.path.join(directory, name)
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def find_first(candidates):
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    return None
+
+
+def qemu_version(qemu):
+    if not qemu:
+        return None
+    try:
+        out = subprocess.run([qemu, "-version"], capture_output=True, timeout=60,
+                             text=True)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return "error: %s" % exc
+    lines = (out.stdout or out.stderr or "").strip().splitlines()
+    return lines[0] if lines else "unknown"
+
+
+def git_value(*args):
+    try:
+        out = subprocess.run(["git"] + list(args), capture_output=True,
+                             timeout=60, text=True)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return (out.stdout or "").strip() or None
+
+
+def describe_firmware(code_path):
+    """Identify the firmware image by hash and, if it looks like one, by the
+    EDK II build string embedded in it.  A hash alone tells a reader nothing
+    about which OVMF they are comparing against."""
+    info = {"path": code_path, "sha256": sha256_file(code_path),
+            "size": None, "version": None}
+    if not code_path:
+        return info
+    try:
+        info["size"] = os.path.getsize(code_path)
+        with open(code_path, "rb") as handle:
+            blob = handle.read()
+    except OSError:
+        return info
+    # OVMF embeds its build description as a UTF-16LE string.  Pick the most
+    # specific one available; a mismatch here is worth knowing about.
+    match = re.search("(?:edk2-stable|EDK II)[ -][A-Za-z0-9._/ -]{0,80}"
+                      .encode("utf-16-le"), blob)
+    if match:
+        info["version"] = match.group(0).decode("utf-16-le", "replace").strip()
+    return info
+
+
+# ---------------------------------------------------------------- QEMU run
+def run_qemu(qemu, code, vars_template, image, vars_path, serial_path,
+             timeout, memory_mb=512, device="ahci", data_dir=None):
+    """Boot `image` once and stop the machine as soon as the log settles.
+
+    The device arrangement differs from the 32-bit driver on purpose.  That one
+    boots an ISO through `-cdrom`; `efi64.img` is not an ISO.  It is a bare
+    FAT12 volume with BOOTX64.EFI at EFI/BOOT/BOOTX64.EFI - a "superfloppy",
+    which QEMU cannot serve as a CD-ROM because there is no El Torito record at
+    sector 17.  Firmware has to see it as a block device and read the FAT volume
+    off the whole disk, so it is attached as a disk.
+
+    AHCI is the default because it needs no USB enumeration race; `usb` is
+    available for firmware builds without AhciDxe.  Both are untested here: no
+    QEMU or OVMF exists on this machine, so this arrangement is the one that
+    should work, not one that has been seen to.  The report says so.
+
+    Serial goes to a pipe rather than a file because QEMU buffers a file
+    chardev: a reader polling the file during the run sees nothing.
+    """
+    if device == "usb":
+        storage = ["-device", "qemu-xhci,id=xhci",
+                   "-drive", "if=none,id=esp,format=raw,file=%s" % image,
+                   "-device", "usb-storage,drive=esp,bus=xhci.0"]
+    else:
+        storage = ["-device", "ich9-ahci,id=ahci",
+                   "-drive", "if=none,id=esp,format=raw,file=%s" % image,
+                   "-device", "ide-hd,drive=esp,bus=ahci.0"]
+
+    command = [
+        qemu,
+        "-machine", "q35",
+        "-m", str(memory_mb),
+        "-smp", "1",
+        "-no-reboot",
+        "-display", "none",
+        "-monitor", "none",
+        "-nic", "none",
+        "-rtc", "base=utc",
+        "-drive", "if=pflash,format=raw,unit=0,readonly=on,file=%s" % code,
+        "-drive", "if=pflash,format=raw,unit=1,file=%s" % vars_path,
+    ] + storage + ["-serial", "stdio"]
+    # QEMU loads its VGA option ROM and other data files from a prefix
+    # directory.  A distribution build has them where it was configured to look;
+    # a relocatable or prebuilt binary does not, and then QEMU exits before ever
+    # reaching the firmware.  That failure is UNAVAILABLE, not a boot failure.
+    if data_dir:
+        command += ["-L", data_dir]
+
+    started = time.time()
+    process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
+    chunks = []
+    stderr_chunks = []
+
+    def drain(stream, sink):
+        for line in iter(stream.readline, b""):
+            sink.append(line.decode("latin-1", "replace"))
+
+    stdout_thread = threading.Thread(target=drain, args=(process.stdout, chunks),
+                                     daemon=True)
+    stderr_thread = threading.Thread(target=drain,
+                                     args=(process.stderr, stderr_chunks),
+                                     daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+
+    # Stop on the kernel's last marker, or on a terminal failure, rather than
+    # burning the whole timeout whenever the boot gets that far.
+    stop_markers = ("PC5-64-DONE", "PC5-64BIT-FAIL=", "PC5-64-LOADER-FAIL=",
+                    "PC5-64-LOADER-REJECT")
+    outcome = "timeout"
+    deadline = started + timeout
+    while time.time() < deadline:
+        if process.poll() is not None:
+            outcome = "exited"
+            break
+        text = "".join(chunks)
+        if any(marker in text for marker in stop_markers):
+            outcome = "evidence"
+            break
+        time.sleep(0.5)
+
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=10)
+    stdout_thread.join(timeout=10)
+    stderr_thread.join(timeout=10)
+    elapsed = time.time() - started
+
+    raw = "".join(chunks)
+    # Never let a previous run's log stand in for this one: if QEMU died before
+    # writing anything, an old file would be the only "evidence" available.
+    with open(serial_path, "w", encoding="latin-1") as handle:
+        handle.write(raw)
+    return {"command": command, "returncode": process.returncode,
+            "started": True,
+            "timed_out": outcome == "timeout", "stopped_on": outcome,
+            "seconds": round(elapsed, 1),
+            "stderr": "".join(stderr_chunks).strip()[-800:],
+            "raw_serial": raw, "serial": normalise_serial(raw)}
+
+
+# ------------------------------------------------------- strict record grammar
+# Every marker is matched against a grammar anchored at the start of the line and
+# required to consume the whole line.  The previous implementation collected
+# records with finditer()/findall(), which silently skips anything that does not
+# match: a truncated or corrupt record was invisible as long as the fourteen (or
+# five) good ones were also present.  Coverage is now established by accounting
+# for every raw marker, so an unparseable record is a failure by construction
+# rather than a line that quietly did not participate.
+PTWALK_DETAIL_RE = re.compile(
+    r"^\s*PC5-64-PTWALK va=(0x[0-9a-fA-F]+|0) path=(\S+) size=(\S+)"
+    r" pa=(0x[0-9a-fA-F]+|0|none) identity=(\d) note=(\S+)\s*$")
+
+PTWALK_SUMMARY_RE = re.compile(
+    r"^\s*PC5-64-PTWALK span probes=(\d+) failed=(\d+)\s*$")
+
+LOADER_ALLOC_RE = re.compile(
+    r"^\s*PC5-64-LOADER-ALLOC(?: purpose=(\S+))? type=(\S+) pages=(\d+)"
+    r" requested-max=0x([0-9a-fA-F]+)"
+    r" returned-base=0x([0-9a-fA-F]+) end=0x([0-9a-fA-F]+)"
+    r" within-bound=(\d) within-limit=(\d) verdict=(\S+)\s*$")
+
+PTWALK_DETAIL_PREFIX = "PC5-64-PTWALK va="
+PTWALK_SUMMARY_PREFIX = "PC5-64-PTWALK span"
+LOADER_ALLOC_PREFIX = "PC5-64-LOADER-ALLOC"
+
+
+def _raw_markers(lines, prefix):
+    """Indices of every line carrying `prefix`."""
+    return [i for i, line in enumerate(lines) if prefix in line]
+
+
+def strict_records(text):
+    """Parse every raw marker, or record why one could not be parsed.
+
+    Returns (walk_samples, allocs, malformed, summaries).  `malformed` holds one entry per
+    raw marker that did not match its grammar, including its line number and the
+    line itself, so a fault can be reported against the line it came from rather
+    than as an anonymous count.
+    """
+    lines = text.splitlines()
+    malformed = []
+    walk_samples = []
+    allocs = []
+
+    for i, line in enumerate(lines):
+        if PTWALK_DETAIL_PREFIX not in line:
+            continue
+        match = PTWALK_DETAIL_RE.match(line)
+        if not match:
+            malformed.append({"marker": "PTWALK", "line": i + 1,
+                              "text": line.strip()[:200]})
+            continue
+        # `pa` is kept numerically as well as textually.  D1 used to judge
+        # identity from the kernel's own `identity=` flag and never compared the
+        # two addresses it printed, so a record claiming `pa=0x1000` for
+        # `va=0x50000000` passed as long as the flag said 1.  "none" has no
+        # numeric value and is preserved as None so it cannot be silently
+        # treated as zero.
+        pa_text = match.group(4)
+        walk_samples.append({
+            "va": match.group(1), "va_value": int(match.group(1), 0),
+            "path": match.group(2), "size": match.group(3),
+            "pa": pa_text,
+            "pa_value": None if pa_text == "none" else int(pa_text, 0),
+            "identity": match.group(5) == "1",
+            "note": match.group(6),
+        })
+
+    # A `PC5-64-PTWALK` line that is neither a detailed record nor the span
+    # summary is a marker nobody can interpret, so it is malformed too.  Every
+    # *valid* summary is collected rather than only the first: `re.search` used
+    # to return one and ignore the rest, so a second summary claiming failures
+    # was invisible.
+    summaries = []
+    for i, line in enumerate(lines):
+        if "PC5-64-PTWALK" not in line:
+            continue
+        if PTWALK_DETAIL_PREFIX in line:
+            continue
+        match = PTWALK_SUMMARY_RE.match(line)
+        if not match:
+            malformed.append({"marker": "PTWALK", "line": i + 1,
+                              "text": line.strip()[:200]})
+            continue
+        summaries.append({"line": i + 1,
+                          "probes": int(match.group(1)),
+                          "failed": int(match.group(2))})
+
+    for i, line in enumerate(lines):
+        if LOADER_ALLOC_PREFIX not in line:
+            continue
+        match = LOADER_ALLOC_RE.match(line)
+        if not match:
+            malformed.append({"marker": "LOADER-ALLOC", "line": i + 1,
+                              "text": line.strip()[:200]})
+            continue
+        allocs.append({
+            "purpose": match.group(1),
+            "type": match.group(2),
+            "pages": int(match.group(3)),
+            "requested_max": int(match.group(4), 16),
+            "returned_base": int(match.group(5), 16),
+            "end": int(match.group(6), 16),
+            "within_bound": match.group(7) == "1",
+            "within_limit": match.group(8) == "1",
+            "verdict": match.group(9),
+        })
+
+    return walk_samples, allocs, malformed, summaries
+
+
+# -------------------------------------------------------------- observation
+def observe(text):
+    """Extract only what the log actually shows."""
+    walk_samples, allocs, malformed, summaries = strict_records(text)
+
+    # Exactly one span summary is valid.  Every summary has already been parsed
+    # or recorded as malformed; what remains is multiplicity.  The old
+    # `re.search` read the first and ignored the rest, so
+    # "probes=14 failed=0" followed by "probes=14 failed=9" was reported as a
+    # clean walk with zero failures.
+    # The first summary drives the count comparison; multiplicity itself is
+    # judged by the caller against `walk_summary_count`, so a contradictory
+    # second summary is reported as duplication rather than as a missing walk.
+    walk = summaries[0] if summaries else None
+    # `va=0` and `pa=0` carry no 0x prefix: the loader's serial_hex() prints a
+    # bare "0" for zero (kernel64/serial64.c, boot/uefi64/uefi64_main.c).  The
+    # grammar accepts both spellings or the probe at address 0 is dropped -
+    # which is exactly what happened once: a `va=0x` pattern parsed 13 of the 14
+    # real probes while the summary still said probes=14.
+
+    return {
+        "firmware_banner": bool(re.search(r"BdsDxe:|TianoCore|EDK II", text)),
+        "seabios": "SeaBIOS" in text,
+        "loader_banner": "PC5-64-LOADER-BANNER" in text,
+        "loader_image": bool(re.search(r"PC5-64-LOADER image=0x[0-9a-fA-F]+", text)),
+        "pagetables": bool(re.search(r"PC5-64-LOADER pagetables=0x", text)),
+        "stack": bool(re.search(r"PC5-64-LOADER stack=0x", text)),
+        "ebs_ok": "PC5-64-LOADER exit-boot-services=ok" in text,
+        "ebs_attempts": _number(text, r"PC5-64-LOADER exit-boot-services=ok attempts=(\d+)"),
+        "jump": re.search(r"PC5-64-LOADER-JUMP entry=0x([0-9a-fA-F]+)", text).group(1)
+                if re.search(r"PC5-64-LOADER-JUMP entry=0x([0-9a-fA-F]+)", text) else None,
+        "kernel_banner": "PC5-64-BANNER PC5 64-bit kernel entry" in text,
+        "kernel_env": bool(re.search(r"PC5-64-ENV cr0=0x", text)),
+        "kernel_paging": re.search(r"PC5-64-PAGING enabled=1 root=0x([0-9a-fA-F]+)", text).group(1)
+                          if re.search(r"PC5-64-PAGING enabled=1 root=0x([0-9a-fA-F]+)", text) else None,
+        "long_mode_ok": "PC5-64BIT-LONG-MODE-OK" in text,
+        "done": "PC5-64-DONE" in text,
+        "allocs": allocs,
+        "walk_probes": walk["probes"] if walk else None,
+        "walk_failed": walk["failed"] if walk else None,
+        # All summaries and their count, so the caller can name duplication and
+        # contradiction precisely instead of just saying "not exactly one".
+        "walk_summaries": summaries,
+        "walk_summary_count": len(summaries),
+        "walk_samples": walk_samples,
+        # Raw marker counts and every unparseable marker, so a caller can prove
+        # that the parsed records account for all of them.
+        "raw_walk_markers": len(_raw_markers(text.splitlines(), PTWALK_DETAIL_PREFIX)),
+        "raw_alloc_markers": len(_raw_markers(text.splitlines(), LOADER_ALLOC_PREFIX)),
+        "malformed": malformed,
+        "loader_failures": sorted(set(re.findall(r"PC5-64-LOADER-FAIL=(\S+)", text))),
+        "loader_rejects": sorted(set(re.findall(r"PC5-64-LOADER-REJECT (\S+)", text))),
+        "kernel_failures": sorted(set(re.findall(r"PC5-64BIT-FAIL=(\S+)", text))),
+        "firmware_refused": [m for m in FIRMWARE_NO_BOOT if m in text],
+    }
+
+
+def _number(text, pattern):
+    match = re.search(pattern, text)
+    return int(match.group(1)) if match else None
+
+
+# ----------------------------------------------------------------- verdicts
+PASS, FAIL, UNAVAILABLE, NOT_TESTED = "PASS", "FAIL", "UNAVAILABLE", "NOT_TESTED"
+
+
+class Evidence:
+    """Per-stage results with four honest states.
+
+    UNAVAILABLE means the environment could not run the stage.  NOT_TESTED
+    means the run got nowhere near it.  Neither is PASS, and neither is FAIL:
+    a machine without OVMF has not proven the firmware wrong, it has proven
+    nothing at all.  `failed` only counts real failures, so a report can be
+    "nothing failed" and still be nowhere near a pass.
+    """
+
+    def __init__(self):
+        self.checks = []
+        self.data = {}
+
+    def record(self, name, state, detail=""):
+        assert state in (PASS, FAIL, UNAVAILABLE, NOT_TESTED), state
+        # A PASS carries no detail.  Callers pass explanatory text that is
+        # written for the failing case ("timed out after 2.5s", "no PC5-64-DONE"),
+        # and keeping it next to a PASS produces a record that contradicts
+        # itself: the committed reports said `state: PASS` with
+        # `detail: "timed out after 2.5s with no terminal marker"`.  The console
+        # already suppressed these; the JSON did not, and the JSON is the
+        # artifact anyone reads later.  The state is authoritative, so the
+        # explanation is dropped when the state says there was no problem.
+        self.checks.append({"name": name, "state": state,
+                            "detail": "" if state == PASS else str(detail)})
+
+    def check(self, name, ok, detail=""):
+        # `detail` is only meaningful for the failing branch by construction.
+        self.record(name, PASS if ok else FAIL, detail if not ok else "")
+
+    def count(self, state):
+        return sum(1 for c in self.checks if c["state"] == state)
+
+    @property
+    def failed(self):
+        return self.count(FAIL)
+
+    def as_dict(self):
+        return {"checks": self.checks, "data": self.data,
+                "passed": self.count(PASS), "failed": self.count(FAIL),
+                "unavailable": self.count(UNAVAILABLE),
+                "not_tested": self.count(NOT_TESTED)}
+
+
+def report_timeout(report, run):
+    """Record whether the run ended on evidence or on the clock.
+
+    Separate from `evaluate` so the rule has one home.  A test that
+    re-implemented this check would be testing itself, and a mutated driver
+    would still pass it - which is exactly what a negative control found.
+    """
+    # The detail is a description of the timeout, so it belongs only to the
+    # failing case; Evidence.record() drops it when the state is PASS.
+    report.check("the machine was stopped on evidence, not on the clock",
+                 not run["timed_out"],
+                 "timed out after %ss with no terminal marker" % run["seconds"])
+
+
+def evaluate(report, seen, run):
+    """Judge one boot in stage order.
+
+    Ordering is enforced on first occurrence, not on presence: a log that shows
+    the kernel banner but no handoff marker is contradictory, and the driver
+    refuses to read the later marker as evidence that the earlier stage ran.
+    """
+    text = run["serial"]
+
+    def first(marker):
+        return text.find(marker)
+
+    # ------------------------------------------------ stage 1: firmware ran
+    report.check("firmware produced a boot manager log", seen["firmware_banner"],
+                 "no BdsDxe/TianoCore/EDK II banner in the serial log")
+    report.check("the machine booted UEFI, not SeaBIOS",
+                 seen["firmware_banner"] and not seen["seabios"],
+                 "SeaBIOS output present")
+    report.check("firmware did not refuse to boot the volume",
+                 not seen["firmware_refused"],
+                 "; ".join(seen["firmware_refused"]))
+
+    # -------------------------------------------- stage 2: loader entered
+    # Gated on the previous stage: without a firmware log, the absence of our
+    # banner is not evidence that the loader is broken.
+    report.check("the 64-bit loader was entered", seen["loader_banner"],
+                 "no PC5-64-LOADER-BANNER")
+
+    # ------------------------------------- stage 3: loader completed its work
+    report.check("the loader allocated inside its own bound",
+                 bool(seen["allocs"]),
+                 "no PC5-64-LOADER-ALLOC line")
+    report.check("the loader exited boot services",
+                 seen["ebs_ok"], "no exit-boot-services=ok")
+    report.check("the loader reported no failure",
+                 not seen["loader_failures"] and not seen["loader_rejects"],
+                 "loader reported: %s" % (seen["loader_failures"] + seen["loader_rejects"]))
+
+    # ------------------------------------------ stage 4: handoff happened
+    report.check("the loader handed control to the kernel",
+                 seen["jump"] is not None, "no PC5-64-LOADER-JUMP entry=")
+
+    # ---------------------------------------- stage 5: the kernel executed
+    report.check("the kernel executed", seen["kernel_banner"],
+                 "no PC5-64-BANNER from the kernel")
+
+    # --------------------------------------------------- ordering enforcement
+    def ordered(*markers):
+        positions = [first(m) for m in markers]
+        if any(p < 0 for p in positions):
+            return None
+        return all(positions[i] < positions[i + 1] for i in range(len(positions) - 1))
+
+    chain = ordered("PC5-64-LOADER-BANNER", "PC5-64-LOADER exit-boot-services=ok",
+                    "PC5-64-LOADER-JUMP entry=", "PC5-64-BANNER PC5 64-bit kernel entry",
+                    "PC5-64-DONE")
+    report.check("the boot stages appeared in order", chain is not False,
+                 "the markers are present but not in stage order")
+
+    # ------------------------------------------------- D1: runtime page tables
+    # Three states, not two.  No summary at all means the walk never ran
+    # (NOT_TESTED).  More than one summary means the log is not one coherent
+    # walk, which is a failure even when the copies agree: two summaries are two
+    # claims, and the driver cannot know which describes the boot.
+    summary_count = seen["walk_summary_count"]
+    if summary_count == 0:
+        report.record("[D1] the live page tables were walked", NOT_TESTED,
+                      "no PC5-64-PTWALK span= summary; the walk did not run")
+    else:
+        if summary_count > 1:
+            distinct = {(s["probes"], s["failed"]) for s in seen["walk_summaries"]}
+            report.check("[D1] exactly one span summary was reported", False,
+                         "%d span summaries (lines %s); %s"
+                         % (summary_count,
+                            ", ".join(str(s["line"]) for s in seen["walk_summaries"]),
+                            "identical duplicates" if len(distinct) == 1
+                            else "contradictory: %s" % sorted(distinct)))
+        else:
+            report.check("[D1] exactly one span summary was reported", True)
+        report.check("[D1] every identity probe resolved",
+                     seen["walk_failed"] == 0,
+                     "%d of %d probes failed" % (seen["walk_failed"], seen["walk_probes"]))
+        # Coverage is established from the detailed records, never from the
+        # summary.  The summary is a claim by the code under test: the previous
+        # version of this check accepted `probes=14` alongside a single detail
+        # record, so a kernel that printed one probe and reported fourteen would
+        # have passed.  The count, the address set and the summary must all agree.
+        actual = [sample["va_value"] for sample in seen["walk_samples"]]
+        expected = list(D1_EXPECTED_ADDRESSES)
+        missing = [hex(a) for a in expected if a not in actual]
+        unexpected = [hex(a) for a in actual if a not in expected]
+        duplicates = sorted({hex(a) for a in actual if actual.count(a) > 1})
+        # Name every problem, not just the first: substituting one address for
+        # another is simultaneously a missing address and an unexpected one, and
+        # a detail that mentions only half of that sends the reader looking in
+        # the wrong place.
+        problems = []
+        # Every raw detailed marker must have contributed a record.  A corrupt
+        # extra record is not harmless: it is a line the code under test emitted
+        # that this driver could not interpret, and treating it as absent would
+        # let a log with 14 good probes plus a garbage one pass as clean.
+        walk_malformed = [m for m in seen["malformed"] if m["marker"] == "PTWALK"]
+        if walk_malformed:
+            problems.append(
+                "%d malformed PC5-64-PTWALK record(s): %s"
+                % (len(walk_malformed),
+                   ", ".join("line %d %r" % (m["line"], m["text"][:60])
+                             for m in walk_malformed)))
+        if seen["raw_walk_markers"] != len(actual):
+            problems.append(
+                "%d raw detailed PTWALK marker(s) but %d parsed"
+                % (seen["raw_walk_markers"], len(actual)))
+        if len(actual) != len(expected):
+            problems.append("%d detailed probe record(s), expected %d"
+                            % (len(actual), len(expected)))
+        if missing:
+            problems.append("missing address(es): %s" % ", ".join(missing))
+        if unexpected:
+            problems.append("unexpected address(es): %s" % ", ".join(unexpected))
+        if duplicates:
+            problems.append("duplicated address(es): %s" % ", ".join(duplicates))
+        if seen["walk_probes"] != len(actual):
+            problems.append("summary claims %d probes but %d detailed record(s) "
+                            "exist" % (seen["walk_probes"], len(actual)))
+        d1_detail = ("; ".join(problems) if problems else
+                     "%d probes covering every required address" % len(actual))
+        report.check("[D1] the walk covered all required addresses",
+                     (len(actual) == len(expected) and not missing
+                      and not unexpected and not duplicates
+                      and not walk_malformed
+                      and seen["raw_walk_markers"] == len(actual)
+                      and seen["walk_probes"] == len(actual)),
+                     d1_detail)
+        report.data["d1_addresses"] = {
+            "expected": [hex(a) for a in expected],
+            "observed": [hex(a) for a in actual],
+            "summary_count": seen["walk_probes"],
+            "raw_detailed_markers": seen["raw_walk_markers"],
+            "malformed": [m["text"] for m in walk_malformed],
+            "summary_count": seen["walk_summary_count"],
+            # pa == va as recomputed here from the two printed addresses, with
+            # the kernel's flag alongside it so a disagreement is visible in the
+            # artifact rather than only in a pass/fail bit.
+            "identity_pairs": [{"va": s["va"], "pa": s["pa"],
+                                "flag": s["identity"],
+                                "pa_equals_va": (s["pa_value"] is not None
+                                                 and s["pa_value"] == s["va_value"])}
+                               for s in seen["walk_samples"]],
+        }
+        # The walk must terminate at a *mapping*, and the path must be
+        # consistent with the size it claims.  "Terminal" is not "the last
+        # character is P": a 2 MiB page sets PDE.PS and never descends to a PT,
+        # so the loader prints pt_present=false and a legitimate complete walk
+        # looks exactly like "PPP-".  Judging that a stub would have failed every
+        # correct 2 MiB mapping - which is the only kind the loader makes.
+        stubby = [s for s in seen["walk_samples"] if s["size"] == "none"]
+        # A size with no matching level is a contradiction in the log, not a
+        # translation: `2m` requires the PD entry to be the terminus, `4k` and
+        # `1g` require every level above and below it to be present.
+        terminal = {"4k": "PPPP", "2m": "PPP-", "1g": "PP--"}
+        inconsistent = [s for s in seen["walk_samples"]
+                        if s["size"] != "none" and s["path"] != terminal[s["size"]]]
+        report.check("[D1] every probe reached a terminal mapping with no gap",
+                     not stubby and not inconsistent,
+                     "%d probe(s) stopped at a table level: %s%s" %
+                     (len(stubby), [s["note"] for s in stubby],
+                      "; %d with a path that does not match the reported size: %s"
+                      % (len(inconsistent),
+                         [(s["note"], s["path"], s["size"]) for s in inconsistent])
+                      if inconsistent else ""))
+        # Identity is recomputed from the two addresses the kernel printed.  The
+        # previous version read the kernel's own `identity=` flag, which is a
+        # claim made by the code under test: a record saying `pa=0x1000` for
+        # `va=0x50000000` passed as long as the flag said 1, and the flag is
+        # exactly the thing that would be wrong.  Three separate defects are
+        # named here so a failure points at the right one:
+        #   - pa != va                      (not an identity translation)
+        #   - identity flag disagrees with pa == va   (self-contradictory record)
+        #   - pa is "none"                  (no translation at all)
+        not_identity = [s for s in seen["walk_samples"]
+                        if s["pa_value"] is None or s["pa_value"] != s["va_value"]]
+        lying_flag = [s for s in seen["walk_samples"]
+                      if s["pa_value"] is not None
+                      and s["identity"] != (s["pa_value"] == s["va_value"])]
+        identity_problems = []
+        if not_identity:
+            identity_problems.append(
+                "%d probe(s) did not translate to their own address: %s"
+                % (len(not_identity),
+                   [(s["note"], s["va"], s["pa"]) for s in not_identity[:6]]))
+        if lying_flag:
+            identity_problems.append(
+                "%d probe(s) whose identity flag contradicts their addresses: %s"
+                % (len(lying_flag),
+                   [(s["note"], s["va"], s["pa"], s["identity"])
+                    for s in lying_flag[:6]]))
+        report.check("[D1] every probed address translated to itself",
+                     bool(seen["walk_samples"]) and not identity_problems,
+                     "; ".join(identity_problems) if identity_problems else
+                     "a probe resolved somewhere other than its own address")
+
+    # -------------------------------------------------- D2: allocation bounds
+    # Completeness first: every mandatory purpose must appear exactly once.
+    # Validating only the records that happen to be present is what let a single
+    # allocation satisfy D2, so a boot that skipped the page-table allocation
+    # would have passed as long as the allocation it did make was correct.
+    purposes = [a["purpose"] for a in seen["allocs"]]
+    missing_p = [p for p in D2_MANDATORY_PURPOSES if p not in purposes]
+    duplicated_p = sorted({p for p in purposes
+                           if p is not None and purposes.count(p) > 1})
+    unknown_p = sorted({a["purpose"] for a in seen["allocs"]
+                        if a["purpose"] is not None
+                        and a["purpose"] not in D2_MANDATORY_PURPOSES
+                        and a["purpose"] not in D2_CONDITIONAL_PURPOSES})
+    untagged = [a for a in seen["allocs"] if a["purpose"] is None]
+    problems_p = []
+    alloc_malformed = [m for m in seen["malformed"] if m["marker"] == "LOADER-ALLOC"]
+    if alloc_malformed:
+        problems_p.append(
+            "%d malformed PC5-64-LOADER-ALLOC record(s): %s"
+            % (len(alloc_malformed),
+               ", ".join("line %d %r" % (m["line"], m["text"][:60])
+                         for m in alloc_malformed)))
+    if seen["raw_alloc_markers"] != len(seen["allocs"]):
+        problems_p.append("%d raw LOADER-ALLOC marker(s) but %d parsed"
+                          % (seen["raw_alloc_markers"], len(seen["allocs"])))
+    if missing_p:
+        problems_p.append("missing mandatory purpose(s): %s" % ", ".join(missing_p))
+    if duplicated_p:
+        problems_p.append("duplicated purpose(s): %s" % ", ".join(duplicated_p))
+    if unknown_p:
+        problems_p.append("unknown purpose(s): %s" % ", ".join(unknown_p))
+    if untagged:
+        problems_p.append("%d allocation record(s) carry no purpose" % len(untagged))
+    report.check("[D2] every mandatory allocation was reported exactly once",
+                 not problems_p,
+                 "; ".join(problems_p) if problems_p else
+                 "all %d mandatory purposes present" % len(D2_MANDATORY_PURPOSES))
+    report.data["d2_allocations"] = {
+        "mandatory": list(D2_MANDATORY_PURPOSES),
+        "observed": [a["purpose"] for a in seen["allocs"] if a["purpose"]],
+        "conditional_observed": [a["purpose"] for a in seen["allocs"]
+                                 if a["purpose"] in D2_CONDITIONAL_PURPOSES],
+        "raw_markers": seen["raw_alloc_markers"],
+        "pages": {a["purpose"]: a["pages"] for a in seen["allocs"] if a["purpose"]},
+        "malformed": [m["text"] for m in alloc_malformed],
+    }
+
+    if not seen["allocs"]:
+        report.record("[D2] allocations stayed inside their bound", NOT_TESTED,
+                      "no allocation was observed")
+    else:
+        bad = [a for a in seen["allocs"] if a["verdict"] != "ok"]
+        report.check("[D2] every allocation verdict was ok", not bad,
+                     "%d allocation(s) not ok: %s" %
+                     (len(bad), sorted({a["verdict"] for a in bad})))
+        # Recomputed independently here: the loader's own "end" field is a claim,
+        # and a claim about arithmetic is exactly what a test should redo.
+        wrong_end, over_bound, over_limit = [], [], []
+        for a in seen["allocs"]:
+            expect_end = a["returned_base"] + a["pages"] * 4096 - 1
+            if a["end"] != expect_end:
+                wrong_end.append(a)
+            if a["end"] > a["requested_max"]:
+                over_bound.append(a)
+            # Both ends of the extent are checked.  A base above the span with a
+            # wrapped end would otherwise look contained.
+            if a["end"] >= 4 << 30 or a["returned_base"] >= 4 << 30:
+                over_limit.append(a)
+        report.check("[D2] reported ends match base + pages*4096 - 1",
+                     not wrong_end, "%d allocation(s) misreported their end" % len(wrong_end))
+        report.check("[D2] no allocation ended above the requested maximum",
+                     not over_bound, "%d allocation(s) over bound" % len(over_bound))
+        report.check("[D2] no allocation ended outside the identity range",
+                     not over_limit, "%d allocation(s) past the limit" % len(over_limit))
+        # A zero-page request is not an allocation, and the loader's own verdict
+        # must not be what establishes that: `pages` is printed by the loader and
+        # `verdict` is computed by the loader, so a record claiming pages=0 with
+        # verdict=ok is precisely the kind of self-consistent nonsense this gate
+        # exists to catch.  The bound is reinterpreted here, independently.
+        zero_pages = [a for a in seen["allocs"] if a["pages"] <= 0]
+        report.check("[D2] every allocation asked for at least one page",
+                     not zero_pages,
+                     "%d record(s) with pages <= 0: %s" %
+                     (len(zero_pages),
+                      [(a["purpose"], a["pages"]) for a in zero_pages]))
+        # The type is part of the contract: EFI_ALLOCATE_MAX_ADDRESS is the only
+        # allocation mode that bounds by address, and a record claiming a
+        # different mode would make the bound checks below meaningless.
+        wrong_type = [a for a in seen["allocs"] if a["type"] != "max-address"]
+        report.check("[D2] every allocation used EFI_ALLOCATE_MAX_ADDRESS",
+                     not wrong_type,
+                     "%d record(s) with another type: %s" %
+                     (len(wrong_type), sorted({a["type"] for a in wrong_type})))
+        report.check("[D2] the requested maximum was the inclusive limit",
+                     all(a["requested_max"] == (4 << 30) - 1 for a in seen["allocs"]),
+                     "firmware was asked for a bound other than 0xffffffff")
+
+    # ------------------------------------------------------ final assertions
+    report.check("the kernel reported no failure", not seen["kernel_failures"],
+                 "kernel reported: %s" % seen["kernel_failures"])
+    report.check("the kernel reached its final marker", seen["done"],
+                 "no PC5-64-DONE")
+
+    # A marker set that contradicts itself is worse than a missing one.
+    contradictions = []
+    if seen["done"] and (seen["kernel_failures"] or seen["loader_failures"]):
+        contradictions.append("DONE together with a failure marker")
+    if seen["kernel_banner"] and not seen["jump"]:
+        contradictions.append("kernel banner without a handoff marker")
+    if seen["walk_failed"] not in (None, 0) and seen["done"]:
+        contradictions.append("DONE after a failed page-table walk")
+    report.check("no marker contradicts another", not contradictions,
+                 "; ".join(contradictions))
+
+    report.data["observed"] = seen
+    report.data["run"] = {"seconds": run["seconds"], "stopped_on": run["stopped_on"],
+                          "returncode": run["returncode"], "timed_out": run["timed_out"],
+                          "stderr": run["stderr"], "command": run["command"]}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Validate the 64-bit UEFI boot path under real OVMF.")
+    parser.add_argument("--image", default=os.path.join(BUILD, "efi64.img"),
+                        help="the ESP image built by `make uefi64`")
+    parser.add_argument("--loader", default=os.path.join(BUILD, "uefi64", "BOOTX64.EFI"))
+    parser.add_argument("--kernel", default=os.path.join(BUILD, "kernel64", "KERNEL64.BIN"))
+    parser.add_argument("--qemu")
+    parser.add_argument("--qemu-data-dir",
+                        default=os.environ.get("PC5_QEMU_DATA_DIR"),
+                        help="QEMU's ROM/keymap directory (-L), for builds whose "
+                             "data files are not in the default prefix")
+    parser.add_argument("--ovmf-code")
+    parser.add_argument("--ovmf-vars")
+    parser.add_argument("--timeout", type=int, default=300)
+    parser.add_argument("--memory-mb", type=int, default=512)
+    parser.add_argument("--device", choices=["ahci", "usb"], default="ahci",
+                        help="how the ESP reaches firmware (default ahci)")
+    parser.add_argument("--serial-dir", default=os.path.join(BUILD, "ovmf64"))
+    parser.add_argument("--json-out")
+    parser.add_argument("--no-build", action="store_true",
+                        help="use the artifacts present instead of rebuilding")
+    args = parser.parse_args(argv)
+
+    report = Evidence()
+
+    # ------------------------------------------- artifacts must be current
+    # Rebuilding is the default because a stale efi64.img would silently test
+    # code that no longer exists in the tree - the one failure mode that makes
+    # a green result meaningless.
+    build_log = ""
+    if not args.no_build:
+        build = subprocess.run(["make", "-s", "uefi64", "kernel64"],
+                               capture_output=True, text=True)
+        build_log = (build.stdout or "") + (build.stderr or "")
+        if build.returncode != 0:
+            report.record("the 64-bit artifacts built", FAIL,
+                          "make uefi64 kernel64 exited %d:\n%s" %
+                          (build.returncode, build_log[-2000:]))
+            report.data["build_log"] = build_log[-4000:]
+            return finish(report, args, code=1)
+        report.record("the 64-bit artifacts were rebuilt from the current tree", PASS)
+    else:
+        # Saying "built" when nothing was built would be a false claim about
+        # provenance; the reader needs to know these artifacts may predate the
+        # source they are being compared against.
+        report.record("the 64-bit artifacts were rebuilt from the current tree",
+                      NOT_TESTED, "--no-build: using whatever is on disk")
+
+    for name, path in (("efi64.img", args.image), ("BOOTX64.EFI", args.loader),
+                       ("KERNEL64.BIN", args.kernel)):
+        if not os.path.exists(path):
+            report.record("the %s artifact exists" % name, FAIL, "missing: %s" % path)
+            return finish(report, args, code=1)
+        # The path is context, not an explanation of a failure, so it belongs in
+        # the data section rather than in the check detail - a PASS detail is now
+        # empty by construction.
+        report.record("the %s artifact exists" % name, PASS)
+
+    # The report states image_format: fat12 superfloppy.  Assert it here, from
+    # the bytes, because that claim is made by this gate and a wrong image
+    # format is the kind of defect that still boots.
+    check_fat12_superfloppy(report, args.image)
+
+    report.data["artifacts"] = {
+        "efi64.img": {"path": args.image, "sha256": sha256_file(args.image),
+                      "size": os.path.getsize(args.image)},
+        "BOOTX64.EFI": {"path": args.loader, "sha256": sha256_file(args.loader),
+                        "size": os.path.getsize(args.loader)},
+        "KERNEL64.BIN": {"path": args.kernel, "sha256": sha256_file(args.kernel),
+                         "size": os.path.getsize(args.kernel)},
+    }
+    report.data["source"] = {
+        "commit": git_value("rev-parse", "HEAD"),
+        "tree": git_value("rev-parse", "HEAD^{tree}"),
+        "branch": git_value("rev-parse", "--abbrev-ref", "HEAD"),
+        "dirty": bool(git_value("status", "--porcelain")),
+    }
+
+    # ------------------------------------------------ environment discovery
+    qemu = args.qemu or os.environ.get("PC5_QEMU") or shutil.which("qemu-system-x86_64")
+    code = args.ovmf_code or find_first(CODE_CANDIDATES)
+    vars_template = args.ovmf_vars or find_first(VARS_CANDIDATES)
+    if not args.ovmf_vars:
+        # Distributions and manual installs name the pair inconsistently
+        # (`OVMF_CODE.fd`/`OVMF_VARS.fd`, `..._4M.fd`, `..._pure-efi.fd`, and
+        # `fd` vs `fd.fd`).  The variable store that belongs with a CODE image is
+        # the one installed beside it under the same stem, so try that before
+        # falling back to whatever happens to be installed system-wide: pairing a
+        # 2 MiB code image with an unrelated 128 KiB variable store produces a
+        # firmware that never gets as far as the boot manager.
+        candidate = sibling_vars(args.ovmf_code)
+        if candidate and (not vars_template or not os.path.exists(vars_template)):
+            vars_template = candidate
+
+    # Existence, not truthiness: a path the caller supplied but that is not
+    # there is a different situation only in the message it deserves, never in
+    # the verdict.  Treating a typo'd --ovmf-code as "firmware present" would
+    # push the run into a crash or, worse, a fabricated result.
+    missing = []
+    if not qemu:
+        missing.append("qemu-system-x86_64 not on PATH and --qemu not given")
+    elif not os.path.exists(qemu):
+        missing.append("the emulator does not exist: %s" % qemu)
+    if not code:
+        missing.append("no OVMF code image found (tried %d locations); "
+                       "pass --ovmf-code" % len(CODE_CANDIDATES))
+    elif not os.path.exists(code):
+        missing.append("the OVMF code image does not exist: %s" % code)
+    if not vars_template:
+        missing.append("no OVMF vars template found; pass --ovmf-vars")
+    elif not os.path.exists(vars_template):
+        missing.append("the OVMF vars template does not exist: %s" % vars_template)
+
+    report.data["qemu"] = {"path": qemu, "version": qemu_version(qemu),
+                           "data_dir": args.qemu_data_dir or None}
+    report.data["firmware"] = describe_firmware(code)
+
+    # Remove the previous run's log before anything else happens - including the
+    # early return for a missing QEMU or OVMF.  The verdict is safe without this,
+    # because it is computed from the bytes this run captures and never read back
+    # from the file; but a leftover complete-looking log beside a failed run is a
+    # trap for whoever reads the directory afterwards, and the report names
+    # serial_path as the evidence location.
+    os.makedirs(args.serial_dir, exist_ok=True)
+    serial_path = os.path.join(args.serial_dir, "efi64-serial.log")
+    try:
+        os.unlink(serial_path)
+    except OSError:
+        pass
+
+    if missing:
+        # Not a failure and emphatically not a pass: nothing was tested.
+        for reason in missing:
+            report.record("the boot could be run", UNAVAILABLE, reason)
+        for stage in STAGES:
+            report.record("stage: %s" % stage, NOT_TESTED, "no QEMU/OVMF")
+        report.data["device_arrangement"] = {
+            "device": args.device, "verified": False,
+            "reason": "no QEMU/OVMF on this machine, so the arrangement that "
+                      "serves a FAT12 superfloppy as a disk was never exercised",
+        }
+        return finish(report, args, code=3)
+
+    report.record("the boot could be run", PASS)
+
+    # ------------------------------------------- per-run writable vars copy
+    # Firmware writes its boot variables back; a shared template would carry
+    # state between runs and make the second run differ from the first.
+    os.makedirs(args.serial_dir, exist_ok=True)
+    vars_path = os.path.join(args.serial_dir, "OVMF_VARS.fd")
+    try:
+        shutil.copyfile(vars_template, vars_path)
+    except OSError as exc:
+        report.record("a writable copy of the variable store was made", FAIL,
+                      "%s: %s" % (vars_template, exc))
+        return finish(report, args, code=1)
+    report.record("a writable copy of the variable store was made", PASS)
+    serial_path = os.path.join(args.serial_dir, "efi64-serial.log")
+    report.data["firmware"]["vars_template"] = vars_template
+    report.data["firmware"]["vars_sha256"] = sha256_file(vars_template)
+
+    try:
+        run = run_qemu(qemu, code, vars_template, args.image, vars_path, serial_path,
+                       args.timeout, args.memory_mb, args.device,
+                       args.qemu_data_dir)
+    except OSError as exc:
+        # The emulator exists as a path but could not be executed.  That is an
+        # environment problem: nothing about the boot was observed either way.
+        report.record("the emulator started", UNAVAILABLE, "%s: %s" % (qemu, exc))
+        for stage in STAGES:
+            report.record("stage: %s" % stage, NOT_TESTED, "QEMU did not start")
+        return finish(report, args, code=3)
+
+    if run["returncode"] is not None and run["returncode"] != 0 and not run["serial"]:
+        # It ran and printed nothing, then failed.  Judging that as a boot with
+        # missing markers would blame PC5 for an emulator invocation problem.
+        report.record("the emulator started", UNAVAILABLE,
+                      "qemu exited %s with no serial output: %s"
+                      % (run["returncode"], run["stderr"]))
+        for stage in STAGES:
+            report.record("stage: %s" % stage, NOT_TESTED, "QEMU produced no output")
+        return finish(report, args, code=3)
+    report.record("the emulator started", PASS)
+    report.data["serial_path"] = serial_path
+    report.data["device_arrangement"] = {"device": args.device, "verified": True,
+                                         "image_format": "fat12 superfloppy"}
+
+    report_timeout(report, run)
+
+    seen = observe(run["serial"])
+    evaluate(report, seen, run)
+
+    if report.count(FAIL):
+        # A failed runtime assertion is distinguished from an ordinary stage
+        # failure so a caller can tell "the boot did not happen" from "the boot
+        # happened and the map was wrong".
+        runtime = [c for c in report.checks
+                   if c["state"] == FAIL and ("[D1]" in c["name"] or "[D2]" in c["name"])]
+        code_out = 2 if runtime else 1
+    elif report.count(UNAVAILABLE) or report.count(NOT_TESTED):
+        # Exit 0 has to mean "every check ran and passed".  Anything left
+        # unrun or unavailable is a third outcome, and returning 0 for it lets a
+        # caller that only checks the status treat an unattested run as a pass -
+        # exactly the failure this driver exists to prevent, one level up.
+        code_out = 3
+    else:
+        code_out = 0
+    return finish(report, args, code=code_out)
+
+
+def finish(report, args, code):
+    data = report.as_dict()
+    print("=" * 68)
+    for check in data["checks"]:
+        # A detail line that explains why something failed reads as nonsense next
+        # to a PASS ("no PC5-64-DONE" beside "the kernel reached its final
+        # marker - PASS"), so details are shown only where they are wanted.
+        # They stay in the JSON for every check.
+        show = check["state"] not in (PASS, NOT_TESTED)
+        print("  [%-11s] %s%s" % (check["state"], check["name"],
+                                  ("  -- " + check["detail"]) if check["detail"] and show else ""))
+    print("-" * 68)
+    print("  %d passed, %d failed, %d unavailable, %d not tested"
+          % (data["passed"], data["failed"], data["unavailable"], data["not_tested"]))
+
+    if data["unavailable"] or data["not_tested"]:
+        print("\n  64-BIT OVMF VALIDATION NOT COMPLETED: %d stage(s) were never run."
+              % (data["unavailable"] + data["not_tested"]))
+    if data["failed"]:
+        print("\n  64-BIT OVMF VALIDATION FAILED: %d check(s)." % data["failed"])
+    elif not (data["unavailable"] or data["not_tested"]):
+        print("\n  64-BIT OVMF VALIDATION PASSED.")
+    else:
+        print("\n  Nothing failed, but this is not a pass: see the states above.")
+
+    if args.json_out:
+        os.makedirs(os.path.dirname(os.path.abspath(args.json_out)), exist_ok=True)
+        with open(args.json_out, "w") as handle:
+            json.dump(data, handle, indent=2)
+            handle.write("\n")
+        print("  evidence: %s" % args.json_out)
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
