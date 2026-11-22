@@ -35,6 +35,9 @@ comparing the two environments' CR0/CR4/segment state or accepting that `sgdt` i
 Unicorn build reports something other than the guest's GDTR — and the answer changes
 nothing about the conclusion, which is why it is left here rather than hunted further.
 
+**Also in this directory:** `suite-count-attribution.md` reconciles the suite totals quoted
+around this work (971, 994, 1011, 1019) against the trees they were measured on.
+
 **What is unchanged.** The arming rule stays; `tr=not-loaded`, `ist-df=0` and `ist-nmi=0`
 stay the expected boot line, and the gate still asserts all three. Double fault and NMI
 running on their IST stacks remains an OVMF-or-hardware criterion: `make ovmf-test` still
