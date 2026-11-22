@@ -277,6 +277,41 @@ class CiLayoutTests(unittest.TestCase):
                          "swallowing the harness status would turn a NOT TESTED run "
                          "into a green one")
 
+    def test_the_64bit_release_image_is_built_in_the_pipeline(self):
+        """`PC5_UEFI=64` has to be exercised by CI, not only by whoever added it.
+
+        A Makefile shorthand is the easiest kind of rot to ship: `make iso64` lives in a
+        recipe line, so nothing discovers it stopped working until a release engineer
+        tries it.  Two properties are pinned here. The first is that the step exists at
+        all. The second is that it builds into a directory of its own, because a step
+        writing to the default `build/` would replace the image the release stages a few
+        lines earlier -- and it would do so green, since everything it checks would still
+        pass about the image it built.  `build/iso64` rather than a sibling `build64`:
+        the ignored-and-cleaned scope of `build/` should cover a scratch release, or the
+        first developer who runs the CI recipe by hand has an untracked tree.
+        """
+        candidates = [
+            os.path.join(ROOT, ".github", "workflows", "build.yml"),
+            os.path.join(ROOT, "ci", "build.yml"),
+        ]
+        found = [p for p in candidates if os.path.exists(p)]
+        self.assertTrue(found)
+        text = open(found[0], encoding="utf-8").read()
+        self.assertIn("make BUILD=build/iso64 iso64", text,
+                      "the pipeline never builds the 64-bit release image, so "
+                      "PC5_UEFI=64 is only known to work on one machine")
+        self.assertIn("build/logs/iso64.log", text,
+                      "the step keeps no log, so its absence would be "
+                      "indistinguishable from a skipped step")
+        step = text[text.index("make BUILD=build/iso64 iso64") - 1200:text.index(
+            "make BUILD=build/iso64 iso64")]
+        self.assertIn("set -eu", step, "the step runs without `set -eu`, so a failed "
+                                       "make inside it would not fail the job")
+        self.assertLess(text.index("make release-assets"),
+                        text.index("make BUILD=build/iso64 iso64"),
+                        "the 64-bit image is built before the release assets are "
+                        "staged, which is the ordering that lets it overwrite them")
+
     def test_readme_explains_activation_when_not_installed(self):
         active = os.path.join(ROOT, ".github", "workflows", "build.yml")
         if os.path.exists(active):

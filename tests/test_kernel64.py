@@ -606,7 +606,13 @@ class PlacementPolicyTests(unittest.TestCase):
 
 
 class ReleaseIsolationTests(unittest.TestCase):
-    """The experimental path must not leak into what ships."""
+    """The experimental path must not leak into what ships.
+
+    These are guard rails on the *default* rules. Since `PC5_UEFI` made shipping the
+    64-bit path an explicit opt-in (`make iso64`), the question "did the default stay
+    32-bit, and does the opt-in actually carry the gated bytes" is answered by
+    `tests/test_release_esp.py`, which builds both modes and digests their ESPs.
+    """
 
     def test_dry_run_of_the_release_build_does_not_build_64_bit_artifacts(self):
         result = subprocess.run(["make", "-n", "all"], cwd=ROOT,

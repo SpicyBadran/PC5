@@ -175,9 +175,15 @@ class StubFirmware64Tests(unittest.TestCase):
     def test_an_application_loaded_at_the_top_of_the_map_still_hands_over(self):
         machine, trace = self.run_once(image_load=0x0FE00000)
         self.assertEqual(machine.image_base, 0x0FE00000)
-        self.assertIn("PC5-64-LOADER image=0xfe00000-0xfe03000 below-span=1",
+        # The numbers are derived from what the stub handed the loader, not written
+        # out as literals: this used to read `0xfe03000`/`size=0x3000`, which was
+        # the image rounded to pages on that day, and it went red the moment the
+        # loader's own .text grew by a page.  What the test is about is that the
+        # loader reports the range firmware told it -- agreement, not a size.
+        base, size = machine.image_base, machine.image_size
+        self.assertIn("PC5-64-LOADER image=0x%x-0x%x below-span=1" % (base, base + size),
                       trace.serial)
-        self.assertIn("PC5-64-LOADER image=0xfe00000 size=0x3000 range=ok",
+        self.assertIn("PC5-64-LOADER image=0x%x size=0x%x range=ok" % (base, size),
                       trace.serial)
         self.assert_full_boot(trace)
 

@@ -38,7 +38,9 @@ make check       # python test suite FIRST, then the unit/contract/documentation
 make citations-check  # every commit cited by the evidence documents resolves here
 make citation-refs    # fetch refs/pull/*/head: needed only for citations that point at an
                       # open pull-request head, or in a filtered/partial clone
-make verify      # independent ISO verification (+ build/verify-report.json)
+make verify      # independent ISO verification (+ build/verify-report.json), including
+                 # byte-comparison of the files inside the ESP against the built artifacts
+make iso64       # the 64-bit release image: `make PC5_UEFI=64 iso verify` in one step
 make roadmap     # validate the milestone graph, release isolation and the destination path
 make uefi        # just the UEFI application and the FAT ESP (build/efi.img)
 make boot-test   # boot the ISO in the emulator; 119 assertions (incl. FAT32 write)
@@ -77,9 +79,80 @@ MBR, so nothing depends on file-system order or on when you build. This is cover
 layout, the per-file SHA-256 values and the image SHA-256 that `make verify`
 re-checks.
 
+The snippet above is run by the test suite for both UEFI paths, as two clean
+rebuilds each (`make clean iso`, not an incremental re-build), so the claim is a
+gate and not a hope. `tests/test_release_esp.py::ReleaseReproducibility` also keeps
+the pin honest in the other direction: it rebuilds with `BUILD_DATE`, `BUILD_ID` and
+`SOURCE_DATE_EPOCH` unset and asserts the digest *moves*. If somebody ever makes the
+timestamp stop appearing in the image, that control fails and this section becomes a
+lie that a test catches.
+
 Take the digest from your own build rather than from a document: this
 repository quotes hashes with the commit they came from, and a hash built from a
 different commit is a different, equally valid image.
+
+## Which UEFI loader ships: `PC5_UEFI`
+
+The release ISO's ESP carries whichever loader firmware hands control to. Until
+this was a variable, `make iso` embedded `build/efi.img` — the 32-bit bring-up
+loader — while the 64-bit path had its own ESP (`build/efi64.img`) that nothing
+shipped. `PC5_UEFI` makes the choice explicit instead of implicit in a file name:
+
+```sh
+make iso                     # PC5_UEFI=32, unchanged: build/efi.img in the ESP
+make iso64                   # PC5_UEFI=64: build/efi64-release.img, built and verified
+make PC5_UEFI=64 iso verify  # the same thing, spelled out
+```
+
+Mode 64 puts `EFI/BOOT/BOOTX64.EFI` (the long-mode loader), `KERNEL64.BIN` — which is
+where that loader reads its kernel from — and `README.TXT` into the ESP, and
+additionally places `KERNEL64.BIN` in the ISO9660 root, where mode 32 places
+`KERNEL.BIN`. `build/build-info.json` records the chosen mode and the SHA-256 prefix of
+the loader that went in, so a release cannot be mislabelled by an edit that changes the
+file name and nothing else. `PC5_UEFI` is read with `?=`, so `make PC5_UEFI=64` and
+`PC5_UEFI=64 make` both work, and any other value is an error before a byte compiles:
+
+```
+$ make PC5_UEFI=128 -n iso
+Makefile:309: *** PC5_UEFI must be 32 or 64, got '128'.  Stop.
+```
+
+`make verify` pins the ESP *contents*, not just its structure:
+
+```sh
+python3 tools/verify_iso.py build/pc5.iso --info build/build-info.json \
+  --expect-esp-loader build/uefi64/BOOTX64.EFI \
+  --expect-esp-file KERNEL64.BIN=build/kernel64/KERNEL64.BIN
+```
+
+Each ESP root entry is read through its FAT cluster chain and digested; a pinned name
+must match the file it is compared against byte for byte, and a pinned file missing
+from the ESP is a failure rather than a shrug. `make verify` passes both flags itself,
+so the image a release engineer checks is provably the image the gates executed — the
+stub gates take their inputs as loose files and never look at the ESP.
+
+The scope is worth stating exactly, because it was measured. Five single-byte flips
+made at fixed offsets inside the ESP region of a finished image: run without `--info`,
+`tools/verify_iso.py` verified all five green, because its structural checks re-derive
+the FAT chain from the image itself and so cannot notice a file whose contents changed.
+With `--info` all five fail — but on one unnamed check, `image SHA-256 matches build
+info`, which is a provenance statement, not a content statement, and is green by
+construction whenever the tampering happens before the record is written: corrupt
+`build/efi64-release.img`, re-run `make iso`, and the build describes its own
+corruption. `tests/test_release_esp.py::ReleaseEspContents` runs exactly that and
+asserts the ESP pins fail while the image digest passes. Two of the five flips land
+inside a compared file and therefore name themselves
+(`ESP KERNEL64.BIN is byte-identical to KERNEL64.BIN`); three land in FAT metadata or
+padding, which nothing compares. The gate says "the file that ships is the file that
+was tested", not "no other byte of the ESP was untouched" — and `tests/boot_test.py`
+has for a while made the equivalent comparison for `KERNEL.BIN` while booting in the
+emulator. Parsing the ESP the way firmware does is still `make ovmf-test`'s job.
+
+**Packaging is not booting.** `make PC5_UEFI=64 iso verify` shows the image is
+structurally sound and contains the bytes `make stubtest64` executed; it does not show
+that TianoCore loads `BOOTX64.EFI` and reaches the kernel, and `make ovmf-test` reports
+NOT TESTED wherever QEMU and OVMF are absent. See `docs/KNOWN_LIMITATIONS.md` 22a and
+`make emulator-probe` for what the installed emulator cannot stand in for.
 
 ## Booting the ISO under real UEFI firmware
 
@@ -237,4 +310,8 @@ volume.
 * kernel must be ≤ 585,728 bytes (real-mode load window),
 * `tools/mkiso.py` refuses to write past the end of the image and asserts the
   final size,
-* `make verify` re-parses the finished image from scratch.
+* `make verify` re-parses the finished image from scratch, and re-digests the files
+  inside the ESP against the artifacts the boot gates ran (`--expect-esp-loader`,
+  `--expect-esp-file`), so a release cannot ship a loader that was never executed;
+* `PC5_UEFI` is validated at Makefile parse time — `make PC5_UEFI=128 iso` fails
+  before building anything rather than silently falling back to 32-bit.

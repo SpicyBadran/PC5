@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import struct
 import sys
 import zlib
@@ -136,7 +137,22 @@ def _fat_read(fat, geo, cluster, size):
     return bytes(out[:size])
 
 
-def verify_esp(rep, fat):
+def _file_digest(path):
+    """{"bytes", "sha256"} for a file, or None if it cannot be read.
+
+    A missing expectation is reported by the caller as a failed check rather than
+    raising: `make verify` on a tree where the 64-bit kernel was never built should
+    say "the built file is not there", not print a traceback.
+    """
+    try:
+        with open(path, "rb") as handle:
+            blob = handle.read()
+    except OSError:
+        return None
+    return {"bytes": len(blob), "sha256": hashlib.sha256(blob).hexdigest()}
+
+
+def verify_esp(rep, fat, expectations=None):
     """Check the El Torito UEFI image the way firmware would mount it."""
     geo = _fat_geometry(fat)
     if not rep.check("UEFI image has a valid FAT boot sector", geo is not None):
@@ -187,6 +203,57 @@ def verify_esp(rep, fat):
         return
     rep.data["uefi_app"] = {"bytes": len(data),
                             "sha256": hashlib.sha256(data).hexdigest()}
+
+    # Every other file the loader will look for, by content.  This is the part the
+    # verifier used to skip: it read the ESP's *structure* (a mountable FAT, a valid
+    # PE header) and stopped, so an image whose KERNEL64.BIN or whose loader bytes had
+    # been swapped stayed green unless `--info` was supplied -- and `--info` is a
+    # provenance check, not a content check: it compares the finished image against a
+    # record the same build wrote, so an ESP corrupted *before* that record exists
+    # passes it while naming nothing.  Structure says "firmware could read this"; the
+    # whole-image digest says "this is the image the build made"; only these hashes say
+    # "this is the artifact the gates executed".  Tested both ways in
+    # tests/test_release_esp.py, including the case the digest cannot see.
+    esp_files = {}
+    for entry in root_entries:
+        if entry["attr"] & 0x18 or not entry["size"]:
+            continue
+        name = entry["name"] + ("." + entry["ext"] if entry["ext"] else "")
+        blob = _fat_read(fat, geo, entry["cluster"], entry["size"])
+        if blob is None or len(blob) != entry["size"]:
+            rep.check(f"ESP file {name} is readable through the FAT chain", False)
+            continue
+        esp_files[name] = {"bytes": len(blob),
+                           "sha256": hashlib.sha256(blob).hexdigest()}
+    rep.data["uefi_files"] = esp_files
+    # Content identity against the files the build gated.  `expectations` is
+    # {"loader": path, "files": {NAME: path}}; each entry is a separate check, so a
+    # report says which promise broke rather than only that one did.
+    expectations = expectations or {}
+    loader_path = expectations.get("loader")
+    if loader_path:
+        want = _file_digest(loader_path)
+        rep.check("ESP loader is byte-identical to " + os.path.basename(loader_path),
+                  want is not None and want["sha256"] == rep.data["uefi_app"]["sha256"]
+                  and want["bytes"] == rep.data["uefi_app"]["bytes"],
+                  "in-iso %s B %s  built %s B %s"
+                  % (rep.data["uefi_app"]["bytes"], rep.data["uefi_app"]["sha256"][:12],
+                     want["bytes"] if want else "?",
+                     want["sha256"][:12] if want else "?"))
+    for name, path in sorted((expectations.get("files") or {}).items()):
+        # FAT stores names upper-cased; accept either spelling so a request that is
+        # right about the content and wrong about the case still checks the content.
+        got = esp_files.get(name) or esp_files.get(name.upper())
+        want = _file_digest(path)
+        if got is None:
+            rep.check(f"ESP carries {name} (the loader reads it from here)", False,
+                      "present: " + (", ".join(sorted(esp_files)) or "empty"))
+            continue
+        rep.check(f"ESP {name} is byte-identical to {os.path.basename(path)}",
+                  want is not None and want["sha256"] == got["sha256"],
+                  "in-iso %s  built %s" % (got["sha256"][:12],
+                                           want["sha256"][:12] if want else "?"))
+
     rep.check("BOOTX64.EFI starts with the DOS 'MZ' signature", data[0:2] == b"MZ",
               data[0:2].hex())
     pe_off = u32le(data, 0x3C)
@@ -322,7 +389,7 @@ def read_dir_records(image, lba, size):
     return out
 
 
-def verify(path, info_path=None):
+def verify(path, info_path=None, expectations=None):
     rep = Report()
     with open(path, "rb") as fh:
         image = fh.read()
@@ -504,7 +571,7 @@ def verify(path, info_path=None):
         rep.data["uefi"] = {"lba": uefi["image_lba"],
                             "bytes": len(fat),
                             "sha256": hashlib.sha256(fat).hexdigest()}
-        verify_esp(rep, fat)
+        verify_esp(rep, fat, expectations)
 
     # ---------------- PC5 boot descriptor ----------------
     desc = None
@@ -583,11 +650,24 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="verify a PC5 ISO image")
     ap.add_argument("image")
     ap.add_argument("--info", help="build-info.json to cross-check")
+    ap.add_argument("--expect-esp-loader", metavar="PATH",
+                    help="require the ESP's EFI/BOOT/BOOTX64.EFI to be byte-identical to PATH")
+    ap.add_argument("--expect-esp-file", action="append", default=[], metavar="NAME=PATH",
+                    help="require NAME in the ESP to be byte-identical to PATH (repeatable)")
     ap.add_argument("--json-out")
     ap.add_argument("-q", "--quiet", action="store_true")
     args = ap.parse_args(argv)
 
-    rep = verify(args.image, args.info)
+    expect_files = {}
+    for spec in args.expect_esp_file:
+        name, _, path = spec.partition("=")
+        if not path:
+            ap.error("--expect-esp-file wants NAME=PATH, got %r" % spec)
+        expect_files[name] = path
+    expectations = {"loader": args.expect_esp_loader, "files": expect_files}
+    if not args.expect_esp_loader and not expect_files:
+        expectations = None
+    rep = verify(args.image, args.info, expectations)
     if not args.quiet:
         for c in rep.checks:
             print(f"[{'PASS' if c['ok'] else 'FAIL'}] {c['name']}"

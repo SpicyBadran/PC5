@@ -18,6 +18,7 @@ import importlib.util
 import io
 import json
 import os
+import pathlib
 import subprocess
 import sys
 import tempfile
@@ -353,9 +354,76 @@ class MatrixTests(unittest.TestCase):
         rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
         self.assertEqual(rows["a missing kernel is an explicit failure"]["state"], "failed")
 
-    def test_the_low_memory_row_exists(self):
+    def test_a_negative_row_follows_its_check_not_a_generic_refusal(self):
+        """A row whose check passed is verified, even when the guest booted fine.
+
+        `deadline` and `small-memory` are negatives that succeed without a refusal;
+        the matrix used to demand `failure_codes or firmware_refused` of every
+        negative and so reported them `failed` on a run whose checks all passed.
+        """
+        report = self.make_report()
+        report.check("a boot that outlives its deadline is reported as a timeout, "
+                     "not as a pass", True)
+        report.data.setdefault("negative", {})["deadline"] = {
+            "markers": {"boot_ok": False, "failure_codes": [],
+                        "firmware_refused": False},
+            "check": ovmf.DEADLINE_CHECK}
+        rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
+        self.assertEqual(rows[ovmf.DEADLINE_CHECK]["state"], "verified")
+        # ... and a negative that records no check keeps the old marker rule, so
+        # this is a link, not a blanket "trust the checks" override.
+        del report.data["negative"]["deadline"]["check"]
+        rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
+        self.assertEqual(rows[ovmf.DEADLINE_CHECK]["state"], "failed")
+
+    def test_a_failed_matrix_row_makes_the_run_fail(self):
+        """The exit status and the matrix cannot disagree."""
+        report = ovmf.Report()
+        ovmf.build_matrix(report)
+        rows = report.data["matrix"]
+        rows.append({"requirement": "invented", "source": "x", "state": "failed"})
+        before = report.fail_count()
+        ovmf.matrix_failures(report, rows)
+        self.assertEqual(report.fail_count(), before + 1)
+
+    def test_the_small_memory_row_exists(self):
+        """Renamed with the control: the row is now about a *small* machine, because
+        the starved one (-m 24) never reaches firmware far enough to say anything
+        about PC5 -- see tests/ovmf_boot.py's comment on the check."""
         rows = {r["requirement"] for r in ovmf.build_matrix(self.make_report())}
-        self.assertIn("insufficient memory fails safely", rows)
+        self.assertIn("a small machine stops with a diagnostic or boots with its "
+                      "own memory", rows)
+        self.assertNotIn("insufficient memory fails safely", rows)
+
+    def test_the_two_check_driven_negatives_are_row_and_check_in_one_name(self):
+        """`deadline` and `small-memory` exist once each, as a constant.
+
+        The bug this pins: the matrix row was worded differently from the check
+        that drove it, so the lookup missed, the generic "did it refuse?" rule
+        applied, and both rows read `failed` while every check passed.  A row
+        that is not one of the two constants keeps the marker rule, which is the
+        right rule for a refusal.
+        """
+        rows = dict(ovmf.REQUIRED_MATRIX)
+        self.assertEqual(rows[ovmf.DEADLINE_CHECK], "negative:deadline")
+        self.assertEqual(rows[ovmf.SMALL_MEMORY_CHECK], "negative:small-memory")
+        source = pathlib.Path(ROOT, "tests", "ovmf_boot.py").read_text()
+        for name in (ovmf.DEADLINE_CHECK, ovmf.SMALL_MEMORY_CHECK):
+            # The sentence appears once in the file: as the constant's own
+            # definition.  Anywhere else it would be a duplicated literal free to
+            # drift, which is the bug this guards.
+            self.assertEqual(source.count('"%s' % name[:34]), 1,
+                             "%r is spelled out somewhere besides its definition" %
+                             name[:34])
+
+    def test_a_refusal_negative_still_uses_the_marker_rule(self):
+        """A negative with no recorded check is verified by a refusal, as before."""
+        report = self.make_report()
+        report.data.setdefault("negative", {})["no-kernel"] = {
+            "markers": {"boot_ok": False, "failure_codes": ["E2"]}}
+        rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
+        self.assertEqual(rows["a missing kernel is an explicit failure"]["state"],
+                         "verified")
 
 
 if __name__ == "__main__":

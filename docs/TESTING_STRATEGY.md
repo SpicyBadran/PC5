@@ -48,6 +48,7 @@ none of them is folded into a single "pass".
 | `make record-validation` | *writes* one record per gate, by running it — never part of `make check` | anything it does not run | exit 1 only if a gate reports `failed`/`error` |
 | `make kernel64` | the flat 64-bit kernel links at `0x100000` with no unresolved symbols | that it runs anywhere |
 | `make uefi64` | the experimental 64-bit loader is a valid PE32+, and the ESP image that carries `KERNEL64.BIN` is built | that firmware boots it |
+| `make iso64` | the 64-bit release image packages the gated artifacts: `make verify` digests every ESP file and the loader and `KERNEL64.BIN` inside it are byte-identical to the files the gates ran | that firmware boots it; bytes the pins do not cover (FAT metadata, padding) | exit 1 on any mismatch, `Makefile` parse error on an unknown `PC5_UEFI` |
 | `make stubtest64` | the 64-bit path runs end to end in long-mode emulation: page tables installed, `ExitBootServices` done, kernel validates the handover (including placement at the top of the map), marker printed last | real firmware, or that the MMU would accept the map on hardware | exit 3 without unicorn, 0/1 otherwise |
 | `make ovmf-test` | a boot under genuine TianoCore OVMF | physical hardware, or Sony software | 0 verified, 1 failed, **NOT TESTED when the tool exits 3** (make then exits 2 and prints the reason) |
 

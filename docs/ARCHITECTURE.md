@@ -228,8 +228,12 @@ flat 32-bit protected-mode kernel. Nothing in that sequence is a 64-bit kernel,
 and turning `-m32` into `-m64` on it would produce an image that cannot run.
 
 `boot/uefi64/` and `kernel64/` are a second, separate path built to answer that
-honestly. It is **experimental**: it is not part of `make iso`, the release ESP
-does not carry it, and `make -n all` shows no 64-bit work.
+honestly. It is **experimental**: the default release does not carry it — `make iso`
+is `PC5_UEFI=32` and its ESP holds the bring-up loader, and `make -n all` shows no
+64-bit work — and only `make iso64` opts the long-mode loader into the release ESP.
+Packaging is the least of what is missing: no firmware has run this path, which is why
+`make iso64` verifies the image against the *executed* artifacts (§7.5c) instead of
+being offered as evidence that they work.
 
 ### 7.1 Boot sequence
 
@@ -550,3 +554,13 @@ still 32-bit. The 64-bit path has its own targets — `make kernel64`,
 `make uefi64`, `make stubtest64` — and its own ESP image
 (`build/efi64.img`). `tests/test_kernel64.py::ReleaseIsolationTests` fails if
 `make -n all` starts to depend on any of it.
+
+`PC5_UEFI` is the one deliberate seam: `make iso64` ships the 64-bit loader and
+kernel, and nothing builds it by accident. Three things keep that honest rather than
+aspirational — the mode is validated at Makefile parse time, so `PC5_UEFI=128 iso`
+stops before compiling; `build/build-info.json` records the mode and the digest of the
+loader actually embedded, so a release states which path it is; and
+`tests/test_release_esp.py` builds both modes in throwaway `BUILD` directories,
+asserts each mode's ESP holds exactly that mode's gated bytes, asserts a swapped
+expectation fails, and asserts the two modes do not produce the same image. Isolation
+is thus a choice a release engineer makes, not a property the 32-bit path can lose.

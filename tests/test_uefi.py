@@ -442,7 +442,14 @@ class UefiSourceContractTests(unittest.TestCase):
         make = self.read("Makefile")
         self.assertIn("--enable-reloc-section", make)
         self.assertIn("tools/mkefiimg.py", make)
-        self.assertIn("--uefi-image $(BUILD)/efi.img", make)
+        # The ISO rule embeds `$(ESP_IMAGE)`, not a hard-coded path, because which
+        # file goes in depends on the UEFI path `PC5_UEFI` selected.  Asserting the
+        # literal `$(BUILD)/efi.img` here pinned the Makefile's wording rather than
+        # its behaviour, and broke the moment the wording became a variable.  That
+        # the *default* still resolves to the 32-bit image is a question for a dry run
+        # of the real rule, which tests/test_release_esp.py::ModeSelection does.
+        self.assertIn("--uefi-image $(ESP_IMAGE)", make)
+        self.assertIn("ESP_IMAGE       := $(BUILD)/efi.img", make)
         self.assertIn("tools/eficheck.py", make)
 
 
