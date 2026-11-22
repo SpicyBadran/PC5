@@ -1,0 +1,110 @@
+Every gate in the final run, in order: the command, its real exit code, and the verdict
+line each one printed, from the exact source this commit carries (`make -s clean` first).
+`make check` appears last because it was invoked separately, after the suite had already
+been run on its own - `make check` aborts at its `citations-check` prerequisite and never
+reaches the suite in this checkout. Nothing here is a claim about firmware:
+`ovmf-check`/`ovmf-test` exit 2 because this machine has no qemu-system-x86_64 and no
+OVMF image at all.
+
+=== clean
+$ make -s clean
+exit=0
+=== kernel64
+$ make kernel64
+KERNEL64 OK: 200704 bytes at 0x100000
+exit=0
+=== uefi64
+$ make uefi64
+pc5: wrote build/efi64.img (FAT12, 1474560 bytes, 416/2847 clusters used)
+UEFI64 OK: 1474560 bytes sha256=792e58791e2e2bebb9632e3c793aaf52456bd7c6a49597985136897b9d04652b
+exit=0
+=== stubtest64
+$ make stubtest64
+PC5-64-MEM status=ok reason=ok frames=768 conventional=671 conventional_total=927 claimed=50 free=621 largest=512 bitmap=0x20000 span=0x100000000
+PC5-64-MEM-SELFTEST one=0x1000 three=0x2000 grant-in-map=1 bitmap-lie-refused=1 refusal-counted=1 disjoint=1 validated=1 claims-clean=1 zero-page-reserved=1 zero-refused=1 oversized-refused=1 refusal-clears-base=1 over-largest-refused=1 double-free-refused=1 unaligned-free-refused=1 first-fit-reuse=1 blocks-apart=1 free-restored=1 result=ok
+64-BIT STUB FIRMWARE OK: 31/31 checks passed
+exit=0
+=== stubtest
+$ make stubtest
+pc5: wrote build/efi.img (FAT12, 1474560 bytes, 167/2847 clusters used)
+pc5: wrote build/pc5.iso (1601536 bytes, 782 sectors)
+PASSED: 58/58 checks against the stub firmware
+exit=0
+=== unit
+$ make unit
+PASSED: 165 checks, 0 failures
+exit=0
+=== docs-check
+$ make docs-check
+DOCS OK: 60 Markdown files, 33 make targets, links, anchors and commands resolve
+exit=0
+=== presentation-check
+$ make presentation-check
+PRESENTATION OK: 6 figures and 5 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+exit=0
+=== citations-check
+$ make citations-check
+258 dead commit reference(s) across 11 documents
+exit=2
+=== suite
+$ python3 -m unittest discover -s tests -p test_*.py
+258 dead commit reference(s) across 11 documents
+Ran 961 tests in 320.105s
+FAILED (failures=5)
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+exit=1
+=== iso
+$ make iso
+exit=0
+=== verify
+$ make verify
+VALID: build/pc5.iso  sha256=2a6325812879c6afe499509bb6fa980be7d7981cbc57c88ffee5291713168f10
+MANIFEST VALID: build/pc5.iso matches build/pc5.iso.manifest.json
+exit=0
+=== boot-test
+$ make boot-test
+PASSED: boot evidence written to /tmp/audit43/land/build/test/boot-evidence.json
+exit=0
+=== ovmf-check
+$ make -s ovmf-check
+exit=2
+=== ovmf-test
+$ make ovmf-test
+NOT TESTED: genuine OVMF firmware and/or QEMU is not available on this machine.
+exit=2
+=== roadmap
+$ make roadmap
+roadmap: OK - 35 milestones in 14 workstreams, destination M19 reachable, document in sync
+exit=0
+=== artifact digests
+=== the 64-bit serial line this evidence quotes
+PC5-64-MEM status=ok reason=ok frames=768 conventional=671 conventional_total=927 claimed=50 free=621 largest=512 bitmap=0x20000 span=0x100000000
+PC5-64-MEM-SELFTEST one=0x1000 three=0x2000 grant-in-map=1 bitmap-lie-refused=1 refusal-counted=1 disjoint=1 validated=1 claims-clean=1 zero-page-reserved=1 zero-refused=1 oversized-refused=1 refusal-clears-base=1 over-largest-refused=1 double-free-refused=1 unaligned-free-refused=1 first-fit-reuse=1 blocks-apart=1 free-restored=1 result=ok
+=== tree state after every gate (only this change should be listed)
+=== check
+$ make check
+exit=2
+PASSED: 165 checks, 0 failures
+DOCS OK: 60 Markdown files, 33 make targets, links, anchors and commands resolve

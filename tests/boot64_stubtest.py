@@ -36,6 +36,21 @@ def run_once(image, kernel, race_map_key=0, seed=None):
     return trace
 
 
+def _number(serial, key):
+    """The decimal value of `key=` on the PC5-64-MEM line, or None.
+
+    Parsed rather than pattern-matched on the whole line: the gate has to fail with a
+    named reason when the kernel omits a field, not with a traceback.
+    """
+    text = fields(serial, "PC5-64-MEM", key)
+    if text is None:
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
 def fields(serial, marker, key):
     """Value of key=... on the line beginning with marker, or None."""
     for line in serial.splitlines():
@@ -110,6 +125,53 @@ def checks_for(trace, expect_success=True):
           "PC5-64-TOPOLOGY " in serial
           and ("not-parsed reason=" in serial or "usable=" in serial))
     check("the kernel ran to its verdict", "PC5-64-DONE" in serial)
+
+    # ------------------------------------------------------------- frame allocator
+    # Two numbers from two places.  `PC5-64-MAP conventional_pages=` is the sum the
+    # kernel took while validating the descriptor array; `PC5-64-MEM conventional=` is
+    # what the pool marked free before any claim was subtracted.  They are computed by
+    # different code over the same map, so a pool that lost, duplicated, or clipped
+    # conventional memory is caught here rather than at the first allocation.
+    map_pages = fields(serial, "PC5-64-MAP", "conventional_pages")
+    mem_status = fields(serial, "PC5-64-MEM", "status")
+    check("the kernel built a frame pool it can allocate from", mem_status == "ok",
+          f"status={mem_status}")
+    check("the frame pool counts the same conventional memory the map states",
+          map_pages is not None
+          and fields(serial, "PC5-64-MEM", "conventional_total") == map_pages,
+          f"map says {map_pages}, pool says "
+          f"{fields(serial, 'PC5-64-MEM', 'conventional_total')}")
+    inside = _number(serial, "conventional")
+    whole = _number(serial, "conventional_total")
+    check("clipping the map to the identity span can only reduce what is managed",
+          inside is not None and whole is not None and 0 < inside <= whole,
+          f"in-span={inside} total={whole}")
+    claimed = _number(serial, "claimed")
+    free = _number(serial, "free")
+    conventional = _number(serial, "conventional")
+    frames = _number(serial, "frames")
+    check("every conventional frame is either free or claimed, and neither is negative",
+          claimed is not None and free is not None and conventional is not None
+          and claimed >= 0 and free > 0 and claimed + free == conventional,
+          f"claimed={claimed} free={free} conventional={conventional}")
+    check("the pool describes at least as many frames as it found usable",
+          frames is not None and conventional is not None and frames >= conventional > 0,
+          f"frames={frames} conventional={conventional}")
+    check("the allocation self-test passed at runtime",
+          fields(serial, "PC5-64-MEM-SELFTEST", "result") == "ok",
+          f"result={fields(serial, 'PC5-64-MEM-SELFTEST', 'result')}")
+    check("the self-test refused every way of cheating the pool",
+          all(fields(serial, "PC5-64-MEM-SELFTEST", key) == "1" for key in (
+              "disjoint", "validated", "claims-clean", "zero-page-reserved",
+              "zero-refused", "oversized-refused", "refusal-clears-base",
+              "over-largest-refused", "double-free-refused", "unaligned-free-refused",
+              "first-fit-reuse", "blocks-apart", "free-restored",
+              "bitmap-lie-refused")),
+          " ".join(f"bitmap-lie-refused={fields(serial, 'PC5-64-MEM-SELFTEST', key)}" for key in (
+              "bitmap-lie-refused", "refusal-counted", "disjoint", "validated",
+              "claims-clean", "zero-page-reserved", "double-free-refused",
+              "free-restored")))
+
 
     if expect_success:
         check("the success marker is present", MARKER in serial)

@@ -17,6 +17,7 @@
 #include "pc5_boot64.h"
 #include "pc5_map.h"
 #include "pc5_io.h"
+#include "pc5_mem64.h"
 #include "cpu64.h"
 #include "apic64.h"
 #include "idt64.h"
@@ -496,6 +497,220 @@ static void report_handover_flags(const struct pc5_boot64 *bi)
  * another chance to disagree with the checks already made. */
 static struct pc5_map_view g_map;
 
+/* ------------------------------------------------------------------ frame allocator
+ * The bitmap describes the whole conventional window the loader's map reaches, and
+ * it lives in .bss - which travels with the image, so the kernel-image claim the
+ * allocator makes on `[kernel_base, kernel_size)` already covers the bitmap's own
+ * bytes.  No heap metadata is written outside the pool.
+ */
+#define MEM64_BITMAP_BYTES (PC5_MEM64_MAX_FRAMES / 8ull)
+static u8 g_mem64_bitmap[MEM64_BITMAP_BYTES];
+static struct pc5_mem64 g_mem64;
+
+/* One boot-time measurement, printed for the log and asserted by the gate that can
+ * execute it (`make stubtest64`).  A pool the map cannot support is reported and
+ * left alone - nothing in this kernel allocates yet, so refusing to manage memory
+ * must not stop a machine that would otherwise boot - but it is never reported as
+ * success, and the stub gate requires status=ok, so a real regression is a build
+ * failure rather than a footnote. */
+static void report_memory(const struct pc5_boot64 *bi)
+{
+    const char *reason = "unreported";
+    int selftest_ok = 1;
+    int ok = pc5_mem64_init(&g_mem64, bi, (u64)(unsigned long)bi,
+                            g_mem64_bitmap, MEM64_BITMAP_BYTES);
+    struct pc5_mem64_stats stats;
+    pc5_mem64_snapshot(&g_mem64, &stats);
+
+    serial64_write("PC5-64-MEM status=");
+    serial64_write(ok ? "ok" : "unavailable");
+    serial64_write(" reason=");
+    serial64_write(ok ? "ok" : (g_mem64.reason ? g_mem64.reason : reason));
+    serial64_write(" frames=");
+    serial64_dec(stats.frames);
+    serial64_write(" conventional=");
+    serial64_dec(stats.conventional);
+    serial64_write(" conventional_total=");
+    serial64_dec(stats.conventional_total);
+    serial64_write(" claimed=");
+    serial64_dec(stats.claimed);
+    serial64_write(" free=");
+    serial64_dec(stats.free);
+    serial64_write(" largest=");
+    serial64_dec(stats.largest_at_init);
+    serial64_write(" bitmap=");
+    serial64_hex(MEM64_BITMAP_BYTES);
+    serial64_write(" span=");
+    serial64_hex(bi->identity_span);
+    serial64_write("\n");
+    if (!ok)
+        return;
+
+    /* The self-test is the part that can only be done here, with the map this machine
+     * actually reported.  Each number printed below is a property of this allocator,
+     * not a constant: `largest` comes from the map the loader was handed, so a fixture
+     * with a different map changes the values and the checks still mean what they say.
+     *
+     * It needs a pool with room to be interesting - a one-page grant, a three-page
+     * grant, and two eight-page runs that must not touch.  A sparse map is not a broken
+     * allocator, so a pool too small for the battery is reported as `skipped`, not as
+     * `failed`; the stub firmware's map always clears the bar, so `ok` is what the
+     * executed gate expects. */
+    int roomy = g_mem64.stats.free >= 32 && g_mem64.stats.largest_at_init >= 8;
+    if (!roomy) {
+        serial64_write("PC5-64-MEM-SELFTEST result=skipped reason=pool-too-small free=");
+        serial64_dec(g_mem64.stats.free);
+        serial64_write(" largest=");
+        serial64_dec(g_mem64.stats.largest_at_init);
+        serial64_write("\n");
+        return;
+    }
+
+    u64 free_before = g_mem64.stats.free;
+    u64 one = 0, three = 0, sentinel = 0xDEAD;
+    int got_one = pc5_mem64_alloc(&g_mem64, 1, &one);
+    int got_three = pc5_mem64_alloc(&g_mem64, 3, &three);
+    int zero_refused = pc5_mem64_alloc(&g_mem64, 0, &sentinel);
+    int oversized_refused = pc5_mem64_alloc(&g_mem64, g_mem64.stats.frames + 1, &sentinel);
+    /* A refusal has to clear the out-parameter, or a caller reusing a variable
+     * would read the previous grant as the result of the failed request. */
+    int sentinel_cleared = sentinel == 0;
+
+    /* Deliberately not a write.  Dereferencing a grant here is only defined on a
+     * machine that has mapped what its map describes, and this function runs before the
+     * kernel has anything of its own living in an allocated page - so a write would
+     * test the fixture's memory layout rather than the allocator.  What is asserted
+     * instead is the property the write was standing in for: the run is conventional
+     * memory inside the identity span, which is a statement about the pool's inputs and
+     * needs no memory reference at all. */
+    int grant_in_map = (!got_one || pc5_mem64_range_usable(&g_mem64, one,
+                                                            one + PC5_MEM64_PAGE)) &&
+        (!got_three || pc5_mem64_range_usable(&g_mem64, three,
+                                              three + 3 * PC5_MEM64_PAGE));
+
+    /* The largest run init measured, plus one page, must be refused: a scan that
+     * stopped early or wrapped its arithmetic would hand out a run that is not
+     * free.  Asking for "every remaining page" would prove nothing, because a map
+     * with claims in the middle has no such contiguous run - and the pool refuses
+     * that request, which is the right answer for the wrong question. */
+    u64 too_big = 1;
+    int over_largest_refused = !pc5_mem64_alloc(&g_mem64, stats.largest_at_init + 1,
+                                                &too_big) && too_big == 0;
+
+    int disjoint = got_one && got_three &&
+        !pc5_ranges_overlap(one, one + PC5_MEM64_PAGE,
+                            three, three + 3 * PC5_MEM64_PAGE);
+    int validated = pc5_mem64_validate(&g_mem64, one, 1) &&
+        pc5_mem64_validate(&g_mem64, three, 3);
+    int claims_clean = !pc5_mem64_overlaps_claimed(&g_mem64, one, 1) &&
+        !pc5_mem64_overlaps_claimed(&g_mem64, three, 3);
+    /* The zero page is the one frame the pool reserves by policy rather than by
+     * map: a caller that leaves an address field at zero must not have it alias a
+     * real allocation. */
+    int zero_page_held = !pc5_mem64_validate(&g_mem64, 0, 1) &&
+        pc5_mem64_overlaps_claimed(&g_mem64, 0, 1);
+    int refused = zero_refused == 0 && oversized_refused == 0 && sentinel_cleared;
+
+    int freed_one = pc5_mem64_free(&g_mem64, one, 1);
+    int refused_again = pc5_mem64_free(&g_mem64, one, 1);       /* the double free */
+    int unaligned = pc5_mem64_free(&g_mem64, three + 1, 1);     /* not a frame edge */
+    pc5_mem64_free(&g_mem64, three, 3);
+
+    /* First-fit is a documented property, so it is asserted rather than assumed:
+     * the page just freed is the first page the next request finds. */
+    u64 reused = 0;
+    int got_reuse = pc5_mem64_alloc(&g_mem64, 1, &reused) && reused == one;
+    pc5_mem64_free(&g_mem64, reused, 1);
+
+    /* Defence in depth, and the only part of this battery that a *running* kernel can
+     * observe: frame 0 is claimed by policy rather than by the map, so the bitmap alone
+     * must never be able to grant it.  Clearing the bit here is safe for exactly one
+     * reason - nothing else is allocating while this runs - and the bit goes straight
+     * back, so the probe cannot leak into the pool the kernel later uses. */
+    u64 refusals_before = g_mem64.stats.refusals;
+    g_mem64_bitmap[0] = (u8)(g_mem64_bitmap[0] & ~1u);
+    u64 probe = 0xA5A5;
+    int probe_refused = !pc5_mem64_alloc(&g_mem64, 1, &probe) && probe == 0;
+    g_mem64_bitmap[0] = (u8)(g_mem64_bitmap[0] | 1u);
+    int probe_counted = g_mem64.stats.refusals == refusals_before + 1;
+    if (probe)
+        pc5_mem64_free(&g_mem64, probe, 1);   /* only reachable on a broken pool */
+
+    u64 block_a = 0, block_b = 0;
+    int got_a = pc5_mem64_alloc(&g_mem64, 8, &block_a);
+    int got_b = pc5_mem64_alloc(&g_mem64, 8, &block_b);
+    int blocks_apart = got_a && got_b &&
+        !pc5_ranges_overlap(block_a, block_a + (8 * PC5_MEM64_PAGE),
+                            block_b, block_b + (8 * PC5_MEM64_PAGE));
+    pc5_mem64_free(&g_mem64, block_a, 8);
+    pc5_mem64_free(&g_mem64, block_b, 8);
+    pc5_mem64_snapshot(&g_mem64, &stats);
+
+    if (!got_one || !got_three || !grant_in_map || !zero_page_held ||
+        !probe_refused || !probe_counted ||
+        !over_largest_refused || !disjoint || !validated || !claims_clean ||
+        !refused || !freed_one || refused_again || unaligned || !got_reuse ||
+        !blocks_apart || stats.free != free_before)
+        selftest_ok = 0;
+
+    serial64_write("PC5-64-MEM-SELFTEST one=");
+    serial64_hex(one);
+    serial64_write(" three=");
+    serial64_hex(three);
+    serial64_write(" grant-in-map=");
+    serial64_write(grant_in_map ? "1" : "0");
+    serial64_write(" bitmap-lie-refused=");
+    serial64_write(probe_refused ? "1" : "0");
+    serial64_write(" refusal-counted=");
+    serial64_write(probe_counted ? "1" : "0");
+    serial64_write(" disjoint=");
+    serial64_write(disjoint ? "1" : "0");
+    serial64_write(" validated=");
+    serial64_write(validated ? "1" : "0");
+    serial64_write(" claims-clean=");
+    serial64_write(claims_clean ? "1" : "0");
+    serial64_write(" zero-page-reserved=");
+    serial64_write(zero_page_held ? "1" : "0");
+    serial64_write(" zero-refused=");
+    serial64_write(zero_refused == 0 ? "1" : "0");
+    serial64_write(" oversized-refused=");
+    serial64_write(oversized_refused == 0 ? "1" : "0");
+    serial64_write(" refusal-clears-base=");
+    serial64_write(sentinel_cleared ? "1" : "0");
+    serial64_write(" over-largest-refused=");
+    serial64_write(over_largest_refused ? "1" : "0");
+    serial64_write(" double-free-refused=");
+    serial64_write(refused_again == 0 ? "1" : "0");
+    serial64_write(" unaligned-free-refused=");
+    serial64_write(unaligned == 0 ? "1" : "0");
+    serial64_write(" first-fit-reuse=");
+    serial64_write(got_reuse ? "1" : "0");
+    serial64_write(" blocks-apart=");
+    serial64_write(blocks_apart ? "1" : "0");
+    serial64_write(" free-restored=");
+    serial64_write(stats.free == free_before ? "1" : "0");
+    serial64_write(" result=");
+    serial64_write(selftest_ok ? "ok" : "failed");
+    serial64_write("\n");
+    if (!selftest_ok) {
+        /* Not `fail()`.  Nothing in this kernel has allocated from the pool yet, so a
+         * bookkeeping disagreement is not a reason to stop a machine that would
+         * otherwise boot.  It is a reason to make the pool unusable, which is what
+         * `ready = 0` does - every entry point refuses when the pool is not ready -
+         * and it is reported on the serial line, where the executed gate turns it into
+         * a build failure. */
+        g_mem64.ready = 0;
+        g_mem64.reason = "mem64-selftest-failed";
+        serial64_write("PC5-64-MEM status=unavailable reason=mem64-selftest-failed\n");
+    }
+}
+
+/* kernel64/start.S: switches RSP to a validated stack and calls the continuation
+ * there.  It never returns. */
+void pc5_adopt_stack(u64 stack_top, void (*continuation)(void *), void *argument)
+    __attribute__((noreturn));
+
+
 /* kernel64/start.S: switches RSP to a validated stack and calls the continuation
  * there.  It never returns. */
 void pc5_adopt_stack(u64 stack_top, void (*continuation)(void *), void *argument)
@@ -638,6 +853,7 @@ static void continue_on_handed_stack(void *argument)
     report_handover_flags(bi);
     report_optional_resources(bi, &g_map);
     cpu64_print(&cpu);
+    report_memory(bi);
     report_local_apic();
     report_timer();
     report_topology(bi);

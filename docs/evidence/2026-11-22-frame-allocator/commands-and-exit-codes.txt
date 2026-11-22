@@ -1,0 +1,22 @@
+Final battery, run once against the committed source (`make -s clean` first), in a
+worktree of ae9f3e25 with the slice applied.  unicorn 2.1.4 and node v22 on PATH,
+V86_ASSETS pointing at the installed v86-system assets, TMPDIR=/tmp.
+A missing dependency exits 3 (stub) / 2 (ovmf) and is reported as not-tested, never 0.
+
+clean -> exit 0
+kernel64 -> exit 0
+uefi64 -> exit 0
+stubtest64 -> exit 0
+stubtest -> exit 0
+unit -> exit 0
+docs-check -> exit 0
+presentation-check -> exit 0
+citations-check -> exit 2
+suite -> exit 1
+iso -> exit 0
+verify -> exit 0
+boot-test -> exit 0
+ovmf-check -> exit 2
+ovmf-test -> exit 2
+roadmap -> exit 0
+check -> exit 2
