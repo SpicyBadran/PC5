@@ -1,7 +1,8 @@
 # The 64-bit release ISO, booted under genuine firmware
 
-**Date:** 2026-11-23 · **Commit this image was built from:** this branch, six commits after
-`e53b4c3` · **Result:** `PC5-64BIT-LONG-MODE-OK` and `PC5-64-DONE`, no `PC5-64-LOADER-FAIL`
+**Date:** 2026-11-23 · **Commit this image was built from:** `e784f66` (main `964b61e741820bb03d26a462f1ade8866ec54cea`
+after this PR merged; the tree is identical, and the ISO above was built from a fresh clone of it)
+· **Result:** `PC5-64BIT-LONG-MODE-OK` and `PC5-64-DONE`, no `PC5-64-LOADER-FAIL`
 line, `tr=not-loaded` reported honestly.
 
 This is the first time PC5's **64-bit** boot path has been executed by firmware that is not
@@ -43,19 +44,30 @@ timeout 260 "$QEMU" -machine q35 -m 512 \
 `BOOTX64.EFI` = `build/uefi64/bootx64.efi` and `KERNEL64.BIN` = `build/kernel64.bin`:
 
 ```
-$ SOURCE_DATE_EPOCH=1700000000 make BUILD=/tmp/r1 PC5_UEFI=64 iso   # and again into /tmp/r2
-$ sha256sum /tmp/r1/pc5.iso /tmp/r2/pc5.iso
-d8e4e2a70f195abca8c33a0f6f8ffee8f4d403630cccef9690e600ea20248caf  /tmp/r1/pc5.iso
-d8e4e2a70f195abca8c33a0f6f8ffee8f4d403630cccef9690e600ea20248caf  /tmp/r2/pc5.iso
+# fresh clone of main at 964b61e (tree identical to e784f66), two BUILD directories
+$ SOURCE_DATE_EPOCH=1700000000 make BUILD=/tmp/m1 PC5_UEFI=64 iso
+$ sha256sum /tmp/m1/pc5.iso
+d6778d0efa4ff6e450c9272a423ce33618d84d5f081cb41f8034dfe0dc060396  /tmp/m1/pc5.iso   (1806336 bytes)
 ```
 
-Two build directories, one digest: that is the release artifact, and it is the file booted below.
-Built without `SOURCE_DATE_EPOCH` the ISO differs (`ff1c2baab92f7a4959346d22112c8a4b10f13644701e3d5e988be0c8701dbec1`,
-also 1806336 bytes) because the FAT volume's timestamp and serial are taken from the clock; both
-digests booted to the same markers, and the boot-log line counts differ only in
-`PC5-64-TIMER spins=`. That is the reproducibility claim `docs/BUILDING.md` makes, and the
-`test_each_mode_rebuilds_byte_identically` case in `tests/test_release_esp.py` pins the pinned-epoch
-form. Quoting an unanchored digest as "the release hash" would have been the mistake.
+`ovmf64-serial.log` is the boot of *that* file: 68 lines, no `PC5-64-LOADER-FAIL`, ending
+`PC5-64BIT-LONG-MODE-OK` / `PC5-64-DONE`.
+
+Two things a reader reproducing this needs to know about the digest, because both bit me while
+writing this file:
+
+* **The clock is in the image.** Built without `SOURCE_DATE_EPOCH` the same tree yields
+  `ff1c2baab92f7a4959346d22112c8a4b10f13644701e3d5e988be0c8701dbec1` — same 1806336 bytes —
+  because the FAT volume's timestamp and serial number come from the clock. So "the release hash"
+  is only meaningful as *the pinned-epoch form*, which is the claim `docs/BUILDING.md` makes and
+  `test_each_mode_rebuilds_byte_identically` in `tests/test_release_esp.py` pins.
+* **The source commit is in the image too**, via `BUILDINFO.TXT`. An ISO built the same way from
+  `4a3e69c` — two commits earlier, when this boot was first obtained — is
+  `d8e4e2a70f195abca8c33a0f6f8ffee8f4d403630cccef9690e600ea20248caf`, and no file that goes into
+  the image changed between them. Two builds of one commit agree byte for byte (verified across
+  two `BUILD=` directories); builds of *different* commits must not be quoted as if they were the
+  same artifact. The 2026-11-23 boot at `4a3e69c` differed from this one by a single line,
+  `PC5-64-TIMER spins=5377` against `spins=9583` — TCG scheduling, nothing more.
 
 Two independent boots of the path are on file in this directory's log and in the notes: apart from
 one timing line (`PC5-64-TIMER spins=701` against `spins=5377`, TCG scheduling), the 68 lines of
