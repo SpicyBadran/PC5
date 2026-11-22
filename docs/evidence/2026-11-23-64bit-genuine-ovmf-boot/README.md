@@ -148,4 +148,6 @@ That leaves a real, named gap, and it is not this boot's to fix:
 `classify()` knows `PC5-UEFI:` and `PC5-BOOT-OK`, not `PC5-64-*`. So this boot is proven by
 the command above and this log, and by the automated gate for the 32-bit ISO — teaching the
 gate the 64-bit marker set is the open piece, recorded in `docs/KNOWN_LIMITATIONS.md`.
-`tr=loaded` is **not** claimed here; that is measured by `make tss-probe`, not by this boot.
+`tr=loaded` is **not** claimed here. The 64-bit TSS/IST work is exercised by `make stubtest64`
+and the unit tests, `make emulator-probe` records what the emulator can and cannot prove about
+exception dispatch, and this boot simply prints the honest `tr=not-loaded reason=...`.

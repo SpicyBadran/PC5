@@ -353,9 +353,13 @@ class MatrixTests(unittest.TestCase):
         rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
         self.assertEqual(rows["a missing kernel is an explicit failure"]["state"], "failed")
 
-    def test_the_low_memory_row_exists(self):
+    def test_the_small_memory_row_exists(self):
+        """Renamed with the control: the row is now about a *small* machine, because
+        the starved one (-m 24) never reaches firmware far enough to say anything
+        about PC5 -- see tests/ovmf_boot.py's comment on the check."""
         rows = {r["requirement"] for r in ovmf.build_matrix(self.make_report())}
-        self.assertIn("insufficient memory fails safely", rows)
+        self.assertIn("a small machine refuses or reports its own memory", rows)
+        self.assertNotIn("insufficient memory fails safely", rows)
 
 
 if __name__ == "__main__":
