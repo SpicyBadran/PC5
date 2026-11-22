@@ -147,6 +147,34 @@ Authority: [`docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md`](docs/architecture/P
 
 ## Progress
 
+![PC5 progress matrix: milestone states, the six evidence levels, acceptance and deliverable counts, workstream shares, contract claim classifications, modelled operations, blocked milestones with their unmet dependencies and the committed validation records, every region carrying its own numerator and denominator](docs/assets/pc5-progress-matrix.svg)
+
+<!-- pc5:matrix:begin -->
+| Progress region | Figure | Where the denominator comes from |
+|---|---|---|
+| Milestones verified | 25.7% (9/35) | milestone `state` in `roadmap.json` |
+| Levels with a verified milestone | 2/6 | milestones grouped by their `level` field |
+| Acceptance items inside verified milestones | 31/116 | `acceptance` arrays, counted per owning milestone state |
+| Deliverables that exist as named paths | 31/66 | `deliverables` strings matched as a repository path, then read off disk |
+| Milestones carrying a filed evidence path | 19/35 | `evidence` arrays resolved against the tree |
+| Modelled operations implemented | 87.5% (56/64) | the generated tables in `docs/architecture/PS5_PLATFORM_CONTRACT.md` |
+| Contract claims backed by public documentation | 15.8% (6/38) | `psm/registry.py` classifications, enforced by `psm/contract.py` |
+| Committed validation records passing | 90.9% (10/11) | `docs/evidence/validation/*.json` |
+| Blocked milestones | 6 | state `blocked` and its `blocker` field |
+| Physical-hardware boot evidence | 0 record(s) filed | `docs/evidence/*.json`, validated by `tools/hw_record.py` |
+| Genuine target-system-software execution | **BLOCKED** — nothing executed | state of `M19` in `roadmap.json` |
+
+Levels: L1 4/6 · L2 5/8 · L3 0/5 · L4 0/9 · L5 0/4 · L6 0/3. Blocked: `M1b`, `M17`, `M18`, `M19`, `M20`, `M21`. A cell is green in `docs/assets/pc5-progress-matrix.svg` only where a file in this repository records the thing as done: documentation progress, synthetic-test coverage and host or emulator validation are counted separately, and no row above them is inferred from a row below.
+<!-- pc5:matrix:end -->
+
+The matrix is drawn by the same generator as the numbers above, from the same files,
+and it is deliberately not one headline percentage: the two levels with verified
+milestones are the two a laptop can reach, and the levels that need a PlayStation are
+drawn with nothing green in them. The figure is generated, so a cell cannot stay green
+after the file that justified it is gone — `make presentation-check` fails instead.
+
+### Milestone progress by workstream
+
 ![PC5 milestone progress: one bar per workstream showing complete, in-progress, blocked and not-started milestones, and the longest dependency chain to destination M19](docs/assets/pc5-progress.svg)
 
 **How the bars are computed:** each bar is the count of milestones in that

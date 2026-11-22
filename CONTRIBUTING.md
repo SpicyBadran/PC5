@@ -6,7 +6,11 @@ that serves that destination is welcome; work that redefines it is not.
 
 ## Before you start
 
-Read [`docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md`](docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md)
+Read [`AGENTS.md`](AGENTS.md) first if you are an agent or an automation: it carries the
+binding post-merge duty (the README progress dashboard is reconciled after every
+successful merge into `main`, without anybody asking) and it is the only instruction file
+for agents. Then read
+[`docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md`](docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md)
 and [`docs/ROADMAP.md`](docs/ROADMAP.md). The milestone graph in
 [`docs/architecture/roadmap.json`](docs/architecture/roadmap.json) is the authority on
 what exists, what is next and what is blocked; `python3 tools/roadmap.py path` prints
@@ -61,7 +65,7 @@ make presentation-check # figures and status block are current (make check runs 
 
 If you touch the milestone graph, run `python3 tools/roadmap.py sync` so the rendered
 document matches the data. If you touch the README or a figure, run
-`make presentation` to regenerate the six figures and five generated blocks from
+`make presentation` to regenerate the seven figures and six generated blocks from
 `roadmap.json` and the committed records, then `make presentation-check` — the read-only check that `make check` also runs, and which
 fails if a hand edit overstates progress. `make docs-check` does the same job for every
 document in the tree: links, heading anchors and documented commands.
@@ -82,6 +86,13 @@ If you have physical hardware, the most valuable contribution is
 [`docs/hardware/M1_PHYSICAL_BOOT_PROCEDURE.md`](docs/hardware/M1_PHYSICAL_BOOT_PROCEDURE.md):
 a filled record validated by `tools/hw_record.py`, with the serial log committed
 verbatim. A screenshot is not a substitute.
+
+## After a merge
+
+`AGENTS.md` requires the dashboard to be reconciled after every successful merge into
+`main`; `make dashboard-reconcile` prints which merges are still unprocessed, and
+`make post-merge` regenerates and re-checks. This is a documentation workflow, not a
+licence to merge anything: merging remains a maintainer decision.
 
 ## Commit and review
 
