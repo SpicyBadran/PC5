@@ -102,6 +102,21 @@ work that has secretly been done.
 
 ## UEFI boot path
 
+- **The 64-bit kernel image is accepted unvalidated, because it carries no header to validate.**
+  The 32-bit loader refuses a `\KERNEL.BIN` whose bytes 2..5 are not `PC5K` or whose version byte
+  is not 1, and `tools/verify_iso.py` re-checks those bytes on the release file. `KERNEL64.BIN`
+  begins directly with `cli; mov rbx, rdi` — `kernel64/start.S`, no signature, no version, no
+  length — so the 64-bit loader trusts the file it opens completely: any bytes of a plausible
+  length boot. A control run on 2026-11-23 proved how easy it is to *believe* this is covered:
+  rewriting `PC5K` to `XXXX` inside the 64-bit ISO still reached `PC5-64BIT-LONG-MODE-OK`, because
+  the bytes edited belonged to the *other* kernel the same ISO carries for its legacy El Torito
+  entry, which the 64-bit path never opens; `tools/verify_iso.py`'s signature check for that ISO
+  reads the same wrong file for the same reason, and passes. Closing it means adding a header to
+  the 64-bit image format (`kernel64/start.S`, `kernel64.ld`, `tools/build_release.py`,
+  `tests/test_release_esp.py`'s digests) and then the loader check — a format change for its own
+  slice, not a patch to a boot PR. Boot evidence and the byte dump that settled it:
+  `docs/evidence/2026-11-23-64bit-genuine-ovmf-boot/README.md`.
+
 Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
 §16). What that does **not** cover:
 

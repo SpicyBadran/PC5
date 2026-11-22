@@ -9,6 +9,22 @@
     .section .text
     .globl _start
 _start:
+    /* Firmware's two arguments have to survive the .bss clear before they are
+     * used, because `rep stosq` consumes RCX as its repeat count -- and RCX is the
+     * register holding ImageHandle under ms_abi.  Clearing .bss therefore left
+     * RCX = 0, and every consumer of the handle downstream asked firmware about
+     * handle 0: HandleProtocol(0, LOADED_IMAGE) is EFI_INVALID_PARAMETER, so the
+     * loader could not name the volume it was loaded from and could not find
+     * KERNEL64.BIN, and ExitBootServices(0, key) would have been refused too.
+     * That is the entire reason a release containing the bytes `make stubtest64`
+     * executed 41/41 did not boot on real firmware: the stub answers a file
+     * request without checking whose request it is, so a destroyed handle is
+     * invisible to it and fatal on OVMF.  R8/R9 are safe places for the two
+     * arguments -- neither is touched by string operations, and neither is a
+     * register firmware expects us to preserve. */
+    movq %rcx, %r8                 /* ImageHandle */
+    movq %rdx, %r9                 /* SystemTable */
+
     /* .bss is NOLOAD, so the image does not carry it and firmware will not
      * zero it: do that before any C code runs. */
     leaq __bss_start(%rip), %rdi
@@ -19,7 +35,9 @@ _start:
     rep stosq
 
     /* ms_abi call: keep the stack 16-byte aligned and reserve 32 bytes of
-     * shadow space.  Arguments are already in RCX/RDX. */
+     * shadow space. */
+    movq %r8, %rcx
+    movq %r9, %rdx
     subq $0x28, %rsp
     call efi_main64
     addq $0x28, %rsp
