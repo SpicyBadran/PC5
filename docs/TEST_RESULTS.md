@@ -3089,22 +3089,35 @@ is exactly the class of error this section documents. The measured counts are in
    fail; both now go through `measure`.
 
 **How the three were found:** a mutation battery — copy the tree to a scratch directory, swap one
-statement, re-run the suite, and require a failure. Eighteen controls in three rounds; **15 caught,
-3 missed and then fixed**. The misses were the value of the exercise: a test that calls a helper
+statement, re-run the suite, and require a failure. 34 control attempts across three rounds against
+committed state: **24 caught**; 5 needles failed to match because the code had moved and 1 produced
+source that would not parse (harness faults, reported as such rather than as passes); and **3
+controls genuinely missed**, which is where the value was — the same experiment run twice on an
+uncommitted tree reported 0/6 caught because the harness resets the copy with `git checkout -- .`,
+which quietly reverted the very tests it was meant to prove. The harness runs on commits only.
+The misses were the point: a test that calls a helper
 directly proves the helper, not the gate, and a `try/except` around a `git rev-list` turns
 "this repository cannot tell me" into "nothing landed". Both holes now have assertions, and the
 structural test on `range_commits` (no `try`, no `except`) is what remains when a behaviour cannot
 be produced in a fixture.
 
-| suite | tests | result |
-|---|---|---|
-| `tests.test_dashboard_reconcile` | 45 | `OK (skipped=1)` |
-| `tests.test_progress_matrix` | 56 | `OK` |
-| `tests.test_presentation` | 66 | `OK` |
-| `make check` | 1037 | `exit=0`, `OK (skipped=110)` |
+Measured on `96d0b9d`, the commit that also carries this entry, by running each command and
+keeping its exit code:
+
+| command | tests | exit | result |
+|---|---|---|---|
+| `python3 -m unittest tests.test_dashboard_reconcile` | 46 | 0 | `OK (skipped=1)` |
+| `python3 -m unittest tests.test_progress_matrix` | 56 | 0 | `OK` |
+| `python3 -m unittest tests.test_presentation` | 66 | 0 | `OK` |
+| `make check` | 1037 | 0 | `OK (skipped=110)` |
+| `make presentation-check` | 7 figures, 6 blocks | 0 | `PRESENTATION OK` |
+| `make docs-check` | 68 files, 36 targets | 0 | `DOCS OK` |
+| `python3 tools/dashboard_reconcile.py` | — | 1 | `OUTSTANDING — no receipt on `main` yet` |
 
 One control is reported as not-proven: a needle aimed at a report string failed to patch, so that
-behaviour rests on scenario 37's substring assertion alone. Nothing in the figure, README or
+behaviour rests on scenario 37's substring assertion alone. The count in §28's summary line above is
+46, not 45: the structural test on `range_commits` was added after the first draft of this table,
+which is the second time in two days that a number here was written down before it was measured. Nothing in the figure, README or
 `claims.json` claims more than these lines support.
 
 **Next actions / still open**
