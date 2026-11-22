@@ -446,6 +446,367 @@ class PostMergePolicyTest(unittest.TestCase):
             self.assertFalse((REPO / name).exists(),
                              f"{name} would compete with AGENTS.md for the same rule")
 
+# ---------------------------------------------------------------- the artwork itself
+CELL_ELEMENT = re.compile(
+    r'<rect x="([\d.]+)" y="([\d.]+)" width="[\d.]+" height="(\d+)" rx="3" '
+    r'fill="(#[0-9a-f]{6})" stroke="(#[0-9a-f]{6})"[^>]*/>\s*'
+    r'(?:<text[^>]*>([^<]*)</text>)?')
+HEAD_ELEMENT = re.compile(
+    r'<text x="(\d+)" y="(\d+)"[^>]*font-size="13"[^>]*font-weight="bold"[^>]*>'
+    r'([A-Z][^<]{5,60}?)</text>')
+ROW_LABEL = re.compile(r'<text x="(24)" y="(\d+)"[^>]*font-weight="bold"[^>]*>(L\d)</text>')
+
+
+def drawn_cells(body: str) -> list:
+    """Every painted cell in the figure, read out of the artwork: (x, y, height, fill,
+    stroke, label)."""
+    cells = []
+    for x, y, height, fill, stroke, label in CELL_ELEMENT.findall(body):
+        if int(height) < 18:                       # legend swatches and separators
+            continue
+        cells.append((float(x), float(y), int(height), fill, stroke, (label or "").strip()))
+    return cells
+
+
+def region_bands(body: str) -> dict:
+    """{title: (column x, first y, last y)} — the span a region's cells live in.
+
+    Two columns of regions share the canvas, so a band is bounded by the next head *in the same
+    column*; reading the bands from the artwork is what keeps these tests independent of the
+    generator's internal constants.
+    """
+    heads = sorted(((int(x), int(y), title) for x, y, title in HEAD_ELEMENT.findall(body)))
+    bands = {}
+    for column in sorted({h[0] for h in heads}):
+        same = [h for h in heads if h[0] == column]
+        for index, (_x, y, title) in enumerate(same):
+            stop = same[index + 1][1] if index + 1 < len(same) else 10 ** 6
+            bands[title.strip()] = (column, y, stop)
+    return bands
+
+
+def cells_in(body: str, region: str, width: int = 576) -> list:
+    """The cells drawn inside one region: its own column, its own vertical span.
+
+    Both bounds matter.  A region's span runs to the next head *in its column*, so without the
+    column bound the last region on the left would also claim every cell on the right.
+    """
+    bands = region_bands(body)
+    if region not in bands:
+        raise AssertionError(f"{region!r} is not a region head in the figure: {sorted(bands)}")
+    column, low, high = bands[region]
+    return [cell for cell in drawn_cells(body)
+            if column - 1 <= cell[0] < column + width and low <= cell[1] < high]
+
+
+def ladder_rows(body: str, region: str) -> dict:
+    """{level: [fill, …]} — the ladder's cells collected per level, matched on baseline."""
+    labels = {int(level[1:]): float(y) for _x, y, level in ROW_LABEL.findall(body)}
+    rows = {level: [] for level in labels}
+    for _x, y, _h, fill, _stroke, _label in cells_in(body, region):
+        for level, label_y in labels.items():
+            if abs(y - (label_y - 15)) < 9:          # a row's text sits 15px under its cells
+                rows[level].append(fill)
+                break
+    return rows
+
+
+def artwork_mismatches(body: str, data: dict, metrics: dict) -> list:
+    """Every way the painted cells can contradict the files they are supposed to come from.
+
+    Kept as a function so the same rules can be pointed at a doctored figure in
+    `ArtworkGuardFalsifiabilityTest`: a check that has never been seen to fail is not a check.
+    """
+    problems = []
+    states = {m["id"]: m["state"] for m in data["milestones"]}
+    green = P.GREEN
+
+    for _x, _y, _h, fill, stroke, label in cells_in(body, "MILESTONES BY STATE"):
+        if not label:
+            continue
+        milestone = label.replace(" !", "")
+        state = states.get(milestone)
+        if state is None:
+            problems.append(f"a cell is labelled {milestone!r}, which is not a milestone")
+            continue
+        if fill == green and state != "complete":
+            problems.append(f"{milestone} is {state} but painted verified")
+        if state == "complete" and fill != green:
+            problems.append(f"{milestone} is complete but not painted verified")
+        if state == "blocked" and (fill == green or stroke != P.RED or not label.endswith(" !")):
+            problems.append(f"{milestone} is blocked and is not drawn as blocked")
+
+    for level, fills in sorted(ladder_rows(body, "EVIDENCE LADDER — ONE ROW PER LEVEL").items()):
+        want = metrics["levels"].get(level, {}).get("complete")
+        if want is None:
+            continue
+        got = sum(1 for fill in fills if fill == green)
+        if got != want:
+            problems.append(f"L{level} paints {got} verified cells; {want} milestones are "
+                            "complete at that level in roadmap.json")
+
+    grid = [c for c in cells_in(body, "MILESTONES BY STATE") if c[5]]
+    if len(grid) != len(data["milestones"]):
+        problems.append(f"the state grid draws {len(grid)} cells for {len(data['milestones'])} "
+                        "milestones")
+    streams = [c for c in cells_in(body, "WORKSTREAMS")]
+    green_streams = sum(1 for c in streams if c[3] == green)
+    want_streams = sum(s["complete"] for s in metrics["streams"])
+    if green_streams != want_streams:
+        problems.append(f"the workstream rows paint {green_streams} verified cells, the "
+                        f"roadmap supports {want_streams}")
+    gates = [c for c in cells_in(body, "COMMITTED VALIDATION RECORDS") if c[5]]
+    if sum(1 for c in gates if c[3] == green) != metrics["gate_passed"]:
+        problems.append("a validation cell is green without a passed record behind it")
+    if len(gates) != len(metrics["gates"]):
+        problems.append(f"{len(gates)} gate cells drawn for {len(metrics['gates'])} records")
+
+    for problem in P.collisions(body):
+        problems.append(problem)
+    for clipped in re.findall(r">([^<>]*\u2026[^<>]*)<", body):
+        problems.append(f"a label is truncated: {clipped!r}")
+    return problems
+
+
+class TheFigureSaysWhatTheFilesSayTest(unittest.TestCase):
+    """The drawing, not only the colour table, has to answer for every green cell.
+
+    The tests above check `MATRIX_STATE` and that the committed asset equals a fresh render.
+    Those two facts together still permit a figure that paints verified cells for milestones no
+    file records: change `fill=` at the drawing site and both stay green, because the render and
+    the asset agree and the colour table is untouched.  These tests read the painted rectangles
+    and hold them against `roadmap.json`, the records and the tree.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.body = MATRIX_BYTES()
+        cls.data = roadmap()
+        cls.metrics = P.progress_metrics(cls.data, P.load_records())
+
+    def test_the_artwork_agrees_with_the_data_it_claims_to_be_drawn_from(self):
+        self.assertEqual(artwork_mismatches(self.body, self.data, self.metrics), [],
+                         "the figure and the files disagree")
+
+    def test_every_green_milestone_cell_is_a_milestone_the_roadmap_calls_complete(self):
+        states = {m["id"]: m["state"] for m in self.data["milestones"]}
+        offenders = []
+        for _x, _y, _h, fill, _stroke, label in cells_in(self.body, "MILESTONES BY STATE"):
+            milestone = label.replace(" !", "")
+            if milestone and fill == P.GREEN and states.get(milestone) != "complete":
+                offenders.append((milestone, states.get(milestone)))
+        self.assertEqual(offenders, [])
+
+    def test_levels_three_to_six_cannot_show_a_verified_cell(self):
+        rows = ladder_rows(self.body, "EVIDENCE LADDER — ONE ROW PER LEVEL")
+        self.assertEqual(sorted(rows), [1, 2, 3, 4, 5, 6],
+                         "the six ladder rows were not all found in the figure")
+        for level, fills in rows.items():
+            verified = sum(1 for fill in fills if fill == P.GREEN)
+            self.assertEqual(verified, self.metrics["levels"][level]["complete"],
+                             f"L{level} paints {verified} cells but the roadmap verifies "
+                             f"{self.metrics['levels'][level]['complete']}")
+            if level >= 3:
+                self.assertEqual(verified, 0, f"L{level} is above what a host can prove")
+
+    def test_the_verified_cell_count_is_the_verified_milestone_count(self):
+        grid = [c for c in cells_in(self.body, "MILESTONES BY STATE") if c[5]]
+        self.assertEqual(sum(1 for c in grid if c[3] == P.GREEN),
+                         self.metrics["states"]["complete"])
+        self.assertEqual(len(grid), self.metrics["milestone_total"])
+
+    def test_every_ratio_in_the_text_fallback_is_drawn_in_the_figure(self):
+        """The README table and the SVG are the same census, so neither may carry a stray count.
+
+        Compared as `a/b` pairs rather than as sentences, because the two render the same number
+        with different words around it.
+        """
+        block = matrix_block()
+        drawn = re.sub(r"<[^>]+>", " ", self.body)
+        pairs = set(re.findall(r"\b(\d+)/(\d+)\b", block))
+        self.assertGreaterEqual(len(pairs), 9, f"the fallback table lost rows: {sorted(pairs)}")
+        for numerator, denominator in sorted(pairs):
+            needle = f"{numerator}/{denominator}"
+            self.assertIn(needle, drawn,
+                          f"{needle!r} is asserted in README.md's pc5:matrix block but the "
+                          f"figure does not show it")
+
+    def test_a_citation_and_a_filed_record_are_not_labelled_the_same_thing(self):
+        figure = self.body.lower()
+        self.assertIn("cited paths", figure)
+        self.assertIn("milestones citing at least one in-tree path", figure)
+        self.assertIn("milestones with a record filed under docs/evidence/", figure)
+        self.assertIn("a citation names a path", figure)
+        self.assertNotIn("filed evidence", figure.split("</desc>")[-1],
+                         "a path the roadmap names is not filed evidence")
+        block = matrix_block()
+        self.assertIn("Milestones citing at least one in-tree path", block)
+        self.assertIn("a citation, not a run", block)
+        self.assertNotIn("carrying a filed evidence path", block)
+
+    def test_nothing_in_the_figure_is_clipped_or_collides(self):
+        self.assertEqual(re.findall(r">[^<>]*\u2026[^<>]*<", self.body), [],
+                         "a clipped label hides a number or a dependency")
+        self.assertEqual(P.collisions(self.body), [],
+                         "two labels share a line; region_head must split the column")
+
+
+class ArtworkGuardFalsifiabilityTest(unittest.TestCase):
+    """The rules above must fail on a doctored figure, or they are decoration."""
+
+    def setUp(self):
+        self.data = roadmap()
+        self.metrics = P.progress_metrics(self.data, P.load_records())
+        self.body = MATRIX_BYTES()
+
+    def test_the_rules_catch_a_green_cell_the_data_does_not_support(self):
+        """A doctored figure, built rather than string-surgically edited, must be reported.
+
+        A check nobody has seen fail is not evidence of anything, so the ladder rule is pointed
+        at a small figure whose L6 row — a level with no verified milestone anywhere in this
+        repository — carries one green cell.
+        """
+        heads = (P.text(24, 91, "MILESTONES BY STATE", size=13, weight="bold")
+                 + P.text(24, 200, "EVIDENCE LADDER — ONE ROW PER LEVEL", size=13,
+                          weight="bold")
+                 + P.text(24, 400, "WORKSTREAMS", size=13, weight="bold")
+                 + P.text(24, 500, "COMMITTED VALIDATION RECORDS", size=13, weight="bold"))
+        row_label = P.text(24, 245, "L6", size=11, weight="bold")
+        forged = P.matrix_cell(300, 232, 30, 22, "20", fill=P.GREEN, ink=P.GREEN_INK, size=10)
+        body = P.svg(1200, 700, heads + row_label + forged, "t", "d")
+        problems = artwork_mismatches(body, self.data, self.metrics)
+        self.assertTrue(any("L6" in problem and "verified" in problem for problem in problems),
+                        f"the forged cell was not reported: {problems}")
+        self.assertTrue(any("grid draws 0 cells" in problem for problem in problems),
+                        "an empty state grid was not reported either")
+
+    def test_the_collision_guard_fires_on_two_labels_that_share_a_line(self):
+        wide = P.text(24, 40, "A" * 60, size=13, weight="bold")
+        right = P.text(588, 40, "B" * 30, size=13, weight="bold", anchor="end")
+        self.assertTrue(P.collisions(P.svg(1200, 100, wide + right, "t", "d")))
+
+    def test_the_collision_guard_stays_quiet_when_the_pair_fits(self):
+        body = P.svg(1200, 100,
+                     P.text(24, 40, "A" * 20, size=13)
+                     + P.text(588, 40, "B" * 20, size=13, anchor="end"), "t", "d")
+        self.assertEqual(P.collisions(body), [])
+
+    def test_region_head_clips_the_title_instead_of_letting_the_pair_overlap(self):
+        body, _y = P.region_head(24, 20, 564, "T" * 70, right="R" * 40)
+        self.assertIn("\u2026", body, "an over-long title must be clipped, not allowed to collide")
+        self.assertEqual(P.collisions(P.svg(1200, 100, body, "t", "d")), [])
+
+    def test_measure_fit_and_the_guard_share_one_ruler(self):
+        self.assertEqual(P.measure("x" * 10, 10), 10 * 10 * P.CHAR_EM)
+        self.assertEqual(P.fit("x" * 10, 100, 10), "x" * 10)
+        self.assertTrue(P.fit("x" * 100, 100, 10).endswith("\u2026"))
+        self.assertEqual(P.fit("x" * 100, 2, 10), "x" * 100, "a 1-character room is no room")
+
+    def setUp_body(self):
+        return MATRIX_BYTES()
+
+
+class EvidenceCensusIsFalsifiableTest(unittest.TestCase):
+    """`evidence_present` is a claim about the disk, so it has to move when the disk moves.
+
+    Every cited path resolves in the committed repository, which is exactly why the earlier
+    recomputation could not fail: numerator and denominator were the same 39.  A fixture tree
+    with one deleted file makes the assertion falsifiable.
+    """
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pc5-evidence-fixture-"))
+        self.addCleanup(lambda: shutil.rmtree(self.directory, ignore_errors=True))
+        (self.directory / "docs/architecture").mkdir(parents=True, exist_ok=True)
+        (self.directory / "docs/evidence").mkdir(parents=True, exist_ok=True)
+        (self.directory / "PS5UPDATE.PUP").write_bytes(b"pointer\n")
+
+    def fixture(self, evidence: dict, existing: list) -> dict:
+        """A two-milestone roadmap, so numerator and denominator are known exactly.
+
+        The committed roadmap cannot be used for this: all 39 of its cited paths resolve, which
+        makes "the census verified the disk" and "the census trusted the roadmap" indistinguishable.
+        """
+        for path in existing:
+            file = self.directory / path
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text("{}\n", encoding="utf-8")
+        milestones, seen = [], set()
+        source = {m["id"]: m for m in roadmap()["milestones"]}
+        # M19 is `product.destination.milestone`, so it has to survive the pruning.
+        for milestone in list(evidence) + [roadmap()["product"]["destination"]["milestone"]]:
+            if milestone in seen:
+                continue
+            seen.add(milestone)
+            row = copy.deepcopy(source[milestone])
+            row["evidence"] = list(evidence.get(milestone, []))
+            row["dependencies"] = []
+            milestones.append(row)
+        data = copy.deepcopy(roadmap())
+        data["milestones"] = milestones
+        return data
+
+    def metrics_for(self, data: dict) -> dict:
+        absent = {"available": False, "interfaces": [], "ops": 0, "unsupported": 0}
+        no_claims = {"available": False, "total": 0, "counts": {}, "ids": []}
+        with unittest.mock.patch.object(P, "ROOT", self.directory), \
+             unittest.mock.patch.object(P, "contract_inventory", return_value=absent), \
+             unittest.mock.patch.object(P, "claim_inventory", return_value=no_claims):
+            return P.progress_metrics(data, {})
+
+    def test_deleting_a_cited_path_lowers_the_count_by_one(self):
+        data = self.fixture({"M0": ["docs/TEST_RESULTS.md", "docs/never-filed-anywhere.md"],
+                             "M1a": ["docs/TEST_RESULTS.md"]},
+                            ["docs/TEST_RESULTS.md"])
+        metrics = self.metrics_for(data)
+        self.assertEqual(metrics["evidence_total"], 3, "three citations were made in the fixture")
+        self.assertEqual(metrics["evidence_present"], 2,
+                         "one cited path was not created; the count must not include it")
+        self.assertEqual(metrics["milestones_with_evidence"], 2)
+
+    def test_the_figure_draws_the_unresolved_citation_as_unresolved(self):
+        data = self.fixture({"M0": ["docs/absent.md"]}, [])
+        metrics = self.metrics_for(data)
+        self.assertEqual((metrics["evidence_present"], metrics["evidence_total"]), (0, 1))
+        absent = {"available": False, "interfaces": [], "ops": 0, "unsupported": 0}
+        no_claims = {"available": False, "total": 0, "counts": {}, "ids": []}
+        with unittest.mock.patch.object(P, "ROOT", self.directory), \
+             unittest.mock.patch.object(P, "contract_inventory", return_value=absent), \
+             unittest.mock.patch.object(P, "claim_inventory", return_value=no_claims):
+            body = P.progress_matrix(data, {})
+            block = P.matrix_markdown(data, {})
+        for where, text in (("figure", body), ("README block", block)):
+            self.assertIn("0/1", text,
+                          f"a citation whose file is absent still reads as resolved in the {where}")
+
+    def test_a_filed_record_is_counted_apart_from_a_citation(self):
+        data = self.fixture({"M0": ["docs/evidence/boot.json"],
+                             "M1a": ["docs/TEST_RESULTS.md"]},
+                            ["docs/evidence/boot.json", "docs/TEST_RESULTS.md"])
+        metrics = self.metrics_for(data)
+        self.assertEqual((metrics["evidence_present"], metrics["evidence_total"]), (2, 2),
+                         "both citations exist, so the count must not hide that")
+        self.assertEqual(metrics["filed_record_paths"], 1)
+        self.assertEqual(metrics["milestones_with_filed_record"], 1)
+        self.assertEqual(metrics["milestones_with_evidence"], 2,
+                         "both milestones cite a path that exists; only one filed a record")
+
+    def test_the_counted_sets_are_not_interchangeable(self):
+        data = self.fixture({"M0": ["docs/TEST_RESULTS.md"]}, ["docs/TEST_RESULTS.md"])
+        metrics = self.metrics_for(data)
+        self.assertEqual(metrics["milestones_with_evidence"], 1)
+        self.assertEqual(metrics["milestones_with_filed_record"], 0,
+                         "a path outside docs/evidence/ is a citation, not a filed record")
+        absent = {"available": False, "interfaces": [], "ops": 0, "unsupported": 0}
+        no_claims = {"available": False, "total": 0, "counts": {}, "ids": []}
+        with unittest.mock.patch.object(P, "ROOT", self.directory), \
+             unittest.mock.patch.object(P, "contract_inventory", return_value=absent), \
+             unittest.mock.patch.object(P, "claim_inventory", return_value=no_claims):
+            body = P.progress_matrix(data, {})
+        self.assertIn("1/1", body)
+        self.assertIn("0/1", body)
+
+
 
 def MATRIX_BYTES() -> str:
     return (REPO / MATRIX_ASSET).read_text(encoding="utf-8")

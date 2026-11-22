@@ -363,6 +363,53 @@ class LayoutGuardTest(unittest.TestCase):
         body = P.svg(400, 60, long_line, "t", "d")
         self.assertTrue(P.overflow(body, 400))
 
+    def test_no_two_labels_share_a_line_in_any_figure(self):
+        """Overflow asks whether a label left the canvas; that is not the only way to collide.
+
+        A region heading and its right-aligned figure can both sit inside the canvas and still
+        print on top of each other, which is what the first version of the matrix did in two
+        places.  Same baseline, overlapping x — measured with the same ruler the generator laid
+        the text out with, so the guard cannot disagree with the layout by accident.
+        """
+        for name, body in P.rendered(roadmap()).items():
+            self.assertEqual(P.collisions(body), [], name)
+
+    def test_the_collision_guard_fires_and_stays_quiet_when_it_should(self):
+        crowded = P.svg(1200, 60, P.text(24, 30, "T" * 60, size=13, weight="bold")
+                        + P.text(588, 30, "R" * 40, size=13, weight="bold", anchor="end"),
+                        "t", "d")
+        self.assertTrue(P.collisions(crowded), "two labels on one baseline that overlap must "
+                                               "be reported")
+        fitting = P.svg(1200, 60, P.text(24, 30, "T" * 20, size=13)
+                        + P.text(588, 30, "R" * 20, size=13, anchor="end"), "t", "d")
+        self.assertEqual(P.collisions(fitting), [])
+        apart = P.svg(1200, 60, P.text(24, 30, "T" * 60, size=13)
+                     + P.text(588, 46, "R" * 60, size=13, anchor="end"), "t", "d")
+        self.assertEqual(P.collisions(apart), [],
+                         "labels on different baselines are allowed to be as wide as they like")
+
+    def test_a_heading_and_its_figure_are_split_by_measurement_not_by_assumption(self):
+        for left, width, title, right in ((24, 564, "MILESTONES BY STATE", "25.7% (9/35)"),
+                                          (24, 564, "EVIDENCE LADDER", "2/6 levels verified"),
+                                          (612, 564, "A" * 55, "B" * 30)):
+            body, _y = P.region_head(left, 20, width, title, right=right)
+            self.assertEqual(P.collisions(P.svg(1200, 100, body, "t", "d")), [],
+                             f"region_head overlapped with {title!r} and {right!r}")
+
+    def test_the_ruler_and_the_clipper_agree(self):
+        self.assertEqual(P.measure("abcdefghij", 10), 100 * P.CHAR_EM)
+        self.assertEqual(P.fit("abcdefghij", 1000, 10), "abcdefghij")
+        clipped = P.fit("a" * 200, 200, 10)
+        self.assertTrue(clipped.endswith("\u2026"))
+        self.assertLessEqual(P.measure(clipped, 10), 200)
+        roomy = P.fit_lines("Hardware discovery and compatibility", 300, 10)
+        self.assertEqual(" ".join(roomy), "Hardware discovery and compatibility",
+                         "a name that fits must be returned whole")
+        crowded = P.fit_lines("word " * 30, 40, 10, limit=2)
+        self.assertEqual(len(crowded), 2, "the row height in the drawing assumes two lines")
+        self.assertTrue(crowded[-1].endswith("\u2026"),
+                        "text with nowhere to go is clipped and says so; it is never dropped")
+
     def test_workstream_labels_stay_clear_of_the_bars(self):
         body = P.rendered(roadmap())["pc5-progress.svg"]
         bar_x = 372
@@ -370,7 +417,7 @@ class LayoutGuardTest(unittest.TestCase):
             if float(x) != 96.0:
                 continue
             label = re.sub(r"<[^>]+>", "", content)
-            self.assertLess(float(x) + len(label) * float(size) * 0.62, bar_x - 6,
+            self.assertLess(float(x) + P.measure(label, float(size)), bar_x - 6,
                             f"label would overlap its bar: {label!r}")
 
     def test_every_figure_scales_for_mobile(self):
