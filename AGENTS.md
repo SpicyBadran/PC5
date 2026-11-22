@@ -59,7 +59,9 @@ The reconciliation, in order, each time:
    and the same function feeds the SVG and the README text fallback.
 4. **Regenerate the visualization and the README blocks:** `make presentation`. Then
    prove it: `make presentation-check` and `make docs-check` must both exit 0, and
-   `make check` must pass. A stale figure is a defect, not a formatting nuisance.
+   `make check` must pass. A stale figure is a defect, not a formatting nuisance. The
+   order is not optional: the reconciler verifies the working tree, so regenerate
+   **before** you record, or the receipt is refused for output you were about to fix.
 5. **Update the generator or the data if the merge changed what the dashboard can
    honestly show.** A new evidence class, a new gate or a new milestone level is a
    presentation-layer change: extend `tools/presentation.py` and its test in the same
@@ -68,7 +70,9 @@ The reconciliation, in order, each time:
    `python3 tools/dashboard_reconcile.py --here --record`, which writes
    `docs/evidence/dashboard-reconciliation.json` naming every commit it inspected, the
    paths they changed, whether the figures or README moved, and the verification commands
-   with their real exit codes. It refuses to write when a gate fails or when a non-
+   with their real exit codes. It runs those gates even when it decides it has nothing to
+   write, so a stale asset cannot be waved through on the technicality that no new receipt was
+   due. It refuses to write when a gate fails or when a non-
    generated file is uncommitted, so a receipt can only ever describe work that has
    landed. The first receipt on a line of history has to be seeded explicitly —
    `--record --bootstrap --boundary <full SHA> --inspect <full SHA>` — because there is
@@ -76,12 +80,17 @@ The reconciliation, in order, each time:
 7. **Commit the reconciliation** on the established documentation workflow: one focused
    commit holding the regenerated figures, the README blocks and the receipt, with a
    message stating the merge SHA it reconciles; then pushing the branch and opening a pull
-   request for a human to merge — exactly like every other change here. Never commit a dashboard update
-   straight to `main`, and never edit the generated regions of `README.md` by hand.
-   That follow-up commit is *exempt* from inspection by design: it changes only generated
-   output and the receipt, so the next run reports `CURRENT` instead of asking for another
-   receipt, and the loop closes in one step. A merge that also changes a driver is not
-   exempt, and cannot be cleared by anything except being named in a receipt.
+   request for a human to merge — exactly like every other change here. Never commit a
+   dashboard update straight to `main`, and never edit the generated regions of `README.md`
+   by hand. That follow-up commit is *exempt* from inspection because of what it is: it
+   changes only generated output and the receipt. The exemption is a premise — that the
+   output on disk is what the generator produces from that data — and the reconciler now
+   *tests* the premise with the same gates before it says `CURRENT`. So the loop still
+   closes in one step, and it closes only when the figures really do match. A merge that
+   also changes a driver is not exempt and cannot be cleared by anything except being named
+   in a receipt; neither can a commit that writes a figure by hand, or damages or deletes
+   one. `CURRENT` means *nothing is owed to this range and the gates passed*; it has never
+   meant "the artwork is intact", and that is `make presentation-check`'s job.
 8. **Report it:** the merged commit's full SHA, the dashboard-update commit SHA, the
    files changed, every figure that moved and the figures that did not, the commands run
    with their real exit codes, and what remains unverified.

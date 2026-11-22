@@ -98,6 +98,10 @@ make post-merge      # regenerate, check, and record `docs/evidence/dashboard-re
 make dashboard-reconcile   # read: does the committed receipt cover everything on origin/main?
 ```
 
+`CURRENT` from the last command means *nothing is owed to the range* — every commit in it is
+either named in the receipt or confined to generated output, and the gates passed. It is not a
+statement that the artwork is intact, and it is not a substitute for `make presentation-check`.
+
 `make post-merge` is what a *local* merge needs: it reconciles the branch you are standing
 on (`--here`) and writes the receipt, which then travels with the commit. Once the change
 is on `main`, `make dashboard-reconcile` reads that receipt **from `origin/main`** and
@@ -107,8 +111,11 @@ out to be empty. It exits 1 while something is unreconciled and 2 when the quest
 be answered at all; it never exits 0 because it could not read the history.
 
 A reconciliation commit that carries nothing but regenerated figures and the receipt does
-not itself require a further reconciliation — that exemption is what keeps the loop closed,
-and it is a rule about file paths, not about who wrote the commit. See
+not itself require a further reconciliation — that exemption is what keeps the loop closed.
+It is decided by file paths, not by who wrote the commit, and it is *tested* rather than
+assumed: a run that would rest on the exemption checks the generated output against its data
+first, and says so either way. A commit that hand-writes a figure, or damages one, is therefore
+not exempt in practice, and neither can a commit clear itself by editing the receipt. See
 [`docs/PRESENTATION.md`](docs/PRESENTATION.md) for the receipt's fields.
 
 None of this is enforced by a machine: this repository has no CI workflow and installs no
