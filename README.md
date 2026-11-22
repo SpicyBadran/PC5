@@ -87,7 +87,14 @@ Every cell is generated from `docs/architecture/roadmap.json` and `docs/evidence
 The dashboard is not maintained by hand. `tools/presentation.py` rebuilds it from
 `docs/architecture/roadmap.json` and the committed records under
 `docs/evidence/validation/`; `make presentation-check` fails if a card, a count or a
-commit stamp no longer matches those sources.
+commit stamp no longer matches those sources. Whether anyone *looked* at what has landed is
+a separate question, answered from a tracked file rather than from memory:
+`make dashboard-reconcile` reads the reconciliation receipt at
+`docs/evidence/dashboard-reconciliation.json` off `origin/main` and exits non-zero while a
+merge since its recorded boundary has not been inspected and recorded. There is no CI
+watching this; after a merge into `main`, running it is the contributor's job, and
+[`CONTRIBUTING.md`](CONTRIBUTING.md) says what to run and
+[`docs/PRESENTATION.md`](docs/PRESENTATION.md) documents the receipt's fields and exit codes.
 
 ## Status at a glance
 
@@ -155,8 +162,9 @@ Authority: [`docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md`](docs/architecture/P
 | Milestones verified | 25.7% (9/35) | milestone `state` in `roadmap.json` |
 | Levels with a verified milestone | 2/6 | milestones grouped by their `level` field |
 | Acceptance items inside verified milestones | 31/116 | `acceptance` arrays, counted per owning milestone state |
-| Deliverables that exist as named paths | 31/66 | `deliverables` strings matched as a repository path, then read off disk |
-| Milestones carrying a filed evidence path | 19/35 | `evidence` arrays resolved against the tree |
+| Deliverables that exist as named paths | 31/66 | `deliverables` strings matched as a repository path, then checked on disk |
+| Milestones citing at least one in-tree path | 39/39 cited paths resolve, in 19/35 milestones | `evidence` arrays resolved against the tree — a citation, not a run |
+| Milestones with a record filed under `docs/evidence/` | 0/35 | `docs/evidence/**` (the directory the milestone graph cites, once, for a record) |
 | Modelled operations implemented | 87.5% (56/64) | the generated tables in `docs/architecture/PS5_PLATFORM_CONTRACT.md` |
 | Contract claims backed by public documentation | 15.8% (6/38) | `psm/registry.py` classifications, enforced by `psm/contract.py` |
 | Committed validation records passing | 90.9% (10/11) | `docs/evidence/validation/*.json` |
@@ -261,6 +269,8 @@ make docs-check   # every Markdown link, heading anchor and documented command r
 make citation-refs   # fetch the pull-request refs, for when evidence cites a commit that lives only on an open PR head
 make presentation # regenerate the figures and every generated README block
 make presentation-check  # read-only: are the generated files still current?
+make dashboard-reconcile # read-only: has every change on origin/main been inspected and recorded?
+make post-merge   # after a merge into main: regenerate, check, and write the reconciliation receipt
 ```
 
 | Command | What it actually proves |
@@ -273,6 +283,8 @@ make presentation-check  # read-only: are the generated files still current?
 | `make docs-check` | no document links a missing file, a renamed heading or a removed target |
 | `make citation-refs` | the objects behind the evidence citations are present in this clone. A full clone of `main` resolves all 258 of them without this step; a tree that cites an open pull-request head, or one fetched with a history filter, cannot — and says so instead of implying the evidence is dead |
 | `make presentation` | rewrites the figures and the generated README blocks from the data |
+| `make dashboard-reconcile` | the receipt at `docs/evidence/dashboard-reconciliation.json`, read off `origin/main`, names every first-parent change since its boundary; exit 1 while one is unreconciled, exit 2 when the history cannot be read |
+| `make post-merge` | the same, written: regenerate, `presentation-check`, `docs-check`, then record the receipt against the branch you are on |
 | `make presentation-check` | those files are current; part of `make check`, and it never writes |
 
 Two optional gates need extra dependencies:

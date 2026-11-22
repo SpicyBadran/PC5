@@ -350,6 +350,40 @@ def wrap(body: str, width: int) -> list:
     return lines
 
 
+#: Width of one character of the monospace stack these figures request, in em.  Deliberately
+#: an over-estimate: DejaVu Sans Mono, the widest fallback a reader is likely to get, is about
+#: 0.60 em, so a label that measures here also fits in a narrower font.
+CHAR_EM = 0.62
+
+#: the gap `region_head` keeps between a region's title and its right-aligned figure
+HEAD_GAP = 12
+
+
+def measure(body: str, size: float) -> float:
+    """How wide `body` is at `size`, in the units the layout guard already uses."""
+    return len(body) * float(size) * CHAR_EM
+
+
+def fit(body: str, room: float, size: float) -> str:
+    """Shorten `body` only when it genuinely cannot fit `room` pixels.
+
+    A caller who sees an ellipsis here has a wording problem, not a layout problem: the
+    figure's own test (`tests/test_progress_matrix.py`) fails on any clipped label, so this
+    stays a safety net rather than a way of hiding text.
+    """
+    budget = int(room / (float(size) * CHAR_EM))
+    return body if len(body) <= budget or budget < 2 else clip(body, budget)
+
+
+def fit_lines(body: str, room: float, size: float, limit: int = 2) -> list:
+    """Wrap `body` onto at most `limit` lines of `room` pixels; no word is silently dropped."""
+    per_line = max(4, int(room / (float(size) * CHAR_EM)))
+    lines = wrap(body, per_line)
+    if len(lines) > limit:
+        lines = lines[:limit - 1] + [fit(" ".join(lines[limit - 1:]), room, size)]
+    return lines or [fit(body, room, size)]
+
+
 def progress(data) -> str:
     by_id = milestones(data)
     streams = workstreams(data)
@@ -896,6 +930,13 @@ def progress_metrics(data, records=None) -> dict:
 
     evidence_entries = [e for m in milestones for e in (m.get("evidence") or [])]
     evidence_present = [e for e in evidence_entries if (ROOT / e.split("#")[0]).exists()]
+    # A path in `evidence` is a citation the roadmap makes; `docs/evidence/` is where a file
+    # that *records a run* is filed.  Counting them separately is the difference between
+    # "someone wrote this down" and "someone ran this".
+    filed = [e for e in evidence_entries if e.split("#")[0].startswith("docs/evidence/")]
+    milestones_filed = sum(1 for m in milestones
+                           if any(x.split("#")[0].startswith("docs/evidence/")
+                                  for x in (m.get("evidence") or [])))
 
     levels = {}
     for level in sorted({m["level"] for m in milestones}):
@@ -942,6 +983,8 @@ def progress_metrics(data, records=None) -> dict:
         "deliverable_existing": len(existing),
         "evidence_total": len(evidence_entries),
         "evidence_present": len(evidence_present),
+        "filed_record_paths": len(filed),
+        "milestones_with_filed_record": milestones_filed,
         "milestones_with_evidence": sum(1 for m in milestones if m.get("evidence")),
         "levels": levels,
         "streams": streams,
@@ -1005,11 +1048,21 @@ def claim_inventory() -> dict:
 
 
 def region_head(x, y, w, title, right="", caption="", colour=INK):
-    body = text(x, y + 15, title, size=13, weight="bold")
+    """A region's title on the left, its figure on the right, and the two cannot collide.
+
+    Both are 13px bold, so they share one column: the right-hand figure is measured first and
+    the title is given whatever room is left, minus HEAD_GAP.  Measuring each label against the
+    canvas on its own (which is all `overflow` did) let a 45-character title and a 26-character
+    figure both "fit" a 564px column and overlap by four pixels of ink in the middle.
+    """
+    right_room = measure(right, 13) + HEAD_GAP if right else 0.0
+    shown = fit(title, w - right_room, 13) if right else title
+    body = text(x, y + 15, shown, size=13, weight="bold")
     if right:
         body += text(x + w, y + 15, right, size=13, weight="bold", fill=colour,
                      anchor="end")
-    body += text(x + w, y + 31, caption, size=10, fill=MUTED, anchor="end")
+    if caption:
+        body += text(x + w, y + 31, fit(caption, w, 10), size=10, fill=MUTED, anchor="end")
     return body, y + 40
 
 
@@ -1090,15 +1143,16 @@ def progress_matrix(data, records) -> str:
     head, y = region_head(
         left_x, y, col_w, "EVIDENCE LADDER — ONE ROW PER LEVEL",
         right=f"{len([1 for level in metrics['levels'] if metrics['levels'][level]['complete']])}"
-              f"/{len(metrics['levels'])} levels hold a verified milestone",
+              f"/{len(metrics['levels'])} levels verified",
         caption="a level is reached by its own evidence; the two top levels have none")
     body += head
     for level in sorted(metrics["levels"]):
         info = metrics["levels"][level]
         body += text(left_x, y + 15, f"L{level}", size=11, weight="bold",
                      fill=INK if info["complete"] else MUTED)
-        body += text(left_x + 32, y + 15, clip(LEVEL_SHORT.get(level, ""), 30), size=10,
-                     fill=MUTED)
+        body += text(left_x + 32, y + 15,
+                 fit(LEVEL_SHORT.get(level, ""), 248 - 32 - 12, 10),
+                 size=10, fill=MUTED)
         area = col_w - 248 - 44
         cell_w = min(30, int(area / max(1, info["total"])))
         for index, milestone_id in enumerate(info["ids"]):
@@ -1114,7 +1168,7 @@ def progress_matrix(data, records) -> str:
 
     # ------------------------------------- requirements, deliverables, filed evidence
     head, y = region_head(
-        left_x, y, col_w, "REQUIREMENTS, DELIVERABLES AND FILED EVIDENCE",
+        left_x, y, col_w, "REQUIREMENTS, DELIVERABLES, CITED PATHS",
         right=f"{metrics['deliverable_existing']}/{metrics['deliverable_total']} deliverables "
               f"present", caption="bar segments are the counts named at the right of each row")
     body += head
@@ -1137,21 +1191,30 @@ def progress_matrix(data, records) -> str:
          [(metrics["deliverable_path_shaped"], CYAN),
           (metrics["deliverable_total"] - metrics["deliverable_path_shaped"], CELL_DIM)],
          f"{metrics['deliverable_path_shaped']}/{metrics['deliverable_total']}"),
-        ("evidence paths a milestone names that are present in the tree",
-         [(metrics["evidence_present"], GREEN),
+        ("cited paths that resolve to a file in this checkout",
+         [(metrics["evidence_present"], CYAN),
           (metrics["evidence_total"] - metrics["evidence_present"], CELL)],
          f"{metrics['evidence_present']}/{metrics['evidence_total']}"),
-        ("milestones carrying at least one evidence path",
+        ("milestones citing at least one in-tree path",
          [(metrics["milestones_with_evidence"], CYAN),
           (metrics["milestone_total"] - metrics["milestones_with_evidence"], CELL)],
          f"{metrics['milestones_with_evidence']}/{metrics['milestone_total']}"),
+        ("milestones with a record filed under docs/evidence/",
+         [(metrics["milestones_with_filed_record"], GREEN),
+          (metrics["milestone_total"] - metrics["milestones_with_filed_record"], CELL)],
+         f"{metrics['milestones_with_filed_record']}/{metrics['milestone_total']}"),
     ]
     for label, bar, count in rows:
-        body += text(left_x, y + 11, clip(label, 62), size=10, fill=MUTED)
+        body += text(left_x, y + 11, fit(label, col_w - measure(count, 10) - 12, 10),
+                     size=10, fill=MUTED)
         body += text(left_x + col_w, y + 11, count, size=10, anchor="end", fill=INK)
         body += matrix_row(left_x, y + 16, col_w, 10, bar)
         y += 34
-    y += 10
+    body += text(left_x, y + 8,
+                 fit("a citation names a path; a record proves a run — the last row "
+                     "counts records only", col_w, 10),
+                 size=10, fill=MUTED)
+    y += 20
 
     # --------------------------------------------------------------- the workstreams
     head, y = region_head(left_x, y, col_w, "WORKSTREAMS",
@@ -1166,11 +1229,12 @@ def progress_matrix(data, records) -> str:
         cell_w, cell_gap = 16, 3
         used = len(rows_in_stream) * (cell_w + cell_gap) - cell_gap
         start = left_x + col_w - 44 - max(used, 0)
-        room = int((start - (left_x + 42) - 10) / 6.2)          # 10px monospace
-        body += text(left_x, y + 13, stream["id"], size=10, weight="bold",  # noqa: E501
+        room = start - (left_x + 42) - 12
+        name_lines = fit_lines(stream["name"], room, 10)
+        body += text(left_x, y + 13, stream["id"], size=10, weight="bold",
                      fill=INK if stream["complete"] else MUTED)
-        body += text(left_x + 42, y + 13, clip(stream["name"], max(12, room)), size=10,
-                     fill=MUTED)
+        for offset, line in enumerate(name_lines):
+            body += text(left_x + 42, y + 13 + offset * 15, line, size=10, fill=MUTED)
         for index, milestone in enumerate(rows_in_stream):
             state = milestone["state"]
             fill, ink, stroke, _suffix = MATRIX_STATE[state]
@@ -1178,7 +1242,7 @@ def progress_matrix(data, records) -> str:
                                 "", fill=fill, ink=ink, stroke=stroke)
         body += text(left_x + col_w, y + 13, f"{stream['complete']}/{stream['total']}",
                      size=10, anchor="end", fill=GREEN if stream["complete"] else MUTED)
-        y += 24
+        y += 24 if len(name_lines) == 1 else 40
     left_bottom = y
 
     # ------------------------------------------------- right column: claim classes
@@ -1249,11 +1313,13 @@ def progress_matrix(data, records) -> str:
         body += (f'  <rect x="{right_x - 8}" y="{y}" width="4" height="24" rx="2" '
                  f'fill="{AMBER}"/>\n')
         body += text(right_x, y + 11, row["id"], size=10, weight="bold", fill=INK)
-        body += text(right_x + 38, y + 11, clip(row["title"], 60), size=10, fill=MUTED)
+        row_room = col_w - 38 - measure(f"L{row['level']}", 10) - 12
+        body += text(right_x + 38, y + 11, fit(row["title"], row_room, 10), size=10,
+                     fill=MUTED)
         deps = (", ".join(f"{dep} {state.replace('_', ' ')}" for dep, state in row["unmet"])
                 if row["unmet"] else "the blocker itself is the reason")
-        body += text(right_x + 38, y + 23, f"blocked on: {clip(deps, 58)}", size=10,
-                     fill="#f4b9bd")
+        body += text(right_x + 38, y + 23, fit(f"blocked on: {deps}", row_room, 10),
+                     size=10, fill="#f4b9bd")
         body += text(right_x + col_w, y + 11, f"L{row['level']}", size=10, anchor="end",
                      fill=MUTED)
         y += 32
@@ -1279,8 +1345,8 @@ def progress_matrix(data, records) -> str:
         cell_y = y + (index // cols) * 37
         body += (f'  <rect x="{cell_x}" y="{cell_y}" width="{width}" height="34" rx="3" '
                  f'fill="{fill}" stroke="{CELL_STROKE}"/>\n')
-        body += text(cell_x + width / 2, cell_y + 14, clip(gate, 17), size=10, fill=ink,
-                     weight="bold", anchor="middle")
+        body += text(cell_x + width / 2, cell_y + 14, fit(gate, width - 8, 10), size=10,
+                     fill=ink, weight="bold", anchor="middle")
         body += text(cell_x + width / 2, cell_y + 27, metrics["gate_commits"][gate],
                      size=10, fill=ink, anchor="middle")
     y += ((max(0, len(gates) - 1) // cols) + 1) * 37 + 4
@@ -1292,9 +1358,12 @@ def progress_matrix(data, records) -> str:
             (f"genuine Sony system software ({metrics['destination']})",
              STATE_LABEL[metrics["destination_state"]].upper(),
              "not executed, therefore not counted", RED)]:
-        body += text(right_x, y + 12, label, size=10, fill=INK)
+        value_room = measure(value, 10) + 14
+        note_x = right_x + 232 + value_room
+        body += text(right_x, y + 12, fit(label, 232 - 12, 10), size=10, fill=INK)
         body += text(right_x + 232, y + 12, value, size=10, weight="bold", fill=colour)
-        body += text(right_x + 330, y + 12, clip(note, 34), size=10, fill=MUTED)
+        body += text(note_x, y + 12, fit(note, right_x + col_w - note_x - 4, 10), size=10,
+                     fill=MUTED)
         y += 20
     right_bottom = y
 
@@ -1311,7 +1380,7 @@ def progress_matrix(data, records) -> str:
         body += (f'  <rect x="{x}" y="{bottom + 12}" width="12" height="12" rx="3" '
                  f'fill="{colour}" stroke="{LINE}"/>\n')
         body += text(x + 18, bottom + 22, label, size=10, fill=MUTED)
-        x += 24 + int(len(label) * 10 * 0.62) + 22
+        x += 24 + int(measure(label, 10)) + 22
     body += text(24, bottom + 44, "counted from roadmap.json, the contract and the committed "
                                   "records — not from a booted machine, not from a PS5, and "
                                   "not from an open pull request", size=10, fill=MUTED)
@@ -1323,6 +1392,9 @@ def progress_matrix(data, records) -> str:
                f"{metrics['milestone_total']}; levels 1 and 2 hold the only verified "
                f"milestones, levels 3 to 6 none; deliverables present "
                f"{metrics['deliverable_existing']} of {metrics['deliverable_total']}; "
+               f"{metrics['milestones_with_filed_record']} of {metrics['milestone_total']} "
+               f"milestones have a record filed under docs/evidence/, and "
+               f"{metrics['milestones_with_evidence']} merely cite a path that exists; "
                f"{len(metrics['blocked'])} milestones blocked; validation records "
                f"{metrics['gate_passed']} of {len(metrics['gates'])} passed; physical boot "
                f"and genuine system-software execution carry no evidence.")
@@ -1344,10 +1416,14 @@ def matrix_markdown(data, records) -> str:
          "`acceptance` arrays, counted per owning milestone state"),
         ("Deliverables that exist as named paths",
          f"{metrics['deliverable_existing']}/{metrics['deliverable_total']}",
-         "`deliverables` strings matched as a repository path, then read off disk"),
-        ("Milestones carrying a filed evidence path",
-         f"{metrics['milestones_with_evidence']}/{metrics['milestone_total']}",
-         "`evidence` arrays resolved against the tree"),
+         "`deliverables` strings matched as a repository path, then checked on disk"),
+        ("Milestones citing at least one in-tree path",
+         f"{metrics['evidence_present']}/{metrics['evidence_total']} cited paths resolve, in "
+         f"{metrics['milestones_with_evidence']}/{metrics['milestone_total']} milestones",
+         "`evidence` arrays resolved against the tree — a citation, not a run"),
+        ("Milestones with a record filed under `docs/evidence/`",
+         f"{metrics['milestones_with_filed_record']}/{metrics['milestone_total']}",
+         "`docs/evidence/**` (the directory the milestone graph cites, once, for a record)"),
     ]
     contract = metrics["contract"]
     if contract["available"]:
@@ -1453,6 +1529,42 @@ TEXT_ELEMENT = re.compile(
     r'text-anchor="(\w+)"[^>]*>(.*?)</text>', re.S)
 
 
+TEXT_WITH_POSITION = re.compile(
+    r'<text x="([\d.]+)" y="([\d.]+)"[^>]*font-size="([\d.]+)"[^>]*'
+    r'text-anchor="(\w+)"[^>]*>(.*?)</text>', re.S)
+
+
+def collisions(body: str, gap: float = 1.0) -> list:
+    """Report labels on one baseline whose measured boxes overlap horizontally.
+
+    `overflow` can only ask whether a label fits the canvas, which is how a region's title and
+    its right-aligned figure both passed while sharing four pixels of ink in the middle.  Text
+    in these figures is placed by baseline, so two labels within one pixel of each other's y
+    are a pair, and the pair either fits together or it does not.
+    """
+    lines = {}
+    for x, y, size, anchor, content in TEXT_WITH_POSITION.findall(body):
+        label = re.sub(r"<[^>]+>", "", content)
+        if not label.strip():
+            continue
+        estimate = measure(label, float(size))
+        left = float(x)
+        if anchor == "end":
+            left = float(x) - estimate
+        elif anchor == "middle":
+            left = float(x) - estimate / 2
+        lines.setdefault(round(float(y)), []).append((left, left + estimate, label))
+    problems = []
+    for _y, items in sorted(lines.items()):
+        items.sort()
+        for (left, right, label), (next_left, _next_right, next_label) in zip(items, items[1:]):
+            if next_left < right - gap:
+                problems.append(
+                    f"labels on one baseline overlap by {right - next_left:.0f}px: "
+                    f"{label[:40]!r} and {next_label[:40]!r}")
+    return problems
+
+
 def overflow(body: str, width: int, margin: int = 12) -> list:
     """Estimate rendered text width and report anything that would leave the canvas.
 
@@ -1465,7 +1577,7 @@ def overflow(body: str, width: int, margin: int = 12) -> list:
         label = re.sub(r"<[^>]+>", "", content)
         if not label:
             continue
-        estimate = len(label) * float(size) * 0.62
+        estimate = measure(label, float(size))     # the same ruler `fit` laid out with
         left, right = float(x), float(x) + estimate
         if anchor == "middle":
             left, right = float(x) - estimate / 2, float(x) + estimate / 2
@@ -1573,6 +1685,8 @@ def check(data, records=None) -> list:
         if measured:  # an unreadable figure is already reported as stale above
             problems += [f"docs/assets/{name}: {problem}"
                          for problem in overflow(actual, int(measured.group(1)))]
+            problems += [f"docs/assets/{name}: {problem}"
+                         for problem in collisions(actual)]
 
     readme = README.read_text(encoding="utf-8")
     for name, body in render_blocks(data, records).items():

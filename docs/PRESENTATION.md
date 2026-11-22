@@ -47,6 +47,15 @@ benchmarks, compatibility percentages, or evidence that does not exist.
   no text below the 10 px floor that `tests/test_presentation.py` enforces (the matrix
   needs it to fit a label inside a cell), and every figure has `<title>` and `<desc>` for
   screen readers plus descriptive `alt` text in the README.
+* **Room is measured before it is spent.** A region heading and its right-aligned figure
+  share one line, so `region_head` lays the figure out first, hands the remainder to the
+  title, and shortens the title only if it still does not fit. Every other label goes
+  through `fit`/`fit_lines`, which use the same `measure` the layout guard uses — an
+  estimate that disagrees with the guard would either clip text that fits or let two
+  labels print on top of each other. Both failures are tested: `overflow` asks whether
+  anything left the canvas, `collisions` asks whether two labels on one baseline overlap,
+  and `tests/test_progress_matrix.py` fails on any `…` in the figure at all, so clipping
+  is a last resort rather than a way of hiding a wording problem.
 
 ## 3. The seven figures
 
@@ -100,6 +109,11 @@ make post-merge             # write then read: presentation, presentation-check,
 `make check` runs `presentation-check` and `docs-check`, never `presentation`, so a test
 run cannot rewrite tracked documentation. Writing is always an explicit act.
 
+```sh
+make dashboard-reconcile    # read: does the receipt cover everything that has landed?
+make post-merge             # write: presentation, the checks, then the receipt (--here)
+```
+
 `check` fails on: a stale figure (bytes differ from a fresh render), a hand-edited
 status block, a broken local link or image path in `README.md` or this document, an
 image without alt text, a figure that lost its `<title>`/`<desc>`, a README that stops
@@ -116,10 +130,39 @@ iteration, integer geometry, and no reading of the current commit: a figure that
 `HEAD` into its own artwork would go stale on every commit and teach people to ignore the
 gate (the commit stamp the matrix draws comes from the validation *record*, which is
 immutable). The same `roadmap.json` produces byte-identical figures on any machine, so a
-diff means the data changed — which is the point. `tests/test_progress_matrix.py` asserts
-the byte equality, the 10 px floor, that nothing is drawn outside the canvas, that the
-canvas has no dead band below the last region, and that every percentage printed carries
-the fraction it came from.
+diff means the data changed — which is the point.
+
+What the tests hold the *drawing* to, not only the data: `tests/test_progress_matrix.py`
+asserts the byte equality, the 10 px floor, that nothing is drawn outside the canvas, that
+the canvas has no dead band below the last region, that every percentage carries the
+fraction it came from, and — because a figure that agrees with itself can still disagree
+with the repository — that every green cell in the artwork names a milestone
+`roadmap.json` calls `complete`, that the evidence ladder's per-level verified cells equal
+the milestones complete at those levels (so levels 3–6 cannot show green while they hold
+nothing), that the workstream rows and validation grid paint exactly as many verified cells
+as the records support, and that no label is clipped or printed over another. Those
+artwork checks read the committed SVG's `<rect>` and `<text>` elements rather than the
+generator's own dictionaries, so changing a `fill=` at the drawing site fails a test
+instead of silently producing a rosier figure.
+
+## 4a. Four words that must not mean the same thing
+
+Progress claims fail on words before they fail on arithmetic, so the generator keeps four
+notions apart and prints them apart:
+
+| Term | What it actually is | Where it is checked |
+|---|---|---|
+| a **cited path** | a file the roadmap names in a milestone's `evidence` array, which `presentation.py` confirms exists in this checkout | the matrix's "cited paths that resolve" row, `39/39` |
+| a **filed record** | a JSON record under `docs/evidence/**`, written by a person or a gate that ran something | the matrix's "record filed under `docs/evidence/`" row — `0/35` today, and drawn as zero |
+| a **validation record** | a gate result committed under `docs/evidence/validation/*.json`, stamped with the commit it ran at | `make validation`, and the matrix's bottom-right region |
+| a **physical-hardware record** | a filled `docs/hardware/M1_PHYSICAL_BOOT_PROCEDURE.md` outcome validated by `tools/hw_record.py` | the matrix's "physical PC boot: none filed" row, and `M1`'s state |
+
+A milestone can hold forty citations and no records; that is the present state of PC5, so
+the figure says so in those words. `tests/test_progress_matrix.py` keeps the census
+falsifiable: it recomputes the counts from `roadmap.json` against the tree, and it runs the
+same code over a fixture roadmap containing a path that does not exist on disk, which must
+lower the "resolve" count. A check that only ever sees paths that happen to exist cannot
+tell verification from trust.
 
 ## 4b. Where the numbers come from
 
@@ -170,3 +213,59 @@ says so in words: a run at an earlier commit is not evidence for the current tre
   target-system-software execution as separate regions, and the top two contain no green
   cell because the repository holds no evidence that could put one there. A cell is green
   only where a file records the thing as done.
+
+## 6. The reconciliation receipt
+
+Being current is two properties, and the first version of this machinery conflated them.
+`presentation-check` proves the *content* matches the data. It says nothing about whether
+every change that landed on `main` was *looked at* — a merge can land that the figures
+describe correctly by accident, and a reconciliation that changes no visible output leaves
+no trace for an inferred watermark to find. So the second property is recorded, not
+inferred, in a tracked file: `docs/evidence/dashboard-reconciliation.json`, schema
+`pc5.dashboard-reconciliation/1`, written only by `tools/dashboard_reconcile.py --record`.
+
+| Field | Why it is in the receipt |
+|---|---|
+| `schema` | a reader must be able to tell which rules produced this record |
+| `repository` | `owner/name` from `remote.origin.url`: the receipt vouches for one repository, and a mismatch is printed as a note rather than trusted |
+| `target_ref`, `reconciled_at`, `previous_boundary` | what was reconciled and where the boundary moved from; `reconciled_at` is a full SHA, and it must be an ancestor of the target the receipt is read from |
+| `boundary_date` | the only date in the file, and it comes from the commits, not from a clock — the receipt stays byte-reproducible |
+| `inspected_commits` | every commit this line of history has processed; a SHA that is not an ancestor of the target is refused, which is what stops a receipt pre-approving a merge that has not happened |
+| `commits_inspected_now` | per commit: subject, date, parent count, `kind` (`merge` or `single-parent`), the paths it brought, and which dashboard drivers it moved — the audit trail for "we looked" |
+| `inspected_paths`, `paths_truncated` | the union of changed paths, capped, with the truncation stated instead of hidden |
+| `figures_changed`, `readme_changed` | whether the reconciliation moved the artwork or only confirmed it; "nothing displayed changed" is a result, and it is recorded as one |
+| `generated_output_pending_commit` | the figures and README blocks `--record` found uncommitted, which the follow-up commit is expected to carry |
+| `verification` | each command, its argv and the exit code it really returned; a non-zero entry makes the receipt unusable, so a receipt cannot be written over a red gate |
+| `complete`, `incomplete_reason` | the explicit incomplete marker: an unfinished reconciliation reads as outstanding, never as clean |
+
+**How a merge is detected.** `git rev-list --first-parent <boundary>..<target>` and, for
+each commit, its diff against *its own first parent*. No `--merges` filter appears anywhere:
+a `--no-ff` merge, a fast-forward, a squash, a rebase-merge and a commit pushed straight to
+`main` are all just commits in the range, and a merge whose diff is empty is still a commit
+that has to be named. `tests/test_dashboard_reconcile.py` runs each of those topologies in a
+disposable repository and asserts the exit code.
+
+**What is exempt, and why the loop stops.** A commit needs no inspection when everything it
+changed is reconciliation output: a file under `docs/assets/`, this receipt, or `README.md`
+lines that all fall inside a generated `<!-- pc5:*:begin -->` span. That is a rule about
+*content*, so the follow-up commit which carries the regenerated figures and the receipt is
+exempt, and the next read reports `CURRENT` instead of asking for another receipt. It is
+also a rule that cannot be satisfied by a merge which changed `roadmap.json`, a gate, or
+prose — which is the case the watermark got wrong.
+
+**Exit codes.** `0` current, `1` outstanding, `2` error, and the difference between the
+last two matters: `1` means the history is readable and something in it is unreconciled,
+`2` means the question could not be answered (no `origin/main` to read, a shallow clone, a
+malformed receipt, a receipt naming commits that have not landed, a tree with uncommitted
+source changes). Missing assets and unreadable ranges never resolve to `CURRENT`, and the
+default target is `origin/main` — the checked-out branch is consulted only when `--here`
+says so out loud, and the receipt records that it was written that way.
+
+**What is *not* claimed.** Nothing enforces this automatically: the pipeline definition
+under `ci/` is not an active GitHub Actions workflow (`.github/workflows` does not exist in
+this repository), no CI service runs these gates on a push, and no Git hook is installed by
+the build. The receipt and
+`make dashboard-reconcile` make the state *checkable* by anyone at any time; keeping it
+current remains the standing duty written in [`AGENTS.md`](../AGENTS.md), carried by whoever
+is working in the repository. A tool that can be ignored is not a monitor, and this document
+does not pretend otherwise.

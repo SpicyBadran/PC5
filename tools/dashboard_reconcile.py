@@ -1,16 +1,46 @@
 #!/usr/bin/env python3
-"""Report whether the README progress dashboard still matches what has been merged.
+"""Reconcile PC5's README dashboard with what has actually landed on the primary branch.
 
-`make presentation-check` proves the dashboard matches the *working tree*. This answers
-the other question, the one that decides whether a dashboard is current at all: has every
-merge into the primary branch since the dashboard was last regenerated been reflected in
-it? It is read-only, it writes nothing, and it never merges anything.
+Two separate questions, and conflating them is what made the first version unreliable:
 
-    python3 tools/dashboard_reconcile.py            # exit 0 current, 1 outstanding
-    python3 tools/dashboard_reconcile.py --json     # the same answer, machine-readable
+  * is the *content* current?  `tools/presentation.py check` answers that — the committed
+    figures and generated README blocks must equal a fresh render of the tree.
+  * has every change on the primary branch been *inspected*?  This tool answers that, from
+    an explicit, durable reconciliation receipt committed in the repository.
 
-The rule it implements is the one written in `AGENTS.md`: a successful merge into `main`
-is the trigger, and an agent reconciles the dashboard without being asked.
+A receipt is a positive record: the boundary commit it was written against, the commits it
+looked at, the files those commits touched, whether the generated output changed as a result,
+and the verification commands with their real exit codes.  Inferring a watermark from "the
+last commit that touched README.md or an SVG" cannot work, because a reconciliation that
+changes nothing visible produces no such commit, and a merge commit that *delivers* one is
+hidden by Git's history simplification.  So nothing here is inferred.
+
+    python3 tools/dashboard_reconcile.py                 # read: is main reconciled?
+    python3 tools/dashboard_reconcile.py --json          # the same answer, machine-readable
+    python3 tools/dashboard_reconcile.py --record        # write the receipt (post-merge)
+
+Exit codes, deliberately: 0 current, 1 outstanding, 2 error.  Anything that cannot be
+established is an error or an outstanding state, never a green result — a tool that answers
+"nothing to do" when it could not read the history is worse than no tool.
+
+Merge strategy does not matter.  The tool walks `git rev-list --first-parent <boundary>..<target>`
+and classifies each commit by the paths its diff to its first parent touched, so a merge
+commit, a squash, a rebase-merge, a fast-forward and a direct commit to `main` are all just
+commits in the range.
+
+Exemption rule (this is what stops a reconciliation from re-triggering itself forever): a
+commit in the range needs no inspection if everything it changed is a reconciliation output —
+the receipt itself, or a file under `docs/assets/` — and, for `README.md`, if every line it
+changed falls inside a generated `<!-- pc5:*:begin --> … <!-- pc5:*:end -->` span.  Those
+files are exactly what `make presentation` writes, they cannot carry an unreviewed change
+(a hand edit fails `presentation-check`), and the rule is a statement about *content*, not
+about a commit SHA that has not been created yet.  Anything else in the range — code, docs
+prose, a milestone state, an evidence record — is an event that must be inspected and named
+in the next receipt.
+
+The follow-up that records the delivery of a receipt is therefore a receipt-only change: it
+is exempt, and the loop closes after one step.  It is also auditable: `boundary_commits` in
+the next receipt names it.
 """
 
 from __future__ import annotations
@@ -22,129 +52,748 @@ import subprocess
 import sys
 from pathlib import Path
 
-#: the files the dashboard is computed from; a merge touching any of them can move a figure
+SCHEMA = "pc5.dashboard-reconciliation/1"
+
+#: where the receipt lives; tracked, dated only by the commits it names
+RECEIPT = "docs/evidence/dashboard-reconciliation.json"
+
+#: the primary branch this tool reconciles against unless told otherwise.  The *remote* ref
+#: only, deliberately: a local `main` may be stale or be the branch you are standing on, and
+#: answering "what has landed?" from it would be a silent fallback.  Offline, pass `--here`.
+DEFAULT_TARGET_REFS = ("origin/main", "origin/HEAD")
+
+#: files whose content is entirely produced by the generator: changing them cannot be an
+#: unreviewed change, because `presentation-check` compares them against a fresh render
+GENERATED_OUTPUTS = ("docs/assets/",)
+GENERATED_README = "README.md"
+
+#: the inputs the dashboard is computed from; a range touching one of these can move a figure
 DRIVERS = (
     "docs/architecture/roadmap.json",
     "docs/architecture/PS5_PLATFORM_CONTRACT.md",
     "psm/",
     "docs/evidence/",
     "PS5UPDATE.PUP",
+    "tools/presentation.py",
 )
 
-#: the files that *are* the dashboard
-ASSETS = (
-    "docs/assets/pc5-progress-matrix.svg",
-    "README.md",
+#: commands a recording run must pass, in order, before a receipt may be written
+VERIFICATIONS = (
+    ("presentation figures and README blocks are current",
+     ["{python}", "tools/presentation.py", "check"]),
+    ("documentation links, anchors and commands resolve",
+     ["{python}", "tools/docs_check.py"]),
 )
 
-MERGE = re.compile(r"^Merge (pull request|branch)")
+FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
+HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", re.M)
+MARKER = re.compile(r"<!-- pc5:([a-z-]+):(begin|end) -->")
+
+
+class ReconcileError(Exception):
+    """Anything that cannot be established. Reported as exit 2, never as a green result."""
 
 
 def git(repo: Path, *args: str) -> str:
-    result = subprocess.run(("git", *args), cwd=repo, capture_output=True, text=True)
+    """Run git in `repo` and return stdout. A failure raises; it is never an empty answer."""
+    if not repo.is_dir():
+        raise ReconcileError(f"not a directory: {repo}")
+    try:
+        result = subprocess.run(("git", *args), cwd=repo, capture_output=True, text=True)
+    except OSError as exc:                       # git not installed, EACCES, …
+        raise ReconcileError(f"cannot run git {args[0] if args else ''}: {exc}") from exc
     if result.returncode != 0:
-        return ""
+        detail = (result.stderr or result.stdout or "").strip().splitlines()
+        raise ReconcileError(f"git {' '.join(args)} failed ({result.returncode}): "
+                             f"{detail[0] if detail else 'no diagnostics'}")
     return result.stdout.strip()
 
 
-def last_touching(repo: Path, path: str) -> str:
-    return git(repo, "log", "-1", "--format=%H", "--", path)
+def try_git(repo: Path, *args: str) -> str:
+    """The one place a failure means something: an empty string, with the caller deciding."""
+    try:
+        return git(repo, *args)
+    except ReconcileError:
+        return ""
 
 
-def earlier(repo: Path, one: str, two: str) -> str:
-    """The older of two commits, by ancestry rather than by date or by hex."""
-    if not one or not two or one == two:
-        return one or two
-    if git(repo, "merge-base", "--is-ancestor", one, two):
-        return one
-    if git(repo, "merge-base", "--is-ancestor", two, one):
-        return two
-    # unrelated histories: neither contains the other, so the older date decides
-    stamps = {sha: git(repo, "show", "-s", "--format=%ct", sha) for sha in (one, two)}
-    return min(stamps, key=lambda sha: int(stamps[sha] or 0))
+def probe(repo: Path, *args: str) -> int:
+    """Run a git command that answers with its exit code: 0 is yes, 1 is no, anything else is an
+    error worth reporting.
+
+    `git cat-file -e <object>` returns 1 for "no such object" and 128 for "that is not even a
+    rev"; conflating the two is how a missing receipt became an error and a broken repository
+    became a clean bill of health, in opposite directions, in the previous version of this tool.
+
+    `git merge-base --is-ancestor` and `git cat-file -e` print *nothing* either way, so reading
+    their stdout turns "yes" into `""` and then into "no".  That is the difference between a
+    receipt being honoured and a receipt being called a foreign line of history, and it is the
+    exact class of bug this tool exists to remove — an empty answer that reads like a negative.
+    """
+    try:
+        done = subprocess.run(("git", *args), cwd=repo, capture_output=True, text=True)
+    except OSError as exc:
+        raise ReconcileError(f"cannot run git {args[0] if args else ''}: {exc}") from exc
+    if done.returncode > 1:
+        detail = (done.stderr or done.stdout or "").strip().splitlines()
+        raise ReconcileError(f"git {' '.join(args)} could not be answered "
+                             f"({done.returncode}): {detail[0] if detail else 'no diagnostics'}")
+    return done.returncode
 
 
-def merge_log(repo: Path, since: str) -> list:
-    """First-parent merges at or after `since`, newest first."""
-    span = f"{since}..HEAD" if since else "HEAD"
-    out = git(repo, "log", "--first-parent", "--merges", f"--format=%H\t%ad\t%s",
-              "--date=short", span)
-    merges = []
-    for line in out.splitlines():
-        if not line.strip():
+def is_ancestor(repo: Path, first: str, second: str) -> bool:
+    """Is `first` an ancestor of `second`, or the same commit?  Absent objects are an error."""
+    for sha, what in ((first, "boundary"), (second, "target")):
+        if not FULL_SHA.match(sha or ""):
+            raise ReconcileError(f"the {what} {sha!r} is not a full 40-hex SHA, so ancestry "
+                                 "cannot be checked")
+        if probe(repo, "cat-file", "-e", sha) != 0:
+            raise ReconcileError(
+                f"the {what} {sha[:12]} is not an object in this repository: a receipt whose "
+                "commits are absent cannot be honoured (a shallow or incomplete clone, or a "
+                "history that was rewritten after the receipt was written)")
+    return probe(repo, "merge-base", "--is-ancestor", first, second) == 0
+
+
+def open_repo(repo: Path) -> None:
+    if not (repo / ".git").exists() and try_git(repo, "rev-parse", "--is-inside-work-tree") != "true":
+        raise ReconcileError(f"{repo} is not a git repository")
+    if try_git(repo, "rev-parse", "--verify", "HEAD") == "":
+        raise ReconcileError(f"{repo} has no commits: nothing can be reconciled in an empty repository")
+    if git(repo, "rev-parse", "--is-shallow-repository") == "true":
+        raise ReconcileError(
+            "this is a shallow clone, so the commits between the receipt's boundary and the "
+            "target cannot be enumerated: a range that cannot be read is not a clean range. "
+            "Fetch the history (`git fetch --unshallow`) or re-clone without --depth")
+
+
+# ---------------------------------------------------------------- topology primitives
+def resolve_target(repo: Path, requested: str | None, here: bool) -> tuple:
+    """Return (ref, sha) for the branch being reconciled. Refuses to guess."""
+    if here:
+        sha = try_git(repo, "rev-parse", "--verify", "HEAD")
+        if not sha:
+            raise ReconcileError("--here: HEAD does not resolve")
+        branch = try_git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+        if branch == "HEAD":
+            print("warning: --here on a detached HEAD; the receipt will name the SHA only",
+                  file=sys.stderr)
+            branch = "detached HEAD"
+        return f"{branch} (--here)", sha
+    candidates = (requested,) if requested else DEFAULT_TARGET_REFS
+    tried = []
+    for ref in candidates:
+        sha = try_git(repo, "rev-parse", "--verify", f"{ref}^{{commit}}")
+        if sha:
+            return ref, sha
+        tried.append(ref)
+    raise ReconcileError(
+        "cannot resolve the primary branch from " + ", ".join(tried)
+        + ": fetch it first (`git fetch origin main`), or name it with --target <ref>. "
+          "A local branch is deliberately not a fallback — the checked-out branch says "
+          "nothing about what has landed on the primary branch, and a stale local copy of "
+          "`main` says less than nothing. Pass --here to reconcile the checked-out branch "
+          "on purpose, and read the limits that prints.")
+
+
+def range_commits(repo: Path, boundary: str, target: str) -> list:
+    """First-parent commits in (boundary, target], oldest first, each with its own diff.
+
+    The diff is against the commit's *first parent*, which is what "what did this commit
+    bring to the branch" means for a merge as well as for a single-parent commit — so a
+    squash, a rebase-merge, a fast-forward and a direct commit are all handled the same way.
+    """
+    out = git(repo, "rev-list", "--reverse", "--first-parent", f"{boundary}..{target}")
+    commits = []
+    for sha in [line for line in out.splitlines() if line.strip()]:
+        parents = git(repo, "show", "-s", "--format=%P", sha).split()
+        base = parents[0] if parents else None
+        paths = (sorted(set(git(repo, "diff", "--name-only", "--no-commit-id", base,
+                                sha).splitlines()))
+                 if base else sorted(git(repo, "show", "--pretty=", "--name-only",
+                                         sha).splitlines()))
+        commits.append({
+            "sha": sha,
+            "subject": git(repo, "show", "-s", "--format=%s", sha),
+            "date": git(repo, "show", "-s", "--format=%cI", sha),
+            "parents": len(parents),
+            "changed_paths": [line for line in paths if line.strip()],
+        })
+    return commits
+
+
+def generated_spans(repo: Path, ref: str) -> list:
+    """Line ranges (1-based, inclusive) of generated blocks in README.md at `ref`."""
+    body = try_git(repo, "show", f"{ref}:{GENERATED_README}")
+    if not body:
+        return []
+    spans, open_at = [], {}
+    for number, line in enumerate(body.splitlines(), start=1):
+        match = MARKER.search(line)
+        if not match:
             continue
-        sha, date, subject = line.split("\t", 2)
-        merges.append({"sha": sha, "date": date, "subject": subject,
-                       "into_main": bool(MERGE.match(subject))})
-    return merges
+        name, edge = match.group(1), match.group(2)
+        if edge == "begin":
+            open_at[name] = number
+        elif name in open_at:
+            spans.append((open_at.pop(name), number))
+    return spans
 
 
-def touched(repo: Path, since: str) -> list:
-    span = f"{since}..HEAD" if since else "HEAD"
-    out = git(repo, "diff", "--name-only", span)
-    return sorted({line for line in out.splitlines() if line.strip()})
+def outside_generated_blocks(repo: Path, sha: str, parents: list) -> list:
+    """README line numbers a commit changed that are NOT inside a generated block."""
+    base = parents[-1] if len(parents) > 1 else (parents[0] if parents else None)
+    if base is None:
+        return []
+    diff = git(repo, "diff", "--unified=0", "--no-commit-id", base, sha, "--",
+               GENERATED_README)
+    if not diff:
+        return []
+    new_spans = generated_spans(repo, sha)
+    old_spans = generated_spans(repo, base)
+    offenders = []
+    for match in HUNK.finditer(diff):
+        old_start, old_count = int(match.group(1)), int(match.group(2) or 1)
+        new_start, new_count = int(match.group(3)), int(match.group(4) or 1)
+        for start, count, spans in ((new_start, new_count, new_spans),
+                                    (old_start, old_count, old_spans)):
+            if count == 0:
+                continue
+            for line in range(start, start + count):
+                if not any(low <= line <= high for low, high in spans):
+                    offenders.append(line)
+    return sorted(set(offenders))
 
 
-def inspect(repo: Path) -> dict:
-    head = git(repo, "rev-parse", "HEAD")
-    dashboard = last_touching(repo, ASSETS[0])
-    readme = last_touching(repo, ASSETS[1])
-    # the dashboard is current only if the figure *and* the README block were written at
-    # or after the same commit; the earlier of the two is the honest watermark
-    stamp = earlier(repo, dashboard, readme)
-    merges = merge_log(repo, stamp) if stamp else []
-    changed = touched(repo, stamp) if stamp else []
-    drivers = [path for path in changed if any(path.startswith(d) for d in DRIVERS)]
+def commit_facts(repo: Path, sha: str, cache: dict) -> dict:
+    """Parents and first-parent diff of one commit, fetched at most once per run.
+
+    Off the first-parent line — the commits a merge introduced — SHAs are looked up as often
+    as a rule needs them, and this is a git subprocess per call otherwise.
+    """
+    if sha not in cache:
+        parents = git(repo, "show", "-s", "--format=%P", sha).split()
+        base = parents[0] if parents else None
+        paths = (sorted(set(git(repo, "diff", "--name-only", "--no-commit-id", base,
+                                sha).splitlines()))
+                 if base else sorted(git(repo, "show", "--pretty=", "--name-only",
+                                         sha).splitlines()))
+        cache[sha] = {"sha": sha, "parents": len(parents),
+                      "changed_paths": [line for line in paths if line.strip()]}
+    return cache[sha]
+
+
+def is_generated_output_only(repo: Path, sha: str, cache: dict) -> bool:
+    """Does everything this commit changed consist of reconciliation output?
+
+    The content rule that closes the loop: `docs/assets/**` and the receipt are written by the
+    generator and by `--record`, and a `README.md` line is reconciliation output only when it
+    falls inside a generated span. Hand-writing prose in a generated block fails
+    `presentation-check`, so exempting these paths cannot hide an unreviewed change — while
+    exempting by *commit SHA* or by *message* would.
+    """
+    facts = commit_facts(repo, sha, cache)
+    paths = facts["changed_paths"]
+    if not paths:
+        return False                                   # an empty commit is nothing to exempt
+    parent = git(repo, "show", "-s", "--format=%P", sha).split()[:1]
+    outside = outside_generated_blocks(repo, sha, parent)
+    return all(p.startswith(GENERATED_OUTPUTS) or p == RECEIPT
+               or (p == GENERATED_README and not outside)
+               for p in paths)
+
+
+def reviewed_ancestry(repo: Path, merge: str, named: set, cache: dict) -> tuple:
+    """For a merge: are all the commits it brought in already reviewed?
+
+    This is what lets a pull-request merge that delivers a reconciliation clear at the moment
+    it lands. The merge commit itself is a new SHA that no earlier receipt can name, and
+    forbidding it from ever being satisfied would mean a reconciliation that must be
+    re-recorded forever; accepting it on the strength of "the merge happened" would mean any
+    merge at all is self-approving. So the rule is about its content: every commit the merge
+    introduces must be named in a receipt or consist of reconciliation output. The commits a
+    squash mints are new SHAs with no such ancestry, and still need recording — which is the
+    honest difference between the two strategies, not an accident of history walking.
+    """
+    introduced = [sha for sha in git(repo, "rev-list", f"{merge}^1..{merge}").splitlines()
+                  if sha and sha != merge]
+    if not introduced:
+        return True, []
+    unreviewed = [sha for sha in introduced
+                  if sha not in named and not is_generated_output_only(repo, sha, cache)]
+    return not unreviewed, unreviewed
+
+
+def classify(repo: Path, commit: dict, named: set = frozenset(), cache: dict = None) -> dict:
+    """Label one commit in the range: does it need inspecting, and what does it drive?"""
+    cache = {} if cache is None else cache
+    sha = commit["sha"]
+    paths = commit["changed_paths"]
+    drivers = [p for p in paths if any(p == d or p.startswith(d) for d in DRIVERS)]
+    parent = git(repo, "show", "-s", "--format=%P", sha).split()[:1]
+    outside = outside_generated_blocks(repo, sha, parent)
+    generated_only = is_generated_output_only(repo, sha, cache)
+    if generated_only:
+        reason, needs = "generated output only", False
+    elif sha in named:
+        reason, needs = "named in the receipt", False
+    elif commit["parents"] > 1:
+        covered, unreviewed = reviewed_ancestry(repo, sha, named, cache)
+        if covered:
+            reason, needs = ("every commit it introduced is already reviewed", False)
+        else:
+            reason = (f"it introduces {len(unreviewed)} unreviewed commit(s): "
+                      + ", ".join(sha[:12] for sha in unreviewed[:6])
+                      + ("" if len(unreviewed) <= 6 else f" (+{len(unreviewed) - 6} more)"))
+            needs = True
+    else:
+        reason, needs = "not recorded by any receipt", True
+    return {"kind": "merge" if commit["parents"] > 1 else "single-parent",
+            "requires_inspection": needs,
+            "reason": reason,
+            "generated_output_only": generated_only,
+            "readme_lines_outside_generated_blocks": outside,
+            "drivers": drivers}
+
+
+# ---------------------------------------------------------------- the receipt
+def read_receipt(repo: Path, target: str) -> dict:
+    """The receipt as committed on the target branch — not the working tree's copy."""
+    raw = try_git(repo, "show", f"{target}:{RECEIPT}")
+    if not raw:
+        # `cat-file -e <ref>:<path>` exits 128 for a path that is simply not there, which is an
+        # absence and not a failure, so presence is asked of `ls-tree` instead: it exits 0 and
+        # prints the path when the file is in the tree, and prints nothing when it is not.
+        if try_git(repo, "ls-tree", "--name-only", target, "--", RECEIPT):
+            raise ReconcileError(f"{RECEIPT} exists at {target} but `git show` could not read "
+                                 "it")
+        return {}                          # genuinely absent: the Outstanding case
+    try:
+        receipt = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ReconcileError(f"{RECEIPT} at {target} is not valid JSON: {exc}") from exc
+    if not isinstance(receipt, dict):
+        raise ReconcileError(f"{RECEIPT} at {target} is not an object")
+    return receipt
+
+
+def validate_receipt(repo: Path, receipt: dict, target: str) -> dict:
+    """Reject a receipt that cannot be honoured. Every rejection is an error, not a green."""
+    if not receipt:
+        raise Outstanding(
+            f"{RECEIPT} does not exist on {target} yet: nothing has been recorded as "
+            "inspected. Bootstrap it with `python3 tools/dashboard_reconcile.py --record "
+            "--bootstrap --boundary <full SHA> --inspect <full SHA>`")
+    if receipt.get("schema") != SCHEMA:
+        raise ReconcileError(f"{RECEIPT} declares schema {receipt.get('schema')!r}, "
+                             f"this tool reads {SCHEMA!r}")
+    boundary = receipt.get("reconciled_at", "")
+    if not isinstance(boundary, str) or not FULL_SHA.match(boundary):
+        raise ReconcileError(f"{RECEIPT} has no full 40-hex `reconciled_at` boundary "
+                             f"(got {boundary!r}); short SHAs are not acceptable because "
+                             "they cannot be proved to be the intended commit")
+    if try_git(repo, "cat-file", "-t", boundary) != "commit":
+        raise ReconcileError(f"the receipt's boundary {boundary} is not a commit in this "
+                             "repository (a rewritten or incomplete clone cannot be audited)")
+    if not is_ancestor(repo, boundary, target):
+        raise ReconcileError(
+            f"the receipt's boundary {boundary[:12]} is not an ancestor of {target}: the "
+            "receipt describes a different line of history, so it says nothing about this "
+            "one (a rebased or force-pushed branch, or a receipt written with --here on a "
+            "feature branch that has not landed)")
+    if receipt.get("complete") is not True:
+        raise Outstanding(f"the receipt on {target} says the reconciliation was incomplete: "
+                          f"{receipt.get('incomplete_reason') or 'no reason recorded'}")
+    claimed = receipt.get("inspected_commits") or []
+    if not isinstance(claimed, list):
+        raise ReconcileError(f"{RECEIPT}'s inspected_commits is not a list")
+    for sha in claimed:
+        if not isinstance(sha, str) or not FULL_SHA.match(sha):
+            raise ReconcileError(f"{RECEIPT} claims a short or malformed SHA: {sha!r}")
+        if not is_ancestor(repo, sha, target):
+            raise ReconcileError(
+                f"{RECEIPT} claims to have inspected {sha[:12]}, which is not an ancestor of "
+                f"{target}: a receipt may only name commits that have actually landed. This "
+                "is what stops a receipt from pre-approving an unknown future merge.")
+    for step in receipt.get("verification", []):
+        if step.get("exit_code") != 0:
+            raise ReconcileError(f"{RECEIPT} records a failing verification "
+                                 f"({step.get('label')} exit {step.get('exit_code')}): the "
+                                 "receipt was written over a red gate")
+    return receipt
+
+
+class Outstanding(Exception):
+    """A reconciliation that is due, as opposed to one that cannot be established."""
+
+
+def inspect(repo: Path, target_ref: str, target: str) -> dict:
+    open_repo(repo)
+    receipt = validate_receipt(repo, read_receipt(repo, target), target)
+    boundary = receipt["reconciled_at"]
+    commits = range_commits(repo, boundary, target)
+    outstanding, reviewed, exempt = [], [], []
+    named = set(receipt.get("inspected_commits") or [])
+    cache: dict = {}
+    for commit in commits:
+        info = commit.setdefault("classification", classify(repo, commit, named, cache))
+        entry = {**commit, **info}
+        if not info["requires_inspection"]:
+            exempt.append(entry)
+        elif commit["sha"] in named:
+            reviewed.append(entry)
+        else:
+            outstanding.append(entry)
+    figures = [c for c in commits if any(p.startswith(GENERATED_OUTPUTS)
+                                         for p in c["changed_paths"])]
+    cleared_by_merge = [c for c in reviewed if c["reason"].startswith("every commit")]
+    notes = []
+    if target_ref.startswith("origin/"):
+        # `origin/main` is a *local* record of what the remote holds; if the branch you are
+        # standing on has moved past it, this answer is about the older state on purpose, and
+        # saying so is better than silently reconciling the wrong commits.
+        local = try_git(repo, "rev-parse", "--verify", "main^{commit}")
+        if local and local != target and is_ancestor(repo, target, local):
+            ahead = len(git(repo, "rev-list", "--count", f"{target}..{main_branch(repo)}").split())
+            notes.append(f"local `main` is {ahead} commit(s) ahead of {target_ref}: this answer "
+                         "is about what has landed. Run `git fetch` to catch up, or `--here` to "
+                         "reconcile the checked-out branch (that is what `make post-merge` does "
+                         "before the push).")
+        if not try_git(repo, "config", "--get", "remote.origin.url"):
+            notes.append("this clone has no `origin`, so the primary branch cannot be fetched; "
+                         "the ref read above is whatever was last recorded locally")
     return {
         "repository": str(repo),
-        "head": head,
-        "dashboard_last_written": stamp,
-        "dashboard_figure_last_written": dashboard,
-        "readme_block_last_written": readme,
-        "unprocessed_merges": merges,
-        "driver_files_since_then": drivers,
-        "outstanding": stamp == "" or bool(merges),
-        "reason": ("the dashboard figure or the README block has never been committed"
-                   if stamp == "" else
-                   (f"{len(merges)} merge commit(s) on the first-parent line since the "
-                    "dashboard was written" if merges else "none")),
+        "repository_id": repository_id(repo),
+        "receipt_repository": receipt.get("repository"),
+        "repository_matches": (receipt.get("repository") or repository_id(repo))
+        == repository_id(repo),
+        "target_ref": target_ref,
+        "target": target,
+        "receipt_path": RECEIPT,
+        "boundary": boundary,
+        "boundary_date": try_git(repo, "show", "-s", "--format=%cI", boundary),
+        "inspected_commits": receipt.get("inspected_commits") or [],
+        "commits_since_boundary": [
+            {"sha": c["sha"], "subject": c["subject"], "date": c["date"],
+             "parents": c["parents"], "changed_paths": c["changed_paths"],
+             "requires_inspection": c["classification"]["requires_inspection"],
+             "reason": c["classification"]["reason"],
+             "drivers": c["classification"]["drivers"]} for c in commits],
+        "outstanding": outstanding,
+        "recorded_in_receipt": reviewed,
+        "merges_cleared_by_reviewed_content": [c["sha"] for c in cleared_by_merge],
+        "exempt_generated_only": exempt,
+        "output_touched_by_range": [c["sha"] for c in figures],
+        "verification": receipt.get("verification", []),
+        "figures_changed": receipt.get("figures_changed"),
+        "readme_changed": receipt.get("readme_changed"),
+        "summary": receipt.get("summary", ""),
+        "notes": notes,
     }
+
+
+def main_branch(repo: Path) -> str:
+    """`main`, if it exists, else the branch `origin/HEAD` points at."""
+    if try_git(repo, "rev-parse", "--verify", "main^{commit}") != "":
+        return "main"
+    head = try_git(repo, "symbolic-ref", "--short", "origin/HEAD")
+    return head or "HEAD"
+
+
+def repository_id(repo: Path) -> str:
+    """The remote this receipt vouches for, so a fork's receipt cannot be mistaken for one."""
+    url = try_git(repo, "config", "--get", "remote.origin.url")
+    match = re.search(r"[:/]([^/]+/[^/.]+?)(?:\.git)?$", url or "")
+    return match.group(1) if match else (url or "unknown-remote")
+
+
+# ---------------------------------------------------------------- reporting and writing
+def report(state: dict, json_mode: bool) -> int:
+    if json_mode:
+        print(json.dumps(state, indent=2, sort_keys=True))
+        return 1 if state["outstanding"] else 0
+    print(f"repository           {state['repository_id']}")
+    if not state["repository_matches"]:
+        print(f"  NOTE the receipt vouches for {state['receipt_repository']!r}, and this "
+              "checkout's origin is "
+              f"{state['repository_id']!r}: the SHAs below were resolved here, so a commit "
+              "that exists in a fork is honoured even though the receipt was written "
+              "elsewhere. That is auditable, not trusted.")
+    print(f"target               {state['target_ref']} @ {state['target'][:12]}")
+    for line in state.get("notes", []):
+        print(f"  {line}")
+    print(f"receipt              {state['receipt_path']}")
+    print(f"reconciled boundary  {state['boundary'][:12]}  ({state['boundary_date'][:10]})")
+    print(f"summary              {state['summary'] or '(none recorded)'}")
+    print(f"figures changed      {state['figures_changed']}   README changed: "
+          f"{state['readme_changed']}")
+    print(f"verifications        " + (", ".join(f"{v['label']}=exit {v['exit_code']}"
+                                                for v in state["verification"]) or "(none)"))
+    total = len(state["commits_since_boundary"])
+    via_merge = len(state.get("merges_cleared_by_reviewed_content", []))
+    print(f"commits since then   {total} on the first-parent line "
+          f"({len(state['outstanding'])} needing inspection, "
+          f"{len(state['recorded_in_receipt']) - via_merge} already named in the receipt, "
+          f"{len(state['exempt_generated_only'])} generated-output only"
+          + (f", {via_merge} merge(s) whose every introduced commit is reviewed"
+             if via_merge else "") + ")")
+    for entry in state["outstanding"]:
+        print(f"  OUTSTANDING {entry['sha'][:12]}  {entry['date'][:10]}  "
+              f"[{entry['kind']}]  {entry['subject'][:64]}")
+        if entry["drivers"]:
+            print(f"              drives: {', '.join(entry['drivers'][:4])}")
+        else:
+            print("              drives: nothing the dashboard counts")
+        if entry["kind"] == "merge" and entry["reason"].startswith("it introduces"):
+            print(f"              {entry['reason']}")
+    if state["outstanding"]:
+        print("OUTSTANDING — a successful change on the primary branch has not been "
+              "reconciled with the dashboard")
+        print("  run: make post-merge        # regenerate, verify, and record the receipt")
+        print("  then commit the regenerated figures and the receipt together (AGENTS.md)")
+        return 1
+    print("CURRENT — every first-parent change since the receipt's boundary is either "
+          "inspected and recorded or confined to generated output")
+    return 0
+
+
+def record(repo: Path, target_ref: str, target: str, summary: str, dry_run: bool) -> tuple:
+    """Write a receipt claiming only what can be shown. Returns (exit code, lines)."""
+    open_repo(repo)
+    log = []
+    existing = read_receipt(repo, target)
+    boundary = existing.get("reconciled_at", "") if FULL_SHA.match(str(existing.get(
+        "reconciled_at", ""))) else ""
+    if boundary and not is_ancestor(repo, boundary, target):
+        raise ReconcileError(
+            f"the receipt at {target} has boundary {boundary[:12]}, which is not an ancestor "
+            "of the target: refusing to record over a history that does not contain it")
+    previous = {"reconciled_at": boundary, "inspected_commits": (existing.get(
+        "inspected_commits") or [])} if boundary else {}
+    commits = range_commits(repo, boundary, target) if boundary else []
+    if not boundary:
+        # The first receipt on a line of history cannot be inferred: there is no earlier
+        # record saying what was already inspected, so the caller has to name a boundary and
+        # the commits it looked at. Refusing here is what keeps `make post-merge` on a fresh
+        # fork from inventing a clean bill of health.
+        raise ReconcileError(
+            f"no usable receipt at {target}: `--record` only extends an existing boundary. "
+            "Bootstrap it explicitly with --record --boundary <full SHA> --inspect <sha>…"
+            " so the receipt states what it looked at.")
+    cache: dict = {}
+    named_all = set((existing.get("inspected_commits") or []))
+    need = [c for c in commits
+            if c.setdefault("classification",
+                            classify(repo, c, named_all, cache))["requires_inspection"]]
+    named = set(previous["inspected_commits"])
+    unrecorded = [c for c in need if c["sha"] not in named]
+    if not unrecorded:
+        return 0, ["nothing to record: every change since the boundary is either named in "
+                   "the receipt or confined to generated output"]
+    # A reconciliation writes generated output and the receipt together. Generated output
+    # is exempt from inspection by definition (presentation-check just proved it matches the
+    # data), so a dirty figure is not a reason to refuse the receipt — a dirty source file is.
+    pending = uncommitted_changes(repo)
+    figures_pending = sorted({p for p in pending if p.startswith(GENERATED_OUTPUTS)})
+    results = verify(repo, log.append)
+    paths = sorted({p for c in unrecorded for p in c["changed_paths"]})
+    for commit in commits:                      # a second pass would re-diff every commit
+        commit.setdefault("classification", classify(repo, commit))
+    receipt = {
+        "schema": SCHEMA,
+        "repository": repository_id(repo),
+        "target_ref": target_ref,
+        "reconciled_at": target,
+        "previous_boundary": boundary,
+        "boundary_date": git(repo, "show", "-s", "--format=%cI", target),
+        "summary": summary or (f"reconciled {len(unrecorded)} commit(s) since {boundary[:12]}"),
+        "inspected_commits": sorted(set(named) | {c["sha"] for c in unrecorded}),
+        "commits_inspected_now": [
+            {"sha": c["sha"], "subject": c["subject"], "date": c["date"],
+             "parents": c["parents"],
+             "kind": c["classification"]["kind"],
+             "changed_paths": sorted(set(c["changed_paths"]))[:24],
+             "dashboard_drivers": c["classification"]["drivers"]} for c in unrecorded],
+        "inspected_paths": paths[:64],
+        "paths_truncated": max(0, len(paths) - 64),
+        "figures_changed": bool(figures_pending) or any(
+            p.startswith(GENERATED_OUTPUTS) for c in unrecorded for p in c["changed_paths"]),
+        "readme_changed": GENERATED_README in pending or any(
+            p == GENERATED_README for c in unrecorded for p in c["changed_paths"]),
+        "generated_output_pending_commit": figures_pending
+        + ([GENERATED_README] if GENERATED_README in pending else []),
+        "verification": results,
+        "complete": True,
+        "incomplete_reason": None,
+    }
+    payload = json.dumps(receipt, indent=2, sort_keys=True) + "\n"
+    if dry_run:
+        log.append("  dry run: receipt not written")
+        return 0, log + [payload]
+    path = repo / RECEIPT
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload, encoding="utf-8")
+    log.append(f"  wrote {RECEIPT}: boundary {target[:12]}, "
+               f"{len(receipt['commits_inspected_now'])} commit(s) inspected, "
+               f"figures changed: {receipt['figures_changed']}")
+    log.append("  commit the receipt (with any regenerated figures) and open a pull request")
+    return 0, log
+
+
+# ---------------------------------------------------------------- writing a receipt
+def uncommitted_changes(repo: Path) -> list:
+    """The receipt and the generator's own output may be dirty; nothing else may.
+
+    A receipt written while a source file is modified would vouch for a tree that does not
+    exist in any commit, so the source change has to land (or be stashed) first.
+    """
+    pending = []
+    for line in git(repo, "status", "--porcelain").splitlines():
+        fields = line.split(None, 1)          # "XY path", "?? path", "R  old -> new"
+        if len(fields) != 2:
+            raise ReconcileError(f"cannot read `git status --porcelain` output: {line!r}")
+        path = fields[1].split(" -> ")[-1].strip().strip('"')
+        if path == RECEIPT or path.startswith(GENERATED_OUTPUTS) or path == GENERATED_README:
+            pending.append(path)
+            continue
+        raise ReconcileError(
+            f"the working tree changes {path}, which is neither the receipt nor generated "
+            "output: commit the source change first, then reconcile against it")
+    return pending
+
+
+def verify(repo: Path, note=lambda line: None) -> list:
+    """Run the gates a receipt is allowed to claim, and record their real exit codes.
+
+    A missing verifier is an error rather than a skipped step: `presentation-check` passing
+    because nothing was run is exactly the kind of green this whole tool exists to prevent.
+    """
+    results = []
+    for label, argv in VERIFICATIONS:
+        cmd = [sys.executable if a == "{python}" else a for a in argv]
+        for part in cmd:
+            if part.endswith(".py") and not (repo / part).exists():
+                raise ReconcileError(f"verifier {part} is missing; refusing to record a "
+                                     "receipt over an unverifiable tree")
+        done = subprocess.run(cmd, cwd=repo, capture_output=True, text=True)
+        results.append({"label": label, "argv": argv, "exit_code": done.returncode})
+        note(f"  verify {label}: exit {done.returncode}")
+        if done.returncode != 0:
+            tail = (done.stdout + done.stderr).strip().splitlines()
+            raise ReconcileError(
+                f"refusing to record: {label} failed (exit {done.returncode}): "
+                f"{tail[-1] if tail else 'no output'}")
+    return results
+
+
+def must_be_on_target(repo: Path, sha: str, target: str, what: str) -> None:
+    """A receipt may only name commits that have landed on the branch it is read from."""
+    if not FULL_SHA.match(sha):
+        raise ReconcileError(f"{what} {sha!r} is not a full 40-hex SHA")
+    if try_git(repo, "cat-file", "-t", sha) != "commit":
+        raise ReconcileError(f"{what} {sha[:12]} is not a commit in this repository")
+    if sha != target and not is_ancestor(repo, sha, target):
+        raise ReconcileError(
+            f"{what} {sha[:12]} is not an ancestor of the target: a receipt may only name "
+            "commits that have already landed, so it cannot pre-approve a merge that has not "
+            "happened yet")
+
+
+def bootstrap(repo: Path, target_ref: str, target: str, boundary: str, inspected: list,
+              note: str, dry_run: bool) -> tuple:
+    """Seed the first receipt on a line of history, with the same guarantees as any other.
+
+    It has to pass the gates and name commits that exist on the target, because a bootstrap
+    that could be written freely would be a way to declare a branch reconciled without reading
+    it — which is the defect this rewrite replaced.
+    """
+    open_repo(repo)
+    must_be_on_target(repo, boundary, target, "the boundary")
+    if not inspected:
+        raise ReconcileError("--bootstrap needs --inspect <full SHA> at least once: the first "
+                             "receipt has to say which commits were read")
+    for sha in inspected:
+        must_be_on_target(repo, sha, target, f"an inspected commit")
+    uncommitted_changes(repo)
+    results = verify(repo, lambda line: None)
+    receipt = {
+        "schema": SCHEMA,
+        "repository": repository_id(repo),
+        "target_ref": target_ref,
+        "reconciled_at": boundary,
+        "previous_boundary": None,
+        "boundary_date": git(repo, "show", "-s", "--format=%cI", boundary),
+        "summary": note or "bootstrap: the first receipt on this line of history",
+        "inspected_commits": sorted(set(inspected)),
+        "commits_inspected_now": [],
+        "inspected_paths": [],
+        "paths_truncated": 0,
+        "figures_changed": False,
+        "readme_changed": False,
+        "generated_output_pending_commit": [],
+        "verification": results,
+        "bootstrap": True,
+        "complete": True,
+        "incomplete_reason": None,
+    }
+    payload = json.dumps(receipt, indent=2, sort_keys=True) + "\n"
+    if dry_run:
+        return 0, ["  dry run: receipt not written", payload]
+    path = repo / RECEIPT
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload, encoding="utf-8")
+    return 0, [f"  bootstrapped {RECEIPT} at boundary {boundary[:12]} naming "
+               f"{len(inspected)} commit(s); commit it and open a pull request"]
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", default=str(Path(__file__).resolve().parent.parent),
                         help="repository to inspect (default: this checkout)")
-    parser.add_argument("--json", action="store_true", help="emit the report as JSON")
+    parser.add_argument("--target", default=None,
+                        help="ref to reconcile against (default: the first of "
+                             + ", ".join(DEFAULT_TARGET_REFS) + " that resolves)")
+    parser.add_argument("--here", action="store_true",
+                        help="reconcile the checked-out branch instead of the primary branch; "
+                             "the receipt records that it was written this way")
+    parser.add_argument("--record", action="store_true",
+                        help="write a receipt for the changes since the recorded boundary")
+    parser.add_argument("--boundary", default="",
+                        help="with --record --bootstrap: the full SHA this receipt starts from")
+    parser.add_argument("--inspect", action="append", default=[],
+                        help="with --record --bootstrap: a full SHA that was inspected "
+                             "(repeatable, at least one required)")
+    parser.add_argument("--bootstrap", action="store_true",
+                        help="write the first receipt on a line of history: needs --boundary "
+                             "and --inspect, and runs the same verification gates")
+    parser.add_argument("--note", default="", help="one-line summary stored in the receipt")
+    parser.add_argument("--dry-run", action="store_true", help="print, do not write")
+    parser.add_argument("--json", action="store_true", dest="json_mode")
     args = parser.parse_args(argv)
 
     repo = Path(args.repo).resolve()
-    if not (repo / ".git").exists():
-        print(f"dashboard-reconcile: {repo} is not a git repository", file=sys.stderr)
-        return 2
-    report = inspect(repo)
-    if args.json:
-        print(json.dumps(report, indent=2, sort_keys=True))
-        return 1 if report["outstanding"] else 0
-
-    print(f"HEAD                 {report['head'][:12]}")
-    print(f"dashboard written at {report['dashboard_last_written'][:12] or 'never'}")
-    if report["unprocessed_merges"]:
-        print(f"merges since then      {len(report['unprocessed_merges'])}")
-        for merge in report["unprocessed_merges"]:
-            mark = "into main" if merge["into_main"] else "merge commit"
-            print(f"  {merge['sha'][:12]}  {merge['date']}  [{mark}]  {merge['subject']}")
-    if report["driver_files_since_then"]:
-        print(f"dashboard drivers touched: {len(report['driver_files_since_then'])}")
-        for path in report["driver_files_since_then"]:
-            print(f"  {path}")
-    if report["outstanding"]:
-        print(f"OUTSTANDING — {report['reason']}")
-        print("  run: make presentation && make presentation-check && make docs-check")
-        print("  then commit the regenerated README and figure (AGENTS.md, rule 1)")
+    try:
+        target_ref, target = resolve_target(repo, args.target, args.here)
+        if args.record:
+            if args.bootstrap:
+                code, log = bootstrap(repo, target_ref, target, args.boundary or "",
+                                      args.inspect, args.note, args.dry_run)
+                for line in log:
+                    print(line)
+                return code
+            code, log = record(repo, target_ref, target, args.note, args.dry_run)
+            for line in log:
+                print(line)
+            return code
+        return report(inspect(repo, target_ref, target), args.json_mode)
+    except Outstanding as due:
+        print(f"OUTSTANDING — {due}")
+        print("  run: make post-merge")
         return 1
-    print("CURRENT — every merge on the first-parent line is reflected in the dashboard")
-    return 0
+    except ReconcileError as error:
+        print(f"ERROR — {error}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

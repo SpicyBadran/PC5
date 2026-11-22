@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1163" viewBox="0 0 1200 1163" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1223" viewBox="0 0 1200 1223" role="img" aria-labelledby="t d">
   <title id="t">PC5 progress matrix</title>
-  <desc id="d">milestones complete 9 of 35; levels 1 and 2 hold the only verified milestones, levels 3 to 6 none; deliverables present 31 of 66; 6 milestones blocked; validation records 10 of 11 passed; physical boot and genuine system-software execution carry no evidence.</desc>
-  <rect width="1200" height="1163" fill="#0b0f14"/>
+  <desc id="d">milestones complete 9 of 35; levels 1 and 2 hold the only verified milestones, levels 3 to 6 none; deliverables present 31 of 66; 0 of 35 milestones have a record filed under docs/evidence/, and 19 merely cite a path that exists; 6 milestones blocked; validation records 10 of 11 passed; physical boot and genuine system-software execution carry no evidence.</desc>
+  <rect width="1200" height="1223" fill="#0b0f14"/>
   <text x="24" y="34" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="20" fill="#e6edf3" font-weight="bold" text-anchor="start">PC5 PROGRESS MATRIX</text>
   <text x="24" y="54" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">every figure is a count over a named set in this repository; a green cell means a file records it, never that a machine ran it</text>
   <text x="1176" y="34" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="end">source: docs/architecture/roadmap.json</text>
@@ -79,7 +79,7 @@
   <rect x="510" y="232" width="78" height="26" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
   <text x="549.0" y="248.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle">M21 !</text>
   <text x="24" y="292" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#e6edf3" font-weight="bold" text-anchor="start">EVIDENCE LADDER — ONE ROW PER LEVEL</text>
-  <text x="588" y="292" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#e6edf3" font-weight="bold" text-anchor="end">2/6 levels hold a verified milestone</text>
+  <text x="588" y="292" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#e6edf3" font-weight="bold" text-anchor="end">2/6 levels verified</text>
   <text x="588" y="308" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">a level is reached by its own evidence; the two top levels have none</text>
   <text x="24" y="332" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="bold" text-anchor="start">L1</text>
   <text x="56" y="332" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">boots on qualified PC hardware</text>
@@ -169,7 +169,7 @@
   <rect x="338" y="452" width="30" height="22" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
   <text x="353.0" y="466.6" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#f4b9bd" font-weight="normal" text-anchor="middle">20 !</text>
   <text x="588" y="467" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/3</text>
-  <text x="24" y="510" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#e6edf3" font-weight="bold" text-anchor="start">REQUIREMENTS, DELIVERABLES AND FILED EVIDENCE</text>
+  <text x="24" y="510" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#e6edf3" font-weight="bold" text-anchor="start">REQUIREMENTS, DELIVERABLES, CITED PATHS</text>
   <text x="588" y="510" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#e6edf3" font-weight="bold" text-anchor="end">31/66 deliverables present</text>
   <text x="588" y="526" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">bar segments are the counts named at the right of each row</text>
   <text x="24" y="547" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">acceptance items, by the state of the owning milestone</text>
@@ -187,128 +187,133 @@
   <text x="588" y="624" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="normal" text-anchor="end">41/66</text>
   <rect x="24" y="629" width="350" height="10" rx="3" fill="#38bdf8" stroke="#0b0f14"/>
   <rect x="377" y="629" width="211" height="10" rx="3" fill="#1b2330" stroke="#0b0f14"/>
-  <text x="24" y="658" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">evidence paths a milestone names that are present in the tree</text>
+  <text x="24" y="658" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">cited paths that resolve to a file in this checkout</text>
   <text x="588" y="658" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="normal" text-anchor="end">39/39</text>
-  <rect x="24" y="663" width="564" height="10" rx="3" fill="#34d399" stroke="#0b0f14"/>
-  <text x="24" y="692" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">milestones carrying at least one evidence path</text>
+  <rect x="24" y="663" width="564" height="10" rx="3" fill="#38bdf8" stroke="#0b0f14"/>
+  <text x="24" y="692" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">milestones citing at least one in-tree path</text>
   <text x="588" y="692" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="normal" text-anchor="end">19/35</text>
   <rect x="24" y="697" width="306" height="10" rx="3" fill="#38bdf8" stroke="#0b0f14"/>
   <rect x="333" y="697" width="255" height="10" rx="3" fill="#2b3646" stroke="#0b0f14"/>
-  <text x="24" y="740" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#e6edf3" font-weight="bold" text-anchor="start">WORKSTREAMS</text>
-  <text x="588" y="740" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#e6edf3" font-weight="bold" text-anchor="end">11/14 with nothing verified</text>
-  <text x="588" y="756" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">one cell per milestone, so a one-milestone stream is one cell</text>
-  <text x="24" y="778" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="bold" text-anchor="start">WS0</text>
-  <text x="66" y="778" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Governance: architecture, evidence, release discipline</text>
-  <rect x="528" y="765" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
-  <text x="536.0" y="778.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="778" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#34d399" font-weight="normal" text-anchor="end">1/1</text>
-  <text x="24" y="802" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS1</text>
-  <text x="66" y="802" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Hardware discovery and compatibility</text>
-  <rect x="509" y="789" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="517.0" y="802.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <rect x="528" y="789" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="536.0" y="802.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="802" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/2</text>
-  <text x="24" y="826" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS2</text>
-  <text x="66" y="826" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">CPU architecture and execution environment</text>
-  <rect x="528" y="813" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="536.0" y="826.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="826" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
-  <text x="24" y="850" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="bold" text-anchor="start">WS3</text>
-  <text x="66" y="850" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Firmware and boot compatibility</text>
-  <rect x="490" y="837" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
-  <text x="498.0" y="850.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
-  <rect x="509" y="837" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
-  <text x="517.0" y="850.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
-  <rect x="528" y="837" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
-  <text x="536.0" y="850.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="850" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#34d399" font-weight="normal" text-anchor="end">3/3</text>
-  <text x="24" y="874" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS4</text>
-  <text x="66" y="874" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Memory management</text>
-  <rect x="528" y="861" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="536.0" y="874.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="874" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
-  <text x="24" y="898" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="bold" text-anchor="start">WS5</text>
-  <text x="66" y="898" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Storage and filesystem</text>
-  <rect x="452" y="885" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
-  <text x="460.0" y="898.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
-  <rect x="471" y="885" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
-  <text x="479.0" y="898.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
-  <rect x="490" y="885" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
-  <text x="498.0" y="898.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
-  <rect x="509" y="885" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
-  <text x="517.0" y="898.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
-  <rect x="528" y="885" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
-  <text x="536.0" y="898.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="898" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#34d399" font-weight="normal" text-anchor="end">5/5</text>
-  <text x="24" y="922" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS6</text>
-  <text x="66" y="922" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">GPU architecture and graphics</text>
-  <rect x="528" y="909" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="536.0" y="922.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="922" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
-  <text x="24" y="946" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS7</text>
-  <text x="66" y="946" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Audio architecture</text>
-  <rect x="528" y="933" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="536.0" y="946.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="946" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
-  <text x="24" y="970" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS8</text>
-  <text x="66" y="970" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">USB, Bluetooth and controllers</text>
-  <rect x="528" y="957" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="536.0" y="970.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="970" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
-  <text x="24" y="994" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS9</text>
-  <text x="66" y="994" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">System services and operating-system interfaces</text>
-  <rect x="528" y="981" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="536.0" y="994.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="994" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
-  <text x="24" y="1018" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS10</text>
-  <text x="66" y="1018" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">PS5 platform compatibility (system…</text>
-  <rect x="300" y="1005" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="308.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <rect x="319" y="1005" width="16" height="20" rx="3" fill="#38bdf8" stroke="#0b0f14" stroke-width="1"/>
-  <text x="327.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#04222f" font-weight="normal" text-anchor="middle"></text>
-  <rect x="338" y="1005" width="16" height="20" rx="3" fill="#38bdf8" stroke="#0b0f14" stroke-width="1"/>
-  <text x="346.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#04222f" font-weight="normal" text-anchor="middle"></text>
-  <rect x="357" y="1005" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="365.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <rect x="376" y="1005" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="384.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <rect x="395" y="1005" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="403.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <rect x="414" y="1005" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="422.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <rect x="433" y="1005" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="441.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <rect x="452" y="1005" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="460.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <rect x="471" y="1005" width="16" height="20" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
-  <text x="479.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle"></text>
-  <rect x="490" y="1005" width="16" height="20" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
-  <text x="498.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle"></text>
-  <rect x="509" y="1005" width="16" height="20" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
-  <text x="517.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle"></text>
-  <rect x="528" y="1005" width="16" height="20" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
-  <text x="536.0" y="1018.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="1018" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/13</text>
-  <text x="24" y="1042" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS11</text>
-  <text x="66" y="1042" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Game execution and runtime compatibility</text>
-  <rect x="528" y="1029" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="536.0" y="1042.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="1042" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
-  <text x="24" y="1066" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS12</text>
-  <text x="66" y="1066" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Installation, recovery and system updates</text>
-  <rect x="490" y="1053" width="16" height="20" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
-  <text x="498.0" y="1066.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle"></text>
-  <rect x="509" y="1053" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="517.0" y="1066.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <rect x="528" y="1053" width="16" height="20" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
-  <text x="536.0" y="1066.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="1066" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/3</text>
-  <text x="24" y="1090" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS13</text>
-  <text x="66" y="1090" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Product experience: shell, library, settings</text>
-  <rect x="528" y="1077" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
-  <text x="536.0" y="1090.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
-  <text x="588" y="1090" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
+  <text x="24" y="726" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">milestones with a record filed under docs/evidence/</text>
+  <text x="588" y="726" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="normal" text-anchor="end">0/35</text>
+  <rect x="24" y="731" width="564" height="10" rx="3" fill="#2b3646" stroke="#0b0f14"/>
+  <text x="24" y="757" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">a citation names a path; a record proves a run — the last row counts records only</text>
+  <text x="24" y="784" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#e6edf3" font-weight="bold" text-anchor="start">WORKSTREAMS</text>
+  <text x="588" y="784" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#e6edf3" font-weight="bold" text-anchor="end">11/14 with nothing verified</text>
+  <text x="588" y="800" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">one cell per milestone, so a one-milestone stream is one cell</text>
+  <text x="24" y="822" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="bold" text-anchor="start">WS0</text>
+  <text x="66" y="822" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Governance: architecture, evidence, release discipline</text>
+  <rect x="528" y="809" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
+  <text x="536.0" y="822.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="822" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#34d399" font-weight="normal" text-anchor="end">1/1</text>
+  <text x="24" y="846" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS1</text>
+  <text x="66" y="846" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Hardware discovery and compatibility</text>
+  <rect x="509" y="833" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="517.0" y="846.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <rect x="528" y="833" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="536.0" y="846.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="846" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/2</text>
+  <text x="24" y="870" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS2</text>
+  <text x="66" y="870" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">CPU architecture and execution environment</text>
+  <rect x="528" y="857" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="536.0" y="870.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="870" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
+  <text x="24" y="894" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="bold" text-anchor="start">WS3</text>
+  <text x="66" y="894" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Firmware and boot compatibility</text>
+  <rect x="490" y="881" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
+  <text x="498.0" y="894.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
+  <rect x="509" y="881" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
+  <text x="517.0" y="894.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
+  <rect x="528" y="881" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
+  <text x="536.0" y="894.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="894" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#34d399" font-weight="normal" text-anchor="end">3/3</text>
+  <text x="24" y="918" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS4</text>
+  <text x="66" y="918" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Memory management</text>
+  <rect x="528" y="905" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="536.0" y="918.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="918" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
+  <text x="24" y="942" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="bold" text-anchor="start">WS5</text>
+  <text x="66" y="942" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Storage and filesystem</text>
+  <rect x="452" y="929" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
+  <text x="460.0" y="942.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
+  <rect x="471" y="929" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
+  <text x="479.0" y="942.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
+  <rect x="490" y="929" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
+  <text x="498.0" y="942.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
+  <rect x="509" y="929" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
+  <text x="517.0" y="942.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
+  <rect x="528" y="929" width="16" height="20" rx="3" fill="#34d399" stroke="#0b0f14" stroke-width="1"/>
+  <text x="536.0" y="942.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#06251c" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="942" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#34d399" font-weight="normal" text-anchor="end">5/5</text>
+  <text x="24" y="966" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS6</text>
+  <text x="66" y="966" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">GPU architecture and graphics</text>
+  <rect x="528" y="953" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="536.0" y="966.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="966" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
+  <text x="24" y="990" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS7</text>
+  <text x="66" y="990" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Audio architecture</text>
+  <rect x="528" y="977" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="536.0" y="990.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="990" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
+  <text x="24" y="1014" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS8</text>
+  <text x="66" y="1014" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">USB, Bluetooth and controllers</text>
+  <rect x="528" y="1001" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="536.0" y="1014.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="1014" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
+  <text x="24" y="1038" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS9</text>
+  <text x="66" y="1038" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">System services and operating-system interfaces</text>
+  <rect x="528" y="1025" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="536.0" y="1038.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="1038" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
+  <text x="24" y="1062" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS10</text>
+  <text x="66" y="1062" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">PS5 platform compatibility (system</text>
+  <text x="66" y="1077" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">software)</text>
+  <rect x="300" y="1049" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="308.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <rect x="319" y="1049" width="16" height="20" rx="3" fill="#38bdf8" stroke="#0b0f14" stroke-width="1"/>
+  <text x="327.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#04222f" font-weight="normal" text-anchor="middle"></text>
+  <rect x="338" y="1049" width="16" height="20" rx="3" fill="#38bdf8" stroke="#0b0f14" stroke-width="1"/>
+  <text x="346.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#04222f" font-weight="normal" text-anchor="middle"></text>
+  <rect x="357" y="1049" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="365.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <rect x="376" y="1049" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="384.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <rect x="395" y="1049" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="403.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <rect x="414" y="1049" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="422.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <rect x="433" y="1049" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="441.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <rect x="452" y="1049" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="460.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <rect x="471" y="1049" width="16" height="20" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
+  <text x="479.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle"></text>
+  <rect x="490" y="1049" width="16" height="20" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
+  <text x="498.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle"></text>
+  <rect x="509" y="1049" width="16" height="20" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
+  <text x="517.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle"></text>
+  <rect x="528" y="1049" width="16" height="20" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
+  <text x="536.0" y="1062.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="1062" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/13</text>
+  <text x="24" y="1102" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS11</text>
+  <text x="66" y="1102" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Game execution and runtime compatibility</text>
+  <rect x="528" y="1089" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="536.0" y="1102.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="1102" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
+  <text x="24" y="1126" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS12</text>
+  <text x="66" y="1126" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Installation, recovery and system updates</text>
+  <rect x="490" y="1113" width="16" height="20" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
+  <text x="498.0" y="1126.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle"></text>
+  <rect x="509" y="1113" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="517.0" y="1126.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <rect x="528" y="1113" width="16" height="20" rx="3" fill="#2b3646" stroke="#f87171" stroke-width="2"/>
+  <text x="536.0" y="1126.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f4b9bd" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="1126" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/3</text>
+  <text x="24" y="1150" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="bold" text-anchor="start">WS13</text>
+  <text x="66" y="1150" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Product experience: shell, library, settings</text>
+  <rect x="528" y="1137" width="16" height="20" rx="3" fill="#2b3646" stroke="#0b0f14" stroke-width="1"/>
+  <text x="536.0" y="1150.96" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#e6edf3" font-weight="normal" text-anchor="middle"></text>
+  <text x="588" y="1150" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">0/1</text>
   <text x="612" y="91" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#e6edf3" font-weight="bold" text-anchor="start">PLATFORM-CONTRACT CLAIMS ABOUT THE CONSOLE</text>
   <text x="1176" y="91" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#38bdf8" font-weight="bold" text-anchor="end">15.8% (6/38)</text>
   <text x="1176" y="107" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">green public · outlined inferred · dim unknown · amber restricted (2)</text>
@@ -460,16 +465,16 @@
   <rect x="604" y="692" width="4" height="24" rx="2" fill="#fbbf24"/>
   <text x="612" y="703" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="bold" text-anchor="start">M19</text>
   <text x="650" y="703" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Genuine system software boots on PC5 (DESTINATION)</text>
-  <text x="650" y="715" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#f4b9bd" font-weight="normal" text-anchor="start">blocked on: M14 not started, M15 not started, M16 not started, M18 bl…</text>
+  <text x="650" y="715" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#f4b9bd" font-weight="normal" text-anchor="start">blocked on: M14 not started, M15 not started, M16 not started, M18 blocked</text>
   <text x="1176" y="703" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">L5</text>
   <rect x="604" y="724" width="4" height="24" rx="2" fill="#fbbf24"/>
   <text x="612" y="735" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="bold" text-anchor="start">M20</text>
-  <text x="650" y="735" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Genuine system-software runtime: services, shell and platfo…</text>
+  <text x="650" y="735" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Genuine system-software runtime: services, shell and platform experience</text>
   <text x="650" y="747" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#f4b9bd" font-weight="normal" text-anchor="start">blocked on: M19 blocked</text>
   <text x="1176" y="735" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">L6</text>
   <rect x="604" y="756" width="4" height="24" rx="2" fill="#fbbf24"/>
   <text x="612" y="767" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="bold" text-anchor="start">M21</text>
-  <text x="650" y="767" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Genuine installation and reinstallation of the system softw…</text>
+  <text x="650" y="767" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">Genuine installation and reinstallation of the system software via PC5</text>
   <text x="650" y="779" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#f4b9bd" font-weight="normal" text-anchor="start">blocked on: M17 blocked, M18 blocked</text>
   <text x="1176" y="767" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">L5</text>
   <text x="612" y="813" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#e6edf3" font-weight="bold" text-anchor="start">COMMITTED VALIDATION RECORDS</text>
@@ -491,7 +496,7 @@
   <text x="681.0" y="889" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#2a1d02" font-weight="bold" text-anchor="middle">ovmf-test</text>
   <text x="681.0" y="902" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#2a1d02" font-weight="normal" text-anchor="middle">a9b383d</text>
   <rect x="753" y="875" width="138" height="34" rx="3" fill="#34d399" stroke="#0b0f14"/>
-  <text x="822.0" y="889" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#06251c" font-weight="bold" text-anchor="middle">presentation-che…</text>
+  <text x="822.0" y="889" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#06251c" font-weight="bold" text-anchor="middle">presentation-check</text>
   <text x="822.0" y="902" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#06251c" font-weight="normal" text-anchor="middle">a9b383d</text>
   <rect x="894" y="875" width="138" height="34" rx="3" fill="#34d399" stroke="#0b0f14"/>
   <text x="963.0" y="889" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#06251c" font-weight="bold" text-anchor="middle">roadmap</text>
@@ -510,21 +515,21 @@
   <text x="963.0" y="939" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#06251c" font-weight="normal" text-anchor="middle">9fdba4f</text>
   <text x="612" y="965" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="normal" text-anchor="start">physical PC boot</text>
   <text x="844" y="965" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#fbbf24" font-weight="bold" text-anchor="start">none filed</text>
-  <text x="942" y="965" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">a record from a real machine</text>
+  <text x="920.0" y="965" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">a record from a real machine</text>
   <text x="612" y="985" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#e6edf3" font-weight="normal" text-anchor="start">genuine Sony system software (M19)</text>
   <text x="844" y="985" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#f87171" font-weight="bold" text-anchor="start">BLOCKED</text>
-  <text x="942" y="985" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">not executed, therefore not count…</text>
-  <line x1="24" y1="1105" x2="1176" y2="1105" stroke="#243040"/>
-  <rect x="24" y="1117" width="12" height="12" rx="3" fill="#34d399" stroke="#243040"/>
-  <text x="42" y="1127" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">verified by a file in this repository</text>
-  <rect x="299" y="1117" width="12" height="12" rx="3" fill="#38bdf8" stroke="#243040"/>
-  <text x="317" y="1127" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">in progress</text>
-  <rect x="413" y="1117" width="12" height="12" rx="3" fill="#2b3646" stroke="#243040"/>
-  <text x="431" y="1127" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">not started, unknown or unverified</text>
-  <rect x="669" y="1117" width="12" height="12" rx="3" fill="#fbbf24" stroke="#243040"/>
-  <text x="687" y="1127" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">withheld by design or awaiting a machine</text>
-  <rect x="963" y="1117" width="12" height="12" rx="3" fill="#2b3646" stroke="#243040"/>
-  <text x="981" y="1127" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">blocked on a dependency</text>
-  <text x="24" y="1149" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">counted from roadmap.json, the contract and the committed records — not from a booted machine, not from a PS5, and not from an open pull request</text>
-  <text x="1176" y="1149" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">package: LFS pointer only, payload absent</text>
+  <text x="901.4" y="985" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">not executed, therefore not counted</text>
+  <line x1="24" y1="1165" x2="1176" y2="1165" stroke="#243040"/>
+  <rect x="24" y="1177" width="12" height="12" rx="3" fill="#34d399" stroke="#243040"/>
+  <text x="42" y="1187" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">verified by a file in this repository</text>
+  <rect x="299" y="1177" width="12" height="12" rx="3" fill="#38bdf8" stroke="#243040"/>
+  <text x="317" y="1187" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">in progress</text>
+  <rect x="413" y="1177" width="12" height="12" rx="3" fill="#2b3646" stroke="#243040"/>
+  <text x="431" y="1187" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">not started, unknown or unverified</text>
+  <rect x="669" y="1177" width="12" height="12" rx="3" fill="#fbbf24" stroke="#243040"/>
+  <text x="687" y="1187" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">withheld by design or awaiting a machine</text>
+  <rect x="963" y="1177" width="12" height="12" rx="3" fill="#2b3646" stroke="#243040"/>
+  <text x="981" y="1187" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">blocked on a dependency</text>
+  <text x="24" y="1209" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start">counted from roadmap.json, the contract and the committed records — not from a booted machine, not from a PS5, and not from an open pull request</text>
+  <text x="1176" y="1209" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="end">package: LFS pointer only, payload absent</text>
 </svg>

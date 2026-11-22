@@ -2978,3 +2978,154 @@ NOT TESTED on this machine. The claim this section supports is that the page-tab
 hierarchy the loader installs covers the span it advertises and that the
 allocations it requests are satisfiable under the UEFI contract — nothing about
 real firmware.
+
+---
+
+## 28. The dashboard's reconciliation was rebuilt around a receipt, and the matrix figure was made unfalsifiable
+
+**Date.** 2026-11-16 (UTC). Corrective work for the audit of PR #40
+(`feat/readme-progress-dashboard`, head `8e3f0b642a92c2d2e27ba6d2a066803a70165697`,
+base `main` at `52f682c8435956c8210b3189cad23ebea973d2de`). Delivered on
+`fix/dashboard-reconciliation-receipts` as a draft pull request against #40's branch;
+nothing here was merged, and `main` was not modified.
+
+**What was wrong.** Four defects, all found by testing the tool rather than reading it:
+
+1. `tools/dashboard_reconcile.py` inferred its watermark from "the last commit that touched
+   `README.md` or `docs/assets/`". A merge that *delivered* such a file therefore moved the
+   watermark past itself, and a merge that changed nothing visible never reached it. In a
+   disposable clone, `git merge --no-ff` of #40's head left `make post-merge` exiting 2 on
+   every retry, forever, while `make presentation` wrote no file: the state was
+   unadvanceable.
+2. Only merge commits were considered (`git log --merges` plus a
+   `^Merge (pull request|branch)` pattern). A squash, a fast-forward, a rebase-merge and a
+   direct push to `main` produced no such commit, so a squash-merged metric change was
+   reported `CURRENT` while `make presentation-check` exited 1 over five stale figures.
+3. Every git helper returned `""` on failure, and the verdict was
+   `stamp == "" or bool(merges)`. A `--depth 1` clone reported `CURRENT` with the
+   dashboard asset absent from the tree.
+4. The figure's own tests were self-consistent: repainting the evidence ladder with
+   `fill=GREEN` at the drawing site left `make presentation-check` passing, `make check`
+   passing, and the README claiming green cells for levels 3–6 that the text two lines
+   above described as `0/5`, `0/9`, `0/4`, `0/3`.
+
+**What changed.** `tools/dashboard_reconcile.py` was rewritten around an explicit, tracked
+receipt at `docs/evidence/dashboard-reconciliation.json` (schema
+`pc5.dashboard-reconciliation/1`), read from the target ref with `git show <target>:…` and
+never from the working tree. A commit in the range needs inspection unless everything it
+changed is generated output — `docs/assets/**`, the receipt itself, or `README.md` lines
+that all fall inside a `<!-- pc5:*:begin -->` span — which is what closes the loop in one
+step instead of never. Every git failure raises; a shallow clone, an unresolvable
+`origin/main`, a malformed receipt, a receipt naming a commit that has not landed, or a
+recorded verification with a non-zero exit is an error (2), never a clean result.
+`--record` runs `presentation-check` and `docs-check` itself and refuses to write a receipt
+over either.
+
+In `tools/presentation.py`, text width is now measured with the same ruler the layout guard
+uses: `region_head` budgets the right-aligned figure first and clips only the title, six
+labels that were being truncated were reworded instead, and `check` gained `collisions()`,
+which reports two labels sharing a baseline. The evidence region distinguishes a cited path
+from a record filed under `docs/evidence/` — 39 citations resolve, 0 records are filed, and
+the figure now says so.
+
+**Tests added.** 41 in `tests/test_dashboard_reconcile.py` (the lifecycle of the receipt,
+each scenario in its own disposable repository, asserting real exit codes), 16 in
+`tests/test_progress_matrix.py` (the artwork read back out of the SVG and held against
+`roadmap.json`, plus the falsifiability controls), 4 in `tests/test_presentation.py` (the
+collision guard, the measured heading, the ruler). No existing test was weakened, skipped,
+re-scoped or deleted; `tests/test_presentation.py`'s workstream-label check was switched
+from a local copy of the width estimate to `measure()`, which is the same number from one
+place.
+
+**Commands and results**, at the correction head (each exit code recorded as it returned):
+
+| Command | Result |
+|---|---|
+| `TMPDIR=/tmp make check` | exit **0** — `Ran 1025 tests … OK (skipped=109)` |
+| `TMPDIR=/tmp python3 -m unittest tests.test_dashboard_reconcile` | exit **0** — `Ran 41 tests … OK` |
+| `TMPDIR=/tmp python3 -m unittest tests.test_progress_matrix` | exit **0** — `Ran 55 tests … OK` |
+| `TMPDIR=/tmp python3 -m unittest tests.test_presentation` | exit **0** — `Ran 64 tests … OK` |
+| `TMPDIR=/tmp python3 tools/presentation.py check` | exit **0** — 7 figures, 6 blocks current |
+| `TMPDIR=/tmp python3 tools/docs_check.py` | exit **0** — 68 Markdown files, 36 make targets |
+| `TMPDIR=/tmp python3 tools/dashboard_reconcile.py` | exit **1** — `OUTSTANDING`: `main` at `52f682c…` carries no receipt, which is the true state before this branch lands |
+| `python3 -c "xml.dom.minidom.parse('docs/assets/pc5-progress-matrix.svg')"` | well-formed XML |
+| `make presentation` run twice into separate clones, `cmp` | byte-identical; the SVG and README are reproducible |
+
+**Independent visual inspection.** The rendered figure was rasterised at its actual 1200 px
+width (2× for legibility) with a FreeType-backed inspector written for this audit, which
+does not import the repository's own code: 335 of 331 `<text>` elements and 195 `<rect>`s
+parsed, 0 labels outside the canvas, **0 same-baseline collisions** (the pre-fix figure had
+2, at 4 px and 4 px of overlap), **0 truncated labels** (previously 6), 0 sub-10 px text,
+and no dead band below the last region. The 4 green ladder cells the pre-fix render carried
+for levels 3–6 are gone because those levels have nothing to show; the counts painted per
+region are now asserted against `roadmap.json` rather than eyeballed.
+
+**This records, and does not establish:** that the dashboard machinery reconciles reliably;
+that a `--depth 1` clone, a missing `origin/main`, a forged receipt and a stale figure are
+each reported as failures. It establishes nothing about physical hardware, about genuine
+Sony system software, or about any milestone's acceptance. `M17`–`M21` remain `blocked`,
+`M19` remains the unexecuted destination, and no evidence level above host-and-emulator was
+reached by this work.
+
+## 29. The receipt's own loop, and the tests the mutation battery said were missing (2026-11-16)
+
+Followed §28 with three fixes and one correction to §28 itself.
+
+**Correction first.** §28 says the suite "grew to 968 tests". That was true at the moment it was
+written and is not the number now; the entry was never re-measured before being committed, which
+is exactly the class of error this section documents. The measured counts are in the table below.
+
+1. **A reconciliation delivered by a pull-request merge re-opened itself forever.** The merge
+   commit is a SHA no earlier receipt can name. Exempting merges as such would let any merge
+   self-approve, so the rule is about content: `reviewed_ancestry()` clears a merge when every
+   commit it introduces is named in a receipt or consists of reconciliation output. A squash
+   mints new SHAs with no such ancestry and still has to be recorded — scenarios 36, 37, 38.
+2. **`presentation-check` could not see a layout defect.** Byte equality passes whenever the
+   asset matches the render, so changing the drawing code leaves a colliding figure "current".
+   `check()` now refuses a figure that is up to date and colliding, from both test files.
+3. **`overflow()` kept its own width estimate.** If that estimate and the one `fit` uses drift,
+   the guard measures a figure the layout never produced. One test places a label exactly as
+   wide as its room and one character wider, and requires the first to pass and the second to
+   fail; both now go through `measure`.
+
+**How the three were found:** a mutation battery — copy the tree to a scratch directory, swap one
+statement, re-run the suite, and require a failure. 34 control attempts across three rounds against
+committed state: **24 caught**; 5 needles failed to match because the code had moved and 1 produced
+source that would not parse (harness faults, reported as such rather than as passes); and **3
+controls genuinely missed**, which is where the value was — the same experiment run twice on an
+uncommitted tree reported 0/6 caught because the harness resets the copy with `git checkout -- .`,
+which quietly reverted the very tests it was meant to prove. The harness runs on commits only.
+The misses were the point: a test that calls a helper
+directly proves the helper, not the gate, and a `try/except` around a `git rev-list` turns
+"this repository cannot tell me" into "nothing landed". Both holes now have assertions, and the
+structural test on `range_commits` (no `try`, no `except`) is what remains when a behaviour cannot
+be produced in a fixture.
+
+Measured by running each command and keeping its exit code. `make check` ran on `2cdbc9f`; the
+three suites and both checks were re-run on the tree carrying this entry, whose only difference from
+`2cdbc9f` is this file, and `docs-check` (exit 0) is that file's gate:
+
+| command | tests | exit | result |
+|---|---|---|---|
+| `python3 -m unittest tests.test_dashboard_reconcile` | 46 | 0 | `OK (skipped=1)` |
+| `python3 -m unittest tests.test_progress_matrix` | 56 | 0 | `OK` |
+| `python3 -m unittest tests.test_presentation` | 66 | 0 | `OK` |
+| `make check` | 1037 | 0 | `OK (skipped=110)` |
+| `make presentation-check` | 7 figures, 6 blocks | 0 | `PRESENTATION OK` |
+| `make docs-check` | 68 files, 36 targets | 0 | `DOCS OK` |
+| `python3 tools/dashboard_reconcile.py` | — | 1 | `OUTSTANDING — no receipt on `main` yet` |
+
+One control is reported as not-proven: a needle aimed at a report string failed to patch, so that
+behaviour rests on scenario 37's substring assertion alone. The count in §28's summary line above is
+46, not 45: the structural test on `range_commits` was added after the first draft of this table,
+which is the second time in two days that a number here was written down before it was measured. Nothing in the figure, README or
+`claims.json` claims more than these lines support.
+
+**Next actions / still open**
+
+* `docs/evidence/dashboard-reconciliation.json` still does not exist: the receipt is recorded on
+  the target, so the first one is bootstrapped on `main` in the merge commit itself.
+* 0 `docs/evidence/` records are filed, so the matrix's "0/35 milestones have a record on file"
+  is an honest reading, not a rendering bug — it changes when evidence is filed, not when the
+  figure is edited.
+
