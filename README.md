@@ -284,6 +284,8 @@ make post-merge   # after a merge into main: regenerate, check, and write the re
 | `make citation-refs` | the objects behind the evidence citations are present in this clone. A full clone of `main` resolves all 258 of them without this step; a tree that cites an open pull-request head, or one fetched with a history filter, cannot — and says so instead of implying the evidence is dead |
 | `make presentation` | rewrites the figures and the generated README blocks from the data |
 | `make dashboard-reconcile` | the receipt at `docs/evidence/dashboard-reconciliation.json`, read off `origin/main`, names every first-parent change since its boundary; exit 1 while one is unreconciled, exit 2 when the history cannot be read |
+
+The exit codes belong to `python3 tools/dashboard_reconcile.py`; `make` reports 2 for any failed recipe, so the 1-versus-2 distinction — a reconciliation is due, as against the question cannot be answered — is read from the tool or from `--json`, not from the target.
 | `make post-merge` | the same, written: regenerate, `presentation-check`, `docs-check`, then record the receipt against the branch you are on |
 | `make presentation-check` | those files are current; part of `make check`, and it never writes |
 

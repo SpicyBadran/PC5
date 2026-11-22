@@ -1,0 +1,22 @@
+{
+  "1_clean_exempt_range": {
+    "exit": 0,
+    "head": "CURRENT \u2014 every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output"
+  },
+  "2_verifier_deleted_read": {
+    "exit": 1,
+    "last": "  then commit the regenerated figures and the receipt together (AGENTS.md)",
+    "line_with_outstanding": "OUTSTANDING \u2014 the range is confined to generated output, and that output is not what its data produces: its generated output no longer matches the data it renders (verifier tools/docs_check.py is missing; refusing to record a receipt over an unverifiable tree)",
+    "stderr": ""
+  },
+  "3_verifier_deleted_json": {
+    "exit": 1,
+    "outstanding": 0,
+    "agreement": "its generated output no longer matches the data it renders (verifier tools/docs_check.py is missing; refusing to record a receipt over an unverifiable tree)",
+    "exemption_checked": true
+  },
+  "4_verifier_deleted_record": {
+    "exit": 2,
+    "err": "ERROR \u2014 the working tree changes tools/docs_check.py, which is neither the receipt nor generated output: commit the source change first, then reconcile against it"
+  }
+}

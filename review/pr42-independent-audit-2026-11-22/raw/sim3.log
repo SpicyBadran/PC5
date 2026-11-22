@@ -1,0 +1,43 @@
+================ A. rebase-merge the whole stack, then fast-forward main ================
+  #40 rebased+ff: head=8e3f0b642a92 tree=d041fd836726 pr-tree=d041fd836726 IDENTICAL CONTENT  (merge exit=0)
+  #41 rebased+ff: head=5bc5d5d4353f tree=e9d2c7073b3c pr-tree=e9d2c7073b3c IDENTICAL CONTENT  (merge exit=0)
+  #42 rebased+ff: head=709581450f24 tree=9e184d7714ae pr-tree=9e184d7714ae IDENTICAL CONTENT  (merge exit=0)
+  [make -s presentation-check] exit=0
+        PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+  [make -s docs-check] exit=0
+        DOCS OK: 76 Markdown files, 36 make targets, links, anchors and commands resolve
+  [read on the rebased main, before any receipt exists] exit=1
+        OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 709581450f24d61a23f4068c9b9df51e8729fc76 yet: nothing has been recorded as inspected. Bootstra
+          run: make post-merge
+  [bootstrap naming 16 first-parent commit(s)] exit=0
+        bootstrapped docs/evidence/dashboard-reconciliation.json at boundary 52f682c84359 naming 16 commit(s); commit it and open a pull request
+  tree after the bootstrap: ['?? docs/evidence/dashboard-reconciliation.json']
+  [commit the receipt on its own and push] exit=0
+  [make -s dashboard-reconcile after the receipt lands] exit=0
+        reconciled boundary  52f682c84359  (2026-11-21)
+        summary              bootstrap: the first receipt on this line of history
+        figures changed      False   README changed: False
+        verifications        presentation figures and README blocks are current=exit 0, documentation links, anchors and commands resolve=exit 0
+        commits since then   17 on the first-parent line (0 needing inspection, 16 already named in the receipt, 1 generated-output only)
+        CURRENT — every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output
+
+================ B. can `--record --bootstrap` be re-run over a landed receipt? ================
+  [bootstrap naming 3 first-parent commit(s)] exit=0
+        bootstrapped docs/evidence/dashboard-reconciliation.json at boundary 52f682c84359 naming 3 commit(s); commit it and open a pull request
+  tree after the bootstrap: ['?? docs/evidence/dashboard-reconciliation.json']
+  [commit the receipt on its own and push] exit=0
+  [make -s dashboard-reconcile after the receipt lands] exit=0
+        reconciled boundary  52f682c84359  (2026-11-21)
+        summary              bootstrap: the first receipt on this line of history
+        figures changed      False   README changed: False
+        verifications        presentation figures and README blocks are current=exit 0, documentation links, anchors and commands resolve=exit 0
+        commits since then   4 on the first-parent line (0 needing inspection, 3 already named in the receipt, 1 generated-output only)
+        CURRENT — every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output
+  before the overwrite: the receipt names 3 commit(s) and the read exits 0
+  [second bootstrap, naming only ONE of the three merges] exit=0
+        bootstrapped docs/evidence/dashboard-reconciliation.json at boundary 52f682c84359 naming 1 commit(s); commit it and open a pull request
+Traceback (most recent call last):
+  File "/tmp/audit42/sim3.py", line 112, in <module>
+    rc, out = report("second bootstrap, naming only ONE of the three merges",
+    ^^^^^^^
+TypeError: cannot unpack non-iterable int object

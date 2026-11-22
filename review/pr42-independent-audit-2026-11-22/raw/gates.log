@@ -1,0 +1,118 @@
+##################### main (refs/heads/main) #####################
+main HEAD=52f682c8435956c8210b3189cad23ebea973d2de
+  tree=a209faad4d765f3da7bdb891a30444fcf689a6f6  commit=52f682c8435956c8210b3189cad23ebea973d2de
+--- gates on a PRISTINE clone (nothing written yet) ---
+$ make -s dashboard-reconcile  ->  exit=2
+      make: *** No rule to make target 'dashboard-reconcile'.  Stop.
+$ make -s presentation-check  ->  exit=0
+      PRESENTATION OK: 6 figures and 5 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+$ make -s docs-check  ->  exit=0
+      DOCS OK: 67 Markdown files, 34 make targets, links, anchors and commands resolve
+$ make -s citations-check  ->  exit=0
+      CITATIONS OK: 258 commit reference(s) resolve across 11 documents
+$ python3 tools/dashboard_reconcile.py --json  ->  exit=2
+      python3: can't open file '/tmp/audit42/clones/main/tools/dashboard_reconcile.py': [Errno 2] No such file or directory
+--- the full suite ---
+$ python3 -m unittest discover -s tests -p test_*.py  ->  exit=0
+      refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+      nothing was written
+      image    /tmp/tmp6fhdc_a_/pc5.iso
+      sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+      refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+      nothing was written
+--- after a generator run, the tree must be clean if the receipt claims currency ---
+$ make -s presentation  ->  exit=0
+      presentation: 6 figures and 5 README blocks are current
+$ git status --porcelain  ->  exit=0
+##################### pr40 (refs/pull/40/head) #####################
+pr40 HEAD=8e3f0b642a92c2d2e27ba6d2a066803a70165697
+  tree=d041fd836726c6432beaf60bce4663a5a094103c  commit=8e3f0b642a92c2d2e27ba6d2a066803a70165697
+--- gates on a PRISTINE clone (nothing written yet) ---
+$ make -s dashboard-reconcile  ->  exit=0
+      HEAD                 8e3f0b642a92
+      dashboard written at 8e3f0b642a92
+      CURRENT — every merge on the first-parent line is reflected in the dashboard
+$ make -s presentation-check  ->  exit=0
+      PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+$ make -s docs-check  ->  exit=0
+      DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve
+$ make -s citations-check  ->  exit=0
+      CITATIONS OK: 258 commit reference(s) resolve across 11 documents
+$ python3 tools/dashboard_reconcile.py --json  ->  exit=0
+        "outstanding": false,
+        "readme_block_last_written": "8e3f0b642a92c2d2e27ba6d2a066803a70165697",
+        "reason": "none",
+        "repository": "/tmp/audit42/clones/pr40",
+        "unprocessed_merges": []
+      }
+--- the full suite ---
+$ python3 -m unittest discover -s tests -p test_*.py  ->  exit=0
+      refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+      nothing was written
+      image    /tmp/tmp4vsho6hm/pc5.iso
+      sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+      refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+      nothing was written
+--- after a generator run, the tree must be clean if the receipt claims currency ---
+$ make -s presentation  ->  exit=0
+      presentation: 7 figures and 6 README blocks are current
+$ git status --porcelain  ->  exit=0
+##################### pr41 (refs/pull/41/head) #####################
+pr41 HEAD=5bc5d5d4353f2e2c520224fd48711556b0054fc4
+  tree=e9d2c7073b3cada4c836fb767161e0877e2cd8a7  commit=5bc5d5d4353f2e2c520224fd48711556b0054fc4
+--- gates on a PRISTINE clone (nothing written yet) ---
+$ make -s dashboard-reconcile  ->  exit=2
+      ERROR — cannot resolve the primary branch from origin/main: fetch it first (`git fetch origin main`), or name it with --target <ref>. A local branch is deliberately not a fallback — the checked-out branch says nothing about what has landed on the primary branch, and a stale local copy of `main` says less than nothing. Pass --here to reconcile the checked-out branch on purpose, and read the limits that prints.
+      make: *** [Makefile:324: dashboard-reconcile] Error 2
+$ make -s presentation-check  ->  exit=0
+      PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+$ make -s docs-check  ->  exit=0
+      DOCS OK: 68 Markdown files, 36 make targets, links, anchors and commands resolve
+$ make -s citations-check  ->  exit=0
+      CITATIONS OK: 258 commit reference(s) resolve across 11 documents
+$ python3 tools/dashboard_reconcile.py --json  ->  exit=2
+      ERROR — cannot resolve the primary branch from origin/main, origin/HEAD: fetch it first (`git fetch origin main`), or name it with --target <ref>. A local branch is deliberately not a fallback — the checked-out branch says nothing about what has landed on the primary branch, and a stale local copy of `main` says less than nothing. Pass --here to reconcile the checked-out branch on purpose, and read the limits that prints.
+--- the full suite ---
+$ python3 -m unittest discover -s tests -p test_*.py  ->  exit=0
+      refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+      nothing was written
+      image    /tmp/tmptt3_frvg/pc5.iso
+      sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+      refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+      nothing was written
+--- after a generator run, the tree must be clean if the receipt claims currency ---
+$ make -s presentation  ->  exit=0
+      presentation: 7 figures and 6 README blocks are current
+$ git status --porcelain  ->  exit=0
+##################### pr42 (refs/pull/42/head) #####################
+pr42 HEAD=709581450f24d61a23f4068c9b9df51e8729fc76
+  tree=9e184d7714aeaaa2f0616a536b60cd473c9a5892  commit=709581450f24d61a23f4068c9b9df51e8729fc76
+--- gates on a PRISTINE clone (nothing written yet) ---
+$ make -s dashboard-reconcile  ->  exit=2
+      ERROR — cannot resolve the primary branch from origin/main: fetch it first (`git fetch origin main`), or name it with --target <ref>. A local branch is deliberately not a fallback — the checked-out branch says nothing about what has landed on the primary branch, and a stale local copy of `main` says less than nothing. Pass --here to reconcile the checked-out branch on purpose, and read the limits that prints.
+      make: *** [Makefile:324: dashboard-reconcile] Error 2
+$ make -s presentation-check  ->  exit=0
+      PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+$ make -s docs-check  ->  exit=0
+      DOCS OK: 76 Markdown files, 36 make targets, links, anchors and commands resolve
+$ make -s citations-check  ->  exit=0
+      CITATIONS OK: 258 commit reference(s) resolve across 11 documents
+$ python3 tools/dashboard_reconcile.py --json  ->  exit=2
+      {
+        "reason": "cannot resolve the primary branch from origin/main, origin/HEAD: fetch it first (`git fetch origin main`), or name it with --target <ref>. A local branch is deliberately not a fallback \u2014 the checked-out branch says nothing about what has landed on the primary branch, and a stale local copy of `main` says less than nothing. Pass --here to reconcile the checked-out branch on purpose, and read the limits that prints.",
+        "status": "error"
+      }
+      ERROR — cannot resolve the primary branch from origin/main, origin/HEAD: fetch it first (`git fetch origin main`), or name it with --target <ref>. A local branch is deliberately not a fallback — the checked-out branch says nothing about what has landed on the primary branch, and a stale local copy of `main` says less than nothing. Pass --here to reconcile the checked-out branch on purpose, and read the limits that prints.
+--- the full suite ---
+$ python3 -m unittest discover -s tests -p test_*.py  ->  exit=0
+      refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+      nothing was written
+      image    /tmp/tmpnb8_9yz4/pc5.iso
+      sha256   6dc87bf3ac7649b799be35cdd8b3a0bdae66a0447c69c286e01df5c87c589859
+      refusing to overwrite /dev/sda2: /dev/sda2 is a partition of the disk carrying '/'
+      nothing was written
+--- after a generator run, the tree must be clean if the receipt claims currency ---
+$ make -s presentation  ->  exit=0
+      presentation: 7 figures and 6 README blocks are current
+$ git status --porcelain  ->  exit=0
+DONE 2026-11-22T06:38:14Z

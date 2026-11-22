@@ -1,0 +1,84 @@
+
+================ simulated sequence, method = merge ================
+  landed #40: head=09096d5bb170 tree=d041fd836726 pr-head-tree=d041fd836726 SAME CONTENT
+  [#40 content vs the PR head] exit=0
+        no diff — identical
+  landed #41: head=b236b6d75e6c tree=e9d2c7073b3c pr-head-tree=e9d2c7073b3c SAME CONTENT
+  [#41 content vs the PR head] exit=0
+        no diff — identical
+  landed #42: head=7e4f3897e29f tree=9e184d7714ae pr-head-tree=9e184d7714ae SAME CONTENT
+  [#42 content vs the PR head] exit=0
+        no diff — identical
+  --- gates on the merged main (all three PRs landed) ---
+  [make -s presentation-check] exit=0
+        PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+  [make -s docs-check] exit=0
+        DOCS OK: 76 Markdown files, 36 make targets, links, anchors and commands resolve
+  [make -s dashboard-reconcile (what main now says)] exit=2
+        OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 7e4f3897e29fd34af6cb549770761cddc377af63 yet: nothing has been recorded as inspected. Bootstra
+          run: make post-merge
+  [tools/dashboard_reconcile.py (the same read, the tool's own exit code)] exit=1
+        OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 7e4f3897e29fd34af6cb549770761cddc377af63 yet: nothing has been recorded as inspected. Bootstra
+          run: make post-merge
+  --- the bootstrap the operator has to run once ---
+  first-parent commits since the pre-merge main: 3
+  [bootstrap naming every first-parent commit] exit=0
+        bootstrapped docs/evidence/dashboard-reconciliation.json at boundary 52f682c84359 naming 3 commit(s); commit it and open a pull request
+  after the bootstrap the tree is: ['?? docs/evidence/dashboard-reconciliation.json']
+  [commit the receipt on its own and push it] exit=0
+  [make -s dashboard-reconcile after the receipt lands] exit=0
+        reconciled boundary  52f682c84359  (2026-11-21)
+        summary              bootstrap: the first receipt on this line of history
+        figures changed      False   README changed: False
+        verifications        presentation figures and README blocks are current=exit 0, documentation links, anchors and commands resolve=exit 0
+        commits since then   4 on the first-parent line (0 needing inspection, 3 already named in the receipt, 1 generated-output only)
+        CURRENT — every first-parent change since the receipt's boundary is either inspected and recorded or confined to generated output
+  [and a second bootstrap attempt (it must not be able to rewrite history)] exit=0
+        bootstrapped docs/evidence/dashboard-reconciliation.json at boundary 52f682c84359 naming 1 commit(s); commit it and open a pull request
+  --- the amend hazard: rewrite #40's head and re-read #41's diff against its base ---
+  #40 head 8e3f0b642a92 -> 8b347be02f47; #41's base is still 8e3f0b642a92; the new merge-base is 5bc5d5d4353f
+  #41's diff against that merge-base now carries 0 file(s), including 0 tool/test file(s)
+
+================ simulated sequence, method = squash ================
+  landed #40: head=1c49bff6bdcb tree=d041fd836726 pr-head-tree=d041fd836726 SAME CONTENT
+  [#40 content vs the PR head] exit=0
+        no diff — identical
+  #41: the squash produced a CONFLICT (exit 1); 9 file(s) conflicted: AGENTS.md, CONTRIBUTING.md, Makefile, README.md, docs/PRESENTATION.md, docs/assets/pc5-progress-matrix.svg …
+        rebase output tail: Automatic merge failed; fix conflicts and then commit the result.
+  #42: skipped, because #41 could not be landed by squash — the rest of this method's measurements are `not verified`
+
+================ simulated sequence, method = rebase ================
+  landed #40: head=8e3f0b642a92 tree=d041fd836726 pr-head-tree=d041fd836726 SAME CONTENT
+  [#40 content vs the PR head] exit=0
+        no diff — identical
+  landed #41: head=5bc5d5d4353f tree=e9d2c7073b3c pr-head-tree=e9d2c7073b3c SAME CONTENT
+  [#41 content vs the PR head] exit=0
+        no diff — identical
+  landed #42: head=709581450f24 tree=9e184d7714ae pr-head-tree=9e184d7714ae SAME CONTENT
+  [#42 content vs the PR head] exit=0
+        no diff — identical
+  --- gates on the merged main (all three PRs landed) ---
+  [make -s presentation-check] exit=0
+        PRESENTATION OK: 7 figures and 6 blocks current, 13 status rows match roadmap.json, 11 validation record(s) read, links and alt text resolve
+  [make -s docs-check] exit=0
+        DOCS OK: 76 Markdown files, 36 make targets, links, anchors and commands resolve
+  [make -s dashboard-reconcile (what main now says)] exit=2
+        OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 52f682c8435956c8210b3189cad23ebea973d2de yet: nothing has been recorded as inspected. Bootstra
+          run: make post-merge
+  [tools/dashboard_reconcile.py (the same read, the tool's own exit code)] exit=1
+        OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 52f682c8435956c8210b3189cad23ebea973d2de yet: nothing has been recorded as inspected. Bootstra
+          run: make post-merge
+  --- the bootstrap the operator has to run once ---
+  first-parent commits since the pre-merge main: 16
+  [bootstrap naming every first-parent commit] exit=2
+        ERROR — an inspected commit 709581450f24 is not an ancestor of the target: a receipt may only name commits that have already landed, so it cannot pre-approve a merge that
+  after the bootstrap the tree is: ['(clean)']
+  [commit the receipt on its own and push it] exit=0
+  [make -s dashboard-reconcile after the receipt lands] exit=2
+        OUTSTANDING — docs/evidence/dashboard-reconciliation.json does not exist on 52f682c8435956c8210b3189cad23ebea973d2de yet: nothing has been recorded as inspected. Bootstra
+          run: make post-merge
+  [and a second bootstrap attempt (it must not be able to rewrite history)] exit=2
+        ERROR — an inspected commit 709581450f24 is not an ancestor of the target: a receipt may only name commits that have already landed, so it cannot pre-approve a merge that
+  --- the amend hazard: rewrite #40's head and re-read #41's diff against its base ---
+  #40 head 8e3f0b642a92 -> c5a26a1acbff; #41's base is still 8e3f0b642a92; the new merge-base is 52f682c84359
+  #41's diff against that merge-base now carries 13 file(s), including 5 tool/test file(s)
