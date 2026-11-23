@@ -3454,6 +3454,13 @@ requires the boot to **succeed**.  Closing the gap properly is a version-2 heade
 digest over a defined prefix — a format change, not a bug fix, and it is recorded that way in
 `docs/KNOWN_LIMITATIONS.md` and in the design document.
 
+The same reasoning bounds the *stacks* the delivery lands on: each IST window is one 4 KiB page with
+its top at the page boundary, the measured layout (`tss=0x1000 ist1=0x3000 ist2=0x4000`) puts the
+TSS's page immediately below IST1's, and neither has a guard page or a canary.  The rows in this
+section assert **which page** the CPU arrived on, which is the claim; they do not and cannot bound
+**how deep a fault that page can absorb**, and that asymmetry is recorded in `KNOWN_LIMITATIONS.md`
+rather than left for the next reader to discover.
+
 **The finding this surfaced first was in the tests.** `tests/kernel64_machine.py` had been building
 every synthetic handover with `kernel_size=0xA000` — against an image of 212,992 bytes — and the
 kernel accepted it, because nothing compared the two.  The first build of the self-check turned up

@@ -159,6 +159,13 @@ measurement.
 * **No NMI during a fault, and no nesting.** The injection lands after the boot has settled, with
   IF clear, one CPU, and nothing on the IST stacks.  A double fault arriving *while* an NMI is being
   handled — the situation IST exists for — is not exercised here; only the switch is.
+* **No depth, only delivery.** Both windows are one page, and `verification.sh` pins the layout
+  that makes an overrun dangerous rather than harmless: `tss=0x1000 ist1=0x3000 ist2=0x4000` means
+  the page below IST1 is the TSS's own page and the page below IST2 is IST1's. So this evidence says
+  *the CPU switched to the stack the TSS names*, and says nothing about what a frame larger than
+  4 KiB would do — there is no guard page and no canary, and an overrunning fault would corrupt the
+  TSS instead of faulting. See "the 64-bit IST stacks are 4 KiB deep" in
+  `docs/KNOWN_LIMITATIONS.md`.
 * **No returning NMI handler.** The reporter prints and halts.  A kernel with a scheduler would have
   to return, and the `IRETQ` path, NMIRE ordering, and the `IRETQ`-vs-`IST` interaction are out of
   scope and untested.

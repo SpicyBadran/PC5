@@ -161,6 +161,18 @@ Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
   `docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`, "After the jump". The gap is asserted
   in tests (`tests/test_kimage64.py`, `tests/test_kernel64.py`) rather than left as a comment,
   and closing it needs a version-2 header with a second digest over a defined prefix.
+* **The 64-bit IST stacks are 4 KiB deep and have nothing under them.** `pc5_tss64_build()`
+  takes three frames from the pool — TSS, IST1, IST2 — and each interrupt stack is one page with
+  its top at the page boundary, which is what the boot records: `tss=0x1000 ist1=0x3000
+  ist2=0x4000`, so the page below IST1 *is* the TSS page and the page below IST2 *is* IST1's
+  (`docs/evidence/2026-11-24-tss-delivery/verification.sh` asserts that layout rather than
+  paraphrasing it). Consequence: a fault whose saved frame exceeds 4 KiB — a `#DF` raised while a
+  `#DF` is being handled, or a debug-registry-heavy path — walks below the bottom of the window it
+  was given and lands on memory the kernel owns and uses, corrupting the TSS or the other interrupt
+  stack instead of faulting. What the gates assert is **delivery into** the window (`rsp` inside
+  `[top-4096, top)`) and **nothing asserts depth**; nesting is not exercised at all (§31, §32).
+  Closing it is a guard page per IST slot plus a canary the reporter checks before it prints, which
+  costs three more frames and belongs with the allocator work, not here.
 * **Physical hardware.** No PC and no PS5 has booted this ISO through UEFI. OVMF
   is firmware, but it is firmware in an emulator; vendor firmware (AMI, Insyde,
   Phoenix, Apple) is untested and its quirks are unknown.
