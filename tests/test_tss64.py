@@ -43,6 +43,11 @@ from test_mem64 import (CONVENTIONAL, DESC_BYTES, INFO_BYTES, OFF,  # noqa: E402
 
 PAGE = 4096
 TSS_SIZE = 104
+#: The two system-descriptor types the post-load check tolerates -- `busy` because a CPU that
+#: performs the load marks it, `available` because a host that leaves it unmarked is a different
+#: fact from one that refused.  Named here rather than left as two literals inside the checker, so
+#: that the sweep below enumerates the sixteen types and the *exceptions* are the assertion.
+DESC_TYPE_AVAIL, DESC_TYPE_BUSY = 9, 11
 # The 64-bit TSS, field by field, transcribed from Intel SDM vol. 3A figure 7-2 ("64-Bit TSS
 # Format") and table 7-1's note on the I/O map.  This table is deliberately *not* read out of
 # kernel64/tss64.h or kernel64/tss64.c: the point of an independent restatement is that it can
@@ -565,15 +570,32 @@ def arm_battery(lib):
              label_edit=label_edit)
 
     # After the load the tolerated set is exactly {busy, available}, and `available` is in it for
-    # one reason only: TCG does not mark a TSS descriptor busy, so a host that leaves it alone is a
-    # different fact from a descriptor that changed into something else.  Nothing here pinned that
-    # boundary -- loosening the comparison to `type <= AVAIL` left all twenty checks green, which
-    # is how a post-load check that accepts a 16-bit code segment as a loaded TSS would have
-    # shipped.  The control is the narrow one: a type that is neither of the two.
-    def label_edit():
-        ram_write(desc_at + 5, bytes([0x83]))         # P set, type 3: neither busy nor available
-    controls("a descriptor of some other type after the load",
-             expect="check-descriptor-type-after", label_edit=label_edit, after=True)
+    # one reason only: a host that does not mark the TSS descriptor busy (TCG) is a different fact
+    # from a descriptor that turned into something else.  Nothing pinned that boundary -- loosening
+    # the comparison to `type <= AVAIL` left every check in this file green, which is how a
+    # post-load check that accepts a 16-bit code segment as a loaded TSS nearly shipped.  So the
+    # control is not one value but the whole nibble: all sixteen system types are tried after the
+    # load, and exactly two are allowed through.  A single value would let a tolerance written as a
+    # set, or a mutant that special-cases that value, pass as a check.
+    pristine = bytes(ram_read(desc_at, 16))
+    for kind in range(16):
+        access = 0x80 | kind                          # present, DPL 0, S clear
+        if kind in (DESC_TYPE_AVAIL, DESC_TYPE_BUSY):
+            ram_write(desc_at + 5, bytes([access]))
+            ok, detail = check(after=True), reason(state)
+            want(f"system type {kind:#x} after the load is a descriptor the check exists to"
+                 f" tolerate", ok == 1, detail)
+        else:
+            def label_edit(access=access):
+                ram_write(desc_at + 5, bytes([access]))
+            controls(f"system type {kind:#x} after the load", expect="check-descriptor-type-after",
+                     label_edit=label_edit, after=True)
+        ram_write(desc_at, pristine)
+    # `controls` restores both the descriptor and the state struct; the tolerated branch above
+    # writes the descriptor itself, so the equality is what proves the sweep borrowed and gave back.
+    want("and the sweep leaves the descriptor it borrowed exactly as the builder wrote it",
+         bytes(ram_read(desc_at, 16)) == pristine and check() == 1 and check(after=True) == 1,
+         reason(state))
 
     def label_edit():
         ram_write(desc_at + 5, bytes([0x09]))         # P cleared
@@ -888,6 +910,20 @@ class Tss64ActivationMutationTests(unittest.TestCase):
             "        && !(after_load && type == PC5_DESC_TYPE_TSS_AVAIL)) {",
             "        && !(after_load && type <= PC5_DESC_TYPE_TSS_AVAIL)) {",
             "after-load-type-widened"), "the after-load descriptor type")
+
+    def test_special_casing_the_one_tested_type_is_caught(self):
+        """Carve out the single value a narrow control would use, and the sweep must notice.
+
+        This is the mutant that justifies the loop.  A checker written to accept `busy`, `available`
+        and exactly type 3 passes a control that tries type 3 and refuses everything else -- it
+        would be a control against one byte pattern rather than against a set.  Sweeping all sixteen
+        system types makes the special case refuse at type 0, 1, 2, 4 ... and so fail the battery.
+        """
+        self.assert_caught(mutate(
+            "        && !(after_load && type == PC5_DESC_TYPE_TSS_AVAIL)) {",
+            "        && !(after_load && (type == PC5_DESC_TYPE_TSS_AVAIL\n"
+            "                                  || type == 3ull))) {",
+            "after-load-type-3-carved-out"), "the swept after-load type set")
 
     def test_losing_the_bounds_test_on_the_table_is_caught(self):
         """A bound so wide it never trips, written so the parameter stays used.

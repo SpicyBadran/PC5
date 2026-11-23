@@ -73,11 +73,18 @@ choices are what let the image be a flat binary and still carry a header:
 front of an unrelocatable image would move `_start64` by 128 bytes; the padding exists so
 that it does not.
 
-`.bss` is counted in the file (the linker emits it as zeros) and cleared again by the loader.
-That is belt-and-braces and it is deliberate: the loader's zeroing is the reason the kernel
-does not depend on whether a filesystem handed back the tail of a sparse file, and
-`bss_size` is declared so the extent of the *cleared* memory is a checked number rather than
-a symbol only the link knew.
+`.bss` is counted in the file (the linker emits it as zeros) and cleared again by the kernel's own
+startup code.  That is belt-and-braces and it is deliberate: the zeroing in `kernel64/start.S` is
+the reason nothing depends on whether a filesystem handed back the tail of a sparse file.
+
+The sentence that used to sit here claimed `bss_size` was declared so the extent of the *cleared*
+memory would be "a checked number rather than a symbol only the link knew", and it outran the rule:
+the validator bounds `bss_size` above by the file and never compares the declaration with the extent
+the boot actually clears, so at v1 the clearing is still done from `__bss_start`/`__bss_end` and the
+declaration is information that nobody acts on.  `docs/TEST_RESULTS.md` §35 measured the consequence —
+an image declaring its whole self as `.bss` is stamped, validated, booted and forgotten.  What makes
+that inert is precisely what makes it a v2 item: the day the boot trusts a declared `bss_start`, this
+field stops being a record and starts being a decision, and the comparison has to exist first.
 
 ## Validation and refusal names
 
@@ -101,7 +108,7 @@ an accidental pass.
 | `kimage64-machine` | `machine` disagrees with `arch`, or is not a 64-bit x86 machine |
 | `kimage64-entry-align` | `entry_offset` is not a multiple of the declared `entry_align` |
 | `kimage64-load-align` | `load_base` is not a multiple of the declared `load_align` |
-| `kimage64-bss-size` | `bss_size` overflows the load extent |
+| `kimage64-bss-size` | `bss_size` overflows the load extent — an upper bound only; see the paragraph above and §35 of `docs/TEST_RESULTS.md` |
 | `kimage64-entry-range` | `entry_offset` is inside the header, or beyond the image |
 | `kimage64-reserved` | a field defined as zero is not zero |
 | `kimage64-checksum` | the payload does not match `checksum` |

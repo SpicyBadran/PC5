@@ -3535,8 +3535,8 @@ which compiles the widening itself and fails if the battery passes it.  The two 
 make the row above read "refused" rather than "untested".  Because no kernel source moved,
 `build/kernel64/KERNEL64.BIN` is still `e390f7e394098401…` and 212992 bytes, so §30–§34 and the
 evidence page are unaffected by construction — re-running `verification.sh` here still returns
-`OK (114 checks re-derived from 16 files in this directory)`, and `tests.test_tss64` is 21 tests
-where it was 20.
+`OK (114 checks re-derived from 16 files in this directory)`, and `tests.test_tss64` is 22 tests
+where it was 20 — 21 for the control and its mutant, 22 for the sweep's counterfactual.
 
 **A `.bss` declaration that is bounded on one side only.** The same review asked whether the header
 rules could be made to certify an impossible image.  One way to try is to fabricate a header whose
@@ -3564,6 +3564,55 @@ reject table, and the same rule reached by both halves of the validator; it chan
 image, so it owes a re-measurement of both firmware gates, which this workspace can no longer
 produce (below).  Recorded, not fixed.
 
+### Did the new control earn its place, or is one value enough?
+
+The review asked for exactly that check: a control that rejects the *one* value a mutant happens to
+permit is a control against a byte pattern, not against a set.  So the counterfactual was run rather
+than argued, in a detached worktree, asking the activation battery itself (`arm_battery(build())`)
+so that a mutated source could not masquerade as a detection through a missing `mutate()` anchor:
+
+| Run | Checker | Control | Battery |
+| --- | --- | --- | --- |
+| A1 | tolerates `available`, `busy` **and type 4** | the old single value (type 3) | `problems=0` — **survived** |
+| A2 | same mutant | the 16-type sweep | `problems=1`: `system type 0x4 after the load is refused as check-descriptor-type-after: returned 1 with 'ok'` |
+| A3 | unmutated | the 16-type sweep | `problems=0` — the sweep is not merely strict |
+| C | unmutated | **control deleted** | the two mutant tests fail (`FAILED (failures=2)`) |
+
+Type 4 rather than 3 for the mutant on purpose: 3 is the value the narrow control happened to test,
+and a counterfactual built around the tested value proves nothing about the sweep.  A1 is the answer
+to "would one value have done?" — no.  C is the answer to "is the control load-bearing?" — remove it
+and the suite's own mutants go green.
+
+### Re-producing the `.bss` measurement
+
+The finding above was reached by this, and it is the procedure a reviewer should run rather than a
+description of one.  It needs `unicorn` for the boot half (`python3 -m venv /tmp/pc5-venv &&
+/tmp/pc5-venv/bin/pip install -r requirements-harness.txt`) and a built kernel
+(`make PC5_UEFI=64 kernel`).  Copy-paste, from the repository root:
+
+```python
+import sys; sys.path.insert(0, ".")
+import tools.kimage64 as K
+from tests.kernel64_machine import run_kernel
+raw = open("build/kernel64/KERNEL64.BIN", "rb").read()
+bss = K.read_fields(raw)["image_size"]            # declare the whole file .bss
+d = bytearray(raw)
+K.set_field(d, "bss_size", bss)
+K.set_field(d, "checksum", K.payload_checksum(bytes(d)))   # self-consistent payload sum
+K.set_field(d, "header_crc", K.header_crc(bytes(d)))        # self-consistent header CRC
+print("loader-side:", K.verify(bytes(d), K.LINK_BASE)[0] or "ACCEPTED")
+r = run_kernel(bytes(d))
+print([l for l in r["serial"].splitlines() if "KIMAGE" in l or "DONE" in l])
+```
+
+Expected, and expected *wrongly*: `loader-side: ACCEPTED`, then a `status=ok` line carrying
+`bss=0x34000` and a `PC5-64-DONE`.  The two re-stamps are why this is not a security claim — it is
+what a self-consistent rewrite looks like — and the reason the boot survives is that
+`kernel64/start.S` clears `.bss` from `__bss_start`/`__bss_end`, the linker's symbols, never from
+`bss_size`.  `grep bss tests/ovmf_boot.py tests/boot64_stubtest.py` returning nothing is the other
+half of the finding: the declaration is printed by the kernel and the loader and read by neither
+judge.
+
 **What the review could not re-measure, and why that is a result too.** The sandbox's `/tmp` was
 wiped between sessions, which took QEMU, the OVMF pair and the harness venv with it.  Two things
 followed, both of them about the checkout rather than the source:
@@ -3579,9 +3628,23 @@ followed, both of them about the checkout rather than the source:
   `make citation-refs` (49 pull-request heads) makes the same 263 resolve.  A citations failure is
   a statement about the clone before it is a statement about the history.
 
-`make check` at this commit: **1153 tests, exit 0**, with 9 skips that each name their reason
-(`build/pc5.iso not built`, and the OVMF-ceiling test that skips *because* OVMF ran here).  The
-README's `1152/1152 @ 86b862f` row is deliberately left alone: that is what the recorded validation
-run measured, the extra test is this section's, and re-recording the gates needs the QEMU this
-workspace no longer has.  A count in a document belongs to the revision it was measured at; the
-honest move when the two drift is to say so, which is what this paragraph is.
+**The skip count, taken seriously.** The first `make check` in this workspace read `Ran 1153 tests
+... OK (skipped=9)`, and that `OK` was doing work nine one-line reasons should have done.  Listing
+them is the difference between "9 tests did not run" and "these 9 did not run, for this"; every
+reason named a missing artifact (`no build/pc5.iso; run make iso first`, `build/efi.img is not
+built`, `need both build/pc5.iso and build/efi.img`, `no build/pc5.iso and
+build/efi64-release.img to compare`) or the inverted OVMF ceiling, and one of the two is a skip that
+*removes* itself when the firmware evidence exists.  Not one was a statement about the source:
+`build/` had lost its artifacts to the same `/tmp` wipe that took QEMU.  Re-derive any of it with
+`python3 -m unittest discover -s tests -p test_\*.py -v` piped through `grep skipped`.  After `make iso`, which also produces the 64-bit release ESP image the two
+comparison cases want, the identical command reads
+`Ran 1154 tests in 576.701s`, exit 0, `skipped=1`, and the one skip left is
+`'OVMF ran on this machine; the ceiling no longer applies'` — a test that removes itself when the
+firmware evidence exists.  So the total moved 1152 → 1153 → 1154 for exactly two reasons, both of
+them tests this section added (the widened-type mutant, then the sweep's counterfactual), and the skip
+count moved 9 → 1 because somebody built the artifacts, not because the suite changed.
+
+The README's `1152/1152 @ 86b862f` row is deliberately left alone: that is what the recorded
+validation run measured, and re-recording it needs the QEMU this workspace no longer has.  A count in
+a document belongs to the revision it was measured at; the honest move when the two drift is to say
+so, which is what this paragraph is.
