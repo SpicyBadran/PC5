@@ -161,6 +161,16 @@ Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
   `docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`, "After the jump". The gap is asserted
   in tests (`tests/test_kimage64.py`, `tests/test_kernel64.py`) rather than left as a comment,
   and closing it needs a version-2 header with a second digest over a defined prefix.
+* **The image header bounds `.bss` from above only.** `pc5_kimage64_validate_header()` refuses a
+  declared `.bss` *bigger* than the file (`kimage64-bss-size`) and says nothing about it being
+  smaller than the space the file has, so a header can declare that the whole image — entry point
+  included — is zero-fill.  Measured at `c487efd`+`tests`: such an image, with both digests
+  re-stamped, is accepted by `tools/kimage64.py`, accepted by the running kernel, boots to
+  `PC5-64-DONE`, and prints `bss=0x34000`; neither firmware gate compares the `bss=` field, so the
+  declaration is recorded and unread.  It is inert today only because `_start64` zeroes the linker's
+  `.bss` rather than the declared one — see §35 of `docs/TEST_RESULTS.md` and the v2 requirements in
+  `docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`, which is where the extra comparison belongs
+  (it changes the kernel image, so it must be landed with a re-measured gate, not on its own).
 * **The 64-bit IST stacks are 4 KiB deep and have nothing under them.** `pc5_tss64_build()`
   takes three frames from the pool — TSS, IST1, IST2 — and each interrupt stack is one page with
   its top at the page boundary, which is what the boot records: `tss=0x1000 ist1=0x3000

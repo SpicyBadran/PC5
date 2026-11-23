@@ -205,6 +205,22 @@ and `tests/test_kernel64.py` boots a kernel with a byte of `.head`'s padding edi
 requires the boot to *succeed*. Closing that gap means a v2 header carrying a second digest over
 a defined prefix (`[0, __bss_start)`) — a format change with a version bump, not a bug fix.
 
+The same review found the boundary on the other side of `.bss`, and it is a v2 item for the same
+reason.  The rules above refuse `bss_size > image_size` and do not refuse the converse absurdity: a
+header that declares the *whole file* to be `.bss`, entry point included, is accepted by this tool
+and by the kernel's half-validator alike (`docs/TEST_RESULTS.md` §35 measured it end to end, with
+both digests re-stamped, and the boot ran to completion).  It is inert while the zeroing comes from
+the linker's symbols.  It becomes a fault the moment a v2 lets the boot trust a declared
+`bss_start`.  So v2 carries `bss_start` explicitly, and the shared validator gains one comparison —
+the declared `.bss` must not contain the declared entry:
+
+    entry_offset < image_size - bss_size
+
+— with a `bss-size-whole-file` row in `MUTATIONS` beside the existing `bss-size`, so both halves of
+the validator are required to refuse it and the reject table stops testing the overshoot alone.
+Both are format-adjacent and change the image, which is why they ride with the version bump rather
+than arriving as a quiet tightening of a rule the gates never read.
+
 A refusal from this check reuses the format's reason names, which is correct and slightly
 confusing: the same string, `kimage64-image-size`, means *"the file I read is not the length you
 declared"* when the loader prints it (`PC5-64-LOADER-FAIL=`) and *"the size I was handed is not

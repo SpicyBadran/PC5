@@ -3505,3 +3505,83 @@ still accepted, exactly as §29 said of the loader's half, and `docs/SECURITY.md
 cryptographic boundary open.  Nothing here verifies the bytes *between* the header and the end of the
 image after the jump — see the boundary above, which is the honest shape of the claim.  No hardware,
 no Secure Boot, no PS5, and no CI run: the numbers above came from boots in this workspace.
+## 35. Adversarial review of PR #49: two mutants refused, one survived, and a .bss declaration nobody compares
+
+The review of #49 asked for something narrower than another milestone: take each Critical/High
+claim, and try to break it.  The method is the one this repository already uses against itself —
+one surgical *leniency* edit into the shipped C, run through the batteries that are supposed to
+notice, then reverted.  Every probe ran in a detached worktree at `/tmp/pc5-adv`; the reviewed tree
+was not edited to make a measurement pass, and `git diff --stat` was clean when the probing ended.
+
+| Probe | The edit | Verdict |
+| --- | --- | --- |
+| TSS descriptor limit | `limit != PC5_TSS64_SIZE - 1` relaxed to accept any limit of half the size or more | **refused** by the activation battery |
+| I/O-map base field | `tss_word(...) != PC5_TSS64_SIZE` relaxed to `>= 100` | **refused** by the activation battery |
+| Descriptor type after `ltr` | the tolerated-after-load type widened from `== PC5_DESC_TYPE_TSS_AVAIL` to `<= PC5_DESC_TYPE_TSS_AVAIL` | **survived every check in `tests/test_tss64.py`** until the control below was added |
+
+The third row is the one worth the trip.  The checker tolerates `available` after the load for a
+specific, defensible reason: TCG does not mark a TSS descriptor busy, so "the host did not set the
+bit" and "the host refused to load the segment" are different facts and the kernel should not
+conflate them.  Writing that tolerance as `type <= AVAIL` reads like a slip of one character and
+empties the check: a descriptor whose type byte had become 3 — a system segment that is not a TSS
+at all — then satisfies "the TSS is loaded", the kernel prints `PC5-64-TSS status=ok`, and the only
+thing standing between that and a shipped milestone was a gate that reads the printed
+`busy=available-to-busy` string, which needs QEMU or the stub to exist.  Nothing pinned the set.
+
+Closing it changed no code, only tests: `tests/test_tss64.py` gains a control that writes type 3
+into the descriptor after the hand-installed load and requires the refusal
+`check-descriptor-type-after`, and `Tss64ActivationMutationTests` gains `after-load-type-widened`,
+which compiles the widening itself and fails if the battery passes it.  The two together are what
+make the row above read "refused" rather than "untested".  Because no kernel source moved,
+`build/kernel64/KERNEL64.BIN` is still `e390f7e394098401…` and 212992 bytes, so §30–§34 and the
+evidence page are unaffected by construction — re-running `verification.sh` here still returns
+`OK (114 checks re-derived from 16 files in this directory)`, and `tests.test_tss64` is 21 tests
+where it was 20.
+
+**A `.bss` declaration that is bounded on one side only.** The same review asked whether the header
+rules could be made to certify an impossible image.  One way to try is to fabricate a header whose
+declared `.bss` *is* the file — set `bss_size` to `image_size`, then re-stamp `checksum` and
+`header_crc` so the image is self-consistent (nothing here is a tamper claim; a rewrite that
+re-stamps both digests is accepted by design, as §29 and §34 both say).  Measured at this commit:
+
+- `tools/kimage64.py`'s own `verify()` returns **ok** for it, and the reject table has no row for
+  it — `MUTATIONS["bss-size"]` tests only the overshoot (`len + 4096`), which is refused;
+- the running kernel agrees: `PC5-64-KIMAGE status=ok reason=ok image=0x34000 handover=0x34000
+  bss=0x34000 entry=0x1000 crc=ok`, and the boot reaches `PC5-64-DONE`;
+- `grep bss tests/ovmf_boot.py tests/boot64_stubtest.py` returns **nothing**: both gates parse the
+  line and neither compares the field, so `bss=` is recorded by the kernel and read by no judge.
+
+So the rules say `.bss` may not be *larger* than the file and say nothing about it being *smaller*
+than the space the file actually has: the declaration above puts the entry point at `0x1000` inside
+a region the image calls zero-fill, and three consumers — tool, kernel, gates — all decline to
+notice.  It is harmless *today* for a reason that is itself the finding: `_start64` zeroes the
+linker's `.bss` and adopts its stack from the link layout, not from `bss_size`, so the declared
+number is currently information, and bad information that nobody acts on.  It stops being harmless
+at exactly the moment v2 makes the boot read the header — which is why this belongs in
+`docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md` and not in a hot fix.  The tightening is one
+comparison in the shared header validator (`entry_offset < image_size - bss_size`), one row in the
+reject table, and the same rule reached by both halves of the validator; it changes the kernel
+image, so it owes a re-measurement of both firmware gates, which this workspace can no longer
+produce (below).  Recorded, not fixed.
+
+**What the review could not re-measure, and why that is a result too.** The sandbox's `/tmp` was
+wiped between sessions, which took QEMU, the OVMF pair and the harness venv with it.  Two things
+followed, both of them about the checkout rather than the source:
+
+- without `unicorn`, `python3 -m unittest tests.test_kernel64` reports `OK` while **skipping 64 of
+  its own cases** — the machine tests that carry the IST-delivery and header-refusal claims.
+  Re-provisioning is `python3 -m venv /tmp/pc5-venv && /tmp/pc5-venv/bin/pip install -r
+  requirements-harness.txt` (pinned `unicorn==2.1.4`), after which the same modules run 106 tests
+  with no skips.  This is the standing rule made concrete: read the `Ran N tests` line, not the
+  `OK`.
+- the clone was **shallow** (`.git/shallow`, depth 1, no PR refs), which turned `make
+  citations-check` into 263 failures naming commits that exist.  `git fetch --unshallow` plus
+  `make citation-refs` (49 pull-request heads) makes the same 263 resolve.  A citations failure is
+  a statement about the clone before it is a statement about the history.
+
+`make check` at this commit: **1153 tests, exit 0**, with 9 skips that each name their reason
+(`build/pc5.iso not built`, and the OVMF-ceiling test that skips *because* OVMF ran here).  The
+README's `1152/1152 @ 86b862f` row is deliberately left alone: that is what the recorded validation
+run measured, the extra test is this section's, and re-recording the gates needs the QEMU this
+workspace no longer has.  A count in a document belongs to the revision it was measured at; the
+honest move when the two drift is to say so, which is what this paragraph is.

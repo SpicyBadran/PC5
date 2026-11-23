@@ -564,6 +564,17 @@ def arm_battery(lib):
     controls("a descriptor already marked busy", expect="check-descriptor-type",
              label_edit=label_edit)
 
+    # After the load the tolerated set is exactly {busy, available}, and `available` is in it for
+    # one reason only: TCG does not mark a TSS descriptor busy, so a host that leaves it alone is a
+    # different fact from a descriptor that changed into something else.  Nothing here pinned that
+    # boundary -- loosening the comparison to `type <= AVAIL` left all twenty checks green, which
+    # is how a post-load check that accepts a 16-bit code segment as a loaded TSS would have
+    # shipped.  The control is the narrow one: a type that is neither of the two.
+    def label_edit():
+        ram_write(desc_at + 5, bytes([0x83]))         # P set, type 3: neither busy nor available
+    controls("a descriptor of some other type after the load",
+             expect="check-descriptor-type-after", label_edit=label_edit, after=True)
+
     def label_edit():
         ram_write(desc_at + 5, bytes([0x09]))         # P cleared
     controls("a descriptor that is not present", expect="check-descriptor-not-present",
@@ -864,6 +875,19 @@ class Tss64ActivationMutationTests(unittest.TestCase):
             return
         self.fail(f"{label}: the activation battery passed against the mutant, so the property "
                   "it is meant to enforce is not enforced by the code")
+
+    def test_widening_the_after_load_type_tolerance_is_caught(self):
+        """Accept any type up to `available` after `ltr` and the battery must notice.
+
+        The shipped rule tolerates one extra type after the load, for the TCG reason above.  A
+        comparison written as `type <= PC5_DESC_TYPE_TSS_AVAIL` reads like a harmless slip and turns
+        the post-load check into a no-op for the very field `ltr` is supposed to have set; before
+        the control existed, this mutant survived every check in this file.
+        """
+        self.assert_caught(mutate(
+            "        && !(after_load && type == PC5_DESC_TYPE_TSS_AVAIL)) {",
+            "        && !(after_load && type <= PC5_DESC_TYPE_TSS_AVAIL)) {",
+            "after-load-type-widened"), "the after-load descriptor type")
 
     def test_losing_the_bounds_test_on_the_table_is_caught(self):
         """A bound so wide it never trips, written so the parameter stays used.

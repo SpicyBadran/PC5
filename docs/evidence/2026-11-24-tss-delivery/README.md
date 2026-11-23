@@ -159,6 +159,13 @@ measurement.
 * **No NMI during a fault, and no nesting.** The injection lands after the boot has settled, with
   IF clear, one CPU, and nothing on the IST stacks.  A double fault arriving *while* an NMI is being
   handled — the situation IST exists for — is not exercised here; only the switch is.
+* **The after-load descriptor type was not pinned when this page was recorded.** `ltr` is judged by
+  a readback that tolerates exactly one surprise — a host that leaves the descriptor `available`,
+  which is what TCG does — and at `86b862f` nothing in the suite noticed that tolerance being widened
+  to *any* type up to `available`. It does now: see §35 of `docs/TEST_RESULTS.md`.  The bytes on this
+  page are unaffected (no kernel source moved, and `verification.sh` still re-derives every claim
+  here), but the claim "the descriptor became busy" rests on the printed `busy=available-to-busy`
+  field and on the gates that read it, not on a kernel-side refusal.
 * **No depth, only delivery.** Both windows are one page, and `verification.sh` pins the layout
   that makes an overrun dangerous rather than harmless: `tss=0x1000 ist1=0x3000 ist2=0x4000` means
   the page below IST1 is the TSS's own page and the page below IST2 is IST1's. So this evidence says
