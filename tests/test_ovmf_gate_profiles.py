@@ -58,6 +58,7 @@ PC5-64-MEM-SELFTEST one=0x1000 three=0x2000 grant-in-map=1 bitmap-lie-refused=1 
 PC5-64-TSS status=ok arm-rules=1 tss=0x1000 gdt=0x129280 limit=47 gdtr=0x129280 cpl=0 ist1=0x3000 ist2=0x4000 ist-df=1 ist-nmi=2 frames=3 free-after=53747 tr=loaded str=0x20 desc=0x1000/103 busy=available-to-busy iomap=104
 PC5-64BIT-LONG-MODE-OK
 PC5-64-DONE
+PC5-64-TSS-DF status=ok reason=ok rsp=0x2fd8 rsp-before=0xe1f9c70 ist1=0x3000 resume=0x10245c gate-ist=1 df=0 frame=0x10245c,0x38,0x2,0xe1f9c70,0x30 stack-intact=1 gate-restored=1
 """
 
 IA32_GOOD_LOG = """\
@@ -202,6 +203,78 @@ class ClassifyX64(unittest.TestCase):
         self.assertEqual(boastful.count("tr=loaded"), 1,
                          "the fixture no longer claims a loaded TR, so this test proves "
                          "nothing about claims")
+
+    def test_the_delivery_probe_is_read_as_the_machine_left_it(self):
+        """The row passes on the numbers a real boot printed, and on nothing else.
+
+        The five refusals below are the five ways the line could be printed and the delivery still
+        be wrong.  Each is written by editing *one field* of a good log, so a row that passed on
+        the substring `status=ok` alone would stay green through all five -- which is the failure
+        mode this whole set exists to avoid, and the one the `ltr` marker lived with for three
+        milestones.
+        """
+        base = X64_GOOD_LOG
+        line = [l for l in base.splitlines() if l.startswith("PC5-64-TSS-DF")][0]
+
+        def row_for(edited):
+            report = ovmf.Report()
+            ovmf.check_boot(report, run_of(base.replace(line, edited), stopped_on=None),
+                            "cold", 208896, ovmf.X64, 256)
+            rows = {c["name"]: c for c in report.checks}
+            name = [key for key in rows if key.endswith(
+                "the double-fault probe found its frame on the interrupt stack, not the "
+                "faulting one")]
+            self.assertEqual(len(name), 1, "no probe row, or more than one: %r" % (rows,))
+            return rows[name[0]]
+
+        self.assertEqual(row_for(line)["state"], "pass", row_for(line)["detail"])
+        # The handler woke up where the fault happened: no switch, so no IST, whatever the TSS
+        # says.  This is the single most important refusal here, because every other field can
+        # still read `ok`.
+        self.assertEqual(row_for(line.replace("rsp=0x2fd8", "rsp=0xe1f9c70"))["state"], "fail",
+                         "a delivery that did not switch stacks passed the row")
+        # The frame is on the right page but contains no address the trap was taken at: a number
+        # placed in a log, not a frame the CPU pushed.
+        self.assertEqual(row_for(line.replace("frame=0x10245c,", "frame=0xdeadbeef,"))["state"],
+                         "fail", "a frame with no saved RIP in it passed the row")
+        # DF left set: the switch worked and the machine is now worse off.
+        self.assertEqual(row_for(line.replace("df=0", "df=1"))["state"], "fail",
+                         "a probe that left DF set passed the row")
+        # The frame outside the granted page: the IST1 field of a TSS written one quadword off
+        # lands the delivery on whatever the neighbouring slot held, which is exactly how the
+        # not-present fault this probe was written to catch looked.
+        self.assertEqual(row_for(line.replace("rsp=0x2fd8", "rsp=0x9fd8"))["state"], "fail",
+                         "a frame outside the IST1 page passed the row")
+        # No line at all: on this profile the boot always reaches the probe, so its absence is a
+        # missing measurement rather than a passing one.
+        report = ovmf.Report()
+        without = "\n".join(l for l in base.splitlines() if not l.startswith("PC5-64-TSS-DF"))
+        ovmf.check_boot(report, run_of(without, stopped_on=None), "cold", 208896, ovmf.X64, 256)
+        self.assertFalse([c for c in report.checks if c["state"] == "pass"
+                          and "double-fault probe" in c["name"]],
+                         "a boot that never reported the probe passed the row")
+
+    def test_a_declined_probe_is_judged_by_whether_tr_was_loaded(self):
+        """`skipped` with a loaded TR is a refusal; without one it is the correct answer."""
+        line = [l for l in X64_GOOD_LOG.splitlines() if l.startswith("PC5-64-TSS-DF")][0]
+        declined = line.replace("status=ok reason=ok", "status=skipped reason=tr-not-loaded")
+
+        def state_of(log):
+            report = ovmf.Report()
+            ovmf.check_boot(report, run_of(log, stopped_on=None), "cold", 208896, ovmf.X64, 256)
+            return [c["state"] for c in report.checks
+                    if c["name"].endswith("the double-fault probe found its frame on the "
+                                         "interrupt stack, not the faulting one")][0]
+
+        self.assertEqual(state_of(X64_GOOD_LOG.replace(line, declined)), "fail",
+                         "the probe declined while TR was loaded, and the row let it through")
+        unloaded = X64_GOOD_LOG.replace(
+            "tr=loaded str=0x20 desc=0x1000/103 busy=available-to-busy iomap=104",
+            "tr=not-loaded reason=arm-tr-readback").replace(
+            "ist-df=1 ist-nmi=2", "ist-df=0 ist-nmi=0")
+        self.assertEqual(state_of(unloaded.replace(line, declined)), "pass",
+                         "a kernel that never loaded TR was refused for declining to measure an "
+                         "IST stack -- which is the behaviour the arming rule demands")
 
     def test_watchdog_refusal_is_a_reported_attempt_not_a_missing_stage(self):
         text = X64_GOOD_LOG.replace("PC5-64-LOADER watchdog=disabled",

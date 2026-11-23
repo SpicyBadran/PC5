@@ -110,4 +110,78 @@ pc5_vector_\n:
     PC5_STUB_NOERR 28
     PC5_STUB_NOERR 31
 
+/* The IST delivery probe's entry point, and the scratch pointer it is handed.
+ *
+ * This is scaffolding for a measurement, not a recovery path, and the difference matters.
+ * `pc5_exception_entry` below prints and halts, because a fault this kernel has not been
+ * shown to survive has no sane continuation.  A probe is different: the kernel deliberately
+ * raised vector 8 with an IST field armed, and wants to know what the CPU did -- where it
+ * put the frame, whether it switched stacks -- and then wants to carry on.  Returning from a
+ * real #DF is not a thing an OS does (the stack it was running on is the suspect), so this
+ * does not pretend to: the *faulting code* recorded its own RSP and resume address before
+ * raising, and this entry copies the three words the CPU pushed, restores RFLAGS from the
+ * frame (the CPU set DF on delivery; leaving it set would turn the next fault into a real
+ * double fault), and jumps back to the recorded address.  Nothing is reconstructed or
+ * guessed, and if the pointer is not armed it halts rather than inventing a return.
+ *
+ * The frame here is the CPU's own, with no vector number pushed: the #DF gate points straight
+ * at this label for the duration of a probe, so the ordinary stub's extra push is absent and the
+ * offsets below are one quadword lower than the ones `pc5_exception_entry` uses.  Nothing
+ * dispatches here on a test of the armed pointer -- the ordinary entry keeps its own frame shape
+ * and its report-and-halt behaviour, because a #PF that arrives while a probe is outstanding is
+ * a real fault and must be reported as one, and because a handler that inferred its frame layout
+ * from a flag is one stale flag away from reading a vector number as a saved RIP.  Getting these
+ * four offsets right was not obvious: the push order is RFLAGS, RIP, CS, error code, so the
+ * *lowest* address holds the last thing pushed (the error code) and CS sits at +8 where a first
+ * reading would put RIP.  A probe that read the wrong slot printed `frame-rip=0x38` -- a code
+ * selector, in the right shape to be believed.
+ *
+ * Nothing here reads the frame, and that is deliberate.  What the CPU pushes above the new RSP
+ * depends on the path the vector arrived by: a soft `int $8` under QEMU leaves rip, cs, rflags,
+ * rsp and ss (five quadwords, no error code), a real double fault leaves an error code first, and
+ * a privilege change leaves two more.  The handler records one number that no version of that
+ * argument can change -- the RSP it was entered with -- and the frame itself is read back later,
+ * from memory, by the code that knows what it is looking for.  An earlier revision copied the
+ * frame's RIP and RFLAGS out at fixed offsets here; on the soft-interrupt path the word at +16 is
+ * not the RIP and the word at +24 is the *saved stack pointer*, so the probe reported a
+ * mismatched RIP and installed a plausible-looking value as flags, and both survived only because
+ * nothing checked them.  A handler that has to be right about the layout to be right at all is the
+ * thing to avoid, not the thing to document.
+ *
+ * Slots in the context (see struct pc5_tss64_probe in tss64.h; the three offsets used here are
+ * duplicated in the assembly and pinned by tests/test_tss64.py, because an asm/C disagreement
+ * about a layout is the kind of bug that reports success):
+ *
+ *     0   rsp the probe recorded before raising     (written by the trigger, read here)
+ *     8   resume address                            (written by the trigger, jumped to here)
+ *    24   RSP as found on delivery                  (written here, and nothing else)
+ */
+    .bss
+    .globl pc5_ist_probe_ctx
+    .balign 64
+pc5_ist_probe_ctx:
+    .zero 64
+
+    .section .text.idt, "ax"
+    .globl pc5_ist_probe_entry
+    .type pc5_ist_probe_entry, @function
+pc5_ist_probe_entry:
+    cli
+    movq  pc5_ist_probe_ctx(%rip), %rdi
+    testq %rdi, %rdi
+    jz    9f
+    movq  %rsp, 24(%rdi)               /* where the CPU put the frame */
+    movq   0(%rdi), %rsp                /* back to the stack the probe recorded */
+    pushfq
+    andq  $~0x400, (%rsp)               /* clear DF in place; every other flag untouched */
+    popfq
+    movq   8(%rdi), %rdx                /* our recorded resume address, not the frame's */
+    xorl  %ecx, %ecx
+    movq  %rcx, pc5_ist_probe_ctx(%rip) /* one shot: a second delivery must not bounce */
+    jmp   *%rdx
+9:  cli
+    hlt                                /* never armed: refuse to fabricate a return */
+    jmp 9b
+    .size pc5_ist_probe_entry, . - pc5_ist_probe_entry
+
     .section .note.GNU-stack, "", @progbits

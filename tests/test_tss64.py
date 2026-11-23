@@ -43,8 +43,42 @@ from test_mem64 import (CONVENTIONAL, DESC_BYTES, INFO_BYTES, OFF,  # noqa: E402
 
 PAGE = 4096
 TSS_SIZE = 104
-IST1_OFFSET = 32            # the AMD64 TSS: IST1 is the first field after RSP0..2 + RSV
-IOMAP_OFFSET = 100          # the I/O-map base, 4 bytes, ending the 104-byte structure
+# The 64-bit TSS, field by field, transcribed from Intel SDM vol. 3A figure 7-2 ("64-Bit TSS
+# Format") and table 7-1's note on the I/O map.  This table is deliberately *not* read out of
+# kernel64/tss64.h or kernel64/tss64.c: the point of an independent restatement is that it can
+# disagree with the code, and here it did.
+#
+# It used to begin `IST1_OFFSET = 32  # the first field after RSP0..2 + RSV`, which is what the
+# builder believed, so the assertions below compared the builder's output with the builder's own
+# idea of where the fields go and passed -- while every CPU in the world read IST1 at 36 and found
+# the high half of that value welded to the low half of IST2.  The kernel's TSS therefore named
+# `0x00004000_00000000` as the double-fault stack, and the mistake was invisible from inside: 32
+# is where RSP0..RSP2 *would* leave the next free byte if the link field were a quadword, and it is
+# eight bytes, so nothing looked unaligned or out of range.  What found it was the delivery probe,
+# which asked a real CPU to use the field and took a not-present write fault at the instruction
+# that asked.
+#
+# So: RSP0 at 4, and the IST slots start at 36, because the reserved quadword at 28 is real, and
+# the I/O map base is a *word* at 102 -- a dword there would read the two reserved bytes before it.
+TSS_FIELDS = (
+    ("link", 0, 4),
+    ("rsp0", 4, 8),
+    ("rsp1", 12, 8),
+    ("rsp2", 20, 8),
+    ("reserved-rsp", 28, 8),
+    ("ist1", 36, 8),
+    ("ist2", 44, 8),
+    ("ist3", 52, 8),
+    ("ist4", 60, 8),
+    ("ist5", 68, 8),
+    ("ist6", 76, 8),
+    ("ist7", 84, 8),
+    ("reserved-ist", 92, 2),
+    ("iomap-base", 102, 2),
+)
+TSS_FIELD = {name: (offset, width) for name, offset, width in TSS_FIELDS}
+IST1_OFFSET = TSS_FIELD["ist1"][0]
+IOMAP_OFFSET = TSS_FIELD["iomap-base"][0]
 FRAMES = 3                  # TSS + IST1 + IST2
 
 _OFFSETS = r"""#include "tss64.h"
@@ -82,6 +116,8 @@ _FUNCS = (
     ("pc5_tss64_gdt_word", ctypes.c_ulonglong, [ctypes.c_ulonglong]),
     ("pc5_tss64_reason", ctypes.c_char_p, [ctypes.c_void_p]),
     ("pc5_tss64_check_loaded", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
+    ("pc5_tss64_probe_verdict", ctypes.c_int,
+     [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_char_p)]),
 )
 
 _CACHE: dict = {}
@@ -134,6 +170,28 @@ def mutate(old, new, tag):
     if text == source:
         raise AssertionError(f"{tag}: the mutant is identical to the original")
     return build(text, tag=tag)
+
+
+def built_tss(lib):
+    """Run the real builder against the real pool and return (body, ist1_top, ist2_top).
+
+    Split out so that a *mutant* of the builder can be asked the same question the shipped
+    builder is asked: the assertions that follow read the bytes at the offsets the architecture
+    names, which a check routed through `pc5_tss64_check_loaded` cannot do -- that function reads
+    through the very offset table under test, so a builder and a checker that move together stay
+    perfectly consistent and report `ok`.  That agreement is how the wrong IST1 offset survived
+    three milestones of green tests.
+    """
+    pool = Pool(lib)
+    state = Reader(lib)
+    if not lib.pc5_tss64_build(pool.cast, state.buffer):
+        raise AssertionError(f"the builder refused the pool: {reason_of(lib, state)}")
+    body = bytes(ram_read(state.word("tss_base"), TSS_SIZE))
+    return (body, state.word("ist_top", 1), state.word("ist_top", 2))
+
+
+def reason_of(lib, state):
+    return lib.pc5_tss64_reason(state.buffer).decode()
 
 
 class Reader:
@@ -316,12 +374,19 @@ def battery(lib):
              f"tss={got1:#x} report={top1:#x}")
         want("the TSS advertises the IST2 the report claims", got2 == top2,
              f"tss={got2:#x} report={top2:#x}")
-        want("the TSS is 104 bytes and the rest of it stays zero",
-             raw[0:4] == bytes(4) and raw[4:IST1_OFFSET] == bytes(IST1_OFFSET - 4)
-             and raw[IST1_OFFSET + 16:IOMAP_OFFSET] == bytes(IOMAP_OFFSET - IST1_OFFSET - 16),
-             "a stale RSP0 or IST3..7 would be a switch onto memory nobody allocated")
+        # Every field the kernel does not use must be zero *at its own architectural offset*.  The
+        # reserved quadword at 28 is the one that matters: it is the slot the builder used to write
+        # IST1 into, so "28..35 are zero" is the sentence that separates the two layouts instead of
+        # accepting either.
+        for name, offset, width in TSS_FIELDS:
+            if name in ("ist1", "ist2", "iomap-base"):
+                continue
+            want(f"the {name} field of the TSS is zero",
+                 raw[offset:offset + width] == bytes(width),
+                 f"{name}@{offset} holds {raw[offset:offset + width].hex()}")
         want("no I/O permission map is claimed",
-             int.from_bytes(raw[IOMAP_OFFSET:IOMAP_OFFSET + 4], "little") == TSS_SIZE)
+             int.from_bytes(raw[IOMAP_OFFSET:IOMAP_OFFSET + 2], "little") == TSS_SIZE,
+             "the field is a word at 102, and 104 means past the limit")
 
         low = lib.pc5_tss64_gdt_word(4)
         high = lib.pc5_tss64_gdt_word(5)
@@ -422,6 +487,7 @@ def battery(lib):
 # every one of them is "the CPU would fault, and the kernel refuses first", and a control that
 # could only be produced by faulting a real CPU would be a control for the environment rather
 # than for the code.
+PROBE_WORDS = 11
 TSS_SELECTOR = 0x20          # slot 4, the first qword of the 16-byte descriptor
 SCRATCH_AT = RAM_BASE + 120 * PAGE
 
@@ -674,6 +740,121 @@ class Tss64HostTests(unittest.TestCase):
             self.assertLess(getattr(lib, f"off_{field}")(), lib.off_size(), field)
 
 
+class Tss64ProbeTests(unittest.TestCase):
+    """The delivery probe's own judgements, driven on the host where no CPU is required.
+
+    `pc5_tss64_probe_verdict` is the function that decides whether a #DF was delivered on the
+    interrupt stack, and it is pure arithmetic over a filled-in struct -- which means every one of
+    its refusals can be produced here by handing it a frame that *looks* right in one way and wrong
+    in another.  The executed half (does the CPU really switch) is the firmware gate's row
+    `a #DF taken by the CPU was delivered on the IST1 stack`, and the two halves are written to
+    fail for different reasons on purpose: the host refuses fabricated verdicts, the gate refuses
+    an unverified claim.
+    """
+
+    #: the shape a good delivery has, taken from the numbers a real boot printed rather than from
+    #: an idealisation -- `rsp` 40 bytes below the IST top, the resume address as the first word of
+    #: the frame, CS and SS as QEMU leaves them
+    GOOD = {
+        "rsp_before": 0xE1F9C70,
+        "resume": 0x10245C,
+        "gate_ist": 1,
+        "rsp_delivery": 0x2FD8,
+        "ist_top": 0x3000,
+        "flags_after": 0x10002,
+        "frame": (0x10245C, 0x38, 0x2, 0xE1F9C70, 0x30),
+    }
+
+    def verdict(self, lib, **overrides):
+        state = Reader(lib)
+        state.poke("built", 1)
+        state.poke("installed", 1)
+        state.poke("tr_armed", 1, width=4)
+        values = dict(self.GOOD)
+        values.update(overrides)
+        # Built by *slot number*, in the order the struct declares them, so this fixture is a
+        # second description of the layout rather than a reader of the first: if a field moves in
+        # tss64.h and the assembly is not updated with it, the `_Static_assert`s in tss64.c catch
+        # that pair, and a verdict computed from the wrong words shows up here as a refusal.
+        probe = (ctypes.c_ulonglong * PROBE_WORDS)(
+            values["rsp_before"], values["resume"], values["gate_ist"],
+            values["rsp_delivery"], values["ist_top"], values["flags_after"],
+            *values["frame"])
+        got = ctypes.c_char_p()
+        ok = lib.pc5_tss64_probe_verdict(state.buffer, probe, ctypes.byref(got))
+        return bool(ok), (got.value or b"").decode()
+
+    def test_a_delivery_on_the_interrupt_stack_is_accepted(self):
+        lib = build()
+        ok, reason = self.verdict(lib)
+        self.assertTrue(ok, reason)
+        self.assertEqual(reason, "ok")
+
+    def test_every_way_a_delivery_can_be_wrong_has_its_own_name(self):
+        """One field at a time, each refusal reached by damaging exactly one fact.
+
+        `probe-stack-unchanged` is the one that matters most: a CPU that ignores the gate's IST
+        field pushes the frame onto the stack that just overflowed, and every other number on the
+        line still reads `ok`.  `probe-frame-rip-missing` is the one that keeps a *fabricated*
+        delivery honest: a stack pointer alone is a number, and the frame is the evidence.
+        """
+        lib = build()
+        for label, expect, overrides in (
+            ("no IST slot was ever granted", "probe-ist-top-missing", {"ist_top": 0}),
+            ("the handler never ran", "probe-not-delivered", {"rsp_delivery": 0}),
+            ("the fault stayed on its own stack", "probe-stack-unchanged",
+             {"rsp_delivery": self.GOOD["rsp_before"]}),
+            ("the frame is outside the granted page", "probe-frame-outside-ist-page",
+             {"rsp_delivery": 0x9FD8}),
+            ("the frame holds no return address", "probe-frame-rip-missing",
+             {"frame": (0xDEADBEEF, 0x38, 0x2, self.GOOD["rsp_before"], 0x30)}),
+            ("the gate names a different slot", "probe-gate-ist-not-one", {"gate_ist": 2}),
+            ("DF was left set", "probe-df-flag-left-set",
+             {"flags_after": self.GOOD["flags_after"] | 0x400}),
+        ):
+            ok, reason = self.verdict(lib, **overrides)
+            self.assertFalse(ok, f"{label}: the probe accepted it")
+            self.assertEqual(reason, expect, f"{label}: refused as {reason}")
+
+    def test_the_frame_is_found_wherever_the_cpu_put_it(self):
+        """The saved RIP may be any of the frame's words, and the verdict must not care.
+
+        Which quadword a CPU pushes the return address into depends on whether an error code went
+        first and on whether SS and RSP were saved with it -- a soft `int $8` and a real double
+        fault do not agree, and neither is the thing under test.  Pinning the *search* rather than
+        an offset is what lets this probe run on a machine that lays the frame out differently,
+        without letting it pass on a frame that contains nothing at all.
+        """
+        lib = build()
+        for index in range(5):
+            frame = [0] * 5
+            frame[index] = self.GOOD["resume"]
+            ok, reason = self.verdict(lib, frame=tuple(frame))
+            self.assertTrue(ok, f"resume at frame[{index}]: {reason}")
+
+    def test_the_state_is_read_and_not_written(self):
+        """A verdict about a probe must not change what the TSS claims.
+
+        The refusal names live in the caller's variable, not in `state->reason`, and that is the
+        contract that lets `report_tss` print `reason=` for the install and a separate `reason=`
+        for the probe on the next line.  A probe that wrote into the state would let a failed
+        measurement quietly rewrite the boot's own verdict.
+        """
+        lib = build()
+        state = Reader(lib)
+        state.poke("built", 1)
+        state.poke("tr_armed", 1, width=4)
+        # `reason` is left exactly as a fresh state has it (a null pointer): the buffer is
+        # zeroed by `Reader`, and a verdict that wrote a refusal into the *state* instead of the
+        # caller's out-parameter would show up as a difference below.
+        before = bytes(state.buffer)
+        probe = (ctypes.c_ulonglong * PROBE_WORDS)(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        got = ctypes.c_char_p()
+        ok = lib.pc5_tss64_probe_verdict(state.buffer, probe, ctypes.byref(got))
+        self.assertEqual(ok, 0, "an all-zero probe was accepted")
+        self.assertEqual(bytes(state.buffer), before,
+                         "the verdict wrote into the state it was handed")
+
 class Tss64ActivationMutationTests(unittest.TestCase):
     """The activation battery has to notice the checks being removed, one `if` at a time."""
 
@@ -710,9 +891,70 @@ class Tss64ActivationMutationTests(unittest.TestCase):
 
     def test_trusting_the_builder_about_the_iomap_field_is_caught(self):
         self.assert_caught(mutate(
-            "    if (tss_dword(base, 100ull) != PC5_TSS64_SIZE) {",
+            "    if (tss_word(base, tss_iomap_offset()) != PC5_TSS64_SIZE) {",
             "    if (0) {",
             "iomap-check-removed"), "an I/O-map base that was never written")
+
+    def test_reading_the_iomap_field_four_bytes_wide_is_caught(self):
+        """A dword at 100 finds `0x00680000`, not 104, and the check has to say so.
+
+        The I/O-map base is a *word* at 102: reading four bytes from 100 picks up the two reserved
+        bytes in front of it and compares a number no CPU would ever use.  Before the layout was
+        corrected, both the write and the read were dwords at 100, so they agreed with each other
+        and the field's width was never tested by anything.
+        """
+        lib = build()
+        body, _, _ = built_tss(lib)
+        self.assertEqual(int.from_bytes(body[102:104], "little"), TSS_SIZE,
+                         "the shipped builder no longer writes the word at 102, so this test has "
+                         "stopped meaning what it says")
+        mutant = mutate("    return 104ull - 2ull;", "    return 104ull - 4ull;",
+                        "iomap-offset-is-dword")
+        bad, _, _ = built_tss(mutant)
+        self.assertEqual(int.from_bytes(bad[100:104], "little"), TSS_SIZE,
+                         "the mutant did not move the field, so it proves nothing")
+        self.assertNotEqual(int.from_bytes(bad[102:104], "little"), TSS_SIZE,
+                            "a builder that writes 104 at offset 100 still leaves 104 at 102: "
+                            "the decode is not independent of the builder")
+
+    def test_the_ist_slots_are_checked_against_the_architecture_not_the_builder(self):
+        """Move IST1 back to offset 32 and only the independent decode notices.
+
+        This is the regression test for the bug the delivery probe found, and it is written to
+        make the point rather than to assert the number: the mutant is *self-consistent* -- the
+        builder writes at 32 and `pc5_tss64_check_loaded` reads through the same helper, so the
+        activation battery above keeps passing.  What fails is a test that reads the bytes at the
+        offset the SDM names, which is the only kind of check that could have caught this while the
+        kernel still believed otherwise.
+        """
+        lib = build()
+        body, top1, top2 = built_tss(lib)
+        self.assertEqual(int.from_bytes(body[36:44], "little"), top1,
+                         "the shipped builder no longer puts IST1 at the architectural offset, "
+                         "so this test has stopped meaning what it says")
+        mutant = mutate("    return 36ull + (index - 1ull) * 8ull;",
+                        "    return 32ull + (index - 1ull) * 8ull;",
+                        "ist1-at-32")
+        bad_body, bad_top1, bad_top2 = built_tss(mutant)
+        self.assertEqual(int.from_bytes(bad_body[32:40], "little"), bad_top1,
+                         "the mutant did not move IST1, so it proves nothing")
+        self.assertNotEqual(int.from_bytes(bad_body[36:44], "little"), bad_top1,
+                            "a TSS whose IST1 sits at offset 32 still reads correctly at 36: "
+                            "the decode is not independent of the builder")
+        # And what a CPU would have used, asserted as a value rather than as a difference: the
+        # high half of IST1 (zero, for a stack below 4 GiB) welded to the low half of IST2, which
+        # for the pair this kernel writes is exactly `0x0000400000000000` -- a 47-bit address no
+        # page table maps, and the number that produced the not-present write fault the probe was
+        # written to catch.  Pinning the shape of the garbage is what stops this test passing for
+        # a mutant that merely leaves the slot empty.
+        garbage = int.from_bytes(bad_body[36:44], "little")
+        self.assertEqual(garbage & 0xFFFFFFFF, 0, "the low half should be IST1's zero extension")
+        self.assertEqual(garbage >> 32, bad_top2 & 0xFFFFFFFF,
+                         "the high half should be IST2's low half: %016x" % garbage)
+        self.assertNotIn(garbage, (bad_top1, bad_top2),
+                         "the garbage happens to name a real stack, which would make this the "
+                         "wrong negative control")
+        self.assertNotEqual(garbage, 0, "an empty slot is a different bug than a shifted one")
 
     def test_reading_the_builders_array_instead_of_gdtr_is_caught(self):
         """Replace the read-through-GDTR with the builder's own words and the copy control

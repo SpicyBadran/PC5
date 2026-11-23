@@ -624,7 +624,7 @@ static void report_tss(void)
      * reports as its own task register, `busy=` is the descriptor type transition the load
      * performs in memory, `desc=` is the base and limit decoded out of the table GDTR names,
      * and `iomap=` is the TSS's own last field read back through that base.  A gate that can
-     * read all four can tell "TR holds 0x28 because the CPU loaded it" from "TR holds 0x28
+     * read all four can tell "TR holds 0x20 because the CPU loaded it" from "TR holds 0x20
      * because something wrote the same number into a log". */
     serial64_write(" tr=");
     serial64_write(g_tss64.tr_armed ? "loaded" : "not-loaded");
@@ -642,6 +642,156 @@ static void report_tss(void)
         serial64_write(" reason=");
         serial64_write(pc5_tss64_reason(&g_tss64));
     }
+    serial64_write("\n");
+}
+
+/* Raise a double fault on purpose, and ask what the CPU did with the stack.
+ *
+ * Everything `report_tss` prints is a *precondition*: an armed gate, a loaded TR, a TSS whose
+ * IST1 field names a granted page.  What it cannot show is the consequence those exist for --
+ * that a fault arriving on a broken stack is delivered somewhere safe.  This raises vector 8
+ * (a `#DF`, from `int $8`, which the CPU delivers through the gate exactly as it would a real
+ * one), and reads back where the handler found itself.  Two outcomes are proof and one is a
+ * measurement: the frame lands inside the IST1 page, which the ordinary stack is not, and the
+ * kernel is still running afterwards with DF clear.
+ *
+ * The mechanism is in idt64.S and it is scaffolding, not recovery: the IDT's #DF gate is
+ * pointed at a handler that records three words, restores RFLAGS (the CPU sets DF while
+ * delivering, and leaving it set would turn the next fault into a real double fault -- a probe
+ * that made the machine worse to measure it would be a bad trade), and jumps back to an address
+ * this function recorded itself.  A real #DF is not returnable, and nothing here pretends
+ * otherwise: this returns because the fault was invited and its stack was known good, which is
+ * precisely the situation a handler must never assume on its own.
+ *
+ * It runs only when TR was loaded, because an IST field on a gate is read out of *whatever TSS
+ * TR names*: with TR pointing elsewhere, this would either deliver onto a stranger's stack or
+ * fault while handling a fault, and both of those look like a passing test in the log. */
+/* idt64.S: the probe's entry point and the one-word mailbox it reads.  The pointer is a plain
+ * global rather than a function argument because the handler is entered through the IDT, with no
+ * caller to hand it anything, and it is declared here rather than in a header because the only
+ * legitimate user is the function below -- `struct pc5_tss64_probe`'s layout is asserted against
+ * the assembly in tss64.c, and the offsets the mailbox is written at are the same ones.  They are
+ * not in a header on purpose: the only legitimate caller is the function below, and a declaration
+ * in `tss64.h` would advertise a way to arm the mailbox without arming the gate that reads it. */
+extern void pc5_ist_probe_entry(void);
+extern u64 pc5_ist_probe_ctx;
+
+static void report_tss_ist_probe(void)
+{
+    struct pc5_tss64_probe probe;
+    const char *which = "unreported";
+    volatile u64 canary = 0xC0FFEE1234567890ull;
+    u64 i;
+    int delivered = 0;
+
+    serial64_write("PC5-64-TSS-DF ");
+    if (!g_tss64.tr_armed) {
+        serial64_write("status=skipped reason=tr-not-loaded\n");
+        return;
+    }
+    /* Arm the gate, then the gate's target.  Both are read back afterwards rather than
+     * assumed, and the IST field is checked *before* the redirect because the redirect is what
+     * could plausibly lose it: `idt64_set_gate_target` moves only the offset, and if it moved
+     * more than that the number printed below would say so. */
+    if (idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT) != PC5_TSS64_IST_DOUBLE_FAULT) {
+        serial64_write("status=refused reason=gate-not-armed\n");
+        return;
+    }
+    probe.rsp_before = 0;
+    probe.resume = 0;
+    probe.gate_ist = idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT);
+    probe.rsp_delivery = 0;
+    /* The bound the frame has to land inside is the IST1 the *loaded TSS* names, read back
+     * through the descriptor -- not `ist_top[]`, which is only the kernel's memory of writing
+     * it.  Quoting the builder here would let a TSS whose field was overwritten after the build
+     * pass the window check against a page nobody is using. */
+    probe.ist_top = pc5_tss64_ist_live(&g_tss64, PC5_TSS64_IST_DOUBLE_FAULT);
+    if (probe.ist_top == 0ull || probe.ist_top != g_tss64.ist_top[PC5_TSS64_IST_DOUBLE_FAULT]) {
+        serial64_write("status=refused reason=ist-live-readback\n");
+        return;
+    }
+    /* Touch the page before asking the CPU to.  A faulting store here reports a #PF at a rip the
+     * reader can identify, which localises the problem to the mapping; a #PF whose rip is the
+     * `int` itself can only mean the delivery, and the two have very different fixes -- one is
+     * the pool handing out a page the platform will not let anyone write, the other is the TSS
+     * field or the descriptor.  Without this line, the pair is indistinguishable in the log. */
+    {
+        volatile u64 *sentinel = (volatile u64 *)(unsigned long)(probe.ist_top - 256ull);
+        *sentinel = 0xA5A5A5A500000000ull | probe.ist_top;
+        if (*sentinel != (0xA5A5A5A500000000ull | probe.ist_top)) {
+            serial64_write("status=refused reason=ist-page-not-writable\n");
+            return;
+        }
+    }
+    probe.flags_after = 0;
+    if (!idt64_set_gate_target(PC5_VECTOR_DOUBLE_FAULT, (u64)(unsigned long)&pc5_ist_probe_entry)) {
+        serial64_write("status=refused reason=gate-redirect-refused\n");
+        return;
+    }
+    pc5_ist_probe_ctx = (u64)(unsigned long)&probe;
+    /* One-shot on purpose: the handler clears the pointer as it returns, so a second delivery
+     * -- a #DF raised by the probe itself going wrong -- halts on the ordinary path rather than
+     * bouncing off the same recorded RSP twice, which would corrupt the stack silently and keep
+     * running. */
+    __asm__ volatile(
+        "leaq 1f(%%rip), %%rax\n\t"
+        "movq %%rax, 8(%[p])\n\t"
+        "movq %%rsp, 0(%[p])\n\t"
+        "int $8\n\t"
+        "1:\n\t"
+        "pushfq\n\t"
+        "popq 40(%[p])\n\t"
+        :
+        : [p] "r"((u64)(unsigned long)&probe)
+        : "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "memory", "cc");
+    /* The frame, read back off the stack the CPU switched to.  Nothing has used that page since
+     * the handler left it, and the handler itself deliberately read nothing from it -- so this is
+     * the CPU's own writing, seen from outside the layout argument. */
+    if (probe.rsp_delivery != 0ull) {
+        const volatile u64 *frame = (const volatile u64 *)(unsigned long)probe.rsp_delivery;
+        u64 i;
+
+        for (i = 0; i < PC5_TSS64_PROBE_WORDS - 6ull; i++)
+            probe.frame[i] = frame[i];
+    }
+    delivered = pc5_tss64_probe_verdict(&g_tss64, &probe, &which);
+    idt64_set_gate_target(PC5_VECTOR_DOUBLE_FAULT, 0u);
+    serial64_write("status=");
+    serial64_write(delivered ? "ok" : "failed");
+    serial64_write(" reason=");
+    serial64_write(which);
+    serial64_write(" rsp=");
+    serial64_hex(probe.rsp_delivery);
+    serial64_write(" rsp-before=");
+    serial64_hex(probe.rsp_before);
+    serial64_write(" ist1=");
+    serial64_hex(probe.ist_top);
+    serial64_write(" resume=");
+    serial64_hex(probe.resume);
+    serial64_write(" gate-ist=");
+    serial64_dec(probe.gate_ist);
+    serial64_write(" df=");
+    serial64_dec((probe.flags_after & 0x400ull) != 0ull);
+    serial64_write(" frame=");
+    for (i = 0; i < PC5_TSS64_PROBE_WORDS - 6ull; i++) {
+        serial64_write(i == 0ull ? "" : ",");
+        serial64_hex(probe.frame[i]);
+    }
+    /* The canary is the negative control for the claim that matters most.  A delivery that
+     * silently used the ordinary stack would still show a plausible RSP if the IST were wired
+     * to it; it would also, for a frame of 40 bytes, be unlikely to touch this word -- so the
+     * proof of "the interrupt stack is a different stack" is that the fault did *not* arrive on
+     * the one we were using.  Kept volatile so the compiler cannot fold the comparison away or
+     * keep the value in a register the handler never touched. */
+    serial64_write(" stack-intact=");
+    serial64_write(canary == 0xC0FFEE1234567890ull ? "1" : "0");
+    /* The frame the CPU left behind, dumped as it sits in memory.  The handler above records
+     * three of these words through fixed offsets, and the offsets are exactly the kind of thing
+     * two files can each get self-consistently wrong about -- so the raw quads go in the log too,
+     * with `resume=` as the needle: whichever word equals the address after the `int` is the RIP,
+     * and a report of the frame's layout that disagrees with the dump is a bug in the dump. */
+    serial64_write(" gate-restored=");
+    serial64_write(idt64_gate_uses_default_stub(PC5_VECTOR_DOUBLE_FAULT) ? "1" : "0");
     serial64_write("\n");
 }
 
@@ -994,5 +1144,15 @@ static void continue_on_handed_stack(void *argument)
     /* Every mandatory check passed; only now is the marker emitted. */
     serial64_write("PC5-64BIT-LONG-MODE-OK\n");
     serial64_write("PC5-64-DONE\n");
+
+    /* Last, and after the marker on purpose.  The probe below halts the CPU if it cannot
+     * complete, and an environment that cannot deliver a software interrupt at all -- which is
+     * what the emulator in `make stubtest64` turns out to be, proven by
+     * tests/test_unicorn_soft_int.py rather than asserted -- would otherwise take every check
+     * that follows down with it and report a broken boot.  Emitting DONE first says which of the
+     * two happened: a boot that reached the marker and then printed a failed probe line is a
+     * machine whose IST delivery was measured and did not match, and a run that stops at the
+     * marker with no probe line is a harness that never got that far. */
+    report_tss_ist_probe();
     halt_forever();
 }

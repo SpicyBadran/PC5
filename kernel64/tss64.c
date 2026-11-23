@@ -15,6 +15,8 @@
  */
 #include "tss64.h"
 
+#include <stddef.h>     /* offsetof, for the layout assertions the assembly depends on */
+
 /* The GDT the kernel lives on.  Slots 1 and 2 are the code and data selectors the IDT
  * gates name (0x08, 0x10) written the same way the loader wrote them, slot 3 is left
  * zero because a null selector is what a NULL pointer looks like, and slots 4 and 5 are
@@ -44,15 +46,33 @@ static u64 g_gdt[PC5_TSS64_GDT_SLOTS] __attribute__((aligned(64)));
 #define PC5_TSS_DESC_ACCESS 0x89ull     /* P=1, DPL=0, S=0, type=9 (available TSS) */
 #define PC5_TSS_DESC_FLAGS  0x20ull     /* in byte 6: L=1, so a 64-bit TSS; G, D/B, AVL are 0 */
 
+/* The two field offsets a CPU reads, and the reason they are written down here rather than
+ * derived.  Intel SDM vol. 3A, figure 7-2 ("64-Bit TSS Format"): link at 0 (a dword), RSP0 at
+ * 4, RSP1 at 12, RSP2 at 20, a reserved quadword at 28, IST1 at 36 growing to IST7 at 84, two
+ * reserved bytes at 92, and the I/O Map Base Address at 102 (0x66) as a *word*, with the whole
+ * segment 104 bytes -- which is why the descriptor limit is 103 and why the I/O field is not a
+ * dword: a dword at 102 would run past the segment the descriptor describes.
+ *
+ * IST1 is at 36 and not at 32 because the link field is four bytes, not eight: the RSP quads
+ * are laid out from offset 4, so after RSP2 the next free byte is 28 and the reserved quadword
+ * fills it.  Off by one slot, the CPU reads IST1 as the high half of one slot welded to the low
+ * half of the next -- `0x00004000_00000000` for the pair this kernel wrote -- and switches to
+ * an address that is not mapped, faulting while delivering the very fault the IST stack exists
+ * to survive.
+ *
+ * That is measured, on the first boot anyone asked a real CPU about: `int $8` under TianoCore
+ * raised a not-present, supervisor write #PF at the address of the `int`, and the store the
+ * probe had just made to the same page had succeeded, so the page was fine and the field was
+ * not.  Nothing upstream of it could see the difference -- the builder and its own checker read
+ * the same table, agreed with each other, and reported `ist1=0x3000`. */
 static u64 tss_ist_offset(u64 index)
 {
-    /* IST1 is the first field after the three RSPs and their reserved word. */
-    return 32ull + (index - 1ull) * 8ull;
+    return 36ull + (index - 1ull) * 8ull;
 }
 
 static u64 tss_iomap_offset(void)
 {
-    return 104ull - 4ull;
+    return 104ull - 2ull;
 }
 
 /* The 16 bytes of a TSS descriptor, built and taken apart here by the same table of
@@ -207,7 +227,7 @@ int pc5_tss64_build(struct pc5_mem64 *pool, struct pc5_tss64 *out)
         u64 value = PC5_TSS64_SIZE;
         u64 b;
 
-        for (b = 0; b < 4; b++)
+        for (b = 0; b < 2; b++)          /* a word: see the field sizes above */
             tss[offset + b] = (u8)((value >> (b * 8)) & 0xFFull);
     }
 
@@ -394,15 +414,13 @@ static u64 tss_qword(u64 base, u64 offset)
     return value;
 }
 
-static u32 tss_dword(u64 base, u64 offset)
+static u32 tss_word(u64 base, u64 offset)
 {
-    u64 value = 0;
-    u64 i;
+    const u8 *p = (const u8 *)(unsigned long)(base + offset);
 
-    for (i = 0; i < 4ull; i++)
-        value |= tss_byte(base, offset + i) << (i * 8ull);
-    return (u32)value;
+    return (u32)p[0] | ((u32)p[1] << 8);
 }
+
 
 /* Everything about the table and the memory that LTR is about to be handed, or has just been
  * handed, without executing an instruction:
@@ -502,15 +520,17 @@ int pc5_tss64_check_loaded(struct pc5_tss64 *state, int after_load)
         state->reason = "check-descriptor-limit";
         return 0;
     }
-    if (tss_qword(base, 32ull) != state->ist_top[PC5_TSS64_IST_DOUBLE_FAULT]) {
+    if (tss_qword(base, tss_ist_offset(PC5_TSS64_IST_DOUBLE_FAULT))
+        != state->ist_top[PC5_TSS64_IST_DOUBLE_FAULT]) {
         state->reason = "check-ist1-field";
         return 0;
     }
-    if (tss_qword(base, 40ull) != state->ist_top[PC5_TSS64_IST_NMI]) {
+    if (tss_qword(base, tss_ist_offset(PC5_TSS64_IST_NMI))
+        != state->ist_top[PC5_TSS64_IST_NMI]) {
         state->reason = "check-ist2-field";
         return 0;
     }
-    if (tss_dword(base, 100ull) != PC5_TSS64_SIZE) {
+    if (tss_word(base, tss_iomap_offset()) != PC5_TSS64_SIZE) {
         state->reason = "check-iomap-field";
         return 0;
     }
@@ -592,11 +612,18 @@ const char *pc5_tss64_busy_transition(const struct pc5_tss64 *state)
  * descriptor's limit, so any I/O access raises #GP instead of reading whatever follows the
  * structure in memory.  A 0 means the field was never written, and an IST stack behind an
  * unwritten TSS is the configuration this whole file exists to refuse. */
+u64 pc5_tss64_ist_live(const struct pc5_tss64 *state, u64 index)
+{
+    if (!state->built || state->desc_base == 0 || index < 1ull || index > 7ull)
+        return 0ull;
+    return tss_qword(state->desc_base, tss_ist_offset(index));
+}
+
 u64 pc5_tss64_iomap_base(const struct pc5_tss64 *state)
 {
     if (!state->built || state->desc_base == 0)
         return 0;
-    return (u64)tss_dword(state->desc_base, 100ull);
+    return (u64)tss_word(state->desc_base, tss_iomap_offset());
 }
 
 void pc5_tss64_release(struct pc5_mem64 *pool, struct pc5_tss64 *state)
@@ -620,6 +647,72 @@ void pc5_tss64_release(struct pc5_mem64 *pool, struct pc5_tss64 *state)
     state->built = 0;
     state->installed = 0;
 }
+
+/* The layout the assembly and this file have to agree on, checked at compile time in both
+ * directions: the size, because idt64.S writes through a pointer to this struct using literal
+ * offsets, and each offset, because a reordered field would leave every check below reading a
+ * neighbouring word and still finding a plausible number. */
+/* The layout the assembly and this file have to agree on, checked at compile time in both
+ * directions: the size, because idt64.S writes through a pointer to this struct using literal
+ * offsets, and each offset, because a reordered field would leave every check below reading a
+ * neighbouring word and still finding a plausible number.  Only three offsets are load-bearing in
+ * assembly -- which is the point of keeping the handler that small. */
+_Static_assert(sizeof(struct pc5_tss64_probe) == PC5_TSS64_PROBE_WORDS * sizeof(u64),
+               "pc5_tss64_probe must stay eleven plain words");
+_Static_assert(offsetof(struct pc5_tss64_probe, rsp_delivery) == 24,
+               "idt64.S stores RSP-on-delivery at +24");
+_Static_assert(offsetof(struct pc5_tss64_probe, resume) == 8,
+               "the trigger records the resume address at +8");
+_Static_assert(offsetof(struct pc5_tss64_probe, rsp_before) == 0,
+               "the trigger records the faulting RSP at +0");
+_Static_assert(offsetof(struct pc5_tss64_probe, ist_top) == 32,
+               "the trigger records the IST top at +32");
+
+int pc5_tss64_probe_verdict(const struct pc5_tss64 *state, const struct pc5_tss64_probe *probe,
+                            const char **which)
+{
+    const u64 top = probe->ist_top;
+    const u64 rsp = probe->rsp_delivery;
+    u64 i;
+    u64 rip_seen = 0ull;
+
+    (void)state;
+    *which = "ok";
+    if (top == 0ull) {
+        *which = "probe-ist-top-missing";
+        return 0;
+    }
+    if (rsp == 0ull) {
+        *which = "probe-not-delivered";
+        return 0;
+    }
+    if (rsp == probe->rsp_before) {
+        *which = "probe-stack-unchanged";
+        return 0;
+    }
+    if (rsp >= top || rsp + 40ull > top + PC5_TSS64_IST_PAGE) {
+        *which = "probe-frame-outside-ist-page";
+        return 0;
+    }
+    for (i = 0; i < 5ull; i++) {
+        if (probe->frame[i] == probe->resume)
+            rip_seen = 1ull;
+    }
+    if (rip_seen == 0ull) {
+        *which = "probe-frame-rip-missing";
+        return 0;
+    }
+    if (probe->gate_ist != PC5_TSS64_IST_DOUBLE_FAULT) {
+        *which = "probe-gate-ist-not-one";
+        return 0;
+    }
+    if ((probe->flags_after & 0x400ull) != 0ull) {
+        *which = "probe-df-flag-left-set";
+        return 0;
+    }
+    return 1;
+}
+
 
 u64 pc5_tss64_gdt_word(u64 index)
 {

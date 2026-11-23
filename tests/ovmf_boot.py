@@ -69,6 +69,7 @@ def _tss64_define(name, cast=int):
 PC5_TSS64_SIZE = _tss64_define("PC5_TSS64_SIZE")
 PC5_TSS64_TR_SELECTOR = _tss64_define("PC5_TSS64_SELECTOR")
 PC5_TSS64_IST_DOUBLE_FAULT = _tss64_define("PC5_TSS64_IST_DOUBLE_FAULT")
+PC5_TSS64_IST_PAGE = _tss64_define("PC5_TSS64_IST_PAGE")
 PC5_TSS64_IST_NMI = _tss64_define("PC5_TSS64_IST_NMI")
 
 
@@ -813,6 +814,32 @@ def _markers_x64(text, profile):
         "ist_gate_nmi": _number(text, r"PC5-64-TSS .*? ist-nmi=(\d+)"),
         "tr_reason": (re.search(r"PC5-64-TSS .*? reason=([a-z0-9-]+)", text).group(1)
                       if re.search(r"PC5-64-TSS .*? reason=([a-z0-9-]+)", text) else None),
+        # The delivery probe, which is the consequence the whole TSS exists for.  The frame dump
+        # is kept as the list of words it holds rather than as one flattened string, because the
+        # claim this gate makes about it is "the resume address is somewhere in the frame" -- a
+        # layout-independent statement, and the only one that survives a CPU that pushes an error
+        # code, or does not.
+        "probe_status": (re.search(r"PC5-64-TSS-DF status=(\w+)", text).group(1)
+                         if re.search(r"PC5-64-TSS-DF status=(\w+)", text) else None),
+        "probe_reason": (re.search(r"PC5-64-TSS-DF status=\w+ reason=([a-z0-9-]+)", text).group(1)
+                         if re.search(r"PC5-64-TSS-DF status=\w+ reason=([a-z0-9-]+)", text)
+                         else None),
+        "probe_rsp": _hex(text, r"PC5-64-TSS-DF .*? rsp=(0x[0-9a-f]+)"),
+        "probe_rsp_before": _hex(text, r"PC5-64-TSS-DF .*? rsp-before=(0x[0-9a-f]+)"),
+        "probe_ist1": _hex(text, r"PC5-64-TSS-DF .*? ist1=(0x[0-9a-f]+)"),
+        "probe_resume": _hex(text, r"PC5-64-TSS-DF .*? resume=(0x[0-9a-f]+)"),
+        "probe_gate_ist": _number(text, r"PC5-64-TSS-DF .*? gate-ist=(\d+)"),
+        "probe_df": _number(text, r"PC5-64-TSS-DF .*? df=(\d+)"),
+        "probe_frame": [int(word, 16) for word in
+                        re.findall(r"0x[0-9a-f]+",
+                                   re.search(r"PC5-64-TSS-DF .*? frame=([0-9a-fx,]+)", text).group(1))]
+                        if re.search(r"PC5-64-TSS-DF .*? frame=([0-9a-fx,]+)", text) else None,
+        "probe_stack_intact": (re.search(r"PC5-64-TSS-DF .*? stack-intact=(\d)", text).group(1)
+                               if re.search(r"PC5-64-TSS-DF .*? stack-intact=(\d)", text)
+                               else None),
+        "probe_gate_restored": (re.search(r"PC5-64-TSS-DF .*? gate-restored=(\d)", text).group(1)
+                                if re.search(r"PC5-64-TSS-DF .*? gate-restored=(\d)", text)
+                                else None),
     }
 
 
@@ -1262,6 +1289,21 @@ def x64_stages():
               "the I/O-map base sits past the descriptor limit, as the TSS was written",
               lambda seen, ctx: (seen["tr_iomap"] == PC5_TSS64_SIZE,
                                  "iomap=%r" % seen["tr_iomap"])),
+        # The last row, and the only one that is about an event rather than a configuration.
+        # Everything above this says the TSS is installed the way an installed TSS should be; a
+        # kernel could satisfy all of it and still deliver a fault onto the stack that just
+        # overflowed, because what a CPU actually does with an IST field is not written in any of
+        # those fields.  So this row reads the numbers a deliberately raised #DF left behind: the
+        # stack the handler woke up on, the frame the CPU pushed there, and the state of a flag the
+        # handler was obliged to clear.
+        #
+        # Written as a conjunction of separable facts, and as a *decline* rather than a failure
+        # when TR was never loaded, because those are different statements: `status=skipped` with
+        # `tr=not-loaded` is a kernel refusing to measure a stack nobody will use, and it must not
+        # be reported the same way as a delivery that went to the wrong place.
+        Stage("a #DF taken by the CPU was delivered on the IST1 stack",
+              "the double-fault probe found its frame on the interrupt stack, not the faulting one",
+              lambda seen, ctx: _probe_delivered(seen)),
     ]
 
 
@@ -1275,6 +1317,54 @@ WARM_STAGES = [
 
 def profile_stages(profile):
     return x64_stages() if profile.key == "x64" else ia32_stages()
+
+
+def _probe_delivered(seen):
+    """Judge the #DF delivery probe from the numbers the boot reported.
+
+    Five things have to hold, and each rules out a different way the line could be printed and the
+    machine still be wrong: the handler woke up on a *different* stack than the one the fault was
+    raised on (a CPU that ignores the IST field leaves them equal); that stack is inside the page
+    the TSS names (a value copied from a neighbouring field, as a TSS whose IST1 sat at the wrong
+    offset did once, sends the delivery somewhere unmapped and the probe never returns to be
+    judged at all); the frame at that address contains the address the trap was taken at (the one
+    test here that distinguishes a real push by the CPU from a plausible number in a log); the
+    gate's IST field was the slot the TSS was built for, so that the two halves are quoting the
+    same arrangement; and DF is clear afterwards, because a probe that left it set would convert
+    the next fault into a real double fault and so would have made the machine worse to look at it.
+    """
+    if seen["probe_status"] is None:
+        return False, "no PC5-64-TSS-DF line: the boot never reached the probe"
+    if seen["probe_status"] == "skipped":
+        if seen["tr_state"] == "loaded":
+            return False, "skipped with TR loaded: the probe declined for reason=%r" % (
+                seen["probe_reason"],)
+        return True, "declined before TR was loaded (reason=%r)" % (seen["probe_reason"],)
+    rsp, before, top = seen["probe_rsp"], seen["probe_rsp_before"], seen["probe_ist1"]
+    frame, resume = seen["probe_frame"], seen["probe_resume"]
+    detail = ("status=%r reason=%r rsp=%r rsp-before=%r ist1=%r resume=%r frame=%r gate-ist=%r "
+              "df=%r stack-intact=%r gate-restored=%r"
+              % (seen["probe_status"], seen["probe_reason"], rsp, before, top, resume, frame,
+                 seen["probe_gate_ist"], seen["probe_df"], seen["probe_stack_intact"],
+                 seen["probe_gate_restored"]))
+    if seen["probe_status"] != "ok":
+        return False, detail
+    if rsp is None or before is None or top is None or resume is None or not frame:
+        return False, "a field the verdict depends on was not printed: " + detail
+    if rsp == before:
+        return False, "the handler ran on the stack that faulted: " + detail
+    if not (top - PC5_TSS64_IST_PAGE <= rsp < top):
+        return False, "the frame is not inside the IST1 page: " + detail
+    if resume not in frame:
+        return False, "no word of the frame is the address the trap was taken at: " + detail
+    if seen["probe_gate_ist"] != PC5_TSS64_IST_DOUBLE_FAULT:
+        return False, "the gate named a different slot than the TSS: " + detail
+    if seen["probe_df"] != 0:
+        return False, "the probe left DF set: " + detail
+    if seen["probe_stack_intact"] != "1" or seen["probe_gate_restored"] != "1":
+        return False, "the probe damaged the stack it left or the gate it borrowed: " + detail
+    return True, detail
+
 
 
 def _in_machine(seen, ctx, key):

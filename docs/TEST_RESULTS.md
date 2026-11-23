@@ -3048,6 +3048,13 @@ IST1/IST2 are allocated and validated but no exception has yet been shown to run
 serial logs for all four boots, `summary.json`, and a `verification.sh` that re-derives 35
 assertions from them: `docs/evidence/2026-11-23-64bit-boot-gate/`.
 
+*Superseded on 2026-11-24, and left as written above:* §30 loaded TR, and §31 delivered a real
+double fault onto IST1. `tr=not-loaded reason=ltr-unverifiable-here` was what the boots printed at
+that commit; the paragraph describes the run it records, and the correction belongs to the later
+sections rather than to this one. Note the one sentence that has not changed meaning: *no* claim
+about an exception running on the IST stacks was made in §29 even though the fields were all
+present, which is the standard §31 was written to meet.
+
 
 ## 29. The 64-bit kernel image became a format, and three gates enforce it
 
@@ -3206,3 +3213,78 @@ consequence that matters most: that a `#DF` or an NMI is *delivered* on those st
 now armed and the TSS is live, which is the precondition; the delivery evidence is PR B and PR C.
 `make check`, both firmware gates, and the Milestone 8 evidence directory are owed a run at the
 commit that lands them, and none of this is claimed until they are green.
+
+
+## 31. A double fault, taken on purpose, lands on the IST stack — and finds the second TSS bug
+
+**Run:** 2026-11-24, workspace on `arena/5e36f38b-pc5`, QEMU 11.0.2 with the EDK II OVMF from the
+same package, TCG only; Unicorn 2.1.4 for the stub.  **Milestone 8, PR B.**  §30 made the TSS live;
+this is the measurement the TSS exists to make, and it did not go as designed.
+
+**What was built.** `report_tss_ist_probe()` in `kernel64/main.c`: it checks the two preconditions
+it can check (the #DF gate's IST field is 1; the IST1 the *loaded TSS* names, read back through
+the descriptor, is the page the pool granted), stores a sentinel 256 bytes below that page top,
+repoints the IDT's #DF gate at a returning handler in `kernel64/idt64.S`, records its own RSP and
+resume address, executes `int $8`, and then reads back what the handler found.  `pc5_tss64_probe_verdict()` in `kernel64/tss64.c` judges the recorded numbers by seven named
+refusals.  The handler records exactly one number — the RSP it was entered with — and the frame is
+dumped afterwards from memory by the C side, because which quadword holds the saved RIP depends on
+whether the CPU pushed an error code and on whether it saved SS and RSP.
+
+**The first boot refused, and the refusal was the point.** `int $8` under TianoCore raised a
+not-present, supervisor, write `#PF` at the address of the `int` itself.  The sentinel store to the
+same page had just succeeded, so the *page* was fine and the *field* was not: the kernel wrote IST1
+at offset 32 and IST2 at 40, while a 64-bit CPU reads IST1 at **36** (SDM vol. 3A figure 7-2 — the
+reserved quadword at 28 is real, because the three RSP slots start at offset 4 under a four-byte
+link field).  What the CPU had been handed was therefore the high half of IST1 welded to the low
+half of IST2 — for those two frames, `0x0000400000000000`, an address no page table maps.  The
+I/O-map base was a related half-error: written and read as a dword at 100 rather than the word at
+102, which agreed with itself and disagreed with the architecture.
+
+**Three files, one shared mistake.** The builder wrote at 32, `pc5_tss64_check_loaded` read back
+through the same offset helper, and `tests/test_tss64.py` carried `IST1_OFFSET = 32` with the
+comment "the AMD64 TSS: IST1 is the first field after RSP0..2 + RSV".  Every check agreed, because
+every check asked the kernel what the kernel thought.  This is the same failure mode as §30's
+selector, one layer down — and the reason the file now states the layout as a field table
+transcribed from the SDM, with each field's width, instead of deriving it from the header.
+
+**The second thing that was wrong is worse.** An earlier revision of the handler copied the frame's
+RIP and RFLAGS out at fixed offsets.  On the soft-interrupt path the word at +16 is not the RIP and
+the word at +24 is the *saved stack pointer*, so the probe installed `0xe1f9c80` as RFLAGS and
+reported `frame-rip=0x38` — a code selector, in exactly the shape that would be believed.  The
+machine survived because the bits happened to be ignorable.  The handler no longer reads the frame
+at all; the flags are corrected in place (`pushfq; andq $~0x400, (%rsp); popfq`) so DF is cleared
+without any claim about layout, and the frame is read back from memory afterwards, where a wrong
+offset cannot corrupt anything.
+
+| Command | Result |
+| --- | --- |
+| cold boot of `make PC5_UEFI=64 iso` under TianoCore | `PC5-64-TSS-DF status=ok reason=ok rsp=0x2fd8 rsp-before=0xe1f9c70 ist1=0x3000 resume=0x10245c gate-ist=1 df=0 frame=0x10245c,0x38,0x2,0xe1f9c70,0x30 stack-intact=1 gate-restored=1` |
+| `make stubtest64` | **`50/50 checks passed`** (was 49; the new check is the emulator-limitation tripwire below) |
+| `python3 -m unittest tests.test_tss64` (venv) | **OK, 20 tests** — +6: the probe verdict battery (7 refusals, each reached by damaging one field), the frame-scan test, the "verdict writes no state" test, the SDM field-table decode, and two mutants |
+| `python3 -m unittest tests.test_unicorn_soft_int` (venv) | **OK, 3 tests** |
+| `python3 -m unittest tests.test_ovmf_gate_profiles` (venv) | **OK, 51 tests** — +2: the five ways the probe line can be printed and still be wrong, and the decline-vs-refusal rule |
+| `make PC5_UEFI=64 ovmf-test`, `make ovmf-test` | recorded in the Milestone 8 evidence directory at the commit that lands them |
+
+**The two refusals worth reading closely.** `probe-stack-unchanged`: if the CPU ignores the gate's
+IST field, the frame lands on the stack that just overflowed and *every other field on the line
+still reads `ok`* — that row is the reason the other rows are allowed to mean anything.
+`probe-frame-rip-missing`: a stack pointer is a number, but a frame containing the address the trap
+was taken at is a thing a CPU did.  That check is what stops this being a log line about a
+measurement instead of a measurement.
+
+**`tests/test_unicorn_soft_int.py`, and why the emulator gets its own test.** The probe cannot run
+in the stub: Unicorn does not deliver a guest software interrupt to a guest IDT at all, so the run
+faults at the `int`.  That is a claim about the *tool*, and §30 is the record of what an untested
+claim about a tool costs, so the file tests it: it boots the shipped image with the harness's stop
+markers cleared, finds the single `cd 08` in the built file (the count is itself asserted), and
+requires the emulator's fault to land on that instruction — so the refusal is demonstrably in the
+interrupt path and not in the TSS, the GDT, or a selector.  When Unicorn learns this, that test
+fails, the stub gains a real IST measurement, and the stub check that says "unreachable here, by
+measurement" has to become an assertion on the probe's fields.
+
+**Not claimed.** An NMI has been delivered on IST2: QMP's `inject-nmi` is PR C, and nothing here
+shows anything about vector 2 except that its gate names slot 2 and the TSS field behind it reads
+back correctly at the architectural offset.  A `#DF` arriving spontaneously because a real fault
+could not be delivered is also not claimed — the probe invited the fault; a real double fault
+pushes an error code first, which is exactly the layout difference this design refuses to depend
+on.  And no claim here is backed by CI: none is granted, and none is asserted.

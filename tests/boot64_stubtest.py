@@ -280,6 +280,19 @@ def checks_for(trace, expect_success=True):
     check("the TSS's own I/O-map base says there is no I/O permission map",
           fields(serial, tss_line, "iomap") == "104",
           f"iomap={fields(serial, tss_line, 'iomap')}")
+    # The delivery probe is deliberately *not* run here, and the reason is a measured property of
+    # the tool rather than a story about the kernel: Unicorn does not deliver a guest software
+    # interrupt to the guest's own IDT at all, which tests/test_unicorn_soft_int.py demonstrates by
+    # faulting the shipped image at the address of its single `int $8` -- read out of the built
+    # file, not written here.  That is the same shape of claim the `ltr` note carried for three
+    # milestones, and the difference is that this one is tested against the emulator: when Unicorn
+    # learns to do it, that test fails and the stub gains a real IST measurement, at which point the
+    # check below turns into an assertion on the probe's fields.
+    check("the delivery probe is unreachable in this emulator, by measurement not by assumption",
+          "PC5-64-TSS-DF" not in serial and "PC5-64-DONE" in serial,
+          "the run stops at the marker, before the probe; if a probe line ever appears here the "
+          "emulator has changed and tests/test_unicorn_soft_int.py must be updated with it")
+
     check("no exception was reported by the kernel across the boot that installed it",
           "PC5-64-EXCEPTION" not in serial,
           "the handler prints this line for any delivered fault, so its absence covers "

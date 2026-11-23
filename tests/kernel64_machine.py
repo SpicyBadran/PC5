@@ -298,20 +298,43 @@ class Machine:
         entry = self.entry()
         uc.reg_write(UC_X86_REG_RIP, entry)
         error = None
+        fault_rip = None
         try:
             uc.emu_start(entry, 0, 0, max_instructions)
         except UcError as exc:
-            error = f"{exc} at {uc.reg_read(UC_X86_REG_RIP):#x}"
-        return dict(serial=self.serial, stopped_on=self.stopped_on, error=error)
+            fault_rip = uc.reg_read(UC_X86_REG_RIP)
+            # The address comes back as a number as well as inside the sentence, because a caller
+            # that wants to know *where* the guest stopped should not have to parse wording that
+            # belongs to the harness.  `tests/test_unicorn_soft_int.py` is the reason: it has to
+            # compare this address with one read out of the built image, and a format change here
+            # must not be able to turn that comparison into a pass.
+            error = f"{exc} at {fault_rip:#x}"
+        return dict(serial=self.serial, stopped_on=self.stopped_on, error=error,
+                    fault_rip=fault_rip)
 
 
 def run_kernel(kernel, memmap=None, paging=True, rsdp_signature=RSDP_SIGNATURE,
-               cpuid=None, rsdp_bytes=None, rsdp_address=None, **overrides):
+               cpuid=None, rsdp_bytes=None, rsdp_address=None, stop_markers=None,
+               max_instructions=None, **overrides):
+    """Boot the kernel in the harness and report what it printed.
+
+    `stop_markers` replaces the default pair, and passing `()` means "do not stop early": the
+    harness's markers are how an ordinary run ends, so clearing them is the only way to ask what
+    the guest does *after* the boot completes -- which is where the IST delivery probe lives, and
+    where an environment that cannot take a software interrupt shows it.  With no markers the run
+    is bounded by `max_instructions` instead, and a caller that expects the guest to fault must
+    say how far to let it go rather than inherit the boot's budget.
+    """
     machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
                       rsdp_bytes=rsdp_bytes, rsdp_address=rsdp_address)
     if memmap is not None:
         overrides.setdefault("memmap_bytes", DESC_SIZE * len(memmap))
+    if stop_markers is not None:
+        machine.stop_markers = tuple(stop_markers)
+    run_kwargs = {}
+    if max_instructions is not None:
+        run_kwargs["max_instructions"] = max_instructions
     result = machine.run(pack_boot_info(**overrides), paging=paging,
-                         memmap=memmap)
+                         memmap=memmap, **run_kwargs)
     result["machine"] = machine
     return result
