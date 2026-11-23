@@ -3648,3 +3648,34 @@ The README's `1152/1152 @ 86b862f` row is deliberately left alone: that is what 
 validation run measured, and re-recording it needs the QEMU this workspace no longer has.  A count in
 a document belongs to the revision it was measured at; the honest move when the two drift is to say
 so, which is what this paragraph is.
+
+
+## 36. Naming note: "Milestone 8" in §29–§35 is a delivery ordinal, not roadmap id `M8`
+
+The live review of #49 caught a collision the documents had created between themselves.  The PR was
+titled "Milestone 8", and §29–§35 label their packages "Milestone 8, PR A" through "PR E"; but in
+`docs/architecture/roadmap.json`, `M8` is *Release-quality PC5: installer, updates, rollback,
+Linux-tier exit*, whose state is `not_started`.  Both statements were true and neither was about the
+other thing: the sections number the **delivery packages this project has shipped**, the roadmap
+numbers **milestones by workstream**, and nothing in the tree said so.  A reader who took "Milestone
+8" as a roadmap id would conclude this PR shipped an installer, which it does not.
+
+The record is corrected where it is machine-readable rather than by rewriting prose.  §29–§35 keep
+their labels and their numbers untouched — they are dated measurements, and "the eighth package" is
+what they said at the time — and `roadmap.json` now names where the evidence for this package
+actually lives: `M1c` (UEFI boot path under real firmware) gains
+`docs/evidence/2026-11-23-64bit-boot-gate/README.md`,
+`docs/evidence/2026-11-23-64bit-genuine-ovmf-boot/README.md`,
+`docs/evidence/2026-11-24-kernel-image-header/README.md`, the header design document and
+`tests/test_kimage64.py`; `M2a` (CPU execution environment) gains
+`docs/evidence/2026-11-24-tss-delivery/README.md` and `tests/test_kernel64.py`.  The TSS/IST
+allocation evidence stays under `M2b`, where the 2026-11-22 page already sat.
+
+**No state moved, and that is the part with teeth.** `M2a` and `M2b` stay `in_progress` because their
+acceptance lists still hold items this package does not provide: a second CPU brought up through the
+same path, a per-process address space with a test that a write to a read-only page faults, and a
+DMA-visible buffer round-tripped through a driver.  `M8` stays `not_started`: there is no installer
+here, no update slot, no rollback.  The PR title was changed to carry both the package ordinal and
+the roadmap ids it advances, so the merge-time record matches the roadmap; the rule going forward is
+that a claim which could be read as a gating statement cites the **roadmap id**, and the delivery
+ordinal is treated as a filing number.

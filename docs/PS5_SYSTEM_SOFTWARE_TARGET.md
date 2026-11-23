@@ -28,8 +28,26 @@ package is the **target input of the mission**, not a curiosity.
 | declared object id | `42ea0e5aad1361e098837d40157863c4c519f0bbc66eb03c04dbaaf339b063fb` | pointer content |
 | declared size | **1,423,697,408 bytes** (≈ 1.33 GiB) | pointer content |
 | object present in LFS storage | **yes, as measured on 2026-11-16**: HTTP 200 with a `download` action for that oid and size, without credentials | `POST /SpicyBadran/pc5.git/info/lfs/objects/batch` (read-only metadata query; no payload fetched) |
+| object present in LFS storage, **re-measured 2026-11-24** | **no — the pointer is dangling**: HTTP 200 carrying `"error": {"code": 404, "message": "Object does not exist on the server"}`, and no `actions` key, returned identically without credentials and with an authenticated token | `curl -s -X POST https://github.com/SpicyBadran/PC5.git/info/lfs/objects/batch -H "Accept: application/vnd.git-lfs+json" -H "Content-Type: application/vnd.git-lfs+json" -d '{"operation":"download","transfers":["basic"],"objects":[{"oid":"sha256:42ea0e5aad1361e098837d40157863c4c519f0bbc66eb03c04dbaaf339b063fb","size":1423697408}]}'` |
 | payload present in this checkout | **no** | `tools/firmware.py analyze` → `size 135 bytes`, `kind unidentified`, entropy 4.924 |
 | consumed by any tool in the tree | **no** | no reference outside documentation |
+
+The two LFS rows above are not a contradiction and neither has been overwritten:
+the 2026-11-16 measurement said the object *was* in storage, and the 2026-11-24
+re-measurement says it is not. What sits between them is a provenance change in the
+remote, not in this checkout. Two consequences are worth stating plainly. First, the
+baseline this milestone exists to describe can no longer be re-derived by anyone from
+the repository — the declared input is now unreachable, so every content claim stays
+`NOT VERIFIED` for a stronger reason than policy. Second, the tree and the remote are
+now unambiguously consistent with ADR-022 and with the roadmap's own exclusion of Sony
+firmware redistribution: what the repository asserts about the package is a pointer, an
+object id, a size, and nothing else. `tools/firmware.py analyze` still reports `size 135
+bytes`, `kind unidentified`, entropy 4.924 for the file in the tree, and
+`tests/test_product_identity.py` keeps asserting that the file must be under 1 KiB, that
+its oid and size agree with this document, and that no `.pup`/`.self`/`.prx`/`.pkg`
+payload or oversized blob appears anywhere in the tracked trees. Re-run the batch query
+above to re-establish which side of "does not exist" the answer is on; do not paste a
+payload into the tree to make the row read better.
 
 The pointer is not the package. Every statement in this repository about the
 package's *contents* is therefore `NOT VERIFIED`, and stays that way until the
