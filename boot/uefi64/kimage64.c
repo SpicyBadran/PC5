@@ -89,8 +89,22 @@ static int is_power_of_two(u32 v)
     return v != 0u && (v & (v - 1u)) == 0u;
 }
 
-const char *pc5_kimage64_validate(const u8 *image, u64 size, u64 loaded_at,
-                                  struct pc5_kimage64 *out)
+/* Everything about the *description*, and nothing about the bytes it describes.
+ *
+ * Split out of `pc5_kimage64_validate` rather than copied, for the reason the format
+ * documents: a second implementation that agrees with the first only by luck is how this
+ * milestone's first two bugs survived.  The running kernel calls this one, because the
+ * payload sum it would need in order to use the full validator is not computable by it --
+ * see the `RUNTIME USE` note in `pc5_kimage64.h`.
+ *
+ * `size` is not "the length of the buffer" here, though it is that too: it is *the claim
+ * being checked against the header*.  The loader passes the number of bytes it read from the
+ * medium; the kernel passes the `kernel_size` it was handed.  Both are then compared against
+ * `image_size`, which the image carries itself, so a disagreement is a refusal at whichever
+ * decision point noticed -- and neither caller is comparing a value with itself.
+ */
+const char *pc5_kimage64_validate_header(const u8 *image, u64 size, u64 loaded_at,
+                                        struct pc5_kimage64 *out)
 {
     u64 image_size;
     u64 entry;
@@ -165,9 +179,6 @@ const char *pc5_kimage64_validate(const u8 *image, u64 size, u64 loaded_at,
             return "kimage64-reserved";
     }
 
-    if (le64(image + PC5_KIMAGE64_OFF_CHECKSUM) != pc5_kimage64_payload_checksum(image, size))
-        return "kimage64-checksum";
-
     out->header_version = PC5_KIMAGE64_VERSION;
     out->header_size = header_size;
     out->image_size = image_size;
@@ -180,5 +191,28 @@ const char *pc5_kimage64_validate(const u8 *image, u64 size, u64 loaded_at,
     out->bss_size = le64(image + PC5_KIMAGE64_OFF_BSS_SIZE);
     out->checksum = le64(image + PC5_KIMAGE64_OFF_CHECKSUM);
     out->entry_address = loaded_at + entry;
+    return 0;
+}
+
+const char *pc5_kimage64_validate(const u8 *image, u64 size, u64 loaded_at,
+                                  struct pc5_kimage64 *out)
+{
+    const char *reason = pc5_kimage64_validate_header(image, size, loaded_at, out);
+
+    if (reason)
+        return reason;
+    /* Last, and only over a header that has already been bounded and CRC-checked: this is
+     * the one read that walks the whole buffer, and a payload sum computed over a length
+     * out of a corrupt header is a sum of nothing. */
+    if (le64(image + PC5_KIMAGE64_OFF_CHECKSUM) != pc5_kimage64_payload_checksum(image, size)) {
+        /* A refusal has to leave nothing usable behind, and the header half has already
+         * filled `out` -- so it is cleared again here rather than left holding a valid
+         * description of an image that failed its own checksum. */
+        u8 *bytes = (u8 *)out;
+
+        for (u64 i = 0; i < (u64)sizeof(*out); i++)
+            bytes[i] = 0u;
+        return "kimage64-checksum";
+    }
     return 0;
 }

@@ -169,6 +169,7 @@ $(BUILD)/kernel64/pc5-64.elf: $(BUILD)/kernel64/start.o $(BUILD)/kernel64/main.o
                               $(BUILD)/kernel64/mem64.o \
                               $(BUILD)/kernel64/tss64.o \
                               $(BUILD)/kernel64/kimage64_head.o \
+                              $(BUILD)/kernel64/kimage64.o \
                               $(BUILD)/kernel64/idt64.S.o kernel64/kernel64.ld
 	$(LD) -m elf_x86_64 -T kernel64/kernel64.ld -nostdlib -o $@ $(filter %.o,$^)
 
@@ -197,11 +198,15 @@ $(BUILD)/kernel64/uefi64_main.o: boot/uefi64/uefi64_main.c $(LOADER64_HDR) | $(B
 $(BUILD)/kernel64/bootx64-64.o: boot/uefi64/bootx64.S | $(BUILD)/kernel64
 	$(CC) -m64 -c $< -o $@
 
-# The image-header validator, compiled twice on purpose: once into BOOTX64.EFI, where it
-# decides whether the kernel is jumped to, and once on the host by
-# `tests/test_kimage64.py`, which feeds it every malformed header the format can be handed
-# and expects a named refusal.  One implementation, two rigs -- which is the only way the
-# host test says anything about what the loader does.
+# The image-header validator, compiled three times on purpose: once into BOOTX64.EFI, where
+# it decides whether the kernel is jumped to; once into KERNEL64.BIN, where the kernel re-runs
+# the header half of the same rules against its own bytes and against the size it was handed
+# (see `validate_image_self`); and once on the host by `tests/test_kimage64.py`, which feeds it
+# every malformed header the format can be handed and expects a named refusal.  One
+# implementation, three rigs -- which is the only way the host test says anything about what
+# either boot-time caller does.  That file also asserts both link lines name this object,
+# because a kernel linking its own copy of the rules would pass the host battery and prove
+# nothing about the loader it quietly disagrees with.
 $(BUILD)/kernel64/kimage64.o: boot/uefi64/kimage64.c $(LOADER64_HDR) | $(BUILD)/kernel64
 	$(CC) $(UEFI_CFLAGS) -Werror -Ikernel64/include -c $< -o $@
 

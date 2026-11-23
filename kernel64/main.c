@@ -24,6 +24,7 @@
 #include "timer64.h"
 #include "madt64.h"
 #include "tss64.h"
+#include "pc5_kimage64.h"
 #include "serial64.h"
 
 #define CR0_PG (1ULL << 31)
@@ -108,6 +109,69 @@ static void validate_header(const struct pc5_boot64 *bi)
         fail("bootinfo-size");
     if (!(bi->flags & PC5_BOOT64_F_MEMMAP))
         fail("bootinfo-no-memmap");
+}
+
+/* The image's own account of itself, read after the jump.
+ *
+ * Every other check on this path is the *loader's* word: `bi->kernel_base` and
+ * `bi->kernel_size` come from the structure the loader filled in, and the range checks above
+ * prove only that the claim is consistent with the memory map.  A handover that described a
+ * different amount of the file than the file describes -- one byte short, or rounded to the
+ * wrong thing -- passes every check that existed before this function, because each one reads
+ * the same number out of the same structure.
+ *
+ * The header at the front of the image is an independent description of the same object: it
+ * is written by the build (`tools/kimage64.py`, from the ELF's own symbols), it travels inside
+ * the bytes that were read, and nothing in the handover can change what it says.  So the two
+ * are compared, by the code that validates the header for the loader as well
+ * (`pc5_kimage64_validate_header`), against the field the format defines rather than against a
+ * re-reading of this file's rules.
+ *
+ * Only the header half is recomputed here, and it is only the header half that *can* be: the
+ * payload checksum covers `.bss`, and `_start64` has already cleared `.bss` and adopted a stack
+ * out of it, so by this point part of the checked range is in use as a stack.  A runtime payload
+ * sum would be measuring the ordering of the boot code, not the integrity of the load.  What is
+ * genuinely re-derived is `header_crc`, over 128 bytes in `.head` that nothing writes.
+ *
+ * The line is printed whatever the verdict, and only then refused, because a boot that died
+ * before printing anything leaves a refusal name with no numbers behind it.  What it prints
+ * differs: on success, `image=` and `handover=` side by side, which is the pair a reader can
+ * check by eye; on refusal, only `handover=`, because the validator zeroes its output on every
+ * failure path, and echoing those zeros back as `image=0x0 crc=ok` would put a success field
+ * on a line that says `fail`.
+ */
+static void validate_image_self(const struct pc5_boot64 *bi)
+{
+    struct pc5_kimage64 head;
+    const u8 *image = (const u8 *)(unsigned long)bi->kernel_base;
+    const char *reason = pc5_kimage64_validate_header(image, bi->kernel_size,
+                                                      bi->kernel_base, &head);
+
+    serial64_write("PC5-64-KIMAGE status=");
+    serial64_write(reason ? "fail" : "ok");
+    serial64_write(" reason=");
+    serial64_write(reason ? reason : "ok");
+    if (reason) {
+        /* Only the claim survives a refusal.  `out` is zeroed by the validator on every
+         * failure path -- that is its contract, so a caller cannot act on a half-read
+         * description -- and echoing those zeros as `image=0x0 crc=ok` would put a success
+         * field on a line that says `fail`.  The handover number is printed because it came
+         * from the boot info rather than from the header, and it is the half a reader needs
+         * in order to see what the header disagreed with. */
+        serial64_write(" handover=");
+        serial64_hex(bi->kernel_size);
+        serial64_write("\n");
+        fail(reason);
+    }
+    serial64_write(" image=");
+    serial64_hex(head.image_size);
+    serial64_write(" handover=");
+    serial64_hex(bi->kernel_size);
+    serial64_write(" bss=");
+    serial64_hex(head.bss_size);
+    serial64_write(" entry=");
+    serial64_hex(head.entry_offset);
+    serial64_write(" crc=ok\n");
 }
 
 /* Stage 2: the map's address is checked arithmetically, then it is read and every
@@ -1021,6 +1085,7 @@ void kmain(struct pc5_boot64 *bi)
     validate_header(bi);
     g_map = validate_memmap(bi);
     validate_mandatory_ranges(bi, &g_map);
+    validate_image_self(bi);
 
     /* The loader's stack is now known to be inside the map, page-aligned and
      * inside a range the map calls loader-owned.  Adopting it is the first moment it

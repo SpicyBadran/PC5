@@ -62,20 +62,23 @@ _PROBE = r"""
  * boot path rather than a test of a reimplementation of it. */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "efi.h"
 #include "pc5_kimage64.h"
 
 int main(int argc, char **argv)
 {
     struct pc5_kimage64 info;
-    unsigned long long loaded_at;
+    unsigned long long loaded_at, claimed;
+    int header_only;
     const char *reason;
     unsigned char *data;
     long length;
     FILE *handle;
 
-    if (argc != 3) {
-        fprintf(stderr, "usage: probe <image> <loaded-at>\n");
+    if (argc != 3 && argc != 4 && argc != 5) {
+        fprintf(stderr,
+                "usage: probe <image> <loaded-at> [full|header] [size-the-caller-claims]\n");
         return 2;
     }
     handle = fopen(argv[1], "rb");
@@ -89,12 +92,23 @@ int main(int argc, char **argv)
         return 2;
     fclose(handle);
     loaded_at = strtoull(argv[2], 0, 0);
-    reason = pc5_kimage64_validate(data, (u64)length, (u64)loaded_at, &info);
+    /* Two entry points, one binary, so "the header half agrees with the full validator" is a
+     * comparison between the two callers' code paths rather than between this file's prose.
+     *
+     * `claimed` defaults to the file length, which is what the loader passes (the bytes it read).
+     * Overriding it is how the *kernel's* call is reproduced: it passes the `kernel_size` it was
+     * handed, so the value under test is a claim rather than a measurement. */
+    header_only = argc > 3 && strcmp(argv[3], "header") == 0;
+    claimed = argc > 4 ? strtoull(argv[4], 0, 0) : (unsigned long long)length;
+    reason = header_only
+        ? pc5_kimage64_validate_header(data, (u64)claimed, (u64)loaded_at, &info)
+        : pc5_kimage64_validate(data, (u64)claimed, (u64)loaded_at, &info);
     if (reason) {
-        printf("refuse %s\n", reason);
+        printf("refuse %s mode=%s\n", reason, header_only ? "header" : "full");
         return 1;
     }
-    printf("accept entry=%llx entry_address=%llx image=%llx bss=%llx\n",
+    printf("accept mode=%s claimed=%llx entry=%llx entry_address=%llx image=%llx bss=%llx\n",
+           header_only ? "header" : "full", claimed,
            (unsigned long long)info.entry_offset,
            (unsigned long long)info.entry_address,
            (unsigned long long)info.image_size,
@@ -255,35 +269,128 @@ class KImage64Refusals(unittest.TestCase):
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
-    def c_verdict(self, data: bytes, loaded_at: int = LINK_BASE) -> tuple:
+    def c_verdict(self, data: bytes, loaded_at: int = LINK_BASE, mode: str = "full",
+                  size: int | None = None) -> tuple:
         """(exit code, verdict) where verdict is `accept` or `refuse <reason>`.
 
         The detail after the verdict is returned separately, because a test that compares
         whole lines drifts the moment the reported fields are reordered, and the *refusal
         name* is the contract here -- not the spacing around it.
         """
-        code, out = self.c_run(data, loaded_at)
+        code, out = self.c_run(data, loaded_at, mode=mode, size=size)
         words = out.split()
         verdict = " ".join(words[:2]) if words and words[0] == "refuse" else "accept"
         return code, verdict, out
 
-    def c_run(self, data: bytes, loaded_at: int = LINK_BASE) -> tuple:
+    def c_run(self, data: bytes, loaded_at: int = LINK_BASE, mode: str = "full",
+              size: int | None = None) -> tuple:
         self._n += 1
         path = os.path.join(self.images, "image-%d.bin" % self._n)
         with open(path, "wb") as handle:
             handle.write(data)
-        run = subprocess.run([self.binary, path, hex(loaded_at)],
-                             capture_output=True, text=True, timeout=120)
+        argv = [self.binary, path, hex(loaded_at)]
+        if mode != "full" or size is not None:
+            argv.append(mode)
+        if size is not None:
+            argv.append(hex(size))
+        run = subprocess.run(argv, capture_output=True, text=True, timeout=120)
         return run.returncode, run.stdout.strip()
 
-    def assert_refused_by_c(self, data, reason, loaded_at=LINK_BASE, note=""):
-        code, verdict, out = self.c_verdict(data, loaded_at)
+    def assert_refused_by_c(self, data, reason, loaded_at=LINK_BASE, note="",
+                            mode="full", size=None):
+        code, verdict, out = self.c_verdict(data, loaded_at, mode=mode, size=size)
         self.assertEqual(code, 1, "the C validator accepted a %s image: %s %s"
                          % (reason, out, note))
         self.assertEqual(verdict, "refuse %s" % reason,
                           "expected the refusal to be named %r so a control can assert on "
                           "it%s; got %r" % (reason, note, out))
         return out
+
+    # ------------------------------------------------------- the header half ----
+    #
+    # `pc5_kimage64_validate_header` exists because the running kernel cannot recompute the
+    # payload: `.bss` is inside the checksummed range and `_start64` has already used part of it
+    # as a stack by the time any C runs (see `RUNTIME USE` in the format header).  These four
+    # tests are what stops that reasoning from being a comment: the header half has to refuse
+    # every header mutation the full validator refuses, accept exactly the payload mutation it
+    # cannot see, and treat the caller's size as a claim rather than as a measurement.
+
+    #: The mutants a header-only validation cannot see.  One entry, and it is the payload.
+    HEADER_BLIND = ("checksum",)
+
+    def test_the_header_half_refuses_everything_the_full_validator_refuses_about_the_header(self):
+        for kind, reason in sorted(kimage64.EXPECTED_REFUSAL.items()):
+            if kind == "_no_op":
+                continue
+            with self.subTest(kind=kind):
+                data = kimage64.mutate_bytes(_make_image(), kind)
+                want = "accept" if kind in self.HEADER_BLIND else "refuse %s" % reason
+                code, verdict, out = self.c_verdict(data, mode="header")
+                if want == "accept":
+                    self.assertEqual(code, 0, "%s must not be refused by the header half: %s"
+                                     % (kind, out))
+                else:
+                    self.assertEqual(verdict, want,
+                                     "the kernel re-checks the header with this code, so %s has "
+                                     "to be refused *for that field* by the header half too, not "
+                                     "by the payload step the kernel cannot run; got %r"
+                                     % (kind, out))
+
+    def test_the_header_half_accepts_a_payload_the_full_validator_refuses(self):
+        """The boundary, stated as an assertion: a mutated body passes a header-only check.
+
+        This is the case the kernel *cannot* catch, and the test exists so that the fact is
+        pinned rather than remembered.  If `validate_header` ever starts refusing it, the split
+        has moved and the format comment is out of date.
+        """
+        data = bytearray(_make_image())
+        data[0x200] ^= 0xFF                 # inside .head's padding: never executed, in the sum
+        kimage64.set_field(data, "header_crc", kimage64.header_crc(bytes(data)))
+        self.assert_refused_by_c(bytes(data), "kimage64-checksum",
+                                 note="the full validator must still see a mutated body")
+        code, verdict, out = self.c_verdict(bytes(data), mode="header")
+        self.assertEqual(code, 0,
+                         "a header-only validator that somehow refuses a body edit is not "
+                         "header-only: %s" % out)
+
+    def test_the_claimed_size_is_compared_rather_than_trusted_by_both_halves(self):
+        """`size` is the caller's *claim*, and both callers are checked against the header.
+
+        The loader passes the bytes it read; the kernel passes `bootinfo.kernel_size`.  Feeding
+        the same image with a claimed size that is one page short is how the second case is
+        exercised without a loader that misreads -- and it must be refused *by the header half*,
+        because that is the half the kernel runs.
+        """
+        data = _make_image()
+        for mode in ("full", "header"):
+            with self.subTest(mode=mode):
+                self.assert_refused_by_c(data, "kimage64-image-size", mode=mode,
+                                         size=len(data) - 4096,
+                                         note=" under %s validation" % mode)
+                code, out = self.c_run(data, mode=mode, size=len(data))
+                self.assertEqual(code, 0, "the same image at its true length must accept: %s"
+                                 % out)
+
+    def test_the_kernel_and_the_loader_link_the_same_validator_object(self):
+        """One implementation, two boot-time callers -- asserted, not trusted.
+
+        §30 and §31 of `docs/TEST_RESULTS.md` are both stories about a builder and a checker that
+        agreed with each other because they were the same code.  Sharing this validator is the
+        *opposite* case and needs to stay that way: the kernel re-running the loader's rules is
+        only evidence if they are literally the same rules.  So the link line is checked, and a
+        Makefile that gave the kernel a second copy would fail here rather than in a boot log.
+        """
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        kernel_link = makefile.split("$(BUILD)/kernel64/pc5-64.elf:", 1)[1].split("\n\t", 1)[0]
+        self.assertIn("$(BUILD)/kernel64/kimage64.o", kernel_link,
+                      "the kernel must link boot/uefi64/kimage64.o rather than carry its own "
+                      "copy of the header rules")
+        loader_link = makefile.split("$(BUILD)/uefi64/BOOTX64.EFI:", 1)[1].split("\n\n", 1)[0]
+        self.assertIn("$(BUILD)/kernel64/kimage64.o", loader_link)
+        self.assertIn("kernel64/include/pc5_kimage64.h", makefile.split("KERNEL64_HDR :=", 1)[1]
+                      .split("\n\n", 1)[0],
+                      "the format header is a dependency of every kernel64 object; dropping it "
+                      "means a format edit can leave a stale object in build/")
 
     # ---------------------------------------------------------------- accept ----
 

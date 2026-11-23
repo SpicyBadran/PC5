@@ -76,6 +76,8 @@ def pack_boot_info(**overrides):
         memmap_desc_size=DESC_SIZE, memmap_desc_version=1,
         framebuffer_addr=FB_BASE, framebuffer_width=1024,
         framebuffer_height=768, framebuffer_pitch=4096, framebuffer_format=0,
+        # A layout default, not a claim about any image: `run_kernel` replaces it with the
+        # length of the bytes it actually loaded, because the kernel compares the two.
         acpi_rsdp=RSDP, kernel_base=LINK_BASE, kernel_size=0xA000,
         stack_top=STACK_TOP, stack_size=0x8000,
         pagetable_addr=PML4, pagetable_pages=6, identity_span=4 << 30,
@@ -275,7 +277,8 @@ class Machine:
             return KERNEL_BASE
         return KERNEL_BASE + struct.unpack_from("<Q", image, 32)[0]
 
-    def run(self, boot_info, paging=True, max_instructions=4_000_000, memmap=None):
+    def run(self, boot_info, paging=True, max_instructions=4_000_000, memmap=None,
+            patch=None):
         from unicorn import UcError
         from unicorn.x86_const import (
             UC_X86_REG_CR0, UC_X86_REG_CR3, UC_X86_REG_CR4, UC_X86_REG_RDI,
@@ -285,6 +288,14 @@ class Machine:
         uc.mem_write(MEMMAP, pack_memmap(memmap if memmap is not None
                                         else DEFAULT_MEMMAP))
         uc.mem_write(BOOT_INFO, boot_info)
+        if patch:
+            # Written after the image is in place and before the first instruction runs, so
+            # nothing but the kernel itself can notice.  That is the property a caller wants: a
+            # corruption applied to the *loaded* bytes is what a truncated read, a partial write
+            # or firmware that overran its buffer look like from the inside -- and a fixture that
+            # edited the file instead would only prove the stamper's arithmetic.
+            for offset, payload in patch:
+                uc.mem_write(KERNEL_BASE + offset, payload)
         pml4 = self.install_identity_map()
         uc.reg_write(UC_X86_REG_CR4, uc.reg_read(UC_X86_REG_CR4) | 0x20)
         uc.reg_write(UC_X86_REG_CR3, pml4)
@@ -313,9 +324,23 @@ class Machine:
                     fault_rip=fault_rip)
 
 
+def pack_boot_info_for(kernel, **overrides):
+    """`pack_boot_info`, with `kernel_size` set to the image that is actually being booted.
+
+    Two kinds of caller build a handover here: the shared `run_kernel` below, and tests that need
+    a `Machine` of their own first (backing an MMIO page has to happen before the run).
+    `pack_boot_info`'s own default for that field is a *layout* fixture, and the kernel now
+    compares it with the length its header declares -- so a caller that forgets to say otherwise
+    does not get a sloppy fixture, it gets a refused boot.  That is the check working; this
+    helper is the place that knows both sides, so no caller has to remember.
+    """
+    overrides.setdefault("kernel_size", len(kernel))
+    return pack_boot_info(**overrides)
+
+
 def run_kernel(kernel, memmap=None, paging=True, rsdp_signature=RSDP_SIGNATURE,
                cpuid=None, rsdp_bytes=None, rsdp_address=None, stop_markers=None,
-               max_instructions=None, **overrides):
+               max_instructions=None, patch=None, **overrides):
     """Boot the kernel in the harness and report what it printed.
 
     `stop_markers` replaces the default pair, and passing `()` means "do not stop early": the
@@ -334,7 +359,7 @@ def run_kernel(kernel, memmap=None, paging=True, rsdp_signature=RSDP_SIGNATURE,
     run_kwargs = {}
     if max_instructions is not None:
         run_kwargs["max_instructions"] = max_instructions
-    result = machine.run(pack_boot_info(**overrides), paging=paging,
-                         memmap=memmap, **run_kwargs)
+    result = machine.run(pack_boot_info_for(kernel, **overrides), paging=paging,
+                         memmap=memmap, patch=patch, **run_kwargs)
     result["machine"] = machine
     return result

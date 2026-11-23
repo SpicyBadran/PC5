@@ -103,6 +103,28 @@ def checks_for(trace, expect_success=True):
           fields(serial, "PC5-64-LOADER kernel-header", "checksum") == "ok",
           "a header whose checksum field was never compared would still print")
 
+    # The four rows above are all the loader's verdict: what the code that *decides whether to
+    # jump* observed.  They cannot say anything about the bytes as the kernel finds them (the
+    # load could be damaged after that check), nor about the `kernel_size` the kernel is handed,
+    # which is a second claim about the same object that the loader computes for itself.  The
+    # kernel re-runs the header half of the same validator (`validate_image_self`), and these two
+    # rows are its account -- which is why the numbers are compared across lines rather than
+    # against constants: a kernel that grew by a page keeps both rows true only if the header,
+    # the handover and the file all grew together.
+    self_status = fields(serial, "PC5-64-KIMAGE", "status")
+    self_reason = fields(serial, "PC5-64-KIMAGE", "reason")
+    self_size = fields(serial, "PC5-64-KIMAGE", "image")
+    self_handover = fields(serial, "PC5-64-KIMAGE", "handover")
+    check("the running kernel re-read its own image header",
+          self_status == "ok" and self_reason == "ok"
+          and fields(serial, "PC5-64-KIMAGE", "crc") == "ok",
+          "PC5-64-KIMAGE status=%s reason=%s" % (self_status, self_reason))
+    sizes = [declared, measured, self_size, self_handover]
+    check("the loader's read, the header, and the handover name one length",
+          None not in sizes and len({int(v, 10 if not v.startswith("0x") else 16)
+                                     for v in sizes}) == 1,
+          "header=%s file-read=%s kernel-saw=%s handover=%s" % tuple(sizes))
+
     # The loader no longer reads CR3 back itself: after installing the root it
     # never runs loader code again.  The read-back now comes from the kernel, which
     # is executing on the new map - a stronger statement than the loader checking

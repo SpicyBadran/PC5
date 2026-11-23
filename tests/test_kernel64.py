@@ -437,12 +437,64 @@ class KernelContractTests(unittest.TestCase):
                                             loader_image_size=0x2000),
                             "bootinfo-loader-span")
 
-    def test_kernel_size_that_does_not_match_the_image_is_refused(self):
-        # The kernel knows its own size from the linker script, so it rejects any
-        # other value outright - which is also what makes the span check below it
-        # unreachable in practice (the linked image cannot leave the map).
+    def test_kernel_size_that_is_implausible_is_refused_by_the_range_check(self):
+        # What the boot-info stage can decide on its own: a size of 4 GiB is not a
+        # kernel image, and that needs no second source to say so.  It used to be
+        # named "does not match the image", which was a promise the code did not
+        # keep -- nothing compared the number with the image until the self-check
+        # below existed, and a handover that *understated* the size went through.
         self.assert_refuses(self.run_kernel(kernel_size=4 << 30),
                             "bootinfo-kernel-size")
+
+    # ------------------------------------------------------ the image, re-read ----
+    #
+    # `validate_image_self()` is the kernel asking its own loaded bytes what they are, and
+    # comparing that with what it was told.  Every case below corrupts one of the two
+    # *sources*, because a test that only checks the happy path cannot tell a comparison
+    # apart from a print statement.
+
+    def test_the_kernel_reads_its_own_header_and_reports_both_sizes(self):
+        header = image_header()
+        line = [l for l in self.run_kernel()["serial"].splitlines()
+                if l.startswith("PC5-64-KIMAGE")][-1]
+        self.assertIn("status=ok reason=ok", line, line)
+        # Both numbers, on the line, from two different places: the header is the build's
+        # record and the handover is the loader's.  Printed as hex because a decimal
+        # coincidence in a log is harder to eyeball than a hex one.
+        self.assertIn(" image=0x%x" % header["image_size"], line)
+        self.assertIn(" handover=0x%x" % header["image_size"], line,
+                      "the harness hands over the real image length; if these two ever "
+                      "disagree in a fixture, the fixture is lying and the check is right "
+                      "to refuse it")
+        self.assertIn(" bss=0x%x" % header["bss_size"], line)
+        self.assertIn(" entry=0x%x" % header["entry_offset"], line)
+        self.assertIn(" crc=ok", line,
+                      "the CRC is recomputed over the loaded bytes, so `ok` is a result "
+                      "and not a field echoed back from the header")
+
+    def test_a_handover_that_understates_the_image_is_refused_by_name(self):
+        # The old harness default, and the shape a truncated read takes: the image is
+        # whole, the number is small.  Before the self-check this booted.
+        self.assert_refuses(self.run_kernel(kernel_size=0xA000), "kimage64-image-size")
+
+    def test_a_header_crc_corrupted_after_loading_is_refused_by_name(self):
+        import struct as st
+        bad = st.pack("<I", 0)
+        self.assert_refuses(self.run_kernel(patch=[(80, bad)]), "kimage64-header-crc")
+
+    def test_a_body_edit_below_the_header_is_not_claimed_to_be_caught(self):
+        """The boundary of a runtime header check, written as a test.
+
+        Byte 0x200 is inside `.head`'s padding -- inside the payload checksum, outside the
+        128 bytes the kernel can still verify after the jump, and never executed.  So the
+        boot succeeds, and this asserts that it does: the day someone claims the kernel
+        re-verifies its own image, this line is the counter-example.  The loader catches it
+        (`tests/test_kimage64.py` feeds the same edit to both halves of the validator),
+        which is why the pair of callers is worth having.
+        """
+        result = self.run_kernel(patch=[(0x200, b"\xff")])
+        self.assert_boots(result)
+        self.assertIn("PC5-64-KIMAGE status=ok", result["serial"])
 
     def test_memory_map_size_must_be_a_multiple_of_the_stride(self):
         self.assert_refuses(self.run_kernel(memmap_bytes=100),

@@ -66,6 +66,11 @@ what moved the RSP.  `verification.sh` asserts that separation explicitly.
 
 ## The gate's numbers
 
+Every total below belongs to the tree this page files (`50ebe7d`), and `verification.sh` reads
+these artifacts rather than the repository's current build output — a later tree legitimately
+prints more rows (the kernel image self-check added two, taking the 64-bit gate to 104 passing
+rows and the stub gate to 52), and that is recorded in §34, not here.
+
 | Command | Result |
 | --- | --- |
 | `make PC5_UEFI=64 ovmf-test` | exit 0 · **102 PASS / 0 FAIL / 1 NOT TESTED** across 103 check rows (21 control + 41 cold + 41 warm), of which 14 are the delivery rows — seven per boot · matrix **56 rows**, all `verified` or `external` |

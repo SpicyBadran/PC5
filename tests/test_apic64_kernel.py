@@ -81,7 +81,12 @@ class ApicIntegrationTests(unittest.TestCase):
             for offset, value in APIC_REGS.items():
                 machine.uc.mem_write(APIC_BASE + offset, value.to_bytes(4, "little"))
         overrides = {"memmap_bytes": self.machine.DESC_SIZE * len(memmap)}
-        result = machine.run(self.machine.pack_boot_info(**overrides),
+        # `pack_boot_info_for`, not `pack_boot_info`: this class builds its own `Machine` (the
+        # APIC page has to be mapped before the run), so it is the one caller in the tree that
+        # does not go through `run_kernel` -- and it was handing over a size the image contradicted
+        # until the kernel started checking.  Six tests here failed on the first run of that
+        # check, which is the honest outcome and the reason the helper exists.
+        result = machine.run(self.machine.pack_boot_info_for(self.kernel, **overrides),
                             memmap=memmap, max_instructions=8_000_000)
         result["machine"] = machine
         return result

@@ -3412,3 +3412,89 @@ logs themselves were fabricated, `verification.sh` would happily verify the fabr
 cross-checks are between the gate's parse and the kernel's text, which is two sources rather than
 two *independent* tools.  Nothing about hardware, Secure Boot, NMI nesting, `IRETQ`, or CI is
 claimed here or anywhere in §30–§33.
+
+## 34. The kernel re-reads its own image header, and finds a harness that had been lying about its size
+
+**Run:** 2026-11-24, workspace on `arena/5e36f38b-pc5`, QEMU 11.0.2 with the EDK II OVMF from the
+same package (TCG), Unicorn 2.1.4 for the stub.  **Milestone 8, PR E.**  §25 gave the kernel image a
+header and §29 made three gates enforce it — all three of them *before* the jump.  What nobody had
+was the other half: the running kernel had no idea what its own image declared, and the size it was
+handed in the boot info was compared with the memory map but never with the file it came from.
+
+**What was built.** `boot/uefi64/kimage64.c`'s rules are now two entry points:
+`pc5_kimage64_validate_header()` decides everything about the *description*, and
+`pc5_kimage64_validate()` is that plus the payload sum, last, over a header that has already been
+bounded.  The reason strings and their order are unchanged — a mutant that corrupts field X still
+has to be refused *for X*, which is what the whole corpus in `tests/test_kimage64.py` asserts.  The
+kernel links the same object the loader links (`$(BUILD)/kernel64/kimage64.o` now appears in the
+`pc5-64.elf` link line as well as the `BOOTX64.EFI` one, and
+`test_the_kernel_and_the_loader_link_the_same_validator_object` reads both lines out of the
+Makefile), because a kernel carrying its own copy of the rules would make any agreement between
+them meaningless.  Then `validate_image_self()` in `kernel64/main.c`:
+
+```
+PC5-64-IMAGE base=0x100000 size=0x34000 range=ok
+PC5-64-KIMAGE status=ok reason=ok image=0x34000 handover=0x34000 bss=0x2a000 entry=0x1000 crc=ok
+```
+
+Two numbers on one line, from two places: `image=` is what the header in the kernel's own memory
+says and `handover=` is what the loader said.  The firmware gate compares both with the length of
+the file it built (`ctx["expected_bytes"]`, the artifact, not the log), which is why the row is not
+the kernel grading its own homework.
+
+**What it costs to re-verify a running kernel, and where that stops.** `checksum` covers the whole
+image, `.bss` travels inside the image, and `_start64` clears `.bss` and takes its stack out of it
+before `kmain` runs — so by the time any C executes, part of the checksummed range is in use as a
+stack.  A runtime payload sum would measure the ordering of the boot code, not the integrity of the
+load, and it would fail.  So `validate_header` is the honest half, and the boundary is *tested*
+rather than explained: `tests/test_kimage64.py` feeds a mutated body to both entry points and
+requires the full validator to refuse it and the header half to accept it;
+`tests/test_kernel64.py` boots a kernel with a byte of `.head`'s padding edited in loaded memory and
+requires the boot to **succeed**.  Closing the gap properly is a version-2 header with a second
+digest over a defined prefix — a format change, not a bug fix, and it is recorded that way in
+`docs/KNOWN_LIMITATIONS.md` and in the design document.
+
+**The finding this surfaced first was in the tests.** `tests/kernel64_machine.py` had been building
+every synthetic handover with `kernel_size=0xA000` — against an image of 212,992 bytes — and the
+kernel accepted it, because nothing compared the two.  The first build of the self-check turned up
+**42 failing tests in `tests/test_kernel64.py`**, all of them asserting `PC5-64-DONE` on a boot
+info that contradicted the bytes being booted.  That is the exact number of lies, not a fluke: the
+default is now the length of the image actually loaded, and the tests that mean to understate it
+say so explicitly (`test_a_handover_that_understates_the_image_is_refused_by_name`, refused by name
+as `kimage64-image-size` — from the *kernel*, where before it was unreachable).
+
+**A test name that promised more than the code delivered.** `test_kernel_size_that_does_not_match_the_image_is_refused`
+fed in `4 << 30` and expected `bootinfo-kernel-size` — an implausibility check, not a match with
+the image, which it had never performed.  It is now
+`test_kernel_size_that_is_implausible_is_refused_by_the_range_check`, and the name it used to have is
+what the new case does.  A test whose title describes a comparison that does not exist is worse than
+a missing test, because it stops anyone writing the real one.
+
+**The emulator half.** The stub gate gained two checks, taking it from 50 to 52, and one of them is
+the cross-line comparison the whole change is about — the loader's `kernel at=…bytes=`, the loader's
+`kernel-header image=`, and the kernel's `image=`/`handover=` all reduced to one integer set
+({212992}), which is the same style of row §29 established for the loader's own four lines.
+
+| Command | Result |
+| --- | --- |
+| `make PC5_UEFI=64 ovmf-test` | exit 0 · **104 PASS / 0 FAIL / 1 NOT TESTED**, matrix **57 rows** (was 56: `the kernel re-read its own image header after the jump`, cold and warm both passing) |
+| `make stubtest64` | **`52/52 checks passed`** (was 50; the 32-bit stub level stayed at 22/22, and both legs ran in the same gate) |
+| `python3 -m unittest tests.test_kernel64` | **OK, 75 tests** (71 before; the four new ones are the two-size report, the understated handover, the in-memory CRC corruption, and the boundary case) |
+| `python3 -m unittest tests.test_kimage64` | **OK, 25 tests** — the header half driven over the same mutant corpus as the full validator |
+| `python3 -m unittest tests.test_kernel64 tests.test_kimage64 tests.test_ovmf_gate_profiles tests.test_ovmf_harness tests.test_apic64_kernel` | **OK, 198 tests** — the refusal corpus for both halves of the validator, six new refusals on the gate's own row, and the APIC module brought back through the honest handover |
+| `make check` | **`make check: suite and all gates passed`** — 1152 tests in 630 s, then `unit` (165 C checks), `psm`, docs, citations, presentation, brand |
+
+Every row above was measured against `build/kernel64/KERNEL64.BIN` at
+`sha256 e390f7e394098401…`, which is the digest the gate report records for the boot it booted
+(`data.environment.kernel_file.sha256`) — the habit §33 established, because "the tests pass" and
+"the tests pass against the artifact whose behaviour you are describing" are different claims.  One
+gap in that habit showed up while writing this section: the 104/57 run first measured here came
+from a kernel one edit older, and only the digest comparison in the report caught it.
+
+| `make ovmf-test` (32-bit) | exit 0 · **63 PASS / 0 FAIL / 1 NOT TESTED**, matrix **35 rows** — byte-for-byte the same verdict as before this change, so nothing the other path claims moved |
+
+**Not claimed.** This is integrity, not authenticity: a rewrite that re-stamps both digests is
+still accepted, exactly as §29 said of the loader's half, and `docs/SECURITY.md` keeps the
+cryptographic boundary open.  Nothing here verifies the bytes *between* the header and the end of the
+image after the jump — see the boundary above, which is the honest shape of the claim.  No hardware,
+no Secure Boot, no PS5, and no CI run: the numbers above came from boots in this workspace.

@@ -151,7 +151,7 @@ class UnicornSoftInterruptTests(unittest.TestCase):
                          "the emulator both refused the interrupt and produced a verdict")
 
     def test_the_boot_itself_is_unaffected_by_the_probe_being_unreachable(self):
-        """Everything up to `PC5-64-DONE` still happens, so the stub's 49 checks are honest.
+        """Everything up to `PC5-64-DONE` still happens, so the stub's other checks are honest.
 
         The probe is emitted after the marker for exactly this reason; if a later change moves it
         back, the stub run dies before the marker and every check that follows goes red for an

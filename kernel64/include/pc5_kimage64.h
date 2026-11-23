@@ -160,6 +160,26 @@ struct pc5_kimage64 {
 const char *pc5_kimage64_validate(const u8 *image, u64 size, u64 loaded_at,
                                   struct pc5_kimage64 *out);
 
+/* RUNTIME USE: only the header half of the same rules, and the reason it is a separate entry
+ * point is a property of the kernel, not of the format.
+ *
+ * The running kernel cannot recompute `checksum`: it covers the whole image, `.bss` travels
+ * inside that image, and `_start64` adopts a stack from `.bss` and clears it before `kmain`
+ * runs.  By the time any C code executes, part of the checked range is in use as a stack --
+ * so a runtime payload sum would not be a check of the load, it would be a check of the
+ * ordering of the boot code, and it would fail.  The header is the opposite case: 128 bytes
+ * in `.head`, which nothing writes, so `header_crc` and every bound the format defines can
+ * be re-derived after the jump with no assumption about what has run in between.
+ *
+ * What that leaves is still a real claim, and it is the one the loader alone could not make:
+ * the header is the image's own account of its length, and `size` here is the *caller's*
+ * account of the same thing.  The loader passes what it read from the medium; the kernel
+ * passes what it was handed.  A handover that understates or overstates the image is refused
+ * by the party the claim is about, in the same code, against the same field.
+ */
+const char *pc5_kimage64_validate_header(const u8 *image, u64 size, u64 loaded_at,
+                                         struct pc5_kimage64 *out);
+
 /* The payload checksum, exposed so the stamper's output can be checked by the same code
  * the loader runs rather than by a second implementation that is equal only by luck. */
 u64 pc5_kimage64_payload_checksum(const u8 *image, u64 size);

@@ -848,6 +848,17 @@ def _markers_x64(text, profile):
         # came from: the declared length against the file on disk, the declared entry
         # against where the loader actually jumped, and the validation against the presence
         # of the field that only prints when the payload checksum matched.
+        # The same image, described by the kernel that is running on it.  Four keys rather
+        # than one boolean because the row below has to be able to say *which* half
+        # disagreed, and because "the line is absent" (the kernel never reached the check)
+        # and "the line says fail" (it reached it and refused) are different findings about
+        # different things -- one is a broken boot, the other is a working check.
+        "image_self_line": "PC5-64-KIMAGE " in text,
+        "image_self_ok": "PC5-64-KIMAGE status=ok reason=ok" in text,
+        "image_self_reason": _word(text, r"PC5-64-KIMAGE status=\S+ reason=(\S+)"),
+        "image_self_size": _hex(text, r"PC5-64-KIMAGE status=\S+ reason=\S+ image=(0x[0-9a-f]+)"),
+        "image_self_handover": _hex(text, r"image=0x[0-9a-f]+ handover=(0x[0-9a-f]+)"),
+        "image_self_crc": re.search(r"PC5-64-KIMAGE [^\n]* crc=ok\b", text) is not None,
         "kernel_header_validated": ("PC5-64-LOADER kernel-header version=1" in text
                                     and "checksum=ok" in text),
         "kernel_header_image": _number(
@@ -989,6 +1000,17 @@ def _hex(text, pattern):
 def _number(text, pattern):
     match = re.search(pattern, text)
     return int(match.group(1)) if match else None
+
+
+def _word(text, pattern):
+    """The first string a pattern captures, or None when the line is not there at all.
+
+    For the fields a kernel prints as words (`reason=ok`, `status=fail`), which the gate has
+    to be able to *name* in a refusal detail: `None` is what tells a reader the marker never
+    appeared, as distinct from appearing with a value the gate did not expect.
+    """
+    match = re.search(pattern, text)
+    return match.group(1) if match else None
 
 
 # ---------------------------------------------------------------- checks
@@ -1159,6 +1181,42 @@ def _kernel_size_matches_file(key):
     return proof
 
 
+def _image_self_checked(seen, ctx):
+    """The kernel's own account of its image, compared with the file the gate built.
+
+    Three numbers have to agree: the length the header declares (which the kernel read out of
+    *its own memory*, after the jump), the length the handover claimed (which the kernel
+    checked that read against), and the length of the file the gate put on the medium.  The
+    first two are the boot's word about itself, and are allowed to agree with each other
+    while both are wrong; the third is why this row is not the kernel grading its own
+    homework.
+
+    The refusals are ordered from "nothing to look at" to "the numbers disagree", so a boot
+    that died early reports that, rather than reporting a mismatch it never measured.
+    """
+    if not seen.get("image_self_line"):
+        return False, ("no `PC5-64-KIMAGE` line: the kernel stopped before its image "
+                       "self-check ran")
+    if not seen.get("image_self_ok"):
+        return False, "the kernel refused its own image: reason=%s" % (
+            seen.get("image_self_reason"),)
+    if not seen.get("image_self_crc"):
+        return False, ("the header's CRC was not re-derived successfully (`crc=ok` missing); "
+                       "the field is the one thing the kernel can recompute after the jump")
+    declared = seen.get("image_self_size")
+    handed = seen.get("image_self_handover")
+    if declared is None or handed is None:
+        return False, "image=%r handover=%r" % (declared, handed)
+    if declared != handed:
+        return False, ("the header says %d bytes and the handover said %d -- one of them is "
+                       "lying about the same object" % (declared, handed))
+    expected = ctx.get("expected_bytes")
+    if expected and declared != expected:
+        return False, ("%d is not the %d bytes the gate built into the image"
+                       % (declared, expected))
+    return True, "header=%d handover=%d file=%s" % (declared, handed, expected)
+
+
 def _entry_is_where_the_image_said(seen, ctx):
     """`JUMP entry=` has to be `kernel at=` plus the header's `entry=`, or the jump lied.
 
@@ -1301,6 +1359,9 @@ def x64_stages():
         Stage("execution began at the entry point the image declared",
               "the jump went to the load address plus the declared entry offset",
               _entry_is_where_the_image_said),
+        Stage("the kernel re-read its own image header after the jump",
+              "the running kernel re-read that header and agreed with its own handover",
+              _image_self_checked),
         Stage("memory allocation and ownership are correct",
               "a memory map was handed over", _positive("memory_map_entries")),
         Stage("the kernel's own map agrees with the loader's count",

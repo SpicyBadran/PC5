@@ -168,13 +168,60 @@ invalid artifact even when every digest matches the files that produced it.
   accidents — a kernel built for the other architecture, and a host toolchain producing the
   wrong object type — and a v1 loader refuses either mismatch. They are not an ABI promise.
 
+## After the jump: what the kernel can re-check, and what it cannot
+
+The loader's validation happens before it transfers control, so it describes the bytes *it*
+read. Two things can still be true afterwards: the copy in memory can have been damaged by
+whatever filled it, and the `kernel_size` handed to the kernel in the boot info can disagree
+with the image the kernel is running in. Neither is visible to a check that runs before the
+jump, and neither was visible to any check at all until `validate_image_self()` existed — the
+kernel printed the size it was told, and compared it only with the memory map.
+
+So the kernel re-reads the header at its own load address, through the *same* validator the
+loader uses (`boot/uefi64/kimage64.c` is linked into `KERNEL64.BIN`;
+`tests/test_kimage64.py` asserts that both link lines name the object, because a kernel holding
+its own copy of these rules would make the agreement meaningless), and prints one line:
+
+```
+PC5-64-KIMAGE status=ok reason=ok image=0x34000 handover=0x34000 bss=0x2a000 entry=0x1000 crc=ok
+```
+
+`image=` is what the loaded header says, `handover=` is what the boot info claimed, and the row
+in the firmware gate compares both with the length of the file the gate built — three sources,
+of which the boot controls two.
+
+**The payload checksum is deliberately not recomputed here, and the reason is a property of
+this kernel rather than of the format.** `checksum` covers the whole image; `.bss` travels
+inside the image; and `_start64` adopts a stack out of `.bss` and clears it before `kmain`
+runs. By the time any C executes, part of the checked range is in use as a stack — so a runtime
+payload sum would not be measuring the integrity of the load, it would be measuring the ordering
+of the boot code, and it would fail. `header_crc` is the opposite case: 128 bytes in `.head`,
+which nothing writes, so it can be re-derived at any point during the boot.
+
+That is the whole of what a runtime check can reach without a format change, and the boundary is
+pinned in tests rather than left as a comment: `tests/test_kimage64.py` feeds a mutated body to
+both entry points and requires the full validator to refuse it and the header half to accept it,
+and `tests/test_kernel64.py` boots a kernel with a byte of `.head`'s padding edited in memory and
+requires the boot to *succeed*. Closing that gap means a v2 header carrying a second digest over
+a defined prefix (`[0, __bss_start)`) — a format change with a version bump, not a bug fix.
+
+A refusal from this check reuses the format's reason names, which is correct and slightly
+confusing: the same string, `kimage64-image-size`, means *"the file I read is not the length you
+declared"* when the loader prints it (`PC5-64-LOADER-FAIL=`) and *"the size I was handed is not
+the length my own header declares"* when the kernel prints it (`PC5-64BIT-FAIL=`). The prefix
+distinguishes them, and the gate's negative runs — which mutate the image on the medium and so
+never reach the kernel — are only ever the first.
+
 ## Changing it
 
 1. Edit `kernel64/include/pc5_kimage64.h` (layout) and, if semantics moved, bump
    `PC5_KIMAGE64_VERSION`.
 2. Update `tools/kimage64.py`'s `FIELDS` and `LAYOUT` — `tests/test_kimage64.py` fails if a
    name, offset or format letter drifts from the `#define`s, and it is the test to read first.
-3. Add a mutation and an `EXPECTED_REFUSAL` entry, then wire the new refusal into
+3. Add a mutation and an `EXPECTED_REFUSAL` entry, and if the field is in the header, teach
+   `pc5_kimage64_validate_header()` about it too — the kernel's runtime re-check covers
+   everything that half checks, so a field added to the full validator alone is a field nothing
+   verifies after the jump. Then wire the new refusal into
    `Profile.kernel_refusals` in `tests/ovmf_boot.py` if the firmware gate must distinguish
    it. `tests/test_ovmf_gate_profiles.py` asserts that every declared refusal has a row in
    the matrix, and that the matrix's rows and the profiles' vocabularies stay in step.

@@ -153,6 +153,14 @@ Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
   selector would object — and fixing it means a far jump through the new table at the end of the
   install, which is a change to the handover's control flow. Deliberately not attempted as a side
   effect of the TSS work.
+* **A kernel whose body was damaged after loading can still boot.** `KERNEL64.BIN` carries a
+  128-byte header whose `checksum` covers the whole image, and the loader verifies it before
+  jumping; after the jump the kernel re-derives only `header_crc`, over those 128 bytes. The
+  payload cannot be re-summed by the running kernel, because `.bss` is inside the checked range
+  and `_start64` has already cleared it and taken a stack out of it — see
+  `docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`, "After the jump". The gap is asserted
+  in tests (`tests/test_kimage64.py`, `tests/test_kernel64.py`) rather than left as a comment,
+  and closing it needs a version-2 header with a second digest over a defined prefix.
 * **Physical hardware.** No PC and no PS5 has booted this ISO through UEFI. OVMF
   is firmware, but it is firmware in an emulator; vendor firmware (AMI, Insyde,
   Phoenix, Apple) is untested and its quirks are unknown.

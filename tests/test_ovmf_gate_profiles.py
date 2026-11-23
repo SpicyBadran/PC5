@@ -49,6 +49,7 @@ PC5-64BIT-KERNEL-ENTRY
 PC5-64-IDT installed=256 present=32
 PC5-64-MAP entries=98 conventional_pages=53751 bytes=0xc40
 PC5-64-IMAGE base=0x100000 size=0x33000 range=ok
+PC5-64-KIMAGE status=ok reason=ok image=0x33000 handover=0x33000 bss=0x2a000 entry=0x1000 crc=ok
 PC5-64-PAGING enabled=1 root=0xe1eb000 pages=6 span=0x100000000 kernel=0x100000-0x133000 loaded=0x100000
 PC5-64-BOOTINFO magic=ok version=2 size=160 memdesc=32 flags=0xd exit_boot_services=1
 PC5-64-CPU vendor=AuthenticAMD
@@ -212,6 +213,55 @@ class ClassifyX64(unittest.TestCase):
         self.assertEqual(boastful.count("tr=loaded"), 1,
                          "the fixture no longer claims a loaded TR, so this test proves "
                          "nothing about claims")
+
+    def test_the_image_self_check_row_needs_the_line_and_the_agreement(self):
+        """The row that reports what the kernel concluded about its own bytes.
+
+        Every edit here leaves the *loader's* lines intact, because that is the point of the row:
+        a boot can pass the loader's validation of the header and still have a kernel that never
+        re-read it, a kernel that re-read a damaged header, or a handover that described fewer
+        bytes than the image does.  The last case is the one no row before this could see.
+        """
+        line = "PC5-64-KIMAGE status=ok reason=ok image=0x33000 handover=0x33000 " \
+               "bss=0x2a000 entry=0x1000 crc=ok"
+
+        def row(log=None, expected=208896):
+            report = ovmf.Report()
+            ovmf.check_boot(report, run_of(log if log is not None else X64_GOOD_LOG,
+                                           stopped_on=None),
+                            "cold", expected, ovmf.X64, 256)
+            return [c for c in report.checks
+                    if c["name"].endswith("agreed with its own handover")][0]
+
+        good = row()
+        self.assertEqual(good["state"], "pass", good["detail"])
+        # The kernel stopped before it got there: a missing line, not a bad verdict.
+        missing = X64_GOOD_LOG.replace(line + "\n", "")
+        self.assertNotEqual(missing, X64_GOOD_LOG, "the fixture stopped exercising this case")
+        refused = row(log=missing)
+        self.assertEqual(refused["state"], "fail")
+        self.assertIn("no `PC5-64-KIMAGE` line", refused["detail"])
+        # The kernel reached the check and refused: the reason has to reach the report.
+        # Shaped the way the kernel shapes it: on a refusal the header's own fields are gone
+        # (the validator zeroes them), and only the boot info's number is still worth printing.
+        refused = row(log=X64_GOOD_LOG.replace(
+            line, "PC5-64-KIMAGE status=fail reason=kimage64-header-crc handover=0x33000"))
+        self.assertEqual(refused["state"], "fail")
+        self.assertIn("kimage64-header-crc", refused["detail"],
+                      "a refusal that loses the kernel's own reason string is a row that "
+                      "tells a reader something went wrong and nothing about what")
+        # A header that decodes but whose CRC did not re-derive.
+        self.assertEqual(row(log=X64_GOOD_LOG.replace(" crc=ok", " crc=bad"))["state"], "fail")
+        # The two sources disagree -- and note that the *file* matches neither comparison,
+        # because the row checks the kernel's two numbers against each other first.
+        refused = row(log=X64_GOOD_LOG.replace("handover=0x33000", "handover=0xa000"))
+        self.assertEqual(refused["state"], "fail")
+        self.assertIn("lying about the same object", refused["detail"])
+        # Both kernel numbers agree with each other and neither is the file the gate built:
+        # the shape a build that stamped one image and shipped another would leave.
+        self.assertEqual(row(expected=212992)["state"], "fail",
+                         "a kernel and a header that agree with each other but not with the "
+                         "file on disk must not pass")
 
     def test_the_injected_nmi_row_needs_the_event_and_the_stack(self):
         """The one row in this gate whose evidence arrives from outside the guest.
