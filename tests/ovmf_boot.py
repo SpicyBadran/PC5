@@ -49,6 +49,29 @@ import sys
 import tempfile
 import time
 
+#: Read out of the kernel's header, so a gate that pins a number cannot drift from the code
+#: that chose it.  These are the same constants the boot line is built from.
+TSS64_HEADER_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                 "kernel64", "tss64.h")
+
+with open(TSS64_HEADER_PATH, encoding="utf-8") as _tss64_handle:
+    TSS64_HEADER = _tss64_handle.read()
+
+
+def _tss64_define(name, cast=int):
+    match = re.search(r"^#define\s+%s\s+(\S+)$" % name, TSS64_HEADER, re.MULTILINE)
+    if match is None:
+        raise AssertionError("kernel64/tss64.h no longer defines %s" % name)
+    text = match.group(1).rstrip("uUlL")
+    return cast(text, 0) if cast is int else text
+
+
+PC5_TSS64_SIZE = _tss64_define("PC5_TSS64_SIZE")
+PC5_TSS64_TR_SELECTOR = _tss64_define("PC5_TSS64_SELECTOR")
+PC5_TSS64_IST_DOUBLE_FAULT = _tss64_define("PC5_TSS64_IST_DOUBLE_FAULT")
+PC5_TSS64_IST_NMI = _tss64_define("PC5_TSS64_IST_NMI")
+
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD = os.path.join(ROOT, "build")
 
@@ -772,6 +795,24 @@ def _markers_x64(text, profile):
         "cpu_long_mode": _number(text, r"PC5-64-CPU long_mode=(\d+)"),
         "tr_state": re.search(r"tr=(not-loaded|loaded)", text).group(1)
                     if re.search(r"tr=(not-loaded|loaded)", text) else None,
+        # The TSS line's own readbacks.  Each of these is the kernel quoting the machine:
+        # STR's answer, the descriptor as it is found through GDTR, the type transition the
+        # load performs in memory, the I/O-map base read back through that descriptor, and the
+        # two IDT gates' IST fields as the live table holds them.  They are extracted here
+        # rather than substring-matched in one blob so a stage can say *which* of the five a
+        # boot failed to produce -- "TR is loaded" is four separate facts, and the day one of
+        # them stops being true is exactly the day a compound match would hide it.
+        "tr_selector": _hex(text, r"PC5-64-TSS .*? str=(0x[0-9a-f]+)"),
+        "tss_frame": _hex(text, r"PC5-64-TSS .*? tss=(0x[0-9a-f]+)"),
+        "tr_desc": (re.search(r"PC5-64-TSS .*? desc=(0x[0-9a-f]+/\d+)", text).group(1)
+                    if re.search(r"PC5-64-TSS .*? desc=(0x[0-9a-f]+/\d+)", text) else None),
+        "tr_busy": (re.search(r"PC5-64-TSS .*? busy=([a-z-]+)", text).group(1)
+                    if re.search(r"PC5-64-TSS .*? busy=([a-z-]+)", text) else None),
+        "tr_iomap": _number(text, r"PC5-64-TSS .*? iomap=(\d+)"),
+        "ist_gate_df": _number(text, r"PC5-64-TSS .*? ist-df=(\d+)"),
+        "ist_gate_nmi": _number(text, r"PC5-64-TSS .*? ist-nmi=(\d+)"),
+        "tr_reason": (re.search(r"PC5-64-TSS .*? reason=([a-z0-9-]+)", text).group(1)
+                      if re.search(r"PC5-64-TSS .*? reason=([a-z0-9-]+)", text) else None),
     }
 
 
@@ -1186,6 +1227,41 @@ def x64_stages():
               "the TSS line reports its own state, and does not over-claim TR",
               lambda seen, ctx: (seen["tr_state"] in ("loaded", "not-loaded"),
                                  "tr=%r" % seen["tr_state"])),
+        # The four facts that together mean "the processor loaded this TSS".  They are separate
+        # rows because they are separate mechanisms: STR reads a register, the descriptor read
+        # goes through GDTR, the busy bit is a write the CPU performs in memory, and the IDT's
+        # IST fields are the consequence the kernel allows itself to act on only when the first
+        # three agree.  A kernel that printed `tr=loaded` without the rest would pass one row
+        # here and fail three -- which is the whole design of this set.
+        Stage("the kernel executed LTR and read the result back with STR",
+              "LTR executed, and STR returned the selector the kernel built",
+              lambda seen, ctx: (seen["tr_state"] == "loaded"
+                                 and seen["tr_selector"] == PC5_TSS64_TR_SELECTOR,  # int
+                                 "tr=%r str=%r reason=%r"
+                                 % (seen["tr_state"], seen["tr_selector"], seen["tr_reason"]))),
+        Stage("the TSS descriptor names the frame that was granted to it",
+              "the descriptor read through GDTR names the TSS frame, with a 103-byte limit",
+              lambda seen, ctx: (seen["tr_desc"] is not None
+                                 and seen["tss_frame"] is not None
+                                 and seen["tr_desc"] == "0x%x/%d" % (seen["tss_frame"],
+                                                                      PC5_TSS64_SIZE - 1),
+                                 "desc=%r tss=%r" % (seen["tr_desc"], seen["tss_frame"]))),
+        Stage("the CPU marked the descriptor busy, which only a load does",
+              "the descriptor type went available -> busy across the instruction",
+              lambda seen, ctx: (seen["tr_busy"] == "available-to-busy",
+                                 "busy=%r" % seen["tr_busy"])),
+        Stage("the IDT routes the two IST-armed vectors, and only because TR was loaded",
+              "the double-fault gate names IST1 and the NMI gate names IST2",
+              lambda seen, ctx: (seen["ist_gate_df"] == PC5_TSS64_IST_DOUBLE_FAULT
+                                 and seen["ist_gate_nmi"] == PC5_TSS64_IST_NMI
+                                 and seen["tr_state"] == "loaded",
+                                 "ist-df=%r ist-nmi=%r tr=%r reason=%r"
+                                 % (seen["ist_gate_df"], seen["ist_gate_nmi"],
+                                    seen["tr_state"], seen["tr_reason"]))),
+        Stage("the TSS's own fields say there is no I/O permission map",
+              "the I/O-map base sits past the descriptor limit, as the TSS was written",
+              lambda seen, ctx: (seen["tr_iomap"] == PC5_TSS64_SIZE,
+                                 "iomap=%r" % seen["tr_iomap"])),
     ]
 
 

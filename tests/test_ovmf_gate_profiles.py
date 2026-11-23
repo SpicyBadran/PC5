@@ -55,7 +55,7 @@ PC5-64-CPU vendor=AuthenticAMD
 PC5-64-CPU long_mode=1
 PC5-64-MEM status=ok reason=ok frames=65094 conventional=53751 conventional_total=53751 claimed=1 free=53750 largest=41964 bitmap=0x20000 span=0x100000000
 PC5-64-MEM-SELFTEST one=0x1000 three=0x2000 grant-in-map=1 bitmap-lie-refused=1 result=ok
-PC5-64-TSS status=ok arm-rules=1 tss=0x1000 gdt=0x129280 limit=47 gdtr=0x129280 cpl=0 ist1=0x3000 ist2=0x4000 ist-df=0 ist-nmi=0 frames=3 free-after=53747 tr=not-loaded reason=ltr-unverifiable-here
+PC5-64-TSS status=ok arm-rules=1 tss=0x1000 gdt=0x129280 limit=47 gdtr=0x129280 cpl=0 ist1=0x3000 ist2=0x4000 ist-df=1 ist-nmi=2 frames=3 free-after=53747 tr=loaded str=0x20 desc=0x1000/103 busy=available-to-busy iomap=104
 PC5-64BIT-LONG-MODE-OK
 PC5-64-DONE
 """
@@ -143,9 +143,65 @@ class ClassifyX64(unittest.TestCase):
         self.assertEqual(seen["cpu_long_mode"], 1)
 
     def test_tr_state_is_recorded_as_measured(self):
-        """The log says `tr=not-loaded`; the gate reads that and does not round up."""
-        self.assertEqual(ovmf.classify(run_of(X64_GOOD_LOG), ovmf.X64)["tr_state"],
-                         "not-loaded")
+        """The gate reports the TSS line's own verdict, in both directions.
+
+        This assertion used to pin `not-loaded`, because that was the only state the boot path
+        could honestly reach: LTR was never executed.  It now pins the *pairing*, which is the
+        part that was ever at risk of drifting -- a log that says one thing and a gate that
+        reports another.
+        """
+        seen = ovmf.classify(run_of(X64_GOOD_LOG), ovmf.X64)
+        self.assertEqual(seen["tr_state"], "loaded")
+        self.assertEqual(seen["tr_selector"], 0x20)
+        self.assertEqual(seen["tr_busy"], "available-to-busy")
+        self.assertEqual(seen["ist_gate_df"], 1)
+        self.assertEqual(seen["ist_gate_nmi"], 2)
+        # The refused shape, read as refused: the reason name survives, the readbacks are
+        # absent rather than zero, and `None` is what a stage has to fail on.
+        refused = X64_GOOD_LOG.replace(
+            "tr=loaded str=0x20 desc=0x1000/103 busy=available-to-busy iomap=104",
+            "tr=not-loaded reason=arm-tr-readback")
+        seen = ovmf.classify(run_of(refused), ovmf.X64)
+        self.assertEqual(seen["tr_state"], "not-loaded")
+        self.assertEqual(seen["tr_reason"], "arm-tr-readback")
+        self.assertIsNone(seen["tr_selector"])
+        # The gates are still read as the log states them -- the gate does not infer them from
+        # TR -- which is what makes the *pairing* a row rather than a restatement: a boot whose
+        # IDT names an IST slot while its TR readback failed is the inconsistency the kernel
+        # refuses to produce, and the row has to be able to see it.
+        self.assertEqual(seen["ist_gate_df"], 1)
+        report = ovmf.Report()
+        ovmf.check_boot(report, run_of(refused, stopped_on=None), "cold", 208896, ovmf.X64,
+                        256)
+        inconsistent = [c for c in report.checks
+                        if c["state"] == "fail" and c["name"].endswith(
+                            "the double-fault gate names IST1 and the NMI gate names IST2")]
+        self.assertTrue(inconsistent,
+                        "TR failed to load while the gates stayed armed, and no row noticed")
+
+    def test_a_log_that_only_claims_tr_is_loaded_fails_the_row(self):
+        """The word with none of the readbacks behind it is a failure, not a pass.
+
+        `tr=loaded` is four separable facts -- STR's value, the descriptor through GDTR, the
+        type transition in memory, and the IDT fields that are only legitimate once the first
+        three agree.  Deleting them from a log has to move the rows, or the rows are reading a
+        substring and not a measurement.
+        """
+        boastful = X64_GOOD_LOG.replace(" str=0x20 desc=0x1000/103 busy=available-to-busy",
+                                       "")
+        report = ovmf.Report()
+        ovmf.check_boot(report, run_of(boastful, stopped_on=None), "cold", 208896, ovmf.X64,
+                        256)
+        states = {check["name"]: check["state"] for check in report.checks}
+        failed = [name for name, state in states.items()
+                  if state == "fail" and "cold]" in name
+                  and ("LTR" in name or "descriptor" in name or "busy" in name
+                       or "IST" in name or "I/O" in name)]
+        self.assertTrue(failed, "a TSS line with no STR, no descriptor and no busy transition "
+                                "passed every TSS row")
+        self.assertEqual(boastful.count("tr=loaded"), 1,
+                         "the fixture no longer claims a loaded TR, so this test proves "
+                         "nothing about claims")
 
     def test_watchdog_refusal_is_a_reported_attempt_not_a_missing_stage(self):
         text = X64_GOOD_LOG.replace("PC5-64-LOADER watchdog=disabled",

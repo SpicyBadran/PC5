@@ -60,6 +60,13 @@ unsigned long pc5_tss_off_gdtr_base(void) { return OFF(gdtr_base); }
 unsigned long pc5_tss_off_frames_taken(void) { return OFF(frames_taken); }
 unsigned long pc5_tss_off_built(void) { return OFF(built); }
 unsigned long pc5_tss_off_installed(void) { return OFF(installed); }
+unsigned long pc5_tss_off_gdtr_limit(void) { return OFF(gdtr_limit); }
+unsigned long pc5_tss_off_desc_base(void) { return OFF(desc_base); }
+unsigned long pc5_tss_off_desc_limit(void) { return OFF(desc_limit); }
+unsigned long pc5_tss_off_desc_type_before(void) { return OFF(desc_type_before); }
+unsigned long pc5_tss_off_desc_type_after(void) { return OFF(desc_type_after); }
+unsigned long pc5_tss_off_tr_selector(void) { return OFF(tr_selector); }
+unsigned long pc5_tss_off_tr_armed(void) { return OFF(tr_armed); }
 unsigned long pc5_tss_off_size(void) { return (unsigned long)sizeof(struct pc5_tss64); }
 """
 
@@ -74,6 +81,7 @@ _FUNCS = (
     ("pc5_tss64_release", None, [ctypes.c_void_p, ctypes.c_void_p]),
     ("pc5_tss64_gdt_word", ctypes.c_ulonglong, [ctypes.c_ulonglong]),
     ("pc5_tss64_reason", ctypes.c_char_p, [ctypes.c_void_p]),
+    ("pc5_tss64_check_loaded", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
 )
 
 _CACHE: dict = {}
@@ -105,7 +113,9 @@ def build(source_text=None, tag="real"):
         fn.restype = restype
         fn.argtypes = argtypes
     for name in ("tss_base", "ist_base", "ist_top", "gdt_base", "gdt_limit", "selector",
-                 "cpl", "gdtr_base", "frames_taken", "built", "installed"):
+                 "cpl", "gdtr_base", "frames_taken", "built", "installed", "gdtr_limit",
+                 "desc_base", "desc_limit", "desc_type_before", "desc_type_after",
+                 "tr_selector", "tr_armed"):
         setattr(lib, f"off_{name}", getattr(lib, f"pc5_tss_off_{name}"))
         getattr(lib, f"off_{name}").restype = ctypes.c_ulonglong
     lib.off_size = getattr(lib, "pc5_tss_off_size")
@@ -127,7 +137,13 @@ def mutate(old, new, tag):
 
 
 class Reader:
-    """Typed reads out of a `struct pc5_tss64` buffer, by the header's own offsets."""
+    """Typed reads out of a `struct pc5_tss64` buffer, by the header's own offsets.
+
+    `poke` is here because half of what the activation checks are about is *state the kernel
+    cannot reach on the host*: GDTR is written by LGDT, and there is no ring 0 here.  A control
+    that needs GDTR to name a different table therefore sets the two numbers LGDT would have
+    loaded, and says so -- which is also why these are the host's half of the evidence and the
+    stub plus the firmware gate are the executed half."""
 
     def __init__(self, lib):
         self.lib = lib
@@ -145,6 +161,13 @@ class Reader:
             width = self.WIDTH.get(field, 8)
         raw = bytes((ctypes.c_ubyte * width).from_buffer(self.buffer, offset))
         return int.from_bytes(raw, "little")
+
+    def poke(self, field, value, index=0, width=None):
+        offset = getattr(self.lib, f"off_{field}")() + index * 8
+        if width is None:
+            width = self.WIDTH.get(field, 8)
+        ctypes.memmove(ctypes.addressof(self.buffer) + offset,
+                       int(value).to_bytes(width, "little"), width)
 
 
 # --- the pool this test drives -------------------------------------------------
@@ -284,7 +307,7 @@ def battery(lib):
         want("the table is 47 bytes of limit for six slots",
              state.word("gdt_limit") == 6 * 8 - 1 and state.word("gdt_base") != 0)
         want("the selector a caller would hand to LTR is the slot the descriptor sits in",
-             state.word("selector") == 0x28, hex(state.word("selector")))
+             state.word("selector") == 0x20, hex(state.word("selector")))
 
         raw = ram_read(tss, TSS_SIZE)
         got1 = int.from_bytes(raw[IST1_OFFSET:IST1_OFFSET + 8], "little")
@@ -392,6 +415,246 @@ def battery(lib):
     return problems
 
 
+# --- the activation checks: the descriptor, the TSS, and what TR has to agree with ---
+#
+# `pc5_tss64_check_loaded` is the half of TR arming that needs no instruction, so the host can
+# drive it over doctored tables.  That is what makes these negative controls possible at all:
+# every one of them is "the CPU would fault, and the kernel refuses first", and a control that
+# could only be produced by faulting a real CPU would be a control for the environment rather
+# than for the code.
+TSS_SELECTOR = 0x20          # slot 4, the first qword of the 16-byte descriptor
+SCRATCH_AT = RAM_BASE + 120 * PAGE
+
+
+def hand_installed(state):
+    """The two numbers LGDT would have left in GDTR.
+
+    Deliberately a copy of the builder's own table address rather than a fresh one: the point
+    of the first control below is to show the check reads through GDTR, and that is only
+    visible when the two can be told apart.
+    """
+    state.poke("installed", 1, width=4)
+    state.poke("gdtr_base", state.word("gdt_base"))
+    state.poke("gdtr_limit", state.word("gdt_limit"), width=2)
+
+
+def arm_battery(lib):
+    problems = []
+
+    def want(label, condition, detail=""):
+        if not condition:
+            problems.append(f"{label}{': ' + detail if detail else ''}")
+
+    def reason(state):
+        return lib.pc5_tss64_reason(state.buffer).decode()
+
+    pool = Pool(lib)
+    state = Reader(lib)
+    if not lib.pc5_tss64_build(pool.cast, state.buffer):
+        problems.append("the builder refused the pool, so nothing here can be checked")
+        return problems
+    hand_installed(state)
+    gdt = state.word("gdt_base")
+    tss = state.word("tss_base")
+    desc_at = gdt + TSS_SELECTOR
+
+    def check(after=False):
+        return lib.pc5_tss64_check_loaded(state.buffer, 1 if after else 0)
+
+    def controls(label, *, expect, label_edit, after=False, detail=""):
+        """Snapshot, break, expect the named refusal, restore.
+
+        The snapshot is the part that matters: a battery that leaves one control's damage in
+        place reports the same reason for every later label and reads as a passing table.
+        """
+        low = bytes(ram_read(desc_at, 16))
+        body = bytes(ram_read(tss, TSS_SIZE))
+        # The whole state, not just the memory: several controls poke a field (GDTR's limit,
+        # the selector, the TSS address), and a snapshot of only the bytes the kernel writes
+        # would leave a poked field behind -- which is how one control's damage was reported as
+        # the *next* one's refusal, and the battery would then be measuring its own leftovers.
+        saved = bytes(bytearray(state.buffer))
+        label_edit()
+        ok = check(after)
+        got = reason(state)
+        want(f"{label} is refused as {expect}", ok == 0 and got == expect,
+             f"returned {ok} with {got!r}{(' ' + detail) if detail else ''}")
+        ram_write(desc_at, low)
+        ram_write(tss, body)
+        ctypes.memmove(state.buffer, saved, len(saved))
+
+    # The undamaged case, both sides of the instruction.
+    want("an available descriptor passes the pre-load check", check() == 1, reason(state))
+    want("and the post-load check accepts it unchanged, because a CPU that does not mark the"
+         " descriptor busy is a different fact from one that refused to load it",
+         check(after=True) == 1, reason(state))
+    want("so the decoded descriptor names the granted frame",
+         state.word("desc_base") == tss and state.word("desc_limit") == TSS_SIZE - 1,
+         f"{state.word('desc_base'):#x}/{state.word('desc_limit')}")
+
+    # A busy TSS is not loadable a second time: #TS on a real CPU, refused here first.
+    def label_edit():
+        ram_write(desc_at + 5, bytes([0x8B]))
+    controls("a descriptor already marked busy", expect="check-descriptor-type",
+             label_edit=label_edit)
+
+    def label_edit():
+        ram_write(desc_at + 5, bytes([0x09]))         # P cleared
+    controls("a descriptor that is not present", expect="check-descriptor-not-present",
+             label_edit=label_edit)
+
+    def label_edit():
+        ram_write(desc_at + 5, bytes([0x99]))         # S set: a code/data descriptor
+    controls("a descriptor with the system bit cleared", expect="check-descriptor-is-code-or-data",
+             label_edit=label_edit)
+
+    def label_edit():
+        ram_write(desc_at + 5, bytes([0xE9]))         # DPL 3
+    controls("a ring-3 TSS descriptor", expect="check-descriptor-dpl", label_edit=label_edit)
+
+    def label_edit():
+        ram_write(desc_at + 6, bytes([0x00]))          # L cleared: a 32-bit TSS
+    controls("a descriptor without the 64-bit TSS flag", expect="check-descriptor-l-bit",
+             label_edit=label_edit)
+
+    def label_edit():
+        ram_write(desc_at + 6, bytes([0xA0]))          # G set: byte limit would be scaled
+    controls("a descriptor with 4 KiB granularity", expect="check-descriptor-granularity",
+             label_edit=label_edit)
+
+    def label_edit():
+        ram_write(desc_at + 2, bytes([0x00, 0x20, 0x00]))   # base[23:0] -> 0x2000...
+    controls("a descriptor whose base is not the granted frame",
+             expect="check-descriptor-base", label_edit=label_edit)
+
+    def label_edit():
+        ram_write(desc_at, bytes([0xFF, 0xFF]))        # limit 65535
+    controls("a descriptor with the wrong limit", expect="check-descriptor-limit",
+             label_edit=label_edit)
+
+    def label_edit():
+        ram_write(desc_at, bytes([0x67, 0x00]))        # limit 103 is what SIZE-1 encodes
+        ram_write(desc_at + 6, bytes([0x00]))
+    # (limit 0x67 with L and G clear is the *correct* pair; this only re-checks the encoder,
+    # so it must PASS -- a control that refuses a good value is as useless as one that accepts
+    # a bad one, and the reason this one is here is that it was the shape of the bug that made
+    # the selector wrong for three milestones.)
+    low = bytes(ram_read(desc_at, 16))
+    want("limit 103 with G clear is the accepted encoding", check() == 1, reason(state))
+    ram_write(desc_at, low)
+
+    # The TSS's own contents, reached through the descriptor rather than through the builder.
+    def label_edit():
+        ram_write(tss + 32, bytes(8))                  # IST1 -> 0
+    controls("an unwritten IST1 field", expect="check-ist1-field", label_edit=label_edit)
+
+    def label_edit():
+        ram_write(tss + 40, bytes(8))                  # IST2 -> 0
+    controls("an unwritten IST2 field", expect="check-ist2-field", label_edit=label_edit)
+
+    def label_edit():
+        ram_write(tss + 100, bytes(4))                 # I/O-map base -> 0, inside the limit
+    controls("an I/O-map base of zero", expect="check-iomap-field", label_edit=label_edit)
+
+    def label_edit():
+        ram_write(tss + 100, (TSS_SIZE - 8).to_bytes(4, "little"))
+    controls("an I/O-map base inside the TSS", expect="check-iomap-field", label_edit=label_edit)
+
+    def label_edit():
+        ram_write(tss + 4, b"\x01" + bytes(7))         # RSP0 -> 1
+    controls("a privilege stack pointer that is not zero", expect="check-rsp-fields",
+             label_edit=label_edit)
+
+    # Selector-level refusals.  The constant check comes first, so a selector that is not the
+    # one this kernel builds -- including one with the table bit set -- is refused as
+    # unexpected rather than out-of-range: which of the two fires is a property of the order,
+    # and the order is asserted here rather than inferred from a comment.
+    def label_edit():
+        state.poke("selector", 0x23, width=2)          # RPL 3
+    controls("a selector at the wrong privilege level", expect="check-selector-rpl",
+             label_edit=label_edit)
+
+    def label_edit():
+        state.poke("selector", 0x28, width=2)          # the second half of the pair: the bug
+    controls("the second half of the descriptor pair as a selector",
+             expect="check-selector-unexpected", label_edit=label_edit)
+
+    def label_edit():
+        state.poke("selector", 0x24, width=2)          # table bit set: an LDT selector
+    controls("an LDT selector", expect="check-selector-table-bit", label_edit=label_edit)
+
+    def label_edit():
+        state.poke("tss_base", tss + 4)
+    controls("a TSS that is not 8-byte aligned", expect="check-tss-unaligned",
+             label_edit=label_edit)
+
+    def label_edit():
+        state.poke("gdtr_limit", 31, width=2)          # table ends before the descriptor pair
+    controls("a GDTR limit that does not cover the descriptor",
+             expect="check-descriptor-outside-gdt", label_edit=label_edit)
+
+    # The discriminating one: the table the CPU reads is GDTR's, not the one the builder kept.
+    # Zero the descriptor in a *copy*, point GDTR at the copy, and the good descriptor still
+    # readable through `pc5_tss64_gdt_word(4)` must not save it.
+    table = bytes(ram_read(gdt, 48))
+    ram_write(SCRATCH_AT, table[:TSS_SELECTOR] + bytes(16))
+    low = bytes(ram_read(desc_at, 16))
+    body = bytes(ram_read(tss, TSS_SIZE))
+    state.poke("gdtr_base", SCRATCH_AT)
+    ok = lib.pc5_tss64_check_loaded(state.buffer, 0)
+    want("a descriptor the builder wrote but GDTR does not name is refused",
+         ok == 0 and reason(state) == "check-descriptor-not-present", reason(state))
+    want("...while the builder's own copy still looks perfect, which is why this test exists",
+         lib.pc5_tss64_gdt_word(4) != 0)
+    state.poke("gdtr_base", gdt)
+    ram_write(SCRATCH_AT, bytes(48))
+    return problems
+
+
+class Tss64ActivationTests(unittest.TestCase):
+    """`pc5_tss64_check_loaded`, driven over every way the table or the TSS can disagree."""
+
+    def test_the_battery_passes_against_the_real_source(self):
+        self.assertEqual(arm_battery(build()), [], "the activation checks disagreed")
+
+    def test_the_selector_is_the_first_qword_of_the_descriptor(self):
+        """0x20, not 0x28 -- and the reason this is a test rather than a comment.
+
+        A GDT selector is the descriptor's byte offset divided by 8, so a 16-byte descriptor
+        that begins at byte 32 is named by 0x20.  This kernel said 0x28, naming the descriptor's
+        *high half*, whose first bytes are base[63:32] and which therefore reads as a
+        not-present descriptor of type 0.  Nothing noticed, because nothing executed LTR: the
+        builder and its own decoder agreed with each other, the way a pair of arithmetic
+        mistakes agrees.  The constant is asserted here against the layout the GDT array
+        actually has, and `arm_battery` above refuses the old value by name.
+        """
+        text = TSS_SOURCE.read_text(encoding="utf-8")
+        slot = text.index("g_gdt[4] = tss_desc_build_low")
+        self.assertIn("PC5_TSS64_SELECTOR 0x20u",
+                      (ROOT / "kernel64" / "tss64.h").read_text(encoding="utf-8"),
+                      "the selector no longer names the low half of the pair built at g_gdt[4]")
+        self.assertLess(text.index("g_gdt[4]"), text.index("g_gdt[5]"),
+                        "the pair is written high-first, so the selector would be 0x28")
+        lib = build()
+        pool = Pool(lib)
+        state = Reader(lib)
+        self.assertEqual(lib.pc5_tss64_build(pool.cast, state.buffer), 1)
+        self.assertEqual(state.word("selector"), TSS_SELECTOR)
+        # And the pair the selector names: byte 32 and byte 40 of the table.
+        self.assertEqual(TSS_SELECTOR, 32 // 8 * 8,
+                         "a selector is an offset divided by 8, times 8")
+
+    def test_tr_armed_stays_zero_until_the_install_has_happened(self):
+        """Arming before LGDT is refused, so TR can never be loaded from a table the CPU
+        is not using -- and `report_tss`'s gate rule reads that flag and nothing else."""
+        lib = build()
+        pool = Pool(lib)
+        state = Reader(lib)
+        self.assertEqual(lib.pc5_tss64_build(pool.cast, state.buffer), 1)
+        self.assertEqual(state.word("installed"), 0)
+        self.assertEqual(state.word("tr_armed", width=4), 0)
+
+
 class Tss64HostTests(unittest.TestCase):
     def test_the_battery_passes_against_the_real_source(self):
         problems = battery(build())
@@ -409,6 +672,56 @@ class Tss64HostTests(unittest.TestCase):
                       "installed"):
             self.assertGreaterEqual(getattr(lib, f"off_{field}")(), 0)
             self.assertLess(getattr(lib, f"off_{field}")(), lib.off_size(), field)
+
+
+class Tss64ActivationMutationTests(unittest.TestCase):
+    """The activation battery has to notice the checks being removed, one `if` at a time."""
+
+    def assert_caught(self, lib, label):
+        problems = arm_battery(lib)
+        if problems:
+            return
+        self.fail(f"{label}: the activation battery passed against the mutant, so the property "
+                  "it is meant to enforce is not enforced by the code")
+
+    def test_losing_the_bounds_test_on_the_table_is_caught(self):
+        """A bound so wide it never trips, written so the parameter stays used.
+
+        `if (0)` would not compile here -- the host build carries -Werror=unused-parameter, and
+        the argument exists only for this test -- which is the right outcome for a mutant, but
+        for the wrong reason.  Relaxing the comparison instead proves the *check* is what the
+        control depends on.
+        """
+        self.assert_caught(mutate(
+            "    if (byte_off + 16ull > gdtr_limit + 1ull)   /* a 16-byte descriptor has to fit */",
+            "    if (byte_off + 16ull > gdtr_limit + 0xFFFFull)   /* a 16-byte descriptor has to fit */",
+            "gdtr-bounds-removed"), "a GDTR limit that cuts the descriptor in half")
+
+    def test_accepting_a_busy_descriptor_before_loading_is_caught(self):
+        """Say the acceptable pre-load type is "busy" and the good table stops passing.
+
+        The constant is the mutation's subject rather than an incidental: which type a
+        *fresh* descriptor must carry is exactly the fact the check encodes, and a kernel that
+        demanded 11 before loading would refuse its own GDT and then load nothing."""
+        self.assert_caught(mutate("#define PC5_DESC_TYPE_TSS_AVAIL 9ull",
+                                  "#define PC5_DESC_TYPE_TSS_AVAIL 11ull",
+                                  "avail-type-is-busy"),
+                           "a descriptor whose type is already busy before the load")
+
+    def test_trusting_the_builder_about_the_iomap_field_is_caught(self):
+        self.assert_caught(mutate(
+            "    if (tss_dword(base, 100ull) != PC5_TSS64_SIZE) {",
+            "    if (0) {",
+            "iomap-check-removed"), "an I/O-map base that was never written")
+
+    def test_reading_the_builders_array_instead_of_gdtr_is_caught(self):
+        """Replace the read-through-GDTR with the builder's own words and the copy control
+        above stops distinguishing them -- which is the whole reason the read is written the
+        way it is."""
+        self.assert_caught(mutate(
+            "    if (!gdt_descriptor_at(state->gdtr_base, state->gdtr_limit, selector, &low, &high)) {",
+            "    if (!gdt_descriptor_at(state->gdt_base, state->gdt_limit, selector, &low, &high)) {",
+            "reads-builder-array"), "a descriptor read from the wrong table")
 
 
 class Tss64MutationTests(unittest.TestCase):

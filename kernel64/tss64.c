@@ -18,7 +18,19 @@
 /* The GDT the kernel lives on.  Slots 1 and 2 are the code and data selectors the IDT
  * gates name (0x08, 0x10) written the same way the loader wrote them, slot 3 is left
  * zero because a null selector is what a NULL pointer looks like, and slots 4 and 5 are
- * the two halves of the TSS descriptor - which is why the selector is 0x28 and not 0x20.
+ * the two halves of the TSS descriptor, named by the selector of its FIRST qword.
+
+ * The selector used to be 0x28, on the reasoning that a 16-byte descriptor "occupies two
+ * slots so it starts at the second one".  That is inverted: a GDT selector is the byte offset
+ * of the descriptor divided by 8 -- which is exactly why the code segment at slot 1 is 0x08 and
+ * the data segment at slot 2 is 0x10, both of which this kernel uses correctly from the IDT.
+ * Slot 4 therefore begins at byte 32, which is 0x20; 0x28 names slot 5, the descriptor's high
+ * half, whose low bits are base[63:32] and read as a not-present descriptor with type 0.
+ *
+ * The bug was invisible for as long as it existed because nothing executed LTR: the descriptor
+ * itself was built correctly, `build()` decodes the same pair it encodes, and the gate asserted
+ * the unloaded TR that a never-attempted load necessarily produces.  It surfaced the moment
+ * `pc5_tss64_arm()` started reading the descriptor back through GDTR before believing it.
  *
  * It is in .bss, not in an allocated frame, on purpose: the CPU reads the GDT while
  * taking a fault, so it has to be up before the first fault, and the image claim covers
@@ -89,6 +101,10 @@ int pc5_tss64_build(struct pc5_mem64 *pool, struct pc5_tss64 *out)
     out->built = 0;
     out->installed = 0;
     out->cpl = 0;
+    out->tr_armed = 0;
+    out->tr_selector = 0;
+    out->desc_type_before = 0;
+    out->desc_type_after = 0;
     out->selector = PC5_TSS64_SELECTOR;
     for (i = 0; i < 8; i++) {
         out->ist_base[i] = 0;
@@ -246,15 +262,24 @@ struct pc5_desc_ptr {
     u64 base;
 } __attribute__((packed, aligned(16)));
 
-/* The GDT the CPU reads.  Deliberately does NOT load TR, and that is not an
- * oversight: `ltr` is the instruction that would make the IST stacks live, and the only
- * 64-bit execution environment this repository can run refuses it - measured, not
- * assumed, and asserted by `tests/test_tss64.py` so the day it changes is a failing test
- * rather than a rumour.  Loading TR is also the one step that would make the IDT's IST
- * fields *used*, and an IDT gate that names an interrupt stack while TR points
- * somewhere else is a fault that reads a stack nobody allocated.  So the table and the
- * segment registers are switched over here, the TSS and its stacks are built and
- * validated, and arming IST is left to a caller that has loaded TR. */
+/* The GDT the CPU reads: a privilege check, LGDT, and an SGDT readback that has to agree.
+ *
+ * It stops short of LTR, and that belongs to `pc5_tss64_arm` rather than being absent: the
+ * table has to be live before the descriptor in it can be handed to the CPU, and the two steps
+ * fail for different reasons, so they report separately.
+ *
+ * The comment that stood here for three milestones explained the missing instruction as an
+ * environment's refusal -- "the only 64-bit execution environment this repository can run
+ * refuses it - measured, not assumed" -- and `docs/evidence/2026-11-22-tss-and-ist/` recorded
+ * the fault with six hypotheses ruled out and the cause unnamed.  The cause was in this file:
+ * the selector named 0x28, which is the *second* qword of the 16-byte TSS descriptor at g_gdt[4]
+ * and reads as a not-present type-0 descriptor, so the CPU raised #TS on a request to load
+ * something that is not a TSS at all.  The emulator behaved correctly; the kernel asked
+ * incorrectly; and nothing could see it because the instruction was never executed, the builder
+ * and its own decoder agreed with each other about the pair, and the gate asserted the unloaded
+ * TR that a never-attempted load necessarily produces.  Recorded here because the lesson is not
+ * "use 0x20": it is that a limitation attributed to a tool outlives the tool's usefulness as an
+ * explanation, and the instruction that documents it is the one worth executing. */
 int pc5_tss64_install(struct pc5_mem64 *pool, struct pc5_tss64 *state)
 {
     static struct pc5_desc_ptr gdtr;
@@ -299,6 +324,279 @@ int pc5_tss64_install(struct pc5_mem64 *pool, struct pc5_tss64 *state)
     state->installed = 1;
     state->reason = "ok";
     return 1;
+}
+
+/* The pieces of the access/flags bytes, at their architectural positions.
+ *
+ * Positions are spelled from the bit numbering in the Intel manual rather than by inverting
+ * `tss_desc_build_low`, on the same principle the encode/decode pair above follows: a shared
+ * helper would let one wrong bit position be both written and believed. */
+#define PC5_DESC_TYPE_MASK   0xFull     /* bits 40..43 */
+#define PC5_DESC_TYPE_SHIFT  40
+#define PC5_DESC_S_SHIFT     44         /* bit 44: 0 for a system descriptor such as a TSS */
+#define PC5_DESC_DPL_SHIFT   45         /* bits 45..46 */
+#define PC5_DESC_P_SHIFT     47         /* bit 47: present */
+#define PC5_DESC_L_SHIFT     53         /* bit 53: the 64-bit TSS flag */
+#define PC5_DESC_G_SHIFT     55         /* bit 55: 4 KiB granularity of the limit */
+
+/* The two types a TSS descriptor may have in long mode.  9 is "available 64-bit TSS", which
+ * is what a fresh GDT entry holds and the only one LTR accepts; 11 is "busy", which is what
+ * the descriptor reads as *after* a CPU has loaded it, and which LTR refuses a second time
+ * with #TS.  So 9 -> 11 across the instruction is the signature of a real load: it is a write
+ * into the GDT that nothing else in this kernel performs.  Both ends are recorded, rather than
+ * the after-value alone, because "the CPU did not mark it busy" and "the CPU refused to load
+ * it" are different facts about the machine the boot ran on, and no prose should be allowed to
+ * blur them. */
+#define PC5_DESC_TYPE_TSS_AVAIL 9ull
+#define PC5_DESC_TYPE_TSS_BUSY  11ull
+
+static u64 desc_field(u64 low, u64 shift, u64 mask)
+{
+    return (low >> shift) & mask;
+}
+
+/* Read the descriptor at `selector` out of the table GDTR names.  Returns 0 when the selector
+ * does not address a complete descriptor inside the limit GDTR reports -- the same bounds test
+ * the CPU applies, so a refusal here and a fault there cannot disagree about *whether* the read
+ * is possible, only about what the read finds. */
+static int gdt_descriptor_at(u64 gdtr_base, u64 gdtr_limit, u64 selector,
+                             u64 *low, u64 *high)
+{
+    u64 byte_off = selector & ~7ull;          /* a GDT selector is the byte offset over 8, +RPL */
+
+    if (gdtr_base == 0)
+        return 0;
+    if (byte_off < 16ull)                      /* slot 0 is null, slot 1 is the code segment */
+        return 0;
+    if (selector & 4u)                         /* table bit: LTR takes a GDT selector only */
+        return 0;
+    if (byte_off + 16ull > gdtr_limit + 1ull)   /* a 16-byte descriptor has to fit */
+        return 0;
+    if ((gdtr_base & 7ull) != 0)                /* qword reads, so the table must be 8-aligned */
+        return 0;
+    *low = *(volatile u64 *)(unsigned long)(gdtr_base + byte_off);
+    *high = *(volatile u64 *)(unsigned long)(gdtr_base + byte_off + 8ull);
+    return 1;
+}
+
+static u64 tss_byte(u64 base, u64 offset)
+{
+    return (u64) * (volatile u8 *)(unsigned long)(base + offset);
+}
+
+static u64 tss_qword(u64 base, u64 offset)
+{
+    u64 value = 0;
+    u64 i;
+
+    for (i = 0; i < 8ull; i++)
+        value |= tss_byte(base, offset + i) << (i * 8ull);
+    return value;
+}
+
+static u32 tss_dword(u64 base, u64 offset)
+{
+    u64 value = 0;
+    u64 i;
+
+    for (i = 0; i < 4ull; i++)
+        value |= tss_byte(base, offset + i) << (i * 8ull);
+    return (u32)value;
+}
+
+/* Everything about the table and the memory that LTR is about to be handed, or has just been
+ * handed, without executing an instruction:
+ *
+ *   1. the selector addresses a real descriptor in the table GDTR names -- read *through*
+ *      GDTR, not out of the builder's own array, because the builder agreeing with itself is
+ *      worth nothing while the CPU reads a different table;
+ *   2. that descriptor is a present, ring-0, available (or, after a load, busy) 64-bit TSS
+ *      whose base and limit name the frame the pool granted, with byte granularity;
+ *   3. what it points at is the TSS that was built: IST1 and IST2 read back as the tops the
+ *      grant implies, the I/O-map base sits past the limit, and RSP0..2 are the zeros that
+ *      say "no privilege transition is offered" rather than a stack nobody owns.
+ *
+ * `after_load` selects which type is expected, and the two calls bracket the instruction, so
+ * the same function is what proves the descriptor did or did not change hands.
+ *
+ * Returns 1 and leaves `reason` at "ok", or returns 0 naming the first thing that disagreed.
+ * It is deliberately callable without loading TR, which is what lets the host battery drive
+ * every refusal below from a doctored table -- and it is why `tests/test_tss64.py` is where the
+ * negative controls live, since a control that could only be run by faulting a real CPU is a
+ * control for the environment rather than for the code. */
+int pc5_tss64_check_loaded(struct pc5_tss64 *state, int after_load)
+{
+    u64 low = 0, high = 0, base = 0, limit = 0;
+    u64 type;
+    u64 selector = state->selector;
+
+    state->reason = "ok";
+    if (!state->built) {
+        state->reason = "check-before-build";
+        return 0;
+    }
+    /* The three selector faults are named apart, in the order the CPU would notice them,
+     * because they mean different things to whoever reads the line: an RPL of 3 or the LDT bit
+     * is a *corrupted* selector field -- something wrote into the state after the build set it
+     * -- while a wrong-but-plausible value is the build's own idea of where the descriptor
+     * lives, which is the defect this file used to carry.  Checking the bits before the
+     * constant is what keeps those two stories apart. */
+    if ((selector & 3ull) != 0ull) {
+        state->reason = "check-selector-rpl";
+        return 0;
+    }
+    if (selector & 4ull) {
+        state->reason = "check-selector-table-bit";
+        return 0;
+    }
+    if (selector != PC5_TSS64_SELECTOR) {
+        state->reason = "check-selector-unexpected";
+        return 0;
+    }
+    if ((state->tss_base & 7ull) != 0ull) {
+        state->reason = "check-tss-unaligned";
+        return 0;
+    }
+    if (!gdt_descriptor_at(state->gdtr_base, state->gdtr_limit, selector, &low, &high)) {
+        state->reason = "check-descriptor-outside-gdt";
+        return 0;
+    }
+    type = desc_field(low, PC5_DESC_TYPE_SHIFT, PC5_DESC_TYPE_MASK);
+    if (after_load)
+        state->desc_type_after = type;
+    else
+        state->desc_type_before = type;
+    if (desc_field(low, PC5_DESC_P_SHIFT, 1ull) != 1ull) {
+        state->reason = "check-descriptor-not-present";
+        return 0;
+    }
+    if (desc_field(low, PC5_DESC_S_SHIFT, 1ull) != 0ull) {
+        state->reason = "check-descriptor-is-code-or-data";
+        return 0;
+    }
+    if (desc_field(low, PC5_DESC_DPL_SHIFT, 3ull) != 0ull) {
+        state->reason = "check-descriptor-dpl";
+        return 0;
+    }
+    if (type != (after_load ? PC5_DESC_TYPE_TSS_BUSY : PC5_DESC_TYPE_TSS_AVAIL)
+        && !(after_load && type == PC5_DESC_TYPE_TSS_AVAIL)) {
+        state->reason = after_load ? "check-descriptor-type-after" : "check-descriptor-type";
+        return 0;
+    }
+    if (desc_field(low, PC5_DESC_L_SHIFT, 1ull) != 1ull) {
+        state->reason = "check-descriptor-l-bit";
+        return 0;
+    }
+    if (desc_field(low, PC5_DESC_G_SHIFT, 1ull) != 0ull) {
+        state->reason = "check-descriptor-granularity";
+        return 0;
+    }
+    tss_desc_decode(low, high, &base, &limit);
+    state->desc_base = base;
+    state->desc_limit = limit;
+    if (base != state->tss_base) {
+        state->reason = "check-descriptor-base";
+        return 0;
+    }
+    if (limit != (u64)(PC5_TSS64_SIZE - 1u)) {
+        state->reason = "check-descriptor-limit";
+        return 0;
+    }
+    if (tss_qword(base, 32ull) != state->ist_top[PC5_TSS64_IST_DOUBLE_FAULT]) {
+        state->reason = "check-ist1-field";
+        return 0;
+    }
+    if (tss_qword(base, 40ull) != state->ist_top[PC5_TSS64_IST_NMI]) {
+        state->reason = "check-ist2-field";
+        return 0;
+    }
+    if (tss_dword(base, 100ull) != PC5_TSS64_SIZE) {
+        state->reason = "check-iomap-field";
+        return 0;
+    }
+    if (tss_qword(base, 4ull) != 0ull || tss_qword(base, 12ull) != 0ull
+        || tss_qword(base, 20ull) != 0ull) {
+        state->reason = "check-rsp-fields";
+        return 0;
+    }
+    return 1;
+}
+
+/* LTR, and the two readbacks that make it a claim rather than an assembly statement.
+ *
+ * The instruction is executed here, on the boot path, by the kernel that owns the TSS -- not
+ * by a harness on its behalf, and not behind a capability check: an environment that cannot
+ * run it is *measured* by what the readbacks say afterwards, which is the difference between
+ * "unverifiable here" and "refused here".
+ *
+ * Note what is checked before the instruction as well as after it.  Loading a descriptor whose
+ * type is already busy raises #TS on a real CPU, so a kernel that only looked afterwards would
+ * turn a stale TSS into a fault inside the setup of the thing meant to catch faults -- and the
+ * boot log would end mid-line rather than name the reason.
+ */
+int pc5_tss64_arm(struct pc5_tss64 *state)
+{
+    u16 selector = (u16)state->selector;
+    u16 readback = 0xFFFFu;
+
+    state->tr_armed = 0;
+    state->tr_selector = 0;
+    state->desc_type_before = 0;
+    state->desc_type_after = 0;
+    if (!state->installed) {
+        state->reason = "arm-before-install";
+        return 0;
+    }
+    if (!pc5_tss64_check_loaded(state, 0))
+        return 0;
+
+    /* LTR's operand is a register holding the selector in 64-bit mode (`ltr %ax`).  `ltr m16`
+     * is not a form this assembler accepts, and hand-encoding the opcode would be the kind of
+     * thing that assembles into something else while looking right in a diff. */
+    __asm__ volatile("ltr %0" : : "r"(selector));
+
+    /* STR's readback is the CPU's own statement about TR, and it is the value the gate
+     * compares against.  Asking for 0xFFFF first means "TR still says nothing" cannot be
+     * confused with "TR says what we set". */
+    __asm__ volatile("str %0" : "=r"(readback));
+    state->tr_selector = readback;
+    if (readback != selector) {
+        state->reason = "arm-tr-readback";
+        return 0;
+    }
+    if (!pc5_tss64_check_loaded(state, 1))
+        return 0;
+
+    state->tr_armed = 1;
+    state->reason = "ok";
+    return 1;
+}
+
+/* What to print for the busy transition: words, not numbers, because the distinction the field
+ * encodes is the point of the whole bracket and a hex digit hides it. */
+const char *pc5_tss64_busy_transition(const struct pc5_tss64 *state)
+{
+    if (state->desc_type_before == PC5_DESC_TYPE_TSS_AVAIL
+        && state->desc_type_after == PC5_DESC_TYPE_TSS_BUSY)
+        return "available-to-busy";
+    if (state->desc_type_before == PC5_DESC_TYPE_TSS_AVAIL
+        && state->desc_type_after == PC5_DESC_TYPE_TSS_AVAIL)
+        return "still-available";
+    if (state->desc_type_before == 0ull && state->desc_type_after == 0ull)
+        return "unreadable";
+    return "other";
+}
+
+/* The I/O-map base field, re-read from the TSS.  104 (`PC5_TSS64_SIZE`) is the encoding for
+ * "there is no I/O permission map", which is what this kernel wants: the field sits past the
+ * descriptor's limit, so any I/O access raises #GP instead of reading whatever follows the
+ * structure in memory.  A 0 means the field was never written, and an IST stack behind an
+ * unwritten TSS is the configuration this whole file exists to refuse. */
+u64 pc5_tss64_iomap_base(const struct pc5_tss64 *state)
+{
+    if (!state->built || state->desc_base == 0)
+        return 0;
+    return (u64)tss_dword(state->desc_base, 100ull);
 }
 
 void pc5_tss64_release(struct pc5_mem64 *pool, struct pc5_tss64 *state)

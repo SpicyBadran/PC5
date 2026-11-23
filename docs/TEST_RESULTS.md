@@ -3153,3 +3153,56 @@ matrices and a `verification.sh` that re-derives all of it; `docs/evidence/2026-
 (`OK (43 checks)`) stays as the record of the run *before* the header existed, and its
 `0x32000`/204800 numbers describe that artifact, not this one — which is why it is kept rather
 than corrected.
+
+
+## 30. TR is loaded: the selector was wrong for three milestones, and executing LTR found it
+
+**Run:** 2026-11-24, workspace on `arena/5e36f38b-pc5` at `898f708` with this work uncommitted,
+QEMU 11.0.2 + the EDK II OVMF from the same package, TCG only; Unicorn 2.1.4 for the stub.
+**Milestone 8, PR A.** §29 left `tr=not-loaded reason=ltr-unverifiable-here` standing, and this is
+the work that removes it — by loading the register, not by editing the marker.
+
+**What was wrong.** `PC5_TSS64_SELECTOR` was `0x28`. The TSS descriptor is 16 bytes, written as
+`g_gdt[4]` (low half) and `g_gdt[5]` (high half), and a GDT selector is the byte offset of the
+descriptor divided by 8 — which is exactly why the kernel's own code segment at `g_gdt[1]` is
+`0x08` and its data segment at `g_gdt[2]` is `0x10`. Slot 4 begins at byte 32, so the descriptor
+is named by `0x20`; `0x28` names the *high half*, whose low bits are `base[63:32]` and which
+therefore reads as a not-present, type-0 descriptor. The correct selector is `0x20`.
+
+**Why that had never been seen.** Nothing executed `ltr`. `pc5_tss64_build()` encodes the pair and
+decodes the same pair, so the builder agreed with itself; the IDT gates were deliberately *not*
+armed, because arming them requires TR to name the TSS and nothing had loaded it; and the gate
+asserted the unloaded TR that a never-attempted load necessarily produces. `docs/evidence/2026-11-22-tss-and-ist/ltr-measurement.md`
+had recorded the fault under the stub, ruled out six hypotheses about the *emulator*, and named the
+cause as undetermined — an erratum now follows that write-up, because the seventh hypothesis was in
+this repository's own header.
+
+**What was built.** `pc5_tss64_check_loaded()` reads the descriptor *through GDTR* (not out of the
+builder's array), checks present/S/DPL/type/L/G, decodes base and limit against the granted frame
+and `PC5_TSS64_SIZE - 1`, and then reads the TSS through that base: IST1, IST2, the I/O-map base,
+and RSP0..2. `pc5_tss64_arm()` brackets the instruction with it — refusing a descriptor that is
+already busy *before* the load (a real CPU raises #TS for that, and the kernel now says so instead
+of faulting inside the setup of the thing meant to catch faults) — executes `ltr %ax` and `str %ax`,
+requires STR's readback to equal the selector, and re-runs the checks expecting the busy transition
+it performs in memory. `report_tss()` arms `#DF` → IST1 and `NMI` → IST2 **if and only if**
+`tr_armed`, and the pairing rule that used to read "not loaded, so not armed" is now a two-way
+equivalence in both the stub and the firmware gate.
+
+| Command | Result |
+| --- | --- |
+| `make stubtest64` | **`49/49 checks passed`** (was 45; one check replaced by five) |
+| `python3 -m unittest tests.test_tss64` | **OK, 14 tests** — 3 new: the activation battery, the selector/`nm`-free layout assertion, and the `tr_armed`-before-install rule |
+| `tests/test_tss64.py::Tss64ActivationMutationTests` | 4 mutants of the new checks, each caught: GDTR bounds widened, `available` redefined to `busy`, the I/O-map read trusted, and the descriptor read from the builder's array instead of GDTR's |
+| `python3 -m unittest tests.test_ovmf_gate_profiles tests.test_ovmf_harness tests.test_idt64 tests.test_kernel64 tests.test_tss64` | **OK, 187 tests** (67 skipped without QEMU) |
+| `make PC5_UEFI=64 iso` + a hand-run cold boot under TianoCore | `PC5-64-TSS status=ok … ist-df=1 ist-nmi=2 tr=loaded str=0x20 desc=0x1000/103 busy=available-to-busy iomap=104`, no `PC5-64-EXCEPTION`, `PC5-64BIT-LONG-MODE-OK`, `PC5-64-DONE` |
+
+**The distinction this run can make, and the one it cannot.** `busy=available-to-busy` is a write
+into the GDT that only a CPU performing a load makes, so the four fields above together are evidence
+about the machine rather than about the log — and they are read back through GDTR and through the
+descriptor, so a kernel that printed the right words without loading anything fails at least three
+of the five new gate rows (`tests/test_ovmf_gate_profiles.py::test_a_log_that_only_claims_tr_is_loaded_fails_the_row`
+asserts exactly that by deleting the readbacks from a good log). What is **not** yet shown is the
+consequence that matters most: that a `#DF` or an NMI is *delivered* on those stacks. The gates are
+now armed and the TSS is live, which is the precondition; the delivery evidence is PR B and PR C.
+`make check`, both firmware gates, and the Milestone 8 evidence directory are owed a run at the
+commit that lands them, and none of this is claimed until they are green.

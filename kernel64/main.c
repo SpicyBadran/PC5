@@ -522,6 +522,8 @@ static struct pc5_tss64 g_tss64;
 
 static void report_tss(void)
 {
+    int tr_ok = 0;
+
     serial64_write("PC5-64-TSS status=");
 
     if (!pc5_tss64_build(&g_mem64, &g_tss64)) {
@@ -560,11 +562,36 @@ static void report_tss(void)
         }
         serial64_write("ok arm-rules=1");
     }
-    /* And the state the boot path leaves behind: not armed, because TR does not name this
-     * TSS.  A gate claiming an interrupt stack the CPU cannot resolve turns a reportable
-     * fault into a lost one, which is worse than having no IST at all. */
-    if (idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT) != 0
-        || idt64_gate_ist(PC5_VECTOR_NMI) != 0) {
+    /* TR.  The instruction is executed here, on the boot path, by the kernel that owns the
+     * TSS -- not by a harness on its behalf.  `pc5_tss64_arm` is what decides whether the
+     * gates below may be armed, and it decides from three readbacks (STR, the descriptor
+     * through GDTR, the TSS through that descriptor) rather than from the fact that the
+     * instruction assembled. */
+    tr_ok = pc5_tss64_arm(&g_tss64);
+
+    /* Arming the interrupt stack routing, and the rule that makes it safe: a gate with a
+     * non-zero IST field makes fault delivery read `ISTn` out of *whatever TSS TR points at*,
+     * so the gates may name an IST slot if and only if TR names this TSS.  That is the same
+     * rule this file had before LTR was executed -- when it could only ever leave TR
+     * unloaded, which is why `ist-df` and `ist-nmi` read 0 -- stated as a two-way agreement
+     * now that both halves of it can be true.  A one-way rule would let a future edit arm the
+     * gates while the readbacks were failing and still print a clean line. */
+    if (tr_ok) {
+        if (!idt64_set_ist(PC5_VECTOR_DOUBLE_FAULT, PC5_TSS64_IST_DOUBLE_FAULT)
+            || !idt64_set_ist(PC5_VECTOR_NMI, PC5_TSS64_IST_NMI)) {
+            serial64_write("failed reason=ist-arm-refused frames=0\n");
+            return;
+        }
+        if (idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT) != PC5_TSS64_IST_DOUBLE_FAULT
+            || idt64_gate_ist(PC5_VECTOR_NMI) != PC5_TSS64_IST_NMI) {
+            idt64_clear_ist(PC5_VECTOR_DOUBLE_FAULT);
+            idt64_clear_ist(PC5_VECTOR_NMI);
+            pc5_tss64_release(&g_mem64, &g_tss64);
+            serial64_write("failed reason=ist-readback-mismatch frames=0\n");
+            return;
+        }
+    } else if (idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT) != 0
+               || idt64_gate_ist(PC5_VECTOR_NMI) != 0) {
         idt64_clear_ist(PC5_VECTOR_DOUBLE_FAULT);
         idt64_clear_ist(PC5_VECTOR_NMI);
         pc5_tss64_release(&g_mem64, &g_tss64);
@@ -593,7 +620,29 @@ static void report_tss(void)
     serial64_dec(g_tss64.frames_taken);
     serial64_write(" free-after=");
     serial64_dec(pc5_mem64_stats(&g_mem64)->free);
-    serial64_write(" tr=not-loaded reason=ltr-unverifiable-here\n");
+    /* The fields that make the claim checkable from outside.  `str=` is what the CPU
+     * reports as its own task register, `busy=` is the descriptor type transition the load
+     * performs in memory, `desc=` is the base and limit decoded out of the table GDTR names,
+     * and `iomap=` is the TSS's own last field read back through that base.  A gate that can
+     * read all four can tell "TR holds 0x28 because the CPU loaded it" from "TR holds 0x28
+     * because something wrote the same number into a log". */
+    serial64_write(" tr=");
+    serial64_write(g_tss64.tr_armed ? "loaded" : "not-loaded");
+    serial64_write(" str=");
+    serial64_hex(g_tss64.tr_selector);
+    serial64_write(" desc=");
+    serial64_hex(g_tss64.desc_base);
+    serial64_write("/");
+    serial64_dec(g_tss64.desc_limit);
+    serial64_write(" busy=");
+    serial64_write(pc5_tss64_busy_transition(&g_tss64));
+    serial64_write(" iomap=");
+    serial64_dec(pc5_tss64_iomap_base(&g_tss64));
+    if (!g_tss64.tr_armed) {
+        serial64_write(" reason=");
+        serial64_write(pc5_tss64_reason(&g_tss64));
+    }
+    serial64_write("\n");
 }
 
 static void report_memory(const struct pc5_boot64 *bi)

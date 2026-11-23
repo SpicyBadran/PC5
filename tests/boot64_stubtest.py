@@ -245,17 +245,41 @@ def checks_for(trace, expect_success=True):
     check("the IST arming rules hold on the live table",
           fields(serial, tss_line, "arm-rules") == "1",
           f"arm-rules={fields(serial, tss_line, 'arm-rules')}")
-    # The claim that must NOT be made: IST means something only once TR names this TSS,
-    # and this boot path does not load TR (see kernel64/tss64.h).  When the last step is
-    # wired up - on an emulator that runs LTR, or on firmware - this check goes red and
-    # says the report and the routing have to be updated together.
-    check("TR is reported unloaded and the gates say the same",
-          fields(serial, tss_line, "tr") == "not-loaded"
-          and fields(serial, tss_line, "ist-df") == "0"
-          and fields(serial, tss_line, "ist-nmi") == "0",
-          f"tr={fields(serial, tss_line, 'tr')} "
-          f"ist-df={fields(serial, tss_line, 'ist-df')} "
-          f"ist-nmi={fields(serial, tss_line, 'ist-nmi')}")
+    # The rule that keeps a fault honest, in both directions now that LTR is executed on this
+    # path: the IDT may name an interrupt stack if and only if the CPU's own readbacks say TR
+    # names this TSS.  Written as an equivalence rather than two assertions, because the whole
+    # point is that the two halves cannot drift: `tr=loaded` with the gates unarmed is a kernel
+    # that loaded a TSS nobody will ever use, and `tr=not-loaded` with them armed is a fault
+    # that reads an IST slot out of whatever TSS TR does name.  Both fail here; neither can be
+    # fixed by editing the other half, and neither was detectable at all while the left side
+    # was hard-wired to "not-loaded" because nobody executed the instruction.
+    tr = fields(serial, tss_line, "tr")
+    ist_df = fields(serial, tss_line, "ist-df")
+    ist_nmi = fields(serial, tss_line, "ist-nmi")
+    check("the IDT routes to an IST slot if and only if TR names this TSS",
+          (tr == "loaded") == (ist_df == "1" and ist_nmi == "2"),
+          f"tr={tr} ist-df={ist_df} ist-nmi={ist_nmi}")
+    # What this emulator specifically established, so that the sentence above is not the only
+    # thing standing between a regression and a green gate.  STR's readback, the descriptor as
+    # it is found through GDTR, the busy transition that only a loading CPU performs in memory,
+    # and the I/O-map base read back through the descriptor - all four are the kernel quoting
+    # the machine rather than quoting itself, and Unicorn 2.1.4 answers all of them: the fault
+    # this path used to take was the kernel's own wrong selector (0x28, the descriptor's high
+    # half), not an emulator that refuses the instruction.  `docs/evidence/2026-11-22-tss-and-ist/`
+    # recorded the fault and could not name the cause; the cause was in tss64.h.
+    check("LTR executed and STR read back the selector the kernel built",
+          tr == "loaded" and fields(serial, tss_line, "str") == "0x20",
+          f"tr={tr} str={fields(serial, tss_line, 'str')} "
+          f"reason={fields(serial, tss_line, 'reason')}")
+    check("the descriptor the CPU was given names the granted TSS frame with a 103-byte limit",
+          fields(serial, tss_line, "desc") == fields(serial, tss_line, "tss") + "/103",
+          f"desc={fields(serial, tss_line, 'desc')} tss={fields(serial, tss_line, 'tss')}")
+    check("the TSS descriptor went from available to busy in memory",
+          fields(serial, tss_line, "busy") == "available-to-busy",
+          f"busy={fields(serial, tss_line, 'busy')}")
+    check("the TSS's own I/O-map base says there is no I/O permission map",
+          fields(serial, tss_line, "iomap") == "104",
+          f"iomap={fields(serial, tss_line, 'iomap')}")
     check("no exception was reported by the kernel across the boot that installed it",
           "PC5-64-EXCEPTION" not in serial,
           "the handler prints this line for any delivered fault, so its absence covers "

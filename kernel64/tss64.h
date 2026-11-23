@@ -44,7 +44,7 @@
 
 #define PC5_TSS64_SIZE 104u
 #define PC5_TSS64_GDT_SLOTS 6u
-#define PC5_TSS64_SELECTOR 0x28u
+#define PC5_TSS64_SELECTOR 0x20u
 #define PC5_TSS64_STACK_PAGES 1ull
 #define PC5_TSS64_FRAMES 3ull          /* TSS + IST1 + IST2 */
 
@@ -71,6 +71,10 @@ struct pc5_tss64 {
     u16 gdtr_limit;
     u64 desc_base;                      /* the TSS descriptor decoded */
     u64 desc_limit;
+    u64 desc_type_before;               /* descriptor type byte field, read through GDTR */
+    u64 desc_type_after;                /* ... and again after LTR: the CPU marks it busy */
+    u64 tr_selector;                    /* what STR reads back after LTR */
+    int tr_armed;                       /* 1 when TR names this TSS and the checks agree */
     u64 frames_taken;                   /* granted and kept */
     int built;                          /* 1 when the TSS and GDT are written */
     int installed;                      /* 1 when GDTR agrees with the table built */
@@ -86,9 +90,28 @@ int pc5_tss64_build(struct pc5_mem64 *pool, struct pc5_tss64 *out);
 /* Switch the CPU to the table `pc5_tss64_build` prepared: a privilege check, LGDT, and
  * an SGDT readback that has to agree.  Returns 1 when GDTR says what the kernel wrote.
  *
- * It does not load TR, and therefore does not make IST live; see the comment on the
- * function.  `installed` is the flag a caller of `idt64_set_ist` has to have set. */
+ * Loading TR is `pc5_tss64_arm`'s job, on purpose: the table has to be live before the
+ * descriptor in it can be handed to the CPU, and the two steps fail for different reasons.  A
+ * caller that wants to arm an IST field checks `tr_armed`, which only that second step sets,
+ * and never `installed` -- GDTR naming the table is not the same fact as TR naming the TSS, and
+ * the difference is the whole content of `report_tss`'s pairing rule. */
 int pc5_tss64_install(struct pc5_mem64 *pool, struct pc5_tss64 *state);
+
+/* Load TR with the selector the build prepared, and *prove it took*: STR's readback, the
+ * descriptor read back through GDTR rather than out of the builder's own array, the TSS
+ * fields read from memory, and the busy transition the CPU performs on the descriptor type.
+ * Returns 1 only when all of it agrees; `reason` says which part did not.
+ *
+ * This is the step that makes the IST stacks live, so it is also the step whose failure has
+ * to be visible: an environment that refuses LTR ends up here with `tr_armed = 0`, and the
+ * caller that arms the IDT gates is required to look at this flag and no other. */
+int pc5_tss64_arm(struct pc5_tss64 *state);
+
+/* The half of that proof that needs no instruction: the descriptor through GDTR and the TSS
+ * through that descriptor.  `after_load` expects a busy descriptor; without it, an available
+ * one.  Returns 1 and leaves `reason` at "ok", or names the first disagreement -- and it is
+ * callable with TR untouched, which is what lets the host battery drive every refusal in it. */
+int pc5_tss64_check_loaded(struct pc5_tss64 *state, int after_load);
 
 /* Hand the frames back after an install that turned out to be unusable, and report what
  * was released.  Called only from the failure path in main.c. */
@@ -99,5 +122,13 @@ void pc5_tss64_release(struct pc5_mem64 *pool, struct pc5_tss64 *state);
 u64 pc5_tss64_gdt_word(u64 index);
 
 const char *pc5_tss64_reason(const struct pc5_tss64 *state);
+
+/* The descriptor type transition LTR performs in memory, as words: "available-to-busy" is a
+ * load, "still-available" is a TR that was set without the CPU touching the table, and
+ * "unreadable" is an attempt that never got far enough to read it. */
+const char *pc5_tss64_busy_transition(const struct pc5_tss64 *state);
+
+/* The TSS's I/O-map-base field, read back through the descriptor's base. */
+u64 pc5_tss64_iomap_base(const struct pc5_tss64 *state);
 
 #endif
