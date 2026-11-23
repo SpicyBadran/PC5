@@ -60,7 +60,7 @@ Two inputs are embedded in the kernel and therefore in the image hash:
 
 | Input | Default | Override |
 |---|---|---|
-| build id, printed as `PC5_BUILD_ID` and shown on screen | `git rev-parse --short HEAD` | `make BUILD_ID=…` |
+| build id, printed as `PC5_BUILD_ID` and shown on screen | `git rev-parse --short HEAD`, with `-dirty` appended when tracked files differ from it | `make BUILD_ID=…` |
 | build timestamp, printed as `PC5_BUILD_DATE` | current UTC time | `SOURCE_DATE_EPOCH=…` or `make BUILD_DATE=…` |
 
 Byte-identical output therefore needs **the same commit and the same timestamp**:
@@ -78,6 +78,27 @@ MBR, so nothing depends on file-system order or on when you build. This is cover
 `tests/test_tools.py::test_source_date_epoch_makes_builds_byte_identical`. `build/build-info.json` records the volume
 layout, the per-file SHA-256 values and the image SHA-256 that `make verify`
 re-checks.
+
+**Attribution, and why the ISO rebuilds when you commit.** The `BUILDINFO.TXT` inside
+the image carries `build:` (the label above), `commit:` (the full object id),
+`uefi-path:` and `esp-loader:` (the first 16 hex of the SHA-256 of the loader actually
+in the ESP).  `$(BUILD)/iso/BUILDINFO.TXT` is a prerequisite of `$(ISO)` and itself
+depends on `$(BUILD)/pc5.iso.stamp`, one file holding the three things the record
+quotes that the image's name does not: the boot mode, `git rev-parse HEAD`, and the
+SHA-256 of the loader embedded in the ESP.  The stamp's recipe runs on every
+invocation and rewrites the file only when one of those values actually differs, so
+committing, or switching `PC5_UEFI` in a directory that already holds both loaders,
+rebuilds the image rather than leaving one that names the tree before it — an ISO is a
+file, and it otherwise survives a `git commit`.  Timestamps alone cannot serve: in a
+shared `build/` directory a mode switch moves no mtime the record depends on.  The
+working tree's state is not stamped on purpose (that would rebuild on every `touch`);
+it is carried in the `build:` label instead, which is why an uncommitted artifact says
+`-dirty` and cannot be mistaken for a release of a commit.
+Both consumers re-check the claim instead of trusting it: `make ovmf-test` grades the
+record against the medium it booted, and `make metadata`
+(`tools/buildmeta.py --ovmf-evidence`) refuses to publish a boot verdict whose report
+names a different image SHA-256 than the image being described — exit 3, both digests
+quoted.
 
 The snippet above is run by the test suite for both UEFI paths, as two clean
 rebuilds each (`make clean iso`, not an incremental re-build), so the claim is a

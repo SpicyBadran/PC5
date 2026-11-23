@@ -21,8 +21,16 @@ Design rules
 * Existing top-level keys written by mkiso.py are preserved (verify_iso.py
   cross-checks them), the new information goes under "build".
 
-Exit codes: 0 on success, 2 on bad input, 3 when a report says verification
-failed (so a pipeline cannot publish a failing build by accident).
+The firmware-boot evidence (--ovmf-evidence) is the record of a *boot*, so it is
+only ever about the image it was produced from: the report's own `iso_sha256` is
+compared with the image being described, and a report about some other artifact is
+refused.  That case is easy to reach by accident -- `make ovmf-test` and `make iso`
+are separate steps, and a report left over from the previous build describes a
+previous build.
+
+Exit codes: 0 on success, 2 on bad input, 3 when a report says verification failed
+or an evidence file describes a different artifact (so a pipeline cannot publish a
+failing build, or someone else's boot, by accident).
 """
 
 from __future__ import annotations
@@ -37,6 +45,17 @@ import subprocess
 import sys
 
 SCHEMA = "pc5.build-metadata/1"
+
+#: What each `PC5_UEFI` mode is, in the words the release record uses.
+#:
+#: The architecture used to be hardcoded to the 32-bit string, so a 64-bit release
+#: published a record describing the other path -- and a reader sorting releases by
+#: architecture would file it wrongly.  `tests/ovmf_boot.py` reads the profile off the
+#: medium, so the two spellings here have to stay the gate's spellings.
+ARCHITECTURE = {
+    "32": "i386 (32-bit protected mode, freestanding)",
+    "64": "x86_64 (long mode, freestanding)",
+}
 
 UNIT_RE = re.compile(r"(PASSED|FAILED):\s*(\d+)\s+checks,\s*(\d+)\s+failures")
 HOST_RE = re.compile(r"Ran\s+(\d+)\s+tests?")
@@ -91,6 +110,59 @@ def summarise_checks(name: str, checks: list, source: str | None) -> dict:
     }
 
 
+def summarise_firmware_boot(report: dict, source: str | None) -> dict:
+    """The OVMF gate's report, reduced to what a release record should carry.
+
+    Only what the gate itself observed is copied out: the verdicts it counted, the
+    artifact digests it measured, the firmware and emulator it ran.  Nothing here is
+    inferred, and a NOT TESTED path stays NOT TESTED -- `not_tested_names` is in the
+    record so a reader can see what the boot did not settle.
+    """
+    data = report.get("data") or {}
+    env = data.get("environment") or {}
+    checks = report.get("checks") or []
+    failed = [c for c in checks if c.get("state") == "fail"]
+    skipped = [c for c in checks if c.get("state") == "skip"]
+    matrix = data.get("matrix") or []
+    states: dict[str, int] = {}
+    for row in matrix:
+        states[str(row.get("state"))] = states.get(str(row.get("state")), 0) + 1
+    boots = {}
+    for kind in ("cold", "warm"):
+        boot = data.get(kind) or {}
+        if boot:
+            boots[kind] = {
+                "stopped_on": boot.get("stopped_on"),
+                "seconds": boot.get("seconds"),
+                "returncode": boot.get("returncode"),
+            }
+    return {
+        "name": "firmware_boot",
+        "checks": len(checks),
+        "failures": len(failed),
+        "failed": [c.get("name") for c in failed][:20],
+        "not_tested": len(skipped),
+        "not_tested_names": [c.get("name") for c in skipped][:20],
+        "all_passed": bool(report.get("passed")),
+        "profile": env.get("profile"),
+        "exit_code": report.get("exit_code"),
+        "matrix": {"rows": len(matrix), **states},
+        "boots": boots,
+        "artifact": {
+            "iso": env.get("iso"),
+            "iso_sha256": env.get("iso_sha256"),
+            "efi_image_sha256": env.get("efi_image_sha256"),
+            "buildinfo": env.get("buildinfo"),
+        },
+        "environment": {
+            "qemu_version": env.get("qemu_version"),
+            "ovmf_code": env.get("ovmf_code"),
+            "host": env.get("host"),
+        },
+        "source": os.path.basename(source) if source else None,
+    }
+
+
 def summarise_log(name: str, path: str | None, regex: re.Pattern) -> dict | None:
     if not path or not os.path.exists(path):
         return None
@@ -127,6 +199,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--source-date-epoch", default=None)
     ap.add_argument("--build-date", default=None)
     ap.add_argument("--verify-report", help="JSON from verify_iso.py --json-out")
+    ap.add_argument("--ovmf-evidence", metavar="PATH",
+                    help="JSON from tests/ovmf_boot.py (the genuine-firmware boot gate)")
+    ap.add_argument("--uefi-path", choices=("32", "64"), default="32",
+                    help="which UEFI loader path the image ships, so the recorded "
+                         "architecture matches the artifact (default: 32)")
     ap.add_argument("--boot-evidence", help="JSON from tests/boot_test.py")
     ap.add_argument("--unit-log", help="captured output of `make unit`")
     ap.add_argument("--host-log", help="captured output of the python test suite")
@@ -189,6 +266,29 @@ def main(argv: list[str] | None = None) -> int:
             summarise_checks("emulated_boot", boot["checks"], args.boot_evidence)
         )
 
+    # The firmware gate's report, and the one rule that makes it worth quoting: it
+    # has to be about *this* image.  A leftover report from an earlier build would
+    # otherwise publish a boot verdict for an artifact nobody booted.
+    firmware_entry = None
+    try:
+        firmware = read_json(args.ovmf_evidence)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"buildmeta: cannot read firmware-boot evidence: {exc}", file=sys.stderr)
+        return 2
+    if firmware is not None:
+        claimed = ((firmware.get("data") or {}).get("environment") or {}).get("iso_sha256")
+        if args.iso and claimed and claimed != artifact["sha256_rechecked"]:
+            print(
+                f"buildmeta: {args.ovmf_evidence} is a boot record for iso sha256 "
+                f"{claimed}, but {args.iso} is {artifact['sha256_rechecked']}: the "
+                "report describes a different artifact. Re-run `make ovmf-test` on "
+                "this image, or drop --ovmf-evidence.",
+                file=sys.stderr,
+            )
+            return 3
+        firmware_entry = summarise_firmware_boot(firmware, args.ovmf_evidence)
+        verification.append(firmware_entry)
+
     for entry in (
         summarise_log("kernel_unit", args.unit_log, UNIT_RE),
         summarise_log("host_tests", args.host_log, HOST_RE),
@@ -196,7 +296,8 @@ def main(argv: list[str] | None = None) -> int:
         if entry:
             verification.append(entry)
 
-    failed = [v for v in verification if (v.get("failures") or 0) > 0]
+    failed = [v for v in verification
+              if (v.get("failures") or 0) > 0 or v.get("all_passed") is False]
     metadata = {
         "schema": SCHEMA,
         "product": "PC5",
@@ -209,7 +310,8 @@ def main(argv: list[str] | None = None) -> int:
         else None,
         "build_date": args.build_date,
         "architecture": {
-            "kernel": "i386 (32-bit protected mode, freestanding)",
+            "kernel": ARCHITECTURE[args.uefi_path],
+            "uefi_path": args.uefi_path,
             "host": platform.machine(),
         },
         "toolchain": toolchain(),

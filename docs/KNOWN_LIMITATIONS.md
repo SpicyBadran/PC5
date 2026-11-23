@@ -12,7 +12,16 @@ work that has secretly been done.
    a protocol stub (`make stubtest`, 58 checks); genuine TianoCore OVMF boots the
    ISO cold and warm and the kernel reaches `PC5-BOOT-OK` (`make ovmf-test`,
    40 checks, 1 NOT APPLICABLE, `docs/TEST_RESULTS.md` §16); and **no physical
-   UEFI machine has done it** — `M1` is not started. On this path the loader also cannot report the
+   UEFI machine has done it** — `M1` is not started.
+   The gate runs both kernel paths, each graded in its own vocabulary: `make
+   ovmf-test` for the 32-bit release and `make PC5_UEFI=64 ovmf-test` for the
+   64-bit one; the counts for a given commit are in `docs/TEST_RESULTS.md` and the
+   serial logs under `docs/evidence/`.  Which path a run grades is read from
+   the medium, not from a flag: both flavors are written to `build/pc5.iso` and both
+   ESPs carry `EFI/BOOT/BOOTX64.EFI`, so only `KERNEL.BIN` against `KERNEL64.BIN`
+   distinguishes them where firmware can see.  A boot that only initialised firmware
+   is never a pass — the 64-bit stages require the loader's own banner, and a stage
+   that reports "no loader failure was reported" must have seen it first. On this path the loader also cannot report the
    ISO volume id, the kernel LBA or the ISO9660 descriptor (the file protocol
    does not expose them), and it hands over no VGA font, so the kernel's
    framebuffer console falls back to text mode.
@@ -116,6 +125,12 @@ work that has secretly been done.
   `tests/test_release_esp.py`'s digests) and then the loader check — a format change for its own
   slice, not a patch to a boot PR. Boot evidence and the byte dump that settled it:
   `docs/evidence/2026-11-23-64bit-genuine-ovmf-boot/README.md`.
+  The gate now says this out loud rather than relying on the prose: on a medium whose
+  kernel file has no `PC5K` signature the corrupted-header control is reported NOT
+  TESTED with that reason — never a pass, because a mutant that cannot be built proves
+  nothing — and `HEADER_VOCABULARY_CHECK` fails the run if the gate's claim and the
+  image disagree, so the row becomes enforced the moment the format gains a header,
+  with no flag left to remember.
 
 Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
 §16). What that does **not** cover:

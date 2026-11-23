@@ -333,48 +333,114 @@ class MatrixTests(unittest.TestCase):
             self.assertNotEqual(row["source"], "OVMF cold boot")
             self.assertIn("(", row["source"])
 
-    def test_a_good_cold_boot_marks_the_boot_rows_verified(self):
+    def test_a_good_cold_boot_verifies_the_rows_it_claims(self):
+        """Rows come from the run's own checks now, not from a shared predicate.
+
+        The bug this replaced: `build_matrix` judged every cold row with one blanket
+        expression (`boot_ok and loader_banner and kernel_entry`), so a row could read
+        VERIFIED while the check that is supposed to answer it had failed -- and a row
+        could be renamed out of existence without the matrix noticing.  A row is now
+        verified exactly when its own check passed, so this test has to feed the
+        harness a complete, real log.
+        """
+        from test_ovmf_gate_profiles import IA32_GOOD_LOG
         report = self.make_report()
-        report.data["cold"] = {"markers": ovmf.classify({"serial": GOOD_SERIAL})}
-        rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
-        self.assertEqual(rows["the PC5 EFI loader executes"]["state"], "verified")
-        self.assertEqual(rows["the kernel handoff succeeds"]["state"], "verified")
+        ovmf.check_boot(report, {"serial": IA32_GOOD_LOG, "raw_serial": IA32_GOOD_LOG,
+                                 "seconds": 4.0, "killed": False,
+                                 "stopped_on": "PC5-BOOT-OK", "returncode": -9,
+                                 "command": [], "stderr": ""},
+                        "cold", 67028, ovmf.IA32, 256)
+        rows = {row["requirement"]: row for row in ovmf.build_matrix(report, ovmf.IA32)}
+        cold = [row for row in rows.values()
+                if row["source"] == "OVMF cold boot"]
+        self.assertEqual(len(cold), len(ovmf.ia32_stages()))
+        self.assertEqual([row["state"] for row in cold], ["verified"] * len(cold),
+                         [(row["requirement"], row.get("note")) for row in cold
+                          if row["state"] != "verified"])
 
-    def test_a_failed_cold_boot_marks_them_not_tested(self):
-        report = self.make_report()
-        report.data["cold"] = {"markers": ovmf.classify(
-            {"serial": "PC5-UEFI FAILURE E15: window\r\nPC5-UEFI-FAILURE E15\r\n"})}
-        rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
-        self.assertEqual(rows["the kernel handoff succeeds"]["state"], "not-tested")
+    def test_a_row_that_names_no_check_is_not_tested(self):
+        """The guard against prose that drifted away from the code.
 
-    def test_a_negative_run_that_booted_is_a_failure_row(self):
-        report = self.make_report()
-        report.data["negative"] = {"no-kernel": {"markers": ovmf.classify(
-            {"serial": "PC5 UEFI loader\r\nPC5-BOOT-OK\r\n"})}}
-        rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
-        self.assertEqual(rows["a missing kernel is an explicit failure"]["state"], "failed")
-
-    def test_a_negative_row_follows_its_check_not_a_generic_refusal(self):
-        """A row whose check passed is verified, even when the guest booted fine.
-
-        `deadline` and `small-memory` are negatives that succeed without a refusal;
-        the matrix used to demand `failure_codes or firmware_refused` of every
-        negative and so reported them `failed` on a run whose checks all passed.
+        A row whose check name nobody emits cannot be satisfied by some other green
+        check, and must not be reported as failed either -- the honest answer is that
+        this run did not answer the question.
         """
         report = self.make_report()
-        report.check("a boot that outlives its deadline is reported as a timeout, "
-                     "not as a pass", True)
-        report.data.setdefault("negative", {})["deadline"] = {
-            "markers": {"boot_ok": False, "failure_codes": [],
-                        "firmware_refused": False},
-            "check": ovmf.DEADLINE_CHECK}
-        rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
+        rows = ovmf.build_matrix(report, ovmf.X64)
+        invented = {"requirement": "an invented requirement",
+                    "source": "OVMF cold boot", "check": "[cold] nothing of the sort",
+                    "state": "not-tested"}
+        rows.append(invented)
+        self.assertEqual(invented["state"], "not-tested")
+        # And with no run at all, no row may claim to be verified.
+        self.assertFalse([row for row in rows if row["state"] == "verified"])
+
+    def test_a_negative_row_follows_its_own_check(self):
+        """`deadline` and `small-memory` succeed without refusing anything.
+
+        They used to be judged by "did it refuse?", which reported a `failed` row on a
+        run whose checks had all passed.  The check is now the only judge, for every
+        control, so a row reads verified exactly when the control's own check did.
+        """
+        report = self.make_report()
+        report.check(ovmf.DEADLINE_CHECK, True)
+        rows = {row["requirement"]: row for row in ovmf.build_matrix(report, ovmf.IA32)}
         self.assertEqual(rows[ovmf.DEADLINE_CHECK]["state"], "verified")
-        # ... and a negative that records no check keeps the old marker rule, so
-        # this is a link, not a blanket "trust the checks" override.
-        del report.data["negative"]["deadline"]["check"]
-        rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
+        report = self.make_report()
+        report.check(ovmf.DEADLINE_CHECK, False, "the boot finished inside the budget")
+        rows = {row["requirement"]: row for row in ovmf.build_matrix(report, ovmf.IA32)}
         self.assertEqual(rows[ovmf.DEADLINE_CHECK]["state"], "failed")
+        self.assertIn("the boot finished inside the budget",
+                      rows[ovmf.DEADLINE_CHECK]["note"])
+
+    def test_the_control_rows_are_row_and_check_in_one_name(self):
+        """One name per control, for both profiles -- including the 64-bit one.
+
+        The bug this pins: a matrix row worded differently from the check that drove
+        it, so the lookup missed and the generic "did it refuse?" rule applied, and
+        rows read `failed` while every check passed.  `required_rows` now *returns* the
+        check name, so there is no second spelling to drift.
+        """
+        for profile in (ovmf.IA32, ovmf.X64):
+            rows = {requirement: (source, check)
+                    for requirement, source, check in ovmf.required_rows(profile)}
+            for name in (ovmf.DEADLINE_CHECK, ovmf.SMALL_MEMORY_CHECK,
+                         ovmf.BAD_PE_CHECK, ovmf.NO_BOOT_APP_CHECK,
+                         ovmf.TRUNCATED_CHECK, profile.no_kernel_check()):
+                self.assertIn(name, rows, "%s: %r is not a row" % (profile.key, name))
+                source, check = rows[name]
+                self.assertEqual(check, name)
+                self.assertTrue(source.startswith("OVMF negative run"), source)
+        source_text = pathlib.Path(ROOT, "tests", "ovmf_boot.py").read_text()
+        for name in (ovmf.DEADLINE_CHECK, ovmf.SMALL_MEMORY_CHECK, ovmf.BAD_PE_CHECK):
+            # The sentence appears once in the file: as the constant's own
+            # definition.  Anywhere else it would be a duplicated literal free to
+            # drift, which is the bug this guards.
+            self.assertEqual(source_text.count('"%s' % name[:34]), 1,
+                             "%r is spelled out somewhere besides its definition"
+                             % name[:20])
+
+    def test_one_broken_stage_fails_one_row(self):
+        """The precision the milestone asked for, on the row level.
+
+        Dropping the read-back line must fail the handoff row alone: not the boot's
+        whole stage set, and -- the old bug -- not the handoff row *not* at all.
+        """
+        from test_ovmf_gate_profiles import X64_GOOD_LOG
+        crippled = "\n".join(
+            line for line in X64_GOOD_LOG.splitlines()
+            if "the kernel copy was read back" not in line and "range=ok" not in line
+            and not line.startswith("PC5-64-IMAGE"))
+        report = self.make_report()
+        ovmf.check_boot(report, {"serial": crippled, "raw_serial": crippled,
+                                 "seconds": 4.0, "killed": False,
+                                 "stopped_on": "PC5-64-DONE", "returncode": -9,
+                                 "command": [], "stderr": ""},
+                        "cold", 204800, ovmf.X64, 256)
+        rows = {row["requirement"]: row for row in ovmf.build_matrix(report, ovmf.X64)}
+        self.assertEqual(rows["the kernel handoff succeeds"]["state"], "failed")
+        self.assertEqual(rows["the kernel reaches its 64-bit success marker"]["state"],
+                         "verified")
 
     def test_a_failed_matrix_row_makes_the_run_fail(self):
         """The exit status and the matrix cannot disagree."""
@@ -395,36 +461,79 @@ class MatrixTests(unittest.TestCase):
                       "own memory", rows)
         self.assertNotIn("insufficient memory fails safely", rows)
 
-    def test_the_two_check_driven_negatives_are_row_and_check_in_one_name(self):
-        """`deadline` and `small-memory` exist once each, as a constant.
+    def test_a_negative_without_its_check_is_never_verified(self):
+        """A refusal in the log is not the verdict; the control's check is.
 
-        The bug this pins: the matrix row was worded differently from the check
-        that drove it, so the lookup missed, the generic "did it refuse?" rule
-        applied, and both rows read `failed` while every check passed.  A row
-        that is not one of the two constants keeps the marker rule, which is the
-        right rule for a refusal.
+        `build_matrix` used to fall back to "did this run refuse or print a failure
+        code?" for any negative row whose check name it could not find.  That is how a
+        row came to read VERIFIED because the emulator happened to stop early: a mutant
+        that was never built, never booted, or was starved by firmware before PC5 ran
+        looks exactly like a control that worked.  Now a row is verified only when its
+        own check ran, and a row whose check is missing says NOT TESTED -- including
+        this case, where the markers do show a refusal.
         """
-        rows = dict(ovmf.REQUIRED_MATRIX)
-        self.assertEqual(rows[ovmf.DEADLINE_CHECK], "negative:deadline")
-        self.assertEqual(rows[ovmf.SMALL_MEMORY_CHECK], "negative:small-memory")
-        source = pathlib.Path(ROOT, "tests", "ovmf_boot.py").read_text()
-        for name in (ovmf.DEADLINE_CHECK, ovmf.SMALL_MEMORY_CHECK):
-            # The sentence appears once in the file: as the constant's own
-            # definition.  Anywhere else it would be a duplicated literal free to
-            # drift, which is the bug this guards.
-            self.assertEqual(source.count('"%s' % name[:34]), 1,
-                             "%r is spelled out somewhere besides its definition" %
-                             name[:34])
-
-    def test_a_refusal_negative_still_uses_the_marker_rule(self):
-        """A negative with no recorded check is verified by a refusal, as before."""
         report = self.make_report()
-        report.data.setdefault("negative", {})["no-kernel"] = {
-            "markers": {"boot_ok": False, "failure_codes": ["E2"]}}
-        rows = {r["requirement"]: r for r in ovmf.build_matrix(report)}
-        self.assertEqual(rows["a missing kernel is an explicit failure"]["state"],
-                         "verified")
+        report.data.setdefault("negative", {})[
+            ovmf.IA32.no_kernel_check()] = {
+                "markers": {"boot_ok": False, "failure_codes": ["E2"]}}
+        rows = {row["requirement"]: row
+                for row in ovmf.build_matrix(report, ovmf.IA32)}
+        self.assertEqual(rows[ovmf.IA32.no_kernel_check()]["state"], "not-tested")
+        # And with the check emitted, the same row follows it in both directions.
+        report.check(ovmf.IA32.no_kernel_check(), True)
+        rows = {row["requirement"]: row
+                for row in ovmf.build_matrix(report, ovmf.IA32)}
+        self.assertEqual(rows[ovmf.IA32.no_kernel_check()]["state"], "verified")
+        report = self.make_report()
+        report.check(ovmf.IA32.no_kernel_check(), False, "the mutant booted anyway")
+        rows = {row["requirement"]: row
+                for row in ovmf.build_matrix(report, ovmf.IA32)}
+        self.assertEqual(rows[ovmf.IA32.no_kernel_check()]["state"], "failed")
 
+    def test_a_duplicated_control_name_is_a_defect(self):
+        """One name per control, defined once, for both profiles.
 
+        The bug this pins: the matrix row was worded differently from the check that
+        drove it, so the lookup missed, the fallback rule judged the row, and both
+        `deadline` and `small-memory` read `failed` on a run whose checks all passed.
+        """
+        for profile in (ovmf.IA32, ovmf.X64):
+            rows = {requirement: (source, check) for requirement, source, check
+                    in ovmf.required_rows(profile)}
+            for name in (ovmf.DEADLINE_CHECK, ovmf.SMALL_MEMORY_CHECK,
+                         ovmf.BAD_PE_CHECK, ovmf.NO_BOOT_APP_CHECK,
+                         ovmf.TRUNCATED_CHECK, profile.no_kernel_check()):
+                self.assertIn(name, rows, "%s: %r is not a row" % (profile.key, name))
+                source, check = rows[name]
+                self.assertEqual(check, name)
+                self.assertTrue(source.startswith("OVMF negative run"), source)
+        source_text = pathlib.Path(ROOT, "tests", "ovmf_boot.py").read_text()
+        for name in (ovmf.DEADLINE_CHECK, ovmf.SMALL_MEMORY_CHECK,
+                     ovmf.BAD_PE_CHECK, ovmf.NO_BOOT_APP_CHECK, ovmf.TRUNCATED_CHECK):
+            # Each control's wording appears exactly once in the file -- in the
+            # constant.  A second occurrence anywhere (a check call, a comment that
+            # restates it) is a second spelling, and the second spelling is what drifts
+            # and silently unbinds a row from its check.
+            fragment = name[:20]
+            self.assertEqual(source_text.count(fragment), 1,
+                             "%r is spelled out somewhere besides its definition"
+                             % fragment)
+
+    def test_the_boot_rows_come_from_the_stage_table(self):
+        """The rows the milestone lists are the rows the harness judges.
+
+        A stage added to the table has to appear as a row, and a row has to name a
+        check; neither list is maintained by hand any more, so this asserts the
+        derivation for both profiles and the profiles' distinctness.
+        """
+        for profile, stages in ((ovmf.IA32, ovmf.ia32_stages()),
+                                (ovmf.X64, ovmf.x64_stages())):
+            rows = [(requirement, source, check)
+                    for requirement, source, check in ovmf.required_rows(profile)
+                    if source == "OVMF cold boot"]
+            self.assertEqual([requirement for requirement, _s, _c in rows],
+                             [stage.requirement for stage in stages])
+            self.assertEqual([check for _r, _s, check in rows],
+                             ["[cold] " + stage.check for stage in stages])
 if __name__ == "__main__":
     unittest.main()

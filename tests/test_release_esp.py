@@ -44,6 +44,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import sys
 import tempfile
 import unittest
@@ -475,6 +476,273 @@ class ModeSelection(unittest.TestCase):
         out, code = self.plan("PC5_UEFI=128", "iso")
         self.assertNotEqual(code, 0)
         self.assertIn("must be 32 or 64", out)
+
+
+class ReleaseAttributionRebuild(unittest.TestCase):
+    """The image's `build:`/`commit:` labels follow the commit, not the clock.
+
+    `$(BUILD)/iso/BUILDINFO.TXT` lists a stamp file holding `git rev-parse HEAD`, and
+    that stamp is the only thing making `$(ISO)` rebuild when the source commit moves.
+    It is also easy to get wrong in a way nothing notices: a `:=` variable referenced
+    above its own definition expands to nothing, the prerequisite silently disappears,
+    and the ISO on disk goes on naming the commit *before* the one that produced it.
+    That happened for real -- a `build/pc5.iso` labelled `e565dd4-dirty` while HEAD was
+    `e7ff3ed` -- and every unit test in this file passed on it, because they compare an
+    image against the build record written by the same run.  So the mechanism is
+    executed here: clone, build, move HEAD, build again, require the label to move.
+    """
+
+    @staticmethod
+    def _fields(path):
+        out = {}
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                if ":" in line:
+                    key, value = line.split(":", 1)
+                    out[key.strip()] = value.strip()
+        return out
+
+    @staticmethod
+    def _git(git, tree, *args):
+        proc = subprocess.run((git, "-C", tree) + args, capture_output=True,
+                              text=True, timeout=300)
+        if proc.returncode != 0:
+            raise AssertionError("git %s: %s" % (" ".join(args),
+                                                 (proc.stdout + proc.stderr)[-1500:]))
+        return proc.stdout.strip()
+
+    def _identity(self, git, tree):
+        """Commit the scratch way as whoever owns this checkout.
+
+        The test needs a commit to move HEAD with; it is created in a throwaway clone
+        that is deleted with the temp directory.  The identity is taken from this
+        repository rather than invented, because a test has no business attributing
+        work to a name nobody owns.
+        """
+        def pick(*args):
+            # `git config user.name` exits 1 when the key is simply unset, which is
+            # not a failure of the assertion -- so lookups fall through quietly.
+            proc = subprocess.run((git, "-C", tree) + args, capture_output=True,
+                                  text=True, timeout=60)
+            return proc.stdout.strip() if proc.returncode == 0 else ""
+
+        name = pick("config", "user.name") or pick("log", "-1", "--format=%an")
+        email = pick("config", "user.email") or pick("log", "-1", "--format=%ae")
+        self.assertTrue(name and email, "no git identity to commit as, even in a scratch clone")
+        return name, email
+
+    @staticmethod
+    def _settle():
+        """Let the clock get clearly past a file that was just written.
+
+        `make` rebuilds on a *strictly newer* prerequisite, so a source touched and a
+        target built inside the same second can compare equal and skip the recipe --
+        which would look like the dependency being tested here being absent.  Every
+        case in this class writes a file or moves HEAD and then asks make what it
+        thinks, so each one waits.
+        """
+        time.sleep(1.05)
+
+    def _scratch(self, git, tmp, tag):
+        """A throwaway clone with the Makefile *under test* committed into it.
+
+        Two reasons, one of them this class exists for.  `git clone` hands out HEAD, so
+        without the copy the case would grade the committed build rules and report them
+        as the ones being tested.  And the copy has to be *committed*: left as an
+        uncommitted edit, whether the scratch tree looks dirty -- and so whether `build:`
+        carries `-dirty`, which these cases assert on -- depends on whether the
+        workspace happened to be clean at the moment the test ran.  One comment line at
+        the end of the file gives the commit something inert to contain.
+        """
+        tree = os.path.join(tmp, tag)
+        clone = subprocess.run([git, "clone", "--no-hardlinks", ROOT, tree],
+                               capture_output=True, text=True, timeout=600)
+        self.assertEqual(clone.returncode, 0, clone.stdout + clone.stderr)
+        with open(os.path.join(ROOT, "Makefile"), encoding="utf-8") as handle:
+            makefile = handle.read()
+        with open(os.path.join(tree, "Makefile"), "w", encoding="utf-8") as handle:
+            handle.write(makefile + "\n# scratch clone: the build rules under test\n")
+        name, email = self._identity(git, tree)
+        self._git(git, tree, "-c", "user.name=%s" % name, "-c", "user.email=%s" % email,
+                  "commit", "-q", "--all", "-m", "test: install the Makefile under test")
+        return tree
+
+    def _make(self, tree, build, *targets, mode="64"):
+        return subprocess.run(
+            ["make", "-C", tree, "BUILD=" + build, "PC5_UEFI=" + mode] + list(targets),
+            capture_output=True, text=True, timeout=1800,
+            env=dict(os.environ, TMPDIR="/tmp", SOURCE_DATE_EPOCH="1700000000"))
+
+    def test_moving_head_rebuilds_the_image_that_names_it(self):
+        git = shutil.which("git")
+        if git is None:
+            self.skipTest("git is not installed")
+        with tempfile.TemporaryDirectory(prefix="pc5-attribution-") as tmp:
+            tree = self._scratch(git, tmp, "clone")
+            build = os.path.join(tmp, "b")
+            stamp = os.path.join(build, "iso", "BUILDINFO.TXT")
+            iso = os.path.join(build, "pc5.iso")
+
+            first = self._make(tree, build, "iso")
+            self.assertEqual(first.returncode, 0, (first.stdout + first.stderr)[-2000:])
+            head = self._git(git, tree, "rev-parse", "HEAD")
+            info = self._fields(stamp)
+            self.assertEqual(info["commit"], head,
+                             "the image does not name the commit it was built from")
+            digest_one = sha256_file(iso)
+
+            # An empty commit changes no source bytes and only the identity -- exactly
+            # the case a stamp cannot be faked for, because nothing else in the tree
+            # moved.
+            name, email = self._identity(git, tree)
+            self._git(git, tree, "-c", "user.name=%s" % name,
+                      "-c", "user.email=%s" % email,
+                      "commit", "--allow-empty", "-m",
+                      "test: move HEAD for the attribution check")
+            head_two = self._git(git, tree, "rev-parse", "HEAD")
+            self.assertNotEqual(head_two, head)
+            self._settle()
+            second = self._make(tree, build, "iso")
+            self.assertEqual(second.returncode, 0,
+                             (second.stdout + second.stderr)[-2000:])
+            self.assertIn("build record now names", second.stdout,
+                          "the image kept a label naming the previous commit: the "
+                          "stamp is not a prerequisite of BUILDINFO.TXT, or it does "
+                          "not compare contents")
+            info_two = self._fields(stamp)
+            self.assertEqual(info_two["commit"], head_two)
+            digest_two = sha256_file(iso)
+            self.assertNotEqual(digest_two, digest_one,
+                                "the label moved but the image did not: the stamp is "
+                                "read by the recipe and not depended on")
+
+            # ...and the other direction, which is what keeps the stamp from being a
+            # rebuild-everything hammer: with HEAD unmoved, nothing is re-stamped and
+            # nothing is rewritten.
+            third = self._make(tree, build, "iso")
+            self.assertEqual(third.returncode, 0, (third.stdout + third.stderr)[-2000:])
+            self.assertNotIn("build record now names", third.stdout,
+                             "an unmoved HEAD must not re-stamp anything")
+            self.assertEqual(sha256_file(iso), digest_two)
+
+    def test_the_stamps_are_defined_above_the_rules_that_list_them(self):
+        """The cheapest half of the guard: a prerequisite list is frozen at parse time.
+
+        The behavioural cases below are what actually prove the stamps work, and they
+        cost a clone and a build each.  This one costs a string comparison and says why
+        the lines are in this order: make expands a rule's prerequisites as it reads the
+        makefile, so an assignment *below* the rule is invisible to it -- no error, no
+        dependency, and a `make -n` that looks perfectly reasonable.
+        """
+        with open(os.path.join(ROOT, "Makefile"), encoding="utf-8") as handle:
+            text = handle.read()
+        rule = text.index("$(BUILD)/iso/BUILDINFO.TXT:")
+        self.assertGreater(rule, 0)
+        for name in ("PC5_UEFI ?=", "ISO_STAMP :=",
+                     "ESP_LOADER      :=", "FORCE:", ".PHONY: FORCE"):
+            position = text.rfind(name, 0, rule)
+            self.assertGreater(position, -1,
+                               "%s is assigned at or below the BUILDINFO.TXT rule, so "
+                               "it cannot be a prerequisite of it" % name.strip(":="))
+
+    def test_switching_modes_rewrites_the_record(self):
+        """One build directory, two modes: the record follows the medium.
+
+        After the first build both loaders exist, so a record that depends only on
+        `$(ESP_LOADER)`'s timestamp sees nothing to do -- the 32-bit ESP goes into the
+        image while `BUILDINFO.TXT` still says `uefi-path: 64` and quotes the other
+        loader's digest.  `make ovmf-test` caught a build in exactly that state by
+        reading the ISO instead of trusting the file; `$(ISO_STAMP)` is the fix,
+        and this is the case that fails without it.
+        """
+        with tempfile.TemporaryDirectory(prefix="pc5-mode-stamp-") as tmp:
+            build = os.path.join(tmp, "b")
+            stamp = os.path.join(build, "iso", "BUILDINFO.TXT")
+            iso = os.path.join(build, "pc5.iso")
+            six = self._make(ROOT, build, "iso")
+            self.assertEqual(six.returncode, 0, (six.stdout + six.stderr)[-2000:])
+            first = self._fields(stamp)
+            self.assertEqual(first["uefi-path"], "64")
+            digest_64 = sha256_file(iso)
+
+            self._settle()
+            flipped = self._make(ROOT, build, "iso", mode="32")
+            self.assertEqual(flipped.returncode, 0,
+                             (flipped.stdout + flipped.stderr)[-2000:])
+            self.assertIn("build record now names", flipped.stdout,
+                          "the stamp did not move, so nothing downstream was told the "
+                          "image had changed mode")
+            second = self._fields(stamp)
+            self.assertEqual(second["uefi-path"], "32")
+            self.assertEqual(second["kernel"], "32-bit PC5 bring-up kernel")
+            self.assertNotEqual(sha256_file(iso), digest_64,
+                                "the record changed but the image did not")
+            sys.path.insert(0, os.path.join(ROOT, "tools"))
+            import mkefiimg
+            esp = open(os.path.join(build, "efi.img"), "rb").read()
+            entry = mkefiimg.FatVolume(esp).walk().get("EFI/BOOT/BOOTX64.EFI") or {}
+            self.assertEqual(second["esp-loader"],
+                             hashlib.sha256(entry.get("data") or b"").hexdigest()[:16],
+                             "the record quotes a loader that is not on the volume")
+
+    def test_the_dirty_label_and_the_loader_digest_stay_honest(self):
+        """An uncommitted source change is labelled, and its digest is re-quoted.
+
+        `build:` carries `-dirty` so an artifact that no commit produced never looks
+        like one it did; `commit:` still names HEAD, which remains the truth about
+        where the tree forked; and `esp-loader:` is recomputed from the loader actually
+        embedded, because the file carrying it depends on that loader.  The last of the
+        three is what makes a dirty build auditable instead of merely labelled:
+        `tests/ovmf_boot.py` refuses a record whose quoted digest is not the volume's
+        loader, so a stale label cannot quietly travel with a rebuilt image.
+        """
+        git = shutil.which("git")
+        if git is None:
+            self.skipTest("git is not installed")
+        with tempfile.TemporaryDirectory(prefix="pc5-dirty-attribution-") as tmp:
+            tree = self._scratch(git, tmp, "clone")   # clean by construction, see above
+            build = os.path.join(tmp, "b")
+            stamp = os.path.join(build, "iso", "BUILDINFO.TXT")
+            self.assertEqual(self._make(tree, build, "iso").returncode, 0)
+            head = self._git(git, tree, "rev-parse", "HEAD")
+            clean = self._fields(stamp)
+            self.assertEqual(clean["commit"], head)
+            self.assertNotIn("-dirty", clean["build"],
+                             "the scratch clone is committed, so its tree is clean")
+            iso = os.path.join(build, "pc5.iso")
+            digest_before = sha256_file(iso)
+
+            source = os.path.join(tree, "boot", "uefi64", "uefi64_main.c")
+            with open(source, "a", encoding="utf-8") as handle:
+                handle.write("\n/* attribution fixture: changes the loader, nothing else */\n")
+            self._settle()
+            dirty_build = self._make(tree, build, "iso")
+            self.assertEqual(dirty_build.returncode, 0,
+                             (dirty_build.stdout + dirty_build.stderr)[-2000:])
+            dirty = self._fields(stamp)
+            self.assertEqual(dirty["commit"], clean["commit"],
+                             "an uncommitted change must not claim a new commit")
+            self.assertTrue(dirty["build"].endswith("-dirty"),
+                            "the label hides that no commit produced this image: %r"
+                            % dirty["build"])
+            self.assertNotEqual(dirty, clean,
+                                "the record was not regenerated when the loader it "
+                                "names was relinked")
+            self.assertNotEqual(sha256_file(iso), digest_before,
+                                "the regenerated record never reached the image")
+            # The source change above is a comment, chosen so the compiled loader is
+            # byte-identical: what is under test is that touching a loader source
+            # *propagates* -- the record regenerates and the ISO re-embeds it -- not
+            # that some particular byte moves.  "Refreshes only when the digest happens
+            # to differ" is the failure mode this case exists to catch.
+            # The record's claim, checked the way the gate checks it.
+            sys.path.insert(0, os.path.join(ROOT, "tools"))
+            import mkefiimg
+            esp = open(os.path.join(build, "efi64-release.img"), "rb").read()
+            entry = mkefiimg.FatVolume(esp).walk().get("EFI/BOOT/BOOTX64.EFI") or {}
+            loader = entry.get("data") or entry.get("bytes")
+            self.assertEqual(dirty["esp-loader"],
+                             hashlib.sha256(loader).hexdigest()[:16])
 
 
 if __name__ == "__main__":

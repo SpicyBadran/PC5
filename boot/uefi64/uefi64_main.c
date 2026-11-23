@@ -120,6 +120,30 @@ void serial_put_raw(char c)
     outb(0x3F8, (unsigned char)c);
 }
 
+/* The firmware's own self-description, read out of the system table.  The 32-bit
+ * path has named its firmware at boot since the gate was written, and the gate
+ * asserts on it, because "OVMF started and then ran our application" is two facts
+ * and a log that only proves the second cannot tell a genuine firmware boot from
+ * some other thing that prints the same banner.  This path printed a banner and
+ * nothing else, so the 64-bit release could be gated only on trust.  The vendor
+ * string is CHAR16 and firmware-supplied, so it is copied character by character
+ * and printable-ASCII-filtered: a serial line must not be able to carry an escape
+ * sequence in from outside. */
+static void serial_write_ascii16(const u16 *text, u32 limit)
+{
+    u32 index = 0;
+    if (!text) {
+        serial_write("absent");
+        return;
+    }
+    for (; index < limit && text[index]; index++) {
+        u16 unit = text[index];
+        serial_put_raw(unit >= 0x20 && unit < 0x7F ? (char)unit : '?');
+    }
+    if (!index)
+        serial_write("empty");
+}
+
 static void serial_hex(u64 value)
 {
     static const char digits[] = "0123456789abcdef";
@@ -751,7 +775,28 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
         die("no-boot-services");
     g_st = system_table;
     g_bs = system_table->boot_services;
-    g_bs->set_watchdog_timer(0, 0, 0, 0);
+
+    serial_write("PC5-64-LOADER firmware=");
+    serial_write_ascii16(g_st->firmware_vendor, 32);
+    serial_write(" revision=");
+    serial_hex(g_st->header.revision >> 16);   /* EFI_2_x major, as EDK II prints it */
+    serial_write(" table-rev=");
+    serial_hex(g_st->firmware_revision);
+    serial_write("\n");
+
+    /* A firmware watchdog that outlives the handover resets the machine mid-kernel
+     * and looks exactly like a hardware fault, so it is disarmed while boot
+     * services are still callable -- and whether firmware *agreed* is reported,
+     * not assumed: a refusal is a fact about this machine worth having in the log. */
+    efi_status watchdog = g_bs->set_watchdog_timer(0, 0, 0, 0);
+    serial_write("PC5-64-LOADER watchdog=");
+    if (watchdog == EFI_SUCCESS)
+        serial_write("disabled\n");
+    else {
+        serial_write("disable-refused=");
+        serial_hex(watchdog);
+        serial_write("\n");
+    }
 
     /* Everything PC5 allocates lives below the identity span, because version 2
      * maps exactly one region and the kernel will validate every pointer against

@@ -11,8 +11,14 @@
 # toolchain needs only binutils, gcc (with 32-bit support), python3 and make.
 
 VERSION      ?= 0.2.0
-BUILD_ID     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo local)
 COMMIT       ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
+# Does the tree hold edits that `commit` cannot name?  Tracked files only: a scratch
+# directory must not make a release look hand-built.  This is what `BUILD_ID` carries,
+# because a record that says "built from dbd7500" while the loader in the image came
+# from an uncommitted diff misdates the artifact -- and the ISO is a *file*, so it
+# survives a `git commit` and would otherwise keep naming the previous tree.
+PC5_DIRTY    := $(shell test -n "$$(git status --porcelain --untracked-files=no 2>/dev/null)" && echo dirty)
+BUILD_ID     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo local)$(if $(PC5_DIRTY),-dirty)
 TAG          ?=
 # Use $(SOURCE_DATE_EPOCH) rather than $$SOURCE_DATE_EPOCH so that a value given
 # on the command line (make SOURCE_DATE_EPOCH=...) pins the timestamp too; a
@@ -51,7 +57,7 @@ KERNEL_CFLAGS := -m32 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter \
                  -DPC5_BUILD_ID='"$(BUILD_ID)"' \
                  -DPC5_BUILD_DATE='"$(BUILD_DATE)"'
 
-.PHONY: ovmf-setup ovmf-check emulator-probe all uefi kernel64 uefi64 stubtest64 check docs-check citations-check citation-refs presentation-check presentation validation record-validation test boot-test stubtest ovmf-test verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record brand brand-check
+.PHONY: ovmf-setup ovmf-check emulator-probe all uefi kernel64 uefi64 stubtest64 check docs-check citations-check citation-refs presentation-check presentation validation record-validation test boot-test stubtest ovmf-test ovmf-test-both verify roadmap clean distclean info unit metadata release-assets psm psm-render manifest hw-record brand brand-check
 
 all: iso
 
@@ -259,14 +265,37 @@ $(BUILD)/iso/README.TXT: docs/ISO_README.txt | $(BUILD)
 	@mkdir -p $(BUILD)/iso
 	cp $< $@
 
-# Depends on the loader it names, because it quotes that loader's digest: switching
-# PC5_UEFI has to change this file, or a 64-bit ISO would ship a 32-bit label.
-$(BUILD)/iso/BUILDINFO.TXT: $(ESP_LOADER) | $(BUILD)
-	@mkdir -p $(BUILD)/iso
-	@printf 'PC5\nversion: %s\nbuild: %s\ndate: %s\nkernel: %s\nuefi-path: %s\nesp-loader: %s\n' \
-	 "$(VERSION)" "$(BUILD_ID)" "$(BUILD_DATE)" \
-	 "$(if $(filter 64,$(PC5_UEFI)),64-bit PC5 long-mode kernel,32-bit PC5 bring-up kernel)" \
-	 "$(PC5_UEFI)" "$(shell sha256sum $(ESP_LOADER) 2>/dev/null | cut -c1-16)" > $@
+#: One stamp file for the inputs the in-image build record quotes, defined before the
+#: rule that lists it.
+#:
+#: Two ordering rules live here, and both were got wrong while this was being written.
+#:
+#: A rule's prerequisites are expanded while the makefile is *read*, so a definition
+#: appearing below the rule contributes nothing to it -- silently, with no error, and
+#: in a way `make -n` cannot see.
+#:
+#: A stamp has to compare contents, not timestamps.  `BUILDINFO.TXT` quotes three things
+#: the file name `pc5.iso` does not carry: the boot mode, the source commit, and the
+#: digest of the loader embedded in the ESP.  In a build directory that already holds
+#: both loaders, switching `PC5_UEFI` moves no mtime the record depends on, so a rule
+#: that merely "depends on the loader" regenerates nothing and the image ships the other
+#: mode's label.  `make ovmf-test` caught a build in exactly that state by reading the
+#: ISO instead of trusting the file.
+#:
+#: So the recipe re-runs on every invocation -- `FORCE`, because a prerequisite-free
+#: target that already exists is otherwise up to date forever, which is how a stamp can
+#: be written once and then quietly stop guarding anything -- and rewrites the file only
+#: when a quoted input actually differs (`cmp -s -`).  An unchanged build costs one
+#: comparison and no rebuild.  Working-tree dirtiness is deliberately not stamped, which
+#: would rebuild on every `touch`; it rides in the `build:` label instead, so an artifact
+#: no commit produced is never mistaken for one.
+#:
+#: `tests/test_release_esp.py::ReleaseAttributionRebuild` runs the mechanism instead of
+#: reading it: build, move HEAD, build again, require the image to have moved; then
+#: build the other mode in the same directory and require the record to follow.
+ISO_STAMP := $(BUILD)/pc5.iso.stamp
+FORCE:
+.PHONY: FORCE
 
 $(BUILD):
 	@mkdir -p $(BUILD)
@@ -309,6 +338,37 @@ else
 $(error PC5_UEFI must be 32 or 64, got '$(PC5_UEFI)')
 endif
 
+# Where this rule sits is part of what it means, and so is what it depends on.
+#
+# A rule's prerequisite list is expanded when the makefile is *parsed*, so a variable
+# assigned further down the file contributes its earlier value -- or nothing.  The
+# 64-bit mode sets `ESP_LOADER` in the block immediately above, which is why the rule
+# has to follow it: before that, `BUILDINFO.TXT` depended on the *32-bit* loader, and
+# in a 64-bit scratch build relinking `BOOTX64.EFI` left the file untouched, so the
+# ISO shipped a record quoting the previous loader's digest.  `$(shell sha256sum …)`
+# inside the recipe reads the current value, which is what made it look right while the
+# dependency was wrong; `tests/test_release_esp.py::ReleaseAttributionRebuild` relinks
+# the loader and requires this file to move.
+# Depends on the loader it names, because it quotes that loader's digest: switching
+# PC5_UEFI has to change this file, or a 64-bit ISO would ship a 32-bit label.  It
+# depends on the revision stamp for the same reason in the other direction: the file
+# quotes the source commit, so *committing* has to change the file (and thus the ISO
+# that embeds it) instead of leaving an image that names the commit before the one
+# that produced it.  `verify` and `tools/iso_manifest.py` can only say something is
+# stale if the thing it says is regenerated when it goes stale.
+#
+# `$(ISO_STAMP)` is in the list because `$(ESP_LOADER)` alone is not enough, and because
+# the record quotes the commit as well: see the stamp's own comment above.  A rebuild that
+# picked up the other mode's ESP while still labelling itself with the previous one is the
+# error this guards; `verify` and `tools/iso_manifest.py` can only call something stale if
+# the thing it says is regenerated when it goes stale.
+$(BUILD)/iso/BUILDINFO.TXT: $(ESP_LOADER) $(ISO_STAMP) | $(BUILD)
+	@mkdir -p $(BUILD)/iso
+	@printf 'PC5\nversion: %s\nbuild: %s\ncommit: %s\ndate: %s\nkernel: %s\nuefi-path: %s\nesp-loader: %s\n' \
+	 "$(VERSION)" "$(BUILD_ID)" "$(COMMIT)" "$(BUILD_DATE)" \
+	 "$(if $(filter 64,$(PC5_UEFI)),64-bit PC5 long-mode kernel,32-bit PC5 bring-up kernel)" \
+	 "$(PC5_UEFI)" "$(shell sha256sum $(ESP_LOADER) 2>/dev/null | cut -c1-16)" > $@
+
 VERIFY_ESP_ARGS := --expect-esp-loader $(ESP_LOADER) \
                    --expect-esp-file $(ESP_KERNEL_NAME)=$(ESP_KERNEL)
 
@@ -326,7 +386,30 @@ $(BUILD)/efi64-release.img: $(BUILD)/uefi64/BOOTX64.EFI $(BUILD)/kernel64/KERNEL
 	@sha=$$(sha256sum $@ | cut -d" " -f1); \
 	 echo "RELEASE ESP (64-bit): $$(stat -c %s $@) bytes sha256=$$sha"
 
-$(ISO): $(BUILD)/loader.bin $(BUILD)/mbr.bin $(BUILD)/kernel.bin $(ESP_IMAGE) $(BUILD)/iso/README.TXT $(BUILD)/iso/BUILDINFO.TXT tools/mkiso.py
+# The mode stamp, and why it is a prerequisite at all.
+#
+# `PC5_UEFI` changes what goes *into* `$(ISO)` but appears nowhere in its name, so
+# `make PC5_UEFI=64 ovmf-test` right after a 32-bit build would find `build/pc5.iso`
+# newer than every file it knows about and boot the 32-bit image while grading the
+# 64-bit expectations.  That is not hypothetical: it is what happened on the first run
+# of the 64-bit gate, which is why the release ESP the ISO embeds is now stamped with
+# the mode -- and why the gate reads the profile off the medium instead of being told.
+#
+$(ISO_STAMP): FORCE | $(BUILD)
+	@mkdir -p $(BUILD)
+	@{ printf 'mode=%s\ncommit=%s\nloader=%s\n' "$(PC5_UEFI)" "$(COMMIT)" \
+	     "$(shell sha256sum $(ESP_LOADER) 2>/dev/null | cut -c1-16)"; } | \
+	  cmp -s - $@ || \
+	  { printf 'mode=%s\ncommit=%s\nloader=%s\n' "$(PC5_UEFI)" "$(COMMIT)" \
+	      "$(shell sha256sum $(ESP_LOADER) 2>/dev/null | cut -c1-16)" > $@; \
+	    echo "pc5: the ISO's build record now names mode=$(PC5_UEFI) commit=$(COMMIT)"; }
+
+# The recipe must therefore *read* the mode, not merely be ordered after the stamp: it
+# writes `build-info.json` with `--uefi-path`, and a rebuild that picked up the 64-bit
+# ESP while still labelling itself `uefi-path: 32` would leave the release note
+# contradicting the medium -- the same class of error as booting the stale ISO, only
+# harder to notice.  So the stamp is a normal prerequisite here.
+$(ISO): $(BUILD)/loader.bin $(BUILD)/mbr.bin $(BUILD)/kernel.bin $(ESP_IMAGE) $(BUILD)/iso/README.TXT $(BUILD)/iso/BUILDINFO.TXT tools/mkiso.py $(ISO_STAMP)
 	python3 tools/mkiso.py \
 	  --volume-id PC5 \
 	  --boot-image $(BUILD)/loader.bin \
@@ -517,11 +600,25 @@ stubtest: $(ISO)
 #   PC5_QEMU=/usr/bin/qemu-system-x86_64
 #   PC5_OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
 #   PC5_OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
-ovmf-test: $(ISO) $(BUILD)/efi.img
-	python3 tests/ovmf_boot.py --iso $(ISO) --efi-image $(BUILD)/efi.img \
-	  --kernel $(BUILD)/kernel.bin --json-out $(BUILD)/ovmf-report.json \
+# The gate takes the same `PC5_UEFI` switch as the release target, from the same
+# variables, so `make PC5_UEFI=64 ovmf-test` boots and grades the 64-bit release
+# artifact -- `$(ESP_IMAGE)` is the ESP that was embedded, not a lookalike.  Passing
+# the 32-bit `efi.img`/`kernel.bin` here while claiming to test the 64-bit path would
+# compare the ISO against the wrong build artifacts, and `tools/build_release.py`
+# hardcodes exactly that pair, which is why the release-side 64-bit gate is driven
+# through this target rather than through that script.
+ovmf-test: $(ISO) $(ESP_IMAGE) $(ESP_KERNEL)
+	python3 tests/ovmf_boot.py --iso $(ISO) --efi-image $(ESP_IMAGE) \
+	  --kernel $(ESP_KERNEL) --json-out $(BUILD)/ovmf-report.json \
 	  --matrix-out $(BUILD)/ovmf-matrix.json \
 	  --serial-dir $(BUILD)/ovmf-serial $(OVMF_ARGS)
+
+# Both paths in one command, for a release run: the 32-bit artifact first because it
+# is the one shipping, then the 64-bit one.  Each is built and booted from its own
+# ESP, so the second boot cannot be influenced by the first ISO.
+ovmf-test-both:
+	@$(MAKE) --no-print-directory PC5_UEFI=32 ovmf-test
+	@$(MAKE) --no-print-directory PC5_UEFI=64 ovmf-test
 
 # Provision the external dependencies of the gate above (QEMU and a real
 # TianoCore OVMF build) with the distribution's package manager, then print the
@@ -550,7 +647,8 @@ metadata: $(ISO)
 	python3 tools/buildmeta.py --iso $(ISO) --info $(BUILD)/build-info.json \
 	  --version "$(VERSION)" --tag "$(TAG)" --commit "$(COMMIT)" \
 	  --build-id "$(BUILD_ID)" --source-date-epoch "$(STAMP_EPOCH)" \
-	  --build-date "$(BUILD_DATE)" \
+	  --build-date "$(BUILD_DATE)" --uefi-path "$(PC5_UEFI)" \
+	  $$([ -f $(BUILD)/ovmf-report.json ] && echo --ovmf-evidence $(BUILD)/ovmf-report.json) \
 	  $$([ -f $(BUILD)/verify-report.json ] && echo --verify-report $(BUILD)/verify-report.json) \
 	  $$([ -f $(BUILD)/test/boot-evidence.json ] && echo --boot-evidence $(BUILD)/test/boot-evidence.json) \
 	  $$([ -f $(BUILD)/logs/unit.log ] && echo --unit-log $(BUILD)/logs/unit.log) \
