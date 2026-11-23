@@ -132,12 +132,45 @@ repository, then re-run the activation:
 1. GitHub → Settings → Applications → (the App that authored these branches) →
    **Configure** → Repository access → ensure `SpicyBadran/pc5` is selected →
    **Permissions → Repository permissions → Workflows: Read and write** → Save.
-2. Next session, or by hand:
+2. Next session, or by hand.  The move is one command; the repository then has to be told that it
+   moved, which is a second commit, and both are listed here so the activation is a single
+   continuous act rather than a half-done one:
+
    ```sh
+   # a. the pure rename, so the acceptance or refusal is attributable to one commit
+   mkdir -p .github/workflows          # `git mv` does not create the parent
    git mv ci/build.yml .github/workflows/build.yml
    git commit -m "ci: activate the build and release pipeline"
    git push
+
+   # b. the references that say where the pipeline lives
+   #    ci/README.md (its title and framing), docs/BUILDING.md, docs/TESTING_STRATEGY.md,
+   #    docs/PRESENTATION.md, docs/RECOVERY.md, docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md,
+   #    docs/architecture/RISK_REGISTER.md (row B6)
+   #    ... plus roadmap.json M1b: state blocked -> in_progress, deliverables/evidence retargeted,
+   #    blocker removed, then `make presentation` to re-render the generated blocks and
+   #    `python3 tools/roadmap.py sync` if the milestone graph drifts.
+   make docs-check presentation-check roadmap citations-check unit
+   python3 -m unittest tests.test_release          # pins the pipeline file's contents, both paths
    ```
+
+   Step (b) is deliberately *not* applied in advance: `.github/workflows/build.yml` in a document is a
+   claim about the repository, and until the push is accepted the claim would be false.  Milestone
+   `M1b` stays `blocked`, and the living documents keep pointing at `ci/build.yml`, for the same
+   reason.  Dated records (the audit reports at the root, `docs/evidence/**`, the historical
+   `TEST_RESULTS` sections) are never retargeted: they reported the location that was true then.
+
+   Then read the first run before believing anything about it:
+
+   ```sh
+   gh run list --limit 3
+   gh run watch <id> --exit-status && echo "green" || echo "red: diagnose, do not re-run blindly"
+   ```
+
+   A green first run says the pipeline executes; it does **not** close M1b.  The milestone's
+   acceptance is a tag that publishes `pc5.iso`, `pc5.iso.sha256` and `build-info.json`, and a
+   published hash equal to a local rebuild at the same `SOURCE_DATE_EPOCH` — which needs the
+   `git tag` step below.
 
 No shell command available in this environment can grant that permission; it is
 an installation-level authorization held by the repository owner.
