@@ -235,9 +235,12 @@ cannot fail is worse than no pipeline:
    printed `OK` after skipping 64 of its own cases.  Provisioning moved above the suite, the suite
    re-asserts the import, and every skip reason is written to the job summary: visible, never
    folded into a pass.
-3. **The documents had no gate.**  `make docs-check`, `make presentation-check`,
-   `make citation-refs` and `make citations-check` run now, so CI cannot be weaker than the local
-   `make check`, and a dead citation is reported as what the tool already calls it — first a
+3. **Four of the six gates `make check` runs had no CI step at all.**  `make check` wraps the suite
+   with `unit`, `psm`, `docs-check`, `citations-check`, `presentation-check` and `brand-check`; the
+   pipeline ran `unit` and nothing else, so the platform contract (`psm/contract.py`, `psm/audit.py`,
+   `psm/conformance.py`, `psm/render --check`), the brand assets, the documents and a dead commit
+   citation could all drift while every CI job stayed green.  They run now — and `citation-refs` runs
+   first, so a citation that cannot resolve in CI is reported as the tool reports it: first a
    statement about the clone, then about the history.
 4. **The firmware job teed into `build/` before `build/` existed**, on a fresh checkout, and left
    checkout credentials behind where the other two jobs do not.

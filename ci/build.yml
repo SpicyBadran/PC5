@@ -139,6 +139,16 @@ jobs:
       - name: Architecture and roadmap gate
         run: make roadmap | tee build/logs/roadmap.log
 
+      # `make check` runs six gates around the suite: unit, psm, docs-check, citations-check,
+      # presentation-check, brand-check.  Two of them had no CI step at all, so the platform
+      # contract (psm/registry.py, audit, conformance) and the generated brand assets could drift
+      # out of agreement with the tree while every CI job stayed green.
+      - name: Platform-contract and brand gates
+        run: |
+          set -eu
+          make psm | tee build/logs/psm.log
+          make brand-check | tee build/logs/brand-check.log
+
       # These are the gates `make check` runs that the pipeline used to omit, which left CI able
       # to go green while the documents contradicted the code (docs-check), while a status figure
       # drifted from roadmap.json (presentation-check), or while a commit citation pointed at an

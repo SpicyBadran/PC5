@@ -3702,7 +3702,7 @@ ever produces should not be a run of a broken one:
 | --- | --- | --- |
 | 1 | The *unspecified* default shell on GitHub's Linux runners is `bash -e {0}` — no `pipefail` — while every gate is written `make <gate> \| tee log` | **every gate in the pipeline could fail and the job would report success** |
 | 2 | The harness venv was provisioned *after* the host test suite ran | `unicorn` missing ⇒ `tests/test_kernel64.py` skips 64 of its own cases under an `OK` (§35 measured exactly this) |
-| 3 | `docs-check`, `presentation-check`, `citation-refs`, `citations-check` had no CI step | CI strictly weaker than the local `make check`; a document contradicting the code would not be caught |
+| 3 | four of the six gates `make check` wraps around its suite (`psm`, `docs-check`, `citations-check`, `presentation-check`, `brand-check` — of which only `unit` had a step) had none | CI strictly weaker than the local gate: the platform contract, the brand assets, the documents and a dead citation could all drift with every job green |
 | 4 | The `ovmf` job teed into `build/` before `build/` existed on a fresh checkout, and left checkout credentials behind | a confusing first-step failure, and a token in `.git/config` where the other two jobs keep none |
 | 5 | The firmware job reported nothing about its own verdict | a reviewer could not tell a measured PASS from an absent one without opening the artifact |
 
