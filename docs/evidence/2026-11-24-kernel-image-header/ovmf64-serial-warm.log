@@ -1,0 +1,71 @@
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01HBdsDxe: loading Boot0001 "UEFI QEMU DVD-ROM QM00005 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)
+BdsDxe: starting Boot0001 "UEFI QEMU DVD-ROM QM00005 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)
+PC5-64-LOADER-BANNER 64-bit UEFI path (experimental)
+PC5-64-LOADER firmware=EDK II revision=0x2 table-rev=0x10000
+PC5-64-LOADER watchdog=disabled
+PC5-64-LOADER kernel-volume=image
+PC5-64-LOADER kernel at=0x100000 bytes=208896
+PC5-64-LOADER kernel-header version=1 header=128 image=208896 entry=0x1000 bss=172032 arch=x86-64 machine=62 checksum=ok
+PC5-64-LOADER rsdp=0xf77e000
+PC5-64-LOADER pagetables=0xe1eb000 pages=6 mapped_2mib=2048 span=0x100000000
+PC5-64-LOADER stack=0xe1f6000-0xe1fa000
+PC5-64-LOADER image=0xe1f1000-0xe1f5768 below-span=1
+PC5-64-LOADER exit-boot-services=ok attempts=1 descriptors=98
+PC5-64-LOADER cr3-plan=0xe1eb000 cr0=0x80010033 cr4=0x668 long-mode=1
+PC5-64-LOADER-JUMP entry=0x101000 bootinfo=0xe5b6000 stack=0xe1fa000
+PC5-64BIT-KERNEL-ENTRY
+PC5-64-IDT installed=256 present=32
+PC5-64-MAP entries=98 conventional_pages=53750 bytes=0xc40
+PC5-64-IMAGE base=0x100000 size=0x33000 range=ok
+PC5-64-BANNER PC5 64-bit kernel entry
+PC5-64-ENV cr0=0x80010033 cr3=0xe1eb000 cr4=0x668 efer=0xd00
+PC5-64-PAGING enabled=1 root=0xe1eb000 pages=6 span=0x100000000 kernel=0x100000-0x133000 loaded=0x100000
+PC5-64-REGS wide-operands=ok arithmetic=ok
+PC5-64-STACK rsp=0xe1f9c90 top=0xe1fa000 size=16384 aligned=16 range=ok
+PC5-64-LOADER image=0xe1f1000 size=0x4768 range=ok
+PC5-64-ENV physical-address-width=40 checked=1
+PC5-64-BOOTINFO magic=ok version=2 size=160 memdesc=32 flags=0xd exit_boot_services=1
+PC5-64-FB usability=absent
+PC5-64-RSDP addr=0xf77e000 usability=ok checks=signature,legacy-checksum tables=not-validated
+PC5-64-CPU vendor=AuthenticAMD
+PC5-64-CPU family=15
+PC5-64-CPU model=107
+PC5-64-CPU stepping=1
+PC5-64-CPU phys_bits=40
+PC5-64-CPU virt_bits=48
+PC5-64-CPU long_mode=1
+PC5-64-CPU nx=1
+PC5-64-CPU pages_1g=0
+PC5-64-CPU apic=1
+PC5-64-CPU max_apic_ids=0
+PC5-64-CPU x2apic=0
+PC5-64-CPU svm_advertised=1
+PC5-64-CPU svm_npt=0
+PC5-64-CPU svm_asids=1
+PC5-64-CPU hypervisor=1
+PC5-64-CPU invariant_tsc=0
+PC5-64-MEM status=ok reason=ok frames=65094 conventional=53750 conventional_total=53750 claimed=1 free=53749 largest=41964 bitmap=0x20000 span=0x100000000
+PC5-64-MEM-SELFTEST one=0x1000 three=0x2000 grant-in-map=1 bitmap-lie-refused=1 refusal-counted=1 disjoint=1 validated=1 claims-clean=1 zero-page-reserved=1 zero-refused=1 oversized-refused=1 refusal-clears-base=1 over-largest-refused=1 double-free-refused=1 unaligned-free-refused=1 first-fit-reuse=1 blocks-apart=1 free-restored=1 result=ok
+PC5-64-TSS status=ok arm-rules=1 tss=0x1000 gdt=0x12a280 limit=47 gdtr=0x12a280 cpl=0 ist1=0x3000 ist2=0x4000 ist-df=0 ist-nmi=0 frames=3 free-after=53746 tr=not-loaded reason=ltr-unverifiable-here
+PC5-64-APIC not-attempted reason="no MMIO range in the memory map covers the architectural APIC base"
+PC5-64-TIMER calibrated=0
+PC5-64-TIMER pit_present=0
+PC5-64-TIMER invariant_tsc=0
+PC5-64-TIMER tsc_per_ms=0
+PC5-64-TIMER tsc_per_us=0
+PC5-64-TIMER spins=5503
+PC5-64-TIMER since_boot_ms=0
+PC5-64-TIMER not-calibrated reason="the PIT did not measure a TSC rate"
+PC5-64-MADT parsed=1
+PC5-64-MADT acpi_revision=66
+PC5-64-MADT used_xsdt=0
+PC5-64-MADT table_bytes=120
+PC5-64-MADT local_apic_address=4276092928
+PC5-64-MADT cpu_count=1
+PC5-64-MADT cpu_total=1
+PC5-64-MADT x2apic_total=0
+PC5-64-MADT truncated=0
+PC5-64-MADT cpu apic_id=0 acpi_id=0
+PC5-64-TOPOLOGY single-cpu=1 usable=1 bringup=not-attempted
+PC5-64BIT-LONG-MODE-OK
+PC5-64-DONE

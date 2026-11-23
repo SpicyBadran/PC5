@@ -187,7 +187,8 @@ class Machine:
             if len(rsdp_bytes) < 36:
                 self.uc.mem_write(self.rsdp_address + len(rsdp_bytes),
                                   bytes(36 - len(rsdp_bytes)))
-        self.uc.mem_write(KERNEL_BASE, bytes(kernel))
+        self.kernel = bytes(kernel)
+        self.uc.mem_write(KERNEL_BASE, self.kernel)
         self.serial = ""
         self.stop_markers = ("PC5-64-DONE", "PC5-64BIT-FAIL=")
         self.stopped_on = None
@@ -255,6 +256,25 @@ class Machine:
         return PML4
 
     # --------------------------------------------------------------- run
+    def entry(self):
+        """Where execution begins: the address the *image* declares, not a constant.
+
+        This used to be `KERNEL_BASE`, which was right only because the flat binary began with
+        `cli; mov rbx, rdi` at the load address.  `KERNEL64.BIN` now starts with its own
+        128-byte header (`docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`), so entering at
+        the load address means executing the magic bytes and getting a #UD at 0x100000 -- which
+        is exactly what this harness did when the header landed, and the reason the fix here is
+        to read the declaration rather than to move a constant: the loader under test jumps by
+        the same field, so a harness that assumed the address would drift away from the artifact
+        again at the next format change.  A blob without the magic -- one of the hand-built
+        images several cases here pass in -- keeps entering at the base, which is what "no
+        header, no declared entry" means.
+        """
+        image = self.kernel
+        if image[:8] != b"PC5K64IM":
+            return KERNEL_BASE
+        return KERNEL_BASE + struct.unpack_from("<Q", image, 32)[0]
+
     def run(self, boot_info, paging=True, max_instructions=4_000_000, memmap=None):
         from unicorn import UcError
         from unicorn.x86_const import (
@@ -275,10 +295,11 @@ class Machine:
             cr0 &= ~(1 << 31)
         uc.reg_write(UC_X86_REG_CR0, cr0)
         uc.reg_write(UC_X86_REG_RDI, BOOT_INFO)
-        uc.reg_write(UC_X86_REG_RIP, KERNEL_BASE)
+        entry = self.entry()
+        uc.reg_write(UC_X86_REG_RIP, entry)
         error = None
         try:
-            uc.emu_start(KERNEL_BASE, 0, 0, max_instructions)
+            uc.emu_start(entry, 0, 0, max_instructions)
         except UcError as exc:
             error = f"{exc} at {uc.reg_read(UC_X86_REG_RIP):#x}"
         return dict(serial=self.serial, stopped_on=self.stopped_on, error=error)

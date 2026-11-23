@@ -1,0 +1,1719 @@
+{
+  "checks": [
+    {
+      "detail": "",
+      "name": "the boot profile can be read from the medium",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "the ISO matches the boot profile it was graded with",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "the ISO's build record names the medium it describes",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] genuine firmware produced a boot manager log",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the machine booted UEFI, not SeaBIOS",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] firmware started the El Torito UEFI image",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the machine was stopped on evidence, not on the clock",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the PC5 UEFI loader executed under it",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the loader identified EDK II as its firmware",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the kernel was found on the volume we booted from",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the kernel image was read through the file protocol",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the loader read the kernel file at its real size",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the kernel image declared its own length and it matched",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the loader validated the kernel image's header before jumping",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the jump went to the load address plus the declared entry offset",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] a memory map was handed over",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the kernel's own map agrees with the loader's count",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the load window was checked against that map (E15 guard)",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] firmware watchdog was disabled while services were callable",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] boot services were exited exactly once",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] ExitBootServices reported its retry count",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the kernel copy was read back at the handover address",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the handover carried exactly the kernel file",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the kernel accepted the boot contract",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the kernel reached its entry point",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the kernel reached PC5-64BIT-LONG-MODE-OK and PC5-64-DONE",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] no loader failure code was reported",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the page-table root the kernel runs on is the one the loader built",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the loader and the kernel agree on the page-table size",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the kernel reported paging enabled in long mode",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the IDT was installed before anything could fault",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the frame allocator was built from the firmware map",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the allocator's free count is its conventional total less what was claimed",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the allocator's own self-test passed after handover",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the kernel read real CPU state in long mode",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] the TSS line reports its own state, and does not over-claim TR",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[cold] a fresh variable store was used and written by firmware",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] genuine firmware produced a boot manager log",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the machine booted UEFI, not SeaBIOS",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] firmware started the El Torito UEFI image",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the machine was stopped on evidence, not on the clock",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the PC5 UEFI loader executed under it",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the loader identified EDK II as its firmware",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the kernel was found on the volume we booted from",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the kernel image was read through the file protocol",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the loader read the kernel file at its real size",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the kernel image declared its own length and it matched",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the loader validated the kernel image's header before jumping",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the jump went to the load address plus the declared entry offset",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] a memory map was handed over",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the kernel's own map agrees with the loader's count",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the load window was checked against that map (E15 guard)",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] firmware watchdog was disabled while services were callable",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] boot services were exited exactly once",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] ExitBootServices reported its retry count",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the kernel copy was read back at the handover address",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the handover carried exactly the kernel file",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the kernel accepted the boot contract",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the kernel reached its entry point",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the kernel reached PC5-64BIT-LONG-MODE-OK and PC5-64-DONE",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] no loader failure code was reported",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the page-table root the kernel runs on is the one the loader built",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the loader and the kernel agree on the page-table size",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the kernel reported paging enabled in long mode",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the IDT was installed before anything could fault",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the frame allocator was built from the firmware map",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the allocator's free count is its conventional total less what was claimed",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the allocator's own self-test passed after handover",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the kernel read real CPU state in long mode",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the TSS line reports its own state, and does not over-claim TR",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "[warm] the warm boot proved the same stages as the cold boot",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "the second boot reused the variable store firmware had written",
+      "state": "pass"
+    },
+    {
+      "detail": "the ISO carries its ESP as an El Torito image inside ISO9660, so there is no ESP partition to attach",
+      "name": "disk-style UEFI boot (ESP attached as a block device)",
+      "state": "skip"
+    },
+    {
+      "detail": "",
+      "name": "the gate's kernel-header claims match the kernel image on the medium",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "firmware refuses an ESP without BOOTX64.EFI (firmware fault)",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "firmware rejects a boot image with a broken PE32+ header (firmware fault)",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "loader reports the missing KERNEL64.BIN as kernel-not-found when no volume has it (bootloader fault)",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "loader refuses a kernel with a corrupted header (bootloader fault) as kimage64-magic",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "loader refuses a KERNEL64.BIN whose arch is wrong as kimage64-arch (bootloader fault)",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "loader refuses a KERNEL64.BIN whose image-size is wrong as kimage64-image-size (bootloader fault)",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "loader refuses a KERNEL64.BIN whose checksum is wrong as kimage64-checksum (bootloader fault)",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "firmware refuses a truncated ISO (firmware fault)",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "a boot that outlives its deadline is reported as a timeout, not as a pass",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "a small machine stops with a diagnostic or boots with its own memory",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "the ISO does not embed the firmware volume",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "no firmware image is carried in the repository",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "the ESP is not a firmware image",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "the ESP contains no firmware volume signature",
+      "state": "pass"
+    },
+    {
+      "detail": "",
+      "name": "the ISO embeds the release ESP the build produced",
+      "state": "pass"
+    }
+  ],
+  "data": {
+    "cold": {
+      "markers": {
+        "boot_ok": true,
+        "boot_services_exited": true,
+        "conventional_mib": null,
+        "cpu_long_mode": 1,
+        "cpu_vendor": "AuthenticAMD",
+        "el_torito_boot_option": true,
+        "exit_retries": 1,
+        "failure_codes": [],
+        "firmware_banner": true,
+        "firmware_refused": false,
+        "handoff_bytes": 208896,
+        "handoff_verified": true,
+        "handover_window_checked": 1,
+        "idt_installed": 256,
+        "kernel_bytes_read": 208896,
+        "kernel_entry": true,
+        "kernel_entry_declared": 4096,
+        "kernel_header_image": 208896,
+        "kernel_header_validated": true,
+        "kernel_jump_entry": 1052672,
+        "kernel_load_base": 1048576,
+        "kernel_memory_entries": 98,
+        "kernel_memory_mib": 209,
+        "kernel_protocol": true,
+        "kernel_read": true,
+        "kernel_volume_image": true,
+        "loader_banner": true,
+        "loader_firmware_edk2": true,
+        "loader_pt_pages": 6,
+        "loader_pt_root": 236892160,
+        "mem_conventional": 53750,
+        "mem_free": 53749,
+        "mem_selftest_ok": true,
+        "mem_status": "ok",
+        "memory_map_entries": 98,
+        "paging_enabled": 1,
+        "paging_pages": 6,
+        "paging_root": 236892160,
+        "seabios": false,
+        "tr_state": "not-loaded",
+        "watchdog": "disabled"
+      },
+      "returncode": 0,
+      "seconds": 3.0,
+      "stages": {
+        "ExitBootServices reports how many attempts it needed": {
+          "check": "[cold] ExitBootServices reported its retry count",
+          "state": "pass"
+        },
+        "ExitBootServices succeeds with a current map key": {
+          "check": "[cold] boot services were exited exactly once",
+          "state": "pass"
+        },
+        "execution began at the entry point the image declared": {
+          "check": "[cold] the jump went to the load address plus the declared entry offset",
+          "state": "pass"
+        },
+        "firmware recognises the PC5 boot medium": {
+          "check": "[cold] genuine firmware produced a boot manager log",
+          "state": "pass"
+        },
+        "memory allocation and ownership are correct": {
+          "check": "[cold] a memory map was handed over",
+          "state": "pass"
+        },
+        "no loader failure was reported": {
+          "check": "[cold] no loader failure code was reported",
+          "state": "pass"
+        },
+        "paging is enabled in long mode": {
+          "check": "[cold] the kernel reported paging enabled in long mode",
+          "state": "pass"
+        },
+        "required files are located and loaded": {
+          "check": "[cold] the kernel was found on the volume we booted from",
+          "state": "pass"
+        },
+        "serial output proves the execution path": {
+          "check": "[cold] the machine was stopped on evidence, not on the clock",
+          "state": "pass"
+        },
+        "the 64-bit PC5 loader executes": {
+          "check": "[cold] the PC5 UEFI loader executed under it",
+          "state": "pass"
+        },
+        "the EFI boot entry is discovered": {
+          "check": "[cold] firmware started the El Torito UEFI image",
+          "state": "pass"
+        },
+        "the IDT is installed and complete before anything can fault": {
+          "check": "[cold] the IDT was installed before anything could fault",
+          "state": "pass"
+        },
+        "the TSS/IST state is reported as measured, never as assumed": {
+          "check": "[cold] the TSS line reports its own state, and does not over-claim TR",
+          "state": "pass"
+        },
+        "the allocator's accounting is consistent with the map": {
+          "check": "[cold] the allocator's free count is its conventional total less what was claimed",
+          "state": "pass"
+        },
+        "the allocator's self-test runs after the handover": {
+          "check": "[cold] the allocator's own self-test passed after handover",
+          "state": "pass"
+        },
+        "the firmware is not a BIOS shim": {
+          "check": "[cold] the machine booted UEFI, not SeaBIOS",
+          "state": "pass"
+        },
+        "the firmware watchdog is disarmed before handover": {
+          "check": "[cold] firmware watchdog was disabled while services were callable",
+          "state": "pass"
+        },
+        "the frame allocator is initialised from the real memory map": {
+          "check": "[cold] the frame allocator was built from the firmware map",
+          "state": "pass"
+        },
+        "the handover carried exactly the kernel file": {
+          "check": "[cold] the handover carried exactly the kernel file",
+          "state": "pass"
+        },
+        "the handover was verified by the kernel that received it": {
+          "check": "[cold] the kernel accepted the boot contract",
+          "state": "pass"
+        },
+        "the kernel handoff succeeds": {
+          "check": "[cold] the kernel copy was read back at the handover address",
+          "state": "pass"
+        },
+        "the kernel image declared its own length and it matched": {
+          "check": "[cold] the kernel image declared its own length and it matched",
+          "state": "pass"
+        },
+        "the kernel image is read through the file protocol": {
+          "check": "[cold] the kernel image was read through the file protocol",
+          "state": "pass"
+        },
+        "the kernel reached its entry point": {
+          "check": "[cold] the kernel reached its entry point",
+          "state": "pass"
+        },
+        "the kernel reaches its 64-bit success marker": {
+          "check": "[cold] the kernel reached PC5-64BIT-LONG-MODE-OK and PC5-64-DONE",
+          "state": "pass"
+        },
+        "the kernel reads real CPU state": {
+          "check": "[cold] the kernel read real CPU state in long mode",
+          "state": "pass"
+        },
+        "the kernel runs on the page tables the loader built": {
+          "check": "[cold] the page-table root the kernel runs on is the one the loader built",
+          "state": "pass"
+        },
+        "the kernel's own map agrees with the loader's count": {
+          "check": "[cold] the kernel's own map agrees with the loader's count",
+          "state": "pass"
+        },
+        "the load window was checked against the memory map (the E15 guard)": {
+          "check": "[cold] the load window was checked against that map (E15 guard)",
+          "state": "pass"
+        },
+        "the loader names the firmware it is running on": {
+          "check": "[cold] the loader identified EDK II as its firmware",
+          "state": "pass"
+        },
+        "the loader read the kernel file at its real size": {
+          "check": "[cold] the loader read the kernel file at its real size",
+          "state": "pass"
+        },
+        "the loader validated the kernel image's header before jumping": {
+          "check": "[cold] the loader validated the kernel image's header before jumping",
+          "state": "pass"
+        },
+        "the page tables the kernel counts are the ones the loader built": {
+          "check": "[cold] the loader and the kernel agree on the page-table size",
+          "state": "pass"
+        }
+      },
+      "stopped_on": "evidence"
+    },
+    "cold_command": [
+      "/tmp/qemu-pc5",
+      "-machine",
+      "q35",
+      "-m",
+      "256",
+      "-smp",
+      "1",
+      "-no-reboot",
+      "-display",
+      "none",
+      "-monitor",
+      "none",
+      "-nic",
+      "none",
+      "-rtc",
+      "base=utc",
+      "-drive",
+      "if=pflash,format=raw,unit=0,readonly=on,file=/tmp/qpm/m/package/share/qemu/edk2-x86_64-code.fd",
+      "-drive",
+      "if=pflash,format=raw,unit=1,file=build/ovmf-serial/vars-cold.fd",
+      "-cdrom",
+      "build/pc5.iso",
+      "-serial",
+      "stdio"
+    ],
+    "cold_stderr": "qemu-system-x86_64: terminating on signal 15 from pid 31003 (python3)",
+    "disk_style": "not-applicable",
+    "environment": {
+      "buildinfo": {
+        "build": "1fdb24e-dirty",
+        "commit": "1fdb24e519d59b49152011ecc52e5da4ad57dadd",
+        "date": "2026-11-23T02:19:37Z",
+        "esp-loader": "5a99ad0424898578",
+        "kernel": "64-bit PC5 long-mode kernel",
+        "uefi-path": "64",
+        "version": "0.2.0"
+      },
+      "efi_image": "/home/user/pc5/build/efi64-release.img",
+      "efi_image_sha256": "e22fb2a6c688df72ebe641b6937ba9535f218e2dd1167191dc6384525078ac76",
+      "host": {
+        "machine": "x86_64",
+        "release": "6.1.158+"
+      },
+      "iso": "/home/user/pc5/build/pc5.iso",
+      "iso_sha256": "ae38b319d293ad529bd065100340b355bc76ead7baa29b8f04b1c7e47e5a203d",
+      "kernel_file": {
+        "path": "/home/user/pc5/build/kernel64/KERNEL64.BIN",
+        "sha256": "5e9156c732c0be87fe75712780b5ce2370341c0982c740f4e7ea336dafc82ed6",
+        "size": 208896
+      },
+      "ovmf_code": "/tmp/qpm/m/package/share/qemu/edk2-x86_64-code.fd",
+      "ovmf_vars": "/tmp/qpm/m/package/share/qemu/edk2-i386-vars.fd",
+      "profile": {
+        "kernel": "KERNEL64.BIN",
+        "key": "x64",
+        "label": "64-bit kernel path (KERNEL64.BIN)",
+        "read_from": "the ESP root directory",
+        "success_markers": [
+          "PC5-64BIT-LONG-MODE-OK",
+          "PC5-64-DONE"
+        ]
+      },
+      "qemu": "/tmp/qemu-pc5",
+      "qemu_version": "QEMU emulator version 11.0.2"
+    },
+    "firmware": {
+      "is_firmware_volume": true,
+      "ok": true,
+      "path": "/tmp/qpm/m/package/share/qemu/edk2-x86_64-code.fd",
+      "problems": [],
+      "sha256": "33090cc07675baa5190d9f1e84bf5176b33bcbfa9bacac522961150cdb6dbb2a",
+      "size": 3653632,
+      "volume_size": 3440640
+    },
+    "matrix": [
+      {
+        "check": "[cold] genuine firmware produced a boot manager log",
+        "requirement": "firmware recognises the PC5 boot medium",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the machine booted UEFI, not SeaBIOS",
+        "requirement": "the firmware is not a BIOS shim",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] firmware started the El Torito UEFI image",
+        "requirement": "the EFI boot entry is discovered",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the machine was stopped on evidence, not on the clock",
+        "requirement": "serial output proves the execution path",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the PC5 UEFI loader executed under it",
+        "requirement": "the 64-bit PC5 loader executes",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the loader identified EDK II as its firmware",
+        "requirement": "the loader names the firmware it is running on",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the kernel was found on the volume we booted from",
+        "requirement": "required files are located and loaded",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the kernel image was read through the file protocol",
+        "requirement": "the kernel image is read through the file protocol",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the loader read the kernel file at its real size",
+        "requirement": "the loader read the kernel file at its real size",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the kernel image declared its own length and it matched",
+        "requirement": "the kernel image declared its own length and it matched",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the loader validated the kernel image's header before jumping",
+        "requirement": "the loader validated the kernel image's header before jumping",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the jump went to the load address plus the declared entry offset",
+        "requirement": "execution began at the entry point the image declared",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] a memory map was handed over",
+        "requirement": "memory allocation and ownership are correct",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the kernel's own map agrees with the loader's count",
+        "requirement": "the kernel's own map agrees with the loader's count",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the load window was checked against that map (E15 guard)",
+        "requirement": "the load window was checked against the memory map (the E15 guard)",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] firmware watchdog was disabled while services were callable",
+        "requirement": "the firmware watchdog is disarmed before handover",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] boot services were exited exactly once",
+        "requirement": "ExitBootServices succeeds with a current map key",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] ExitBootServices reported its retry count",
+        "requirement": "ExitBootServices reports how many attempts it needed",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the kernel copy was read back at the handover address",
+        "requirement": "the kernel handoff succeeds",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the handover carried exactly the kernel file",
+        "requirement": "the handover carried exactly the kernel file",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the kernel accepted the boot contract",
+        "requirement": "the handover was verified by the kernel that received it",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the kernel reached its entry point",
+        "requirement": "the kernel reached its entry point",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the kernel reached PC5-64BIT-LONG-MODE-OK and PC5-64-DONE",
+        "requirement": "the kernel reaches its 64-bit success marker",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] no loader failure code was reported",
+        "requirement": "no loader failure was reported",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the page-table root the kernel runs on is the one the loader built",
+        "requirement": "the kernel runs on the page tables the loader built",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the loader and the kernel agree on the page-table size",
+        "requirement": "the page tables the kernel counts are the ones the loader built",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the kernel reported paging enabled in long mode",
+        "requirement": "paging is enabled in long mode",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the IDT was installed before anything could fault",
+        "requirement": "the IDT is installed and complete before anything can fault",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the frame allocator was built from the firmware map",
+        "requirement": "the frame allocator is initialised from the real memory map",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the allocator's free count is its conventional total less what was claimed",
+        "requirement": "the allocator's accounting is consistent with the map",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the allocator's own self-test passed after handover",
+        "requirement": "the allocator's self-test runs after the handover",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the kernel read real CPU state in long mode",
+        "requirement": "the kernel reads real CPU state",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[cold] the TSS line reports its own state, and does not over-claim TR",
+        "requirement": "the TSS/IST state is reported as measured, never as assumed",
+        "source": "OVMF cold boot",
+        "state": "verified"
+      },
+      {
+        "check": "[warm] the warm boot proved the same stages as the cold boot",
+        "requirement": "rebooting the same machine boots identically",
+        "source": "OVMF warm boot",
+        "state": "verified"
+      },
+      {
+        "check": "loader reports the missing KERNEL64.BIN as kernel-not-found when no volume has it (bootloader fault)",
+        "requirement": "loader reports the missing KERNEL64.BIN as kernel-not-found when no volume has it (bootloader fault)",
+        "source": "OVMF negative run (no-kernel)",
+        "state": "verified"
+      },
+      {
+        "check": "loader refuses a kernel with a corrupted header (bootloader fault) as kimage64-magic",
+        "requirement": "loader refuses a kernel with a corrupted header (bootloader fault) as kimage64-magic",
+        "source": "OVMF negative run (bad-signature)",
+        "state": "verified"
+      },
+      {
+        "check": "firmware rejects a boot image with a broken PE32+ header (firmware fault)",
+        "requirement": "firmware rejects a boot image with a broken PE32+ header (firmware fault)",
+        "source": "OVMF negative run (bad-pe)",
+        "state": "verified"
+      },
+      {
+        "check": "firmware refuses an ESP without BOOTX64.EFI (firmware fault)",
+        "requirement": "firmware refuses an ESP without BOOTX64.EFI (firmware fault)",
+        "source": "OVMF negative run (no-boot-app)",
+        "state": "verified"
+      },
+      {
+        "check": "firmware refuses a truncated ISO (firmware fault)",
+        "requirement": "firmware refuses a truncated ISO (firmware fault)",
+        "source": "OVMF negative run (truncated-iso)",
+        "state": "verified"
+      },
+      {
+        "check": "a small machine stops with a diagnostic or boots with its own memory",
+        "requirement": "a small machine stops with a diagnostic or boots with its own memory",
+        "source": "OVMF negative run (small-memory)",
+        "state": "verified"
+      },
+      {
+        "check": "a boot that outlives its deadline is reported as a timeout, not as a pass",
+        "requirement": "a boot that outlives its deadline is reported as a timeout, not as a pass",
+        "source": "OVMF negative run (deadline)",
+        "state": "verified"
+      },
+      {
+        "check": "loader refuses a KERNEL64.BIN whose arch is wrong as kimage64-arch (bootloader fault)",
+        "requirement": "loader refuses a KERNEL64.BIN whose arch is wrong as kimage64-arch (bootloader fault)",
+        "source": "OVMF negative run (kernel-arch)",
+        "state": "verified"
+      },
+      {
+        "check": "loader refuses a KERNEL64.BIN whose image-size is wrong as kimage64-image-size (bootloader fault)",
+        "requirement": "loader refuses a KERNEL64.BIN whose image-size is wrong as kimage64-image-size (bootloader fault)",
+        "source": "OVMF negative run (kernel-image-size)",
+        "state": "verified"
+      },
+      {
+        "check": "loader refuses a KERNEL64.BIN whose checksum is wrong as kimage64-checksum (bootloader fault)",
+        "requirement": "loader refuses a KERNEL64.BIN whose checksum is wrong as kimage64-checksum (bootloader fault)",
+        "source": "OVMF negative run (kernel-checksum)",
+        "state": "verified"
+      },
+      {
+        "requirement": "a stale memory map key is retried, not fatal",
+        "source": "tests/uefi_stubtest.py (executed against the real loader image)",
+        "state": "external"
+      },
+      {
+        "requirement": "a firmware that never accepts the key fails without a false success",
+        "source": "tests/uefi_stubtest.py (executed)",
+        "state": "external"
+      },
+      {
+        "requirement": "invalid boot information is rejected by the kernel",
+        "source": "make unit (host unit test of the same predicate kmain runs)",
+        "state": "external"
+      },
+      {
+        "requirement": "the loader never calls a boot service after ExitBootServices",
+        "source": "tests/uefi_stubtest.py (executed)",
+        "state": "external"
+      },
+      {
+        "requirement": "the BIOS boot path still boots and passes its own test",
+        "source": "make boot-test (v86, BIOS/SeaBIOS)",
+        "state": "external"
+      }
+    ],
+    "negative": {
+      "bad-pe": {
+        "iso": "bad-pe.iso",
+        "markers": {
+          "boot_ok": false,
+          "boot_services_exited": false,
+          "conventional_mib": null,
+          "cpu_long_mode": null,
+          "cpu_vendor": null,
+          "el_torito_boot_option": true,
+          "exit_retries": null,
+          "failure_codes": [],
+          "firmware_banner": true,
+          "firmware_refused": true,
+          "handoff_bytes": null,
+          "handoff_verified": false,
+          "handover_window_checked": 0,
+          "idt_installed": null,
+          "kernel_bytes_read": null,
+          "kernel_entry": false,
+          "kernel_entry_declared": null,
+          "kernel_header_image": null,
+          "kernel_header_validated": false,
+          "kernel_jump_entry": null,
+          "kernel_load_base": null,
+          "kernel_memory_entries": null,
+          "kernel_memory_mib": null,
+          "kernel_protocol": false,
+          "kernel_read": false,
+          "kernel_volume_image": false,
+          "loader_banner": false,
+          "loader_firmware_edk2": false,
+          "loader_pt_pages": null,
+          "loader_pt_root": null,
+          "mem_conventional": null,
+          "mem_free": null,
+          "mem_selftest_ok": false,
+          "mem_status": null,
+          "memory_map_entries": null,
+          "paging_enabled": null,
+          "paging_pages": null,
+          "paging_root": null,
+          "seabios": false,
+          "tr_state": null,
+          "watchdog": null
+        },
+        "seconds": 180.1,
+        "serial_tail": "to continue.\u001b[11;01HPress \u001b[1m\u001b[37m\u001b[40mESC\u001b[0m\u001b[37m\u001b[40m in 4 seconds to skip \u001b[1m\u001b[33m\u001b[40mstartup.nsh\u001b[0m\u001b[37m\u001b[40m or any other key to continue.\u001b[11;01HPress \u001b[1m\u001b[37m\u001b[40mESC\u001b[0m\u001b[37m\u001b[40m in 3 seconds to skip \u001b[1m\u001b[33m\u001b[40mstartup.nsh\u001b[0m\u001b[37m\u001b[40m or any other key to continue.\u001b[11;01HPress \u001b[1m\u001b[37m\u001b[40mESC\u001b[0m\u001b[37m\u001b[40m in 2 seconds to skip \u001b[1m\u001b[33m\u001b[40mstartup.nsh\u001b[0m\u001b[37m\u001b[40m or any other key to continue.\u001b[11;01HPress \u001b[1m\u001b[37m\u001b[40mESC\u001b[0m\u001b[37m\u001b[40m in 1 seconds to skip \u001b[1m\u001b[33m\u001b[40mstartup.nsh\u001b[0m\u001b[37m\u001b[40m or any other key to continue.\n\u001b[12;01H\u001b[1m\u001b[33m\u001b[40mShell> \u001b[0m\u001b[37m\u001b[40m"
+      },
+      "bad-signature": {
+        "iso": "bad-signature.iso",
+        "markers": {
+          "boot_ok": false,
+          "boot_services_exited": false,
+          "conventional_mib": null,
+          "cpu_long_mode": null,
+          "cpu_vendor": null,
+          "el_torito_boot_option": true,
+          "exit_retries": null,
+          "failure_codes": [
+            "kimage64-magic"
+          ],
+          "firmware_banner": true,
+          "firmware_refused": false,
+          "handoff_bytes": null,
+          "handoff_verified": false,
+          "handover_window_checked": 0,
+          "idt_installed": null,
+          "kernel_bytes_read": 208896,
+          "kernel_entry": false,
+          "kernel_entry_declared": null,
+          "kernel_header_image": null,
+          "kernel_header_validated": false,
+          "kernel_jump_entry": null,
+          "kernel_load_base": 1048576,
+          "kernel_memory_entries": null,
+          "kernel_memory_mib": null,
+          "kernel_protocol": false,
+          "kernel_read": true,
+          "kernel_volume_image": true,
+          "loader_banner": true,
+          "loader_firmware_edk2": true,
+          "loader_pt_pages": null,
+          "loader_pt_root": null,
+          "mem_conventional": null,
+          "mem_free": null,
+          "mem_selftest_ok": false,
+          "mem_status": null,
+          "memory_map_entries": null,
+          "paging_enabled": null,
+          "paging_pages": null,
+          "paging_root": null,
+          "seabios": false,
+          "tr_state": null,
+          "watchdog": "disabled"
+        },
+        "seconds": 2.5,
+        "serial_tail": "\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01H\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01H\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01HBdsDxe: loading Boot0001 \"UEFI QEMU DVD-ROM QM00005 \" from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)\nBdsDxe: starting Boot0001 \"UEFI QEMU DVD-ROM QM00005 \" from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)\nPC5-64-LOADER-BANNER 64-bit UEFI path (experimental)\nPC5-64-LOADER firmware=EDK II revision=0x2 table-rev=0x10000\nPC5-64-LOADER watchdog=disabled\nPC5-64-LOADER kernel-volume=image\nPC5-64-LOADER kernel at=0x100000 bytes=208896\nPC5-64-LOADER-FAIL=kimage64-magic"
+      },
+      "deadline": {
+        "check": "a boot that outlives its deadline is reported as a timeout, not as a pass",
+        "killed": true,
+        "markers": {
+          "boot_ok": false,
+          "boot_services_exited": false,
+          "conventional_mib": null,
+          "cpu_long_mode": null,
+          "cpu_vendor": null,
+          "el_torito_boot_option": false,
+          "exit_retries": null,
+          "failure_codes": [],
+          "firmware_banner": false,
+          "firmware_refused": false,
+          "handoff_bytes": null,
+          "handoff_verified": false,
+          "handover_window_checked": 0,
+          "idt_installed": null,
+          "kernel_bytes_read": null,
+          "kernel_entry": false,
+          "kernel_entry_declared": null,
+          "kernel_header_image": null,
+          "kernel_header_validated": false,
+          "kernel_jump_entry": null,
+          "kernel_load_base": null,
+          "kernel_memory_entries": null,
+          "kernel_memory_mib": null,
+          "kernel_protocol": false,
+          "kernel_read": false,
+          "kernel_volume_image": false,
+          "loader_banner": false,
+          "loader_firmware_edk2": false,
+          "loader_pt_pages": null,
+          "loader_pt_root": null,
+          "mem_conventional": null,
+          "mem_free": null,
+          "mem_selftest_ok": false,
+          "mem_status": null,
+          "memory_map_entries": null,
+          "paging_enabled": null,
+          "paging_pages": null,
+          "paging_root": null,
+          "seabios": false,
+          "tr_state": null,
+          "watchdog": null
+        },
+        "seconds": 1.0
+      },
+      "kernel-arch": {
+        "iso": "kernel-arch.iso",
+        "markers": {
+          "boot_ok": false,
+          "boot_services_exited": false,
+          "conventional_mib": null,
+          "cpu_long_mode": null,
+          "cpu_vendor": null,
+          "el_torito_boot_option": true,
+          "exit_retries": null,
+          "failure_codes": [
+            "kimage64-arch"
+          ],
+          "firmware_banner": true,
+          "firmware_refused": false,
+          "handoff_bytes": null,
+          "handoff_verified": false,
+          "handover_window_checked": 0,
+          "idt_installed": null,
+          "kernel_bytes_read": 208896,
+          "kernel_entry": false,
+          "kernel_entry_declared": null,
+          "kernel_header_image": null,
+          "kernel_header_validated": false,
+          "kernel_jump_entry": null,
+          "kernel_load_base": 1048576,
+          "kernel_memory_entries": null,
+          "kernel_memory_mib": null,
+          "kernel_protocol": false,
+          "kernel_read": true,
+          "kernel_volume_image": true,
+          "loader_banner": true,
+          "loader_firmware_edk2": true,
+          "loader_pt_pages": null,
+          "loader_pt_root": null,
+          "mem_conventional": null,
+          "mem_free": null,
+          "mem_selftest_ok": false,
+          "mem_status": null,
+          "memory_map_entries": null,
+          "paging_enabled": null,
+          "paging_pages": null,
+          "paging_root": null,
+          "seabios": false,
+          "tr_state": null,
+          "watchdog": "disabled"
+        },
+        "seconds": 2.5,
+        "serial_tail": "\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01H\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01H\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01HBdsDxe: loading Boot0001 \"UEFI QEMU DVD-ROM QM00005 \" from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)\nBdsDxe: starting Boot0001 \"UEFI QEMU DVD-ROM QM00005 \" from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)\nPC5-64-LOADER-BANNER 64-bit UEFI path (experimental)\nPC5-64-LOADER firmware=EDK II revision=0x2 table-rev=0x10000\nPC5-64-LOADER watchdog=disabled\nPC5-64-LOADER kernel-volume=image\nPC5-64-LOADER kernel at=0x100000 bytes=208896\nPC5-64-LOADER-FAIL=kimage64-arch"
+      },
+      "kernel-checksum": {
+        "iso": "kernel-checksum.iso",
+        "markers": {
+          "boot_ok": false,
+          "boot_services_exited": false,
+          "conventional_mib": null,
+          "cpu_long_mode": null,
+          "cpu_vendor": null,
+          "el_torito_boot_option": true,
+          "exit_retries": null,
+          "failure_codes": [
+            "kimage64-checksum"
+          ],
+          "firmware_banner": true,
+          "firmware_refused": false,
+          "handoff_bytes": null,
+          "handoff_verified": false,
+          "handover_window_checked": 0,
+          "idt_installed": null,
+          "kernel_bytes_read": 208896,
+          "kernel_entry": false,
+          "kernel_entry_declared": null,
+          "kernel_header_image": null,
+          "kernel_header_validated": false,
+          "kernel_jump_entry": null,
+          "kernel_load_base": 1048576,
+          "kernel_memory_entries": null,
+          "kernel_memory_mib": null,
+          "kernel_protocol": false,
+          "kernel_read": true,
+          "kernel_volume_image": true,
+          "loader_banner": true,
+          "loader_firmware_edk2": true,
+          "loader_pt_pages": null,
+          "loader_pt_root": null,
+          "mem_conventional": null,
+          "mem_free": null,
+          "mem_selftest_ok": false,
+          "mem_status": null,
+          "memory_map_entries": null,
+          "paging_enabled": null,
+          "paging_pages": null,
+          "paging_root": null,
+          "seabios": false,
+          "tr_state": null,
+          "watchdog": "disabled"
+        },
+        "seconds": 2.5,
+        "serial_tail": "\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01H\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01H\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01HBdsDxe: loading Boot0001 \"UEFI QEMU DVD-ROM QM00005 \" from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)\nBdsDxe: starting Boot0001 \"UEFI QEMU DVD-ROM QM00005 \" from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)\nPC5-64-LOADER-BANNER 64-bit UEFI path (experimental)\nPC5-64-LOADER firmware=EDK II revision=0x2 table-rev=0x10000\nPC5-64-LOADER watchdog=disabled\nPC5-64-LOADER kernel-volume=image\nPC5-64-LOADER kernel at=0x100000 bytes=208896\nPC5-64-LOADER-FAIL=kimage64-checksum"
+      },
+      "kernel-image-size": {
+        "iso": "kernel-image-size.iso",
+        "markers": {
+          "boot_ok": false,
+          "boot_services_exited": false,
+          "conventional_mib": null,
+          "cpu_long_mode": null,
+          "cpu_vendor": null,
+          "el_torito_boot_option": true,
+          "exit_retries": null,
+          "failure_codes": [
+            "kimage64-image-size"
+          ],
+          "firmware_banner": true,
+          "firmware_refused": false,
+          "handoff_bytes": null,
+          "handoff_verified": false,
+          "handover_window_checked": 0,
+          "idt_installed": null,
+          "kernel_bytes_read": 208896,
+          "kernel_entry": false,
+          "kernel_entry_declared": null,
+          "kernel_header_image": null,
+          "kernel_header_validated": false,
+          "kernel_jump_entry": null,
+          "kernel_load_base": 1048576,
+          "kernel_memory_entries": null,
+          "kernel_memory_mib": null,
+          "kernel_protocol": false,
+          "kernel_read": true,
+          "kernel_volume_image": true,
+          "loader_banner": true,
+          "loader_firmware_edk2": true,
+          "loader_pt_pages": null,
+          "loader_pt_root": null,
+          "mem_conventional": null,
+          "mem_free": null,
+          "mem_selftest_ok": false,
+          "mem_status": null,
+          "memory_map_entries": null,
+          "paging_enabled": null,
+          "paging_pages": null,
+          "paging_root": null,
+          "seabios": false,
+          "tr_state": null,
+          "watchdog": "disabled"
+        },
+        "seconds": 2.5,
+        "serial_tail": "\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01H\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01H\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01HBdsDxe: loading Boot0001 \"UEFI QEMU DVD-ROM QM00005 \" from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)\nBdsDxe: starting Boot0001 \"UEFI QEMU DVD-ROM QM00005 \" from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)\nPC5-64-LOADER-BANNER 64-bit UEFI path (experimental)\nPC5-64-LOADER firmware=EDK II revision=0x2 table-rev=0x10000\nPC5-64-LOADER watchdog=disabled\nPC5-64-LOADER kernel-volume=image\nPC5-64-LOADER kernel at=0x100000 bytes=208896\nPC5-64-LOADER-FAIL=kimage64-image-size"
+      },
+      "no-boot-app": {
+        "iso": "no-boot-app.iso",
+        "markers": {
+          "boot_ok": false,
+          "boot_services_exited": false,
+          "conventional_mib": null,
+          "cpu_long_mode": null,
+          "cpu_vendor": null,
+          "el_torito_boot_option": true,
+          "exit_retries": null,
+          "failure_codes": [],
+          "firmware_banner": true,
+          "firmware_refused": true,
+          "handoff_bytes": null,
+          "handoff_verified": false,
+          "handover_window_checked": 0,
+          "idt_installed": null,
+          "kernel_bytes_read": null,
+          "kernel_entry": false,
+          "kernel_entry_declared": null,
+          "kernel_header_image": null,
+          "kernel_header_validated": false,
+          "kernel_jump_entry": null,
+          "kernel_load_base": null,
+          "kernel_memory_entries": null,
+          "kernel_memory_mib": null,
+          "kernel_protocol": false,
+          "kernel_read": false,
+          "kernel_volume_image": false,
+          "loader_banner": false,
+          "loader_firmware_edk2": false,
+          "loader_pt_pages": null,
+          "loader_pt_root": null,
+          "mem_conventional": null,
+          "mem_free": null,
+          "mem_selftest_ok": false,
+          "mem_status": null,
+          "memory_map_entries": null,
+          "paging_enabled": null,
+          "paging_pages": null,
+          "paging_root": null,
+          "seabios": false,
+          "tr_state": null,
+          "watchdog": null
+        },
+        "seconds": 180.1,
+        "serial_tail": "to continue.\u001b[11;01HPress \u001b[1m\u001b[37m\u001b[40mESC\u001b[0m\u001b[37m\u001b[40m in 4 seconds to skip \u001b[1m\u001b[33m\u001b[40mstartup.nsh\u001b[0m\u001b[37m\u001b[40m or any other key to continue.\u001b[11;01HPress \u001b[1m\u001b[37m\u001b[40mESC\u001b[0m\u001b[37m\u001b[40m in 3 seconds to skip \u001b[1m\u001b[33m\u001b[40mstartup.nsh\u001b[0m\u001b[37m\u001b[40m or any other key to continue.\u001b[11;01HPress \u001b[1m\u001b[37m\u001b[40mESC\u001b[0m\u001b[37m\u001b[40m in 2 seconds to skip \u001b[1m\u001b[33m\u001b[40mstartup.nsh\u001b[0m\u001b[37m\u001b[40m or any other key to continue.\u001b[11;01HPress \u001b[1m\u001b[37m\u001b[40mESC\u001b[0m\u001b[37m\u001b[40m in 1 seconds to skip \u001b[1m\u001b[33m\u001b[40mstartup.nsh\u001b[0m\u001b[37m\u001b[40m or any other key to continue.\n\u001b[12;01H\u001b[1m\u001b[33m\u001b[40mShell> \u001b[0m\u001b[37m\u001b[40m"
+      },
+      "no-kernel": {
+        "iso": "no-kernel.iso",
+        "markers": {
+          "boot_ok": false,
+          "boot_services_exited": false,
+          "conventional_mib": null,
+          "cpu_long_mode": null,
+          "cpu_vendor": null,
+          "el_torito_boot_option": true,
+          "exit_retries": null,
+          "failure_codes": [
+            "kernel-not-found"
+          ],
+          "firmware_banner": true,
+          "firmware_refused": false,
+          "handoff_bytes": null,
+          "handoff_verified": false,
+          "handover_window_checked": 0,
+          "idt_installed": null,
+          "kernel_bytes_read": null,
+          "kernel_entry": false,
+          "kernel_entry_declared": null,
+          "kernel_header_image": null,
+          "kernel_header_validated": false,
+          "kernel_jump_entry": null,
+          "kernel_load_base": null,
+          "kernel_memory_entries": null,
+          "kernel_memory_mib": null,
+          "kernel_protocol": false,
+          "kernel_read": false,
+          "kernel_volume_image": true,
+          "loader_banner": true,
+          "loader_firmware_edk2": true,
+          "loader_pt_pages": null,
+          "loader_pt_root": null,
+          "mem_conventional": null,
+          "mem_free": null,
+          "mem_selftest_ok": false,
+          "mem_status": null,
+          "memory_map_entries": null,
+          "paging_enabled": null,
+          "paging_pages": null,
+          "paging_root": null,
+          "seabios": false,
+          "tr_state": null,
+          "watchdog": "disabled"
+        },
+        "seconds": 2.5,
+        "serial_tail": "\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01HBdsDxe: loading Boot0001 \"UEFI QEMU DVD-ROM QM00005 \" from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)\nBdsDxe: starting Boot0001 \"UEFI QEMU DVD-ROM QM00005 \" from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)\nPC5-64-LOADER-BANNER 64-bit UEFI path (experimental)\nPC5-64-LOADER firmware=EDK II revision=0x2 table-rev=0x10000\nPC5-64-LOADER watchdog=disabled\nPC5-64-LOADER kernel-volume=image-miss why=6 status=0x800000000000000e device=0xe5c7318\nPC5-64-LOADER kernel-search why=1 volumes=1 handles=0 need=0 status=0x8000000000000002\nPC5-64-LOADER-FAIL=kernel-not-found"
+      },
+      "small-memory": {
+        "check": "a small machine stops with a diagnostic or boots with its own memory",
+        "conventional_mib": null,
+        "kernel_memory_mib": 17,
+        "markers": {
+          "boot_ok": true,
+          "boot_services_exited": true,
+          "conventional_mib": null,
+          "cpu_long_mode": 1,
+          "cpu_vendor": "AuthenticAMD",
+          "el_torito_boot_option": true,
+          "exit_retries": 1,
+          "failure_codes": [],
+          "firmware_banner": true,
+          "firmware_refused": false,
+          "handoff_bytes": 208896,
+          "handoff_verified": true,
+          "handover_window_checked": 1,
+          "idt_installed": 256,
+          "kernel_bytes_read": 208896,
+          "kernel_entry": true,
+          "kernel_entry_declared": 4096,
+          "kernel_header_image": 208896,
+          "kernel_header_validated": true,
+          "kernel_jump_entry": 1052672,
+          "kernel_load_base": 1048576,
+          "kernel_memory_entries": 96,
+          "kernel_memory_mib": 17,
+          "kernel_protocol": true,
+          "kernel_read": true,
+          "kernel_volume_image": true,
+          "loader_banner": true,
+          "loader_firmware_edk2": true,
+          "loader_pt_pages": 6,
+          "loader_pt_root": 35565568,
+          "mem_conventional": 4598,
+          "mem_free": 4597,
+          "mem_selftest_ok": true,
+          "mem_status": "ok",
+          "memory_map_entries": 96,
+          "paging_enabled": 1,
+          "paging_pages": 6,
+          "paging_root": 35565568,
+          "seabios": false,
+          "tr_state": "not-loaded",
+          "watchdog": "disabled"
+        },
+        "memory_mb": 64,
+        "over_claims": false,
+        "refused_with_code": false,
+        "seconds": 2.5,
+        "serial_bytes": 3725
+      },
+      "truncated-iso": {
+        "iso": "truncated.iso",
+        "markers": {
+          "boot_ok": false,
+          "boot_services_exited": false,
+          "conventional_mib": null,
+          "cpu_long_mode": null,
+          "cpu_vendor": null,
+          "el_torito_boot_option": true,
+          "exit_retries": null,
+          "failure_codes": [],
+          "firmware_banner": true,
+          "firmware_refused": true,
+          "handoff_bytes": null,
+          "handoff_verified": false,
+          "handover_window_checked": 0,
+          "idt_installed": null,
+          "kernel_bytes_read": null,
+          "kernel_entry": false,
+          "kernel_entry_declared": null,
+          "kernel_header_image": null,
+          "kernel_header_validated": false,
+          "kernel_jump_entry": null,
+          "kernel_load_base": null,
+          "kernel_memory_entries": null,
+          "kernel_memory_mib": null,
+          "kernel_protocol": false,
+          "kernel_read": false,
+          "kernel_volume_image": false,
+          "loader_banner": false,
+          "loader_firmware_edk2": false,
+          "loader_pt_pages": null,
+          "loader_pt_root": null,
+          "mem_conventional": null,
+          "mem_free": null,
+          "mem_selftest_ok": false,
+          "mem_status": null,
+          "memory_map_entries": null,
+          "paging_enabled": null,
+          "paging_pages": null,
+          "paging_root": null,
+          "seabios": false,
+          "tr_state": null,
+          "watchdog": null
+        },
+        "seconds": 180.1,
+        "serial_tail": "to continue.\u001b[11;01HPress \u001b[1m\u001b[37m\u001b[40mESC\u001b[0m\u001b[37m\u001b[40m in 4 seconds to skip \u001b[1m\u001b[33m\u001b[40mstartup.nsh\u001b[0m\u001b[37m\u001b[40m or any other key to continue.\u001b[11;01HPress \u001b[1m\u001b[37m\u001b[40mESC\u001b[0m\u001b[37m\u001b[40m in 3 seconds to skip \u001b[1m\u001b[33m\u001b[40mstartup.nsh\u001b[0m\u001b[37m\u001b[40m or any other key to continue.\u001b[11;01HPress \u001b[1m\u001b[37m\u001b[40mESC\u001b[0m\u001b[37m\u001b[40m in 2 seconds to skip \u001b[1m\u001b[33m\u001b[40mstartup.nsh\u001b[0m\u001b[37m\u001b[40m or any other key to continue.\u001b[11;01HPress \u001b[1m\u001b[37m\u001b[40mESC\u001b[0m\u001b[37m\u001b[40m in 1 seconds to skip \u001b[1m\u001b[33m\u001b[40mstartup.nsh\u001b[0m\u001b[37m\u001b[40m or any other key to continue.\n\u001b[12;01H\u001b[1m\u001b[33m\u001b[40mShell> \u001b[0m\u001b[37m\u001b[40m"
+      }
+    },
+    "release_esp": {
+      "built_sha256": "e22fb2a6c688df72ebe641b6937ba9535f218e2dd1167191dc6384525078ac76",
+      "identical": true,
+      "iso_sha256": "e22fb2a6c688df72ebe641b6937ba9535f218e2dd1167191dc6384525078ac76"
+    },
+    "status": "passed",
+    "vars_template": {
+      "path": "/tmp/qpm/m/package/share/qemu/edk2-i386-vars.fd",
+      "sha256": "5d2ac383371b408398accee7ec27c8c09ea5b74a0de0ceea6513388b15be5d1e",
+      "size": 540672
+    },
+    "warm": {
+      "markers": {
+        "boot_ok": true,
+        "boot_services_exited": true,
+        "conventional_mib": null,
+        "cpu_long_mode": 1,
+        "cpu_vendor": "AuthenticAMD",
+        "el_torito_boot_option": true,
+        "exit_retries": 1,
+        "failure_codes": [],
+        "firmware_banner": true,
+        "firmware_refused": false,
+        "handoff_bytes": 208896,
+        "handoff_verified": true,
+        "handover_window_checked": 1,
+        "idt_installed": 256,
+        "kernel_bytes_read": 208896,
+        "kernel_entry": true,
+        "kernel_entry_declared": 4096,
+        "kernel_header_image": 208896,
+        "kernel_header_validated": true,
+        "kernel_jump_entry": 1052672,
+        "kernel_load_base": 1048576,
+        "kernel_memory_entries": 98,
+        "kernel_memory_mib": 209,
+        "kernel_protocol": true,
+        "kernel_read": true,
+        "kernel_volume_image": true,
+        "loader_banner": true,
+        "loader_firmware_edk2": true,
+        "loader_pt_pages": 6,
+        "loader_pt_root": 236892160,
+        "mem_conventional": 53750,
+        "mem_free": 53749,
+        "mem_selftest_ok": true,
+        "mem_status": "ok",
+        "memory_map_entries": 98,
+        "paging_enabled": 1,
+        "paging_pages": 6,
+        "paging_root": 236892160,
+        "seabios": false,
+        "tr_state": "not-loaded",
+        "watchdog": "disabled"
+      },
+      "returncode": 0,
+      "seconds": 2.5,
+      "stages": {
+        "ExitBootServices reports how many attempts it needed": {
+          "check": "[warm] ExitBootServices reported its retry count",
+          "state": "pass"
+        },
+        "ExitBootServices succeeds with a current map key": {
+          "check": "[warm] boot services were exited exactly once",
+          "state": "pass"
+        },
+        "execution began at the entry point the image declared": {
+          "check": "[warm] the jump went to the load address plus the declared entry offset",
+          "state": "pass"
+        },
+        "firmware recognises the PC5 boot medium": {
+          "check": "[warm] genuine firmware produced a boot manager log",
+          "state": "pass"
+        },
+        "memory allocation and ownership are correct": {
+          "check": "[warm] a memory map was handed over",
+          "state": "pass"
+        },
+        "no loader failure was reported": {
+          "check": "[warm] no loader failure code was reported",
+          "state": "pass"
+        },
+        "paging is enabled in long mode": {
+          "check": "[warm] the kernel reported paging enabled in long mode",
+          "state": "pass"
+        },
+        "required files are located and loaded": {
+          "check": "[warm] the kernel was found on the volume we booted from",
+          "state": "pass"
+        },
+        "serial output proves the execution path": {
+          "check": "[warm] the machine was stopped on evidence, not on the clock",
+          "state": "pass"
+        },
+        "the 64-bit PC5 loader executes": {
+          "check": "[warm] the PC5 UEFI loader executed under it",
+          "state": "pass"
+        },
+        "the EFI boot entry is discovered": {
+          "check": "[warm] firmware started the El Torito UEFI image",
+          "state": "pass"
+        },
+        "the IDT is installed and complete before anything can fault": {
+          "check": "[warm] the IDT was installed before anything could fault",
+          "state": "pass"
+        },
+        "the TSS/IST state is reported as measured, never as assumed": {
+          "check": "[warm] the TSS line reports its own state, and does not over-claim TR",
+          "state": "pass"
+        },
+        "the allocator's accounting is consistent with the map": {
+          "check": "[warm] the allocator's free count is its conventional total less what was claimed",
+          "state": "pass"
+        },
+        "the allocator's self-test runs after the handover": {
+          "check": "[warm] the allocator's own self-test passed after handover",
+          "state": "pass"
+        },
+        "the firmware is not a BIOS shim": {
+          "check": "[warm] the machine booted UEFI, not SeaBIOS",
+          "state": "pass"
+        },
+        "the firmware watchdog is disarmed before handover": {
+          "check": "[warm] firmware watchdog was disabled while services were callable",
+          "state": "pass"
+        },
+        "the frame allocator is initialised from the real memory map": {
+          "check": "[warm] the frame allocator was built from the firmware map",
+          "state": "pass"
+        },
+        "the handover carried exactly the kernel file": {
+          "check": "[warm] the handover carried exactly the kernel file",
+          "state": "pass"
+        },
+        "the handover was verified by the kernel that received it": {
+          "check": "[warm] the kernel accepted the boot contract",
+          "state": "pass"
+        },
+        "the kernel handoff succeeds": {
+          "check": "[warm] the kernel copy was read back at the handover address",
+          "state": "pass"
+        },
+        "the kernel image declared its own length and it matched": {
+          "check": "[warm] the kernel image declared its own length and it matched",
+          "state": "pass"
+        },
+        "the kernel image is read through the file protocol": {
+          "check": "[warm] the kernel image was read through the file protocol",
+          "state": "pass"
+        },
+        "the kernel reached its entry point": {
+          "check": "[warm] the kernel reached its entry point",
+          "state": "pass"
+        },
+        "the kernel reaches its 64-bit success marker": {
+          "check": "[warm] the kernel reached PC5-64BIT-LONG-MODE-OK and PC5-64-DONE",
+          "state": "pass"
+        },
+        "the kernel reads real CPU state": {
+          "check": "[warm] the kernel read real CPU state in long mode",
+          "state": "pass"
+        },
+        "the kernel runs on the page tables the loader built": {
+          "check": "[warm] the page-table root the kernel runs on is the one the loader built",
+          "state": "pass"
+        },
+        "the kernel's own map agrees with the loader's count": {
+          "check": "[warm] the kernel's own map agrees with the loader's count",
+          "state": "pass"
+        },
+        "the load window was checked against the memory map (the E15 guard)": {
+          "check": "[warm] the load window was checked against that map (E15 guard)",
+          "state": "pass"
+        },
+        "the loader names the firmware it is running on": {
+          "check": "[warm] the loader identified EDK II as its firmware",
+          "state": "pass"
+        },
+        "the loader read the kernel file at its real size": {
+          "check": "[warm] the loader read the kernel file at its real size",
+          "state": "pass"
+        },
+        "the loader validated the kernel image's header before jumping": {
+          "check": "[warm] the loader validated the kernel image's header before jumping",
+          "state": "pass"
+        },
+        "the page tables the kernel counts are the ones the loader built": {
+          "check": "[warm] the loader and the kernel agree on the page-table size",
+          "state": "pass"
+        }
+      },
+      "stopped_on": "evidence"
+    },
+    "warm_command": [
+      "/tmp/qemu-pc5",
+      "-machine",
+      "q35",
+      "-m",
+      "256",
+      "-smp",
+      "1",
+      "-no-reboot",
+      "-display",
+      "none",
+      "-monitor",
+      "none",
+      "-nic",
+      "none",
+      "-rtc",
+      "base=utc",
+      "-drive",
+      "if=pflash,format=raw,unit=0,readonly=on,file=/tmp/qpm/m/package/share/qemu/edk2-x86_64-code.fd",
+      "-drive",
+      "if=pflash,format=raw,unit=1,file=build/ovmf-serial/vars-cold.fd",
+      "-cdrom",
+      "build/pc5.iso",
+      "-serial",
+      "stdio"
+    ]
+  },
+  "exit_code": 0,
+  "not_applicable": 1,
+  "passed": true,
+  "success_marker": "PC5-OVMF-BOOT-OK"
+}
