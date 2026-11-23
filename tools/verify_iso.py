@@ -215,6 +215,9 @@ def verify_esp(rep, fat, expectations=None):
     # "this is the artifact the gates executed".  Tested both ways in
     # tests/test_release_esp.py, including the case the digest cannot see.
     esp_files = {}
+    # The blobs too, because "is this a valid kernel image" is a question about bytes and a
+    # digest cannot answer it.  Held only for the duration of this function.
+    esp_blobs = {}
     for entry in root_entries:
         if entry["attr"] & 0x18 or not entry["size"]:
             continue
@@ -225,7 +228,40 @@ def verify_esp(rep, fat, expectations=None):
             continue
         esp_files[name] = {"bytes": len(blob),
                            "sha256": hashlib.sha256(blob).hexdigest()}
+        esp_blobs[name] = blob
     rep.data["uefi_files"] = esp_files
+
+    # The 64-bit kernel image, judged by its own format rather than by its name.
+    #
+    # `--info` compares the finished ESP against a record this build wrote, and the digests
+    # above compare it against the files the gates executed; neither says the kernel *image*
+    # is a kernel image.  A release whose `KERNEL64.BIN` had been stamped by an older tool,
+    # or whose header had been edited after the fact, was byte-for-byte "the file we built"
+    # and still unbootable -- the loader would refuse it, and nobody would have known until a
+    # machine tried to start.  So the verifier reads the header out of the bytes inside the
+    # ISO and applies the same rules the loader applies, using the loader's own format tool:
+    # the declared length, the entry point inside the image, both checksums.  A file that
+    # fails here is refused by a boot too, and the two verdicts cannot drift apart
+    # (`tests/test_kimage64.py` cross-runs them over the same corpus).
+    for name, blob in sorted(esp_blobs.items()):
+        if name.upper() != "KERNEL64.BIN":
+            continue
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import kimage64  # noqa: E402  (path set above)
+            refusal, fields = kimage64.verify(blob)
+        except ImportError as exc:                       # a tree without the tool is a bug
+            rep.check("the kernel image format is checkable in this tree", False, str(exc))
+            continue
+        rep.data["kernel64_image"] = {k: (v.hex() if isinstance(v, bytes) else v)
+                                      for k, v in fields.items() if k != "magic"}
+        rep.data["kernel64_image"]["sha256"] = esp_files[name]["sha256"]
+        rep.check("KERNEL64.BIN in the ISO is a valid PC5 64-bit kernel image",
+                  refusal is None,
+                  "refused as %s: %s" % (refusal, fields) if refusal else
+                  "v%s, %s bytes, entry %#x, .bss %s bytes, payload checksum verified"
+                  % (fields["header_version"], fields["image_size"], fields["entry_offset"],
+                     fields["bss_size"]))
     # Content identity against the files the build gated.  `expectations` is
     # {"loader": path, "files": {NAME: path}}; each entry is a separate check, so a
     # report says which promise broke rather than only that one did.

@@ -82,6 +82,30 @@ def loader_image():
     return LOADER_EFI.read_bytes()
 
 
+def image_header():
+    """The built flat image's own 128-byte header, decoded here by hand.
+
+    Deliberately *not* `tools/kimage64.py`'s `verify`, even though that tool exists, is
+    importable and would be shorter: a test that reads the declarations back through the same
+    code that wrote them proves only that the writer is self-consistent.  These assertions are
+    about the artifact, so the layout is re-expressed from the field offsets in
+    `kernel64/include/pc5_kimage64.h`.
+    """
+    build()
+    raw = KERNEL_BIN.read_bytes()
+    magic, version, hsize = struct.unpack_from("<8sII", raw, 0)
+    size, base, entry = struct.unpack_from("<QQQ", raw, 16)
+    ealign, lalign, arch, machine = struct.unpack_from("<IIII", raw, 40)
+    bss, checksum = struct.unpack_from("<QQ", raw, 56)
+    reserved0, reserved1, crc = struct.unpack_from("<IIi", raw, 72)
+    return {"magic": magic, "header_version": version, "header_size": hsize,
+            "image_size": size, "load_base": base, "entry_offset": entry,
+            "entry_align": ealign, "load_align": lalign, "arch": arch,
+            "machine": machine, "bss_size": bss, "checksum": checksum & 0xFFFFFFFFFFFFFFFF,
+            "reserved0": reserved0, "reserved1": reserved1, "header_crc": crc & 0xFFFFFFFF,
+            "bytes": raw}
+
+
 class KernelImageTests(unittest.TestCase):
     def test_kernel_is_elf64_for_x86_64(self):
         build()
@@ -92,7 +116,22 @@ class KernelImageTests(unittest.TestCase):
         self.assertEqual(struct.unpack_from("<H", header, 18)[0], 62, "EM_X86_64")
         self.assertEqual(struct.unpack_from("<H", header, 16)[0], 2, "ET_EXEC")
         entry = struct.unpack_from("<Q", header, 24)[0]
-        self.assertEqual(entry, 0x100000, "entry must be the linked load address")
+        # The entry point used to *be* the load address, because the image began with
+        # `cli; mov rbx, rdi` at 0x100000.  It no longer is: the image begins with its own
+        # header, which `kernel64.ld` puts in a page of its own at the load address so that no
+        # instruction had to move (docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md).  The
+        # property this assertion protected -- that the code the firmware is told to start at
+        # is the code that is really there -- is now a three-way agreement, so it is asserted
+        # as one rather than by a constant that would have to be edited every time the header
+        # page changed size:
+        declared = image_header()
+        self.assertEqual(declared["magic"], b"PC5K64IM")
+        self.assertEqual(declared["load_base"], 0x100000,
+                         "the header must name the address the boot protocol requires")
+        self.assertEqual(entry, declared["load_base"] + declared["entry_offset"],
+                         "the ELF entry and the entry the loader jumps to disagree")
+        self.assertEqual(entry % declared["entry_align"], 0,
+                         "the image declares an entry alignment the entry does not honour")
 
     def test_kernel_has_no_unresolved_symbols(self):
         build()
@@ -107,7 +146,17 @@ class KernelImageTests(unittest.TestCase):
         text = subprocess.run(["objcopy", "-O", "binary", "--only-section=.text",
                                str(KERNEL_ELF), "/dev/stdout"],
                               capture_output=True).stdout
-        self.assertTrue(binary.startswith(text[:4096]))
+        declared = image_header()
+        self.assertEqual(binary[:8], b"PC5K64IM",
+                         "the flat image begins with its header, and that is the whole point")
+        # Stronger than the `startswith(text[:4096])` this replaced, which compared a fixed
+        # 4 KiB at offset 0: the offset now comes from the image's own declaration, and the
+        # whole `.text` section has to be there, not its first page.  A stamper that wrote an
+        # `entry_offset` off by a page -- or a linker script that moved .text without telling
+        # the header -- fails here rather than at boot.
+        start = declared["entry_offset"]
+        self.assertEqual(binary[start:start + len(text)], text,
+                         "the entry the image declares does not point at the kernel's text")
         # Derived from the linker script's own symbols, not hardcoded. It used to
         # say 0xC000, and that number stopped being true the moment the kernel
         # gained a 4 KiB IDT - the test then failed for a correct change, which is a
@@ -131,8 +180,21 @@ class KernelImageTests(unittest.TestCase):
     def test_link_address_is_the_protocol_address(self):
         build()
         nm = subprocess.run(["nm", str(KERNEL_ELF)], capture_output=True, text=True).stdout
-        self.assertIn("0000000000100000 T __kernel_start", nm)
-        self.assertIn("0000000000100000 T _start64", nm)
+        found = {}
+        for line in nm.splitlines():
+            fields = line.split()
+            if len(fields) == 3 and fields[2] in ("__kernel_start", "_start64"):
+                found[fields[2]] = int(fields[0], 16)
+        # Addresses, not whole `nm` lines.  This used to match the literal
+        # "0000000000100000 T __kernel_start", and `__kernel_start` is now typed `R`: the
+        # symbol lives at the start of `.head`, which is read-only data, not text.  The letter
+        # was never the invariant, and pinning it made the test fail for a change that was
+        # correct -- while pinning the *address* still catches the one that is not.
+        self.assertEqual(found.get("__kernel_start"), 0x100000,
+                         "the image's first address must be the protocol's load address")
+        self.assertEqual(found.get("_start64"),
+                         0x100000 + image_header()["entry_offset"],
+                         "the entry symbol and the header's declaration must be the same place")
 
 
 class BootInfoAbiTests(unittest.TestCase):

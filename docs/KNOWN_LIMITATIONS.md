@@ -111,26 +111,32 @@ work that has secretly been done.
 
 ## UEFI boot path
 
-- **The 64-bit kernel image is accepted unvalidated, because it carries no header to validate.**
-  The 32-bit loader refuses a `\KERNEL.BIN` whose bytes 2..5 are not `PC5K` or whose version byte
-  is not 1, and `tools/verify_iso.py` re-checks those bytes on the release file. `KERNEL64.BIN`
-  begins directly with `cli; mov rbx, rdi` — `kernel64/start.S`, no signature, no version, no
-  length — so the 64-bit loader trusts the file it opens completely: any bytes of a plausible
-  length boot. A control run on 2026-11-23 proved how easy it is to *believe* this is covered:
-  rewriting `PC5K` to `XXXX` inside the 64-bit ISO still reached `PC5-64BIT-LONG-MODE-OK`, because
-  the bytes edited belonged to the *other* kernel the same ISO carries for its legacy El Torito
-  entry, which the 64-bit path never opens; `tools/verify_iso.py`'s signature check for that ISO
-  reads the same wrong file for the same reason, and passes. Closing it means adding a header to
-  the 64-bit image format (`kernel64/start.S`, `kernel64.ld`, `tools/build_release.py`,
-  `tests/test_release_esp.py`'s digests) and then the loader check — a format change for its own
-  slice, not a patch to a boot PR. Boot evidence and the byte dump that settled it:
+- **The 64-bit kernel image carries its own header, and the loader refuses it on sight.**
+  `KERNEL64.BIN` begins with 128 bytes declaring its magic, format version, exact length, load
+  address, entry offset, alignment requirements, architecture (in two encodings), `.bss` size and
+  payload checksum. `boot/uefi64/kimage64.c` validates all of it before it computes an entry
+  address, and every refusal has a name (`kimage64-magic`, `kimage64-image-size`,
+  `kimage64-checksum`, …) that reaches the serial as `PC5-64-LOADER-FAIL=<name>`.
+  `tools/verify_iso.py` re-runs the same validation from the bytes inside the release ISO's own
+  FAT directory, with no build record consulted, so an artifact that contradicts itself is an
+  invalid artifact even when every digest matches. The format, the refusal vocabulary and the
+  compatibility rules are [`docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`](engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md).
+  Four of the fifteen refusals are additionally earned by booting a *deliberately corrupted*
+  image: `magic` (a stale or foreign image), `arch` (the wrong architecture), `image-size` (a
+  truncated file whose FAT record was updated, so only the self-description catches it) and
+  `checksum` (one bit in the code, which no length, signature or digest check can see). Each of
+  those controls fails unless the *named* refusal appears **and** the run never reaches
+  `PC5-64-LOADER-JUMP`: a mutant that dies for the wrong reason, or a boot that is "refused" by
+  firmware starvation, is a failing test rather than a pass.
+  What this still does not do: it is integrity, not authenticity — a deliberate rewrite that
+  recomputes both checksums is indistinguishable, which stays a Secure Boot item in
+  `docs/SECURITY.md`; the 32-bit path is unchanged and still validated by the four
+  `PC5K` bytes its header parser reads; and the header's `load_base` documents what the link
+  assumed rather than requesting an address, because the image is not relocatable.
+  The history behind the format — including the control run that showed a `PC5K` edit in the
+  64-bit ISO changing nothing, because the bytes edited belonged to the *other* kernel the same
+  ISO carries for its legacy El Torito entry — is
   `docs/evidence/2026-11-23-64bit-genuine-ovmf-boot/README.md`.
-  The gate now says this out loud rather than relying on the prose: on a medium whose
-  kernel file has no `PC5K` signature the corrupted-header control is reported NOT
-  TESTED with that reason — never a pass, because a mutant that cannot be built proves
-  nothing — and `HEADER_VOCABULARY_CHECK` fails the run if the gate's claim and the
-  image disagree, so the row becomes enforced the moment the format gains a header,
-  with no flag left to remember.
 
 Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
 §16). What that does **not** cover:

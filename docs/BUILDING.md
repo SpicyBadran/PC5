@@ -169,6 +169,22 @@ was tested", not "no other byte of the ESP was untouched" — and `tests/boot_te
 has for a while made the equivalent comparison for `KERNEL.BIN` while booting in the
 emulator. Parsing the ESP the way firmware does is still `make ovmf-test`'s job.
 
+The ESP's kernel is checked twice now, by two mechanisms with different weaknesses, because
+the paragraph above describes the state before the kernel image carried a header.
+`tools/verify_iso.py` also reads `KERNEL64.BIN` out of the FAT directory and validates its own
+128-byte image header — declared length against the file, entry offset inside the image, the
+header's CRC, the payload checksum — **with no build record consulted at all**. That is a
+content statement, so it does not have the weakness the paragraph above names: corrupt
+`build/kernel64/KERNEL64.BIN`, re-run `make iso`, and the release is refused even though the
+build faithfully describes its own corruption. `tests/test_release_esp.py` pins that by
+flipping one byte of the payload — a corruption with no signature to notice, no length change
+and no digest mismatch against the file that shipped — and requiring the verifier to fail while
+naming `kimage64-checksum`. The format, its refusal vocabulary and its compatibility rules are
+[`docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`](engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md).
+`make kernel64` stamps the header, and the stamping recipe refuses to write one that would not
+validate; `make stubtest64` executes the release loader's own validation path in an emulated
+CPU over fifteen hand-corrupted images (`tests/test_boot64_stub.py::KernelImageHeaderTests`).
+
 **Packaging is not booting.** `make PC5_UEFI=64 iso verify` shows the image is
 structurally sound and contains the bytes `make stubtest64` executed; it does not show
 that TianoCore loads `BOOTX64.EFI` and reaches the kernel, and `make ovmf-test` reports

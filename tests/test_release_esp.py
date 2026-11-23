@@ -361,6 +361,66 @@ class ReleaseEspContents(unittest.TestCase):
         self.assertEqual(readme["sha256"], hashlib.sha256(source).hexdigest())
 
 
+    def test_a_kernel_image_that_contradicts_its_own_header_fails_the_release(self):
+        """The verifier judges the kernel by its format, with no build record in sight.
+
+        Every other ESP check in `tools/verify_iso.py` is a comparison -- against the
+        structural rules firmware would apply, or against a digest this build recorded.  A
+        corrupted `KERNEL64.BIN` satisfied both when the corruption was the whole story: the
+        file was still readable, still the length the directory claimed, and without
+        `--expect-esp-file` there was nothing to compare it against.  The image now carries a
+        header, so a verdict exists that needs no provenance at all: the artifact
+        contradicts itself, and that is enough to refuse the release.
+
+        The corruption is the payload checksum, a single byte flipped in the code far from the
+        header, because that is the class of damage with no signature to notice -- precisely
+        what the 64-bit path could not previously state, and what `docs/KNOWN_LIMITATIONS.md`
+        used to list as a control that could not be built.
+        """
+        # The build is the class's, so it is not cleaned up here -- and the tampered copy
+        # goes into a directory this test owns, because writing it next to the release image
+        # and then removing the directory is how one case makes every later one error out.
+        scratch = tempfile.TemporaryDirectory(prefix="pc5-badkernel-")
+        self.addCleanup(scratch.cleanup)
+        build = self.build_for("64")
+        try:
+            sys.path.insert(0, os.path.join(ROOT, "tools"))
+            import kimage64
+            with open(build.path("kernel64/KERNEL64.BIN"), "rb") as handle:
+                kernel = handle.read()
+            broken = kimage64.mutate_bytes(kernel, "checksum")
+            self.assertEqual(len(broken), len(kernel),
+                             "the mutation changed the length, so the FAT directory record "
+                             "would fail first and the test would measure that instead")
+            esp = bytearray(build.esp_bytes())
+            start = esp.find(b"PC5K64IM")
+            self.assertGreater(start, 0,
+                               "the release ESP does not carry a header-stamped kernel, so "
+                               "there is nothing here to corrupt")
+            esp[start:start + len(broken)] = broken
+            with open(build.iso(), "rb") as handle:
+                iso = bytearray(handle.read())
+            offset = build.layout()["layout"]["uefi_image_lba"] * SECTOR
+            iso[offset:offset + len(esp)] = esp
+            tampered = os.path.join(scratch.name, "bad-kernel.iso")
+            with open(tampered, "wb") as handle:
+                handle.write(bytes(iso))
+
+            proc = subprocess.run(
+                [sys.executable, os.path.join(ROOT, "tools", "verify_iso.py"), tampered],
+                capture_output=True, text=True, timeout=300, cwd=ROOT)
+            self.assertNotEqual(proc.returncode, 0,
+                                "a release ISO whose kernel image does not match its own "
+                                "payload checksum verified clean")
+            self.assertIn("KERNEL64.BIN in the ISO is a valid PC5 64-bit kernel image",
+                          proc.stdout, proc.stdout[-800:])
+            self.assertIn("kimage64-checksum", proc.stdout,
+                          "the refusal should name the property that broke, the way the "
+                          "loader's does")
+        finally:
+            sys.path.pop(0)
+
+
 class ReleaseReproducibility(unittest.TestCase):
     """The release digest is a property of the source, for both UEFI paths."""
 
@@ -543,28 +603,87 @@ class ReleaseAttributionRebuild(unittest.TestCase):
         """
         time.sleep(1.05)
 
-    def _scratch(self, git, tmp, tag):
-        """A throwaway clone with the Makefile *under test* committed into it.
+    #: What never travels into a scratch clone, however `git status` labels it: build
+    #: output, caches, and the evidence directory (which records digests of *other* runs and
+    #: would make a scratch build look at somebody else's artifacts).
+    SCRATCH_SKIP = ("build/", ".run-evidence/", "__pycache__/", ".git/")
 
-        Two reasons, one of them this class exists for.  `git clone` hands out HEAD, so
-        without the copy the case would grade the committed build rules and report them
-        as the ones being tested.  And the copy has to be *committed*: left as an
-        uncommitted edit, whether the scratch tree looks dirty -- and so whether `build:`
-        carries `-dirty`, which these cases assert on -- depends on whether the
-        workspace happened to be clean at the moment the test ran.  One comment line at
-        the end of the file gives the commit something inert to contain.
+    def _scratch_paths(self, git):
+        """Every path in this working tree that HEAD does not have, or has differently.
+
+        `git clone` hands out HEAD, so a clone alone grades the *committed* build rules and
+        reports them as the ones under test -- which is how this class would have happily
+        passed against the old Makefile for as long as the new one stayed uncommitted.  The
+        set is taken from `git status` rather than from a hard-coded list of files, because a
+        change that adds a new source file (`boot/uefi64/kimage64.c` did, when the kernel image
+        format landed) is exactly the case a fixed list forgets, and the build then fails in
+        the clone for a reason that has nothing to do with what is being asserted.
+        """
+        listing = subprocess.run(
+            (git, "-C", ROOT, "status", "--porcelain=v1", "--untracked-files=normal"),
+            capture_output=True, text=True, timeout=300)
+        self.assertEqual(listing.returncode, 0, listing.stderr[-500:])
+        # `listing.stdout`, deliberately *not* stripped: a porcelain line begins with two
+        # status columns, so stripping the whole output eats the first line's leading space
+        # and shifts that one path left by a character -- which reads as `kefile`, is not a
+        # file, and is silently skipped.  A helper that trims for the convenience of the
+        # other callers has no business deciding what a machine-readable listing looks like.
+        paths = []
+        for line in listing.stdout.splitlines():
+            candidate = line[3:].split(" -> ")[-1].strip().strip('"')
+            if not candidate or candidate.endswith("/"):
+                continue
+            if any(candidate.startswith(skip) for skip in self.SCRATCH_SKIP):
+                continue
+            paths.append(candidate)
+        return paths
+
+    def _scratch(self, git, tmp, tag):
+        """A throwaway clone with the tree *under test* committed into it.
+
+        Two things the copy has to do.  It has to exist, for the reason in
+        `_scratch_paths`.  And it has to be *committed*: left as an uncommitted edit,
+        whether the scratch tree looks dirty -- and so whether `build:` carries `-dirty`,
+        which one case here asserts on and another asserts the absence of -- would depend on
+        what the workspace happened to look like when the test ran.  Committing turns "clean"
+        and "dirty" into states the test creates instead of inherits, and it makes the clone
+        a tree whose HEAD contains the rules being judged, which is the closest thing to a
+        release build this can be without touching `main`.
         """
         tree = os.path.join(tmp, tag)
         clone = subprocess.run([git, "clone", "--no-hardlinks", ROOT, tree],
                                capture_output=True, text=True, timeout=600)
         self.assertEqual(clone.returncode, 0, clone.stdout + clone.stderr)
-        with open(os.path.join(ROOT, "Makefile"), encoding="utf-8") as handle:
-            makefile = handle.read()
-        with open(os.path.join(tree, "Makefile"), "w", encoding="utf-8") as handle:
-            handle.write(makefile + "\n# scratch clone: the build rules under test\n")
+        copied = []
+        for relative in self._scratch_paths(git):
+            source = os.path.join(ROOT, relative)
+            if not os.path.isfile(source):
+                continue
+            target = os.path.join(tree, relative)
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            shutil.copy2(source, target)
+            copied.append(relative)
+        # The one file whose arrival is always required -- not because it is special, but
+        # because a scratch tree whose Makefile is not the one under test would grade the
+        # previous rules and report them as the new ones, which is the failure this whole
+        # helper exists to prevent.
+        with open(os.path.join(ROOT, "Makefile"), "rb") as handle:
+            here = handle.read()
+        with open(os.path.join(tree, "Makefile"), "rb") as handle:
+            there = handle.read()
+        self.assertEqual(there, here,
+                         "the scratch clone's Makefile is not the working tree's")
         name, email = self._identity(git, tree)
+        self._git(git, tree, "add", "-A")
         self._git(git, tree, "-c", "user.name=%s" % name, "-c", "user.email=%s" % email,
-                  "commit", "-q", "--all", "-m", "test: install the Makefile under test")
+                  "commit", "-q", "--all", "--allow-empty",
+                  "-m", "test: install the build rules under test")
+        # `commit --all` cannot see an untracked file that became tracked here, so say
+        # plainly if the scratch tree still thinks it has work pending: the dirty-label
+        # case below would otherwise be asserting against a state this helper made.
+        self.assertEqual(self._git(git, tree, "status", "--porcelain"), "",
+                         "the scratch clone is dirty after installation, so `-dirty` in "
+                         "this run is not the property under test")
         return tree
 
     def _make(self, tree, build, *targets, mode="64"):

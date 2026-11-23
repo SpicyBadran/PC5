@@ -3047,3 +3047,109 @@ IST1/IST2 are allocated and validated but no exception has yet been shown to run
 `make emulator-probe` remains the record of what the emulator can and cannot establish. Full
 serial logs for all four boots, `summary.json`, and a `verification.sh` that re-derives 35
 assertions from them: `docs/evidence/2026-11-23-64bit-boot-gate/`.
+
+
+## 29. The 64-bit kernel image became a format, and three gates enforce it
+
+**Run:** 2026-11-24, workspace at `1fdb24e` on `arena/5e36f38b-pc5`, Unicorn 2.1.4 from
+`requirements-harness.txt`, host GCC for the validator probe. §28 left one sentence open — the
+64-bit image "has no header to corrupt yet" — and this is the work that closes it, from the
+limitation entry `docs/KNOWN_LIMITATIONS.md` **UEFI boot path** and
+[`docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`](engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md).
+
+**What was built.** `KERNEL64.BIN` now begins with a 128-byte header (`PC5K64IM`, format
+version 1) declaring the image's exact length, load address, entry offset, alignment
+requirements, architecture in two encodings, `.bss` size, a payload checksum, a header CRC, and
+zero-filled reserved fields. `kernel64/kimage64_head.c` puts it in a `.head` section that
+`kernel64/kernel64.ld` places first and pads to a page, so no instruction address moved;
+`tools/kimage64.py --stamp` fills in what only exists after the link, reading `__kernel_start`,
+`_start64`, `__bss_start` and `__bss_end` out of the ELF rather than being told any of them;
+`boot/uefi64/kimage64.c` validates all of it and returns a *named* refusal. The image grew
+204800 → 208896 bytes (`0x33000`) and the entry point from `0x100000` to `0x101000` — the
+header page, not a code change — so `0x32000` in §28's tables and in
+`docs/evidence/2026-11-23-64bit-boot-gate/` describes the pre-header artifact.
+
+| Command | Result |
+| --- | --- |
+| `python3 -m unittest tests.test_kimage64` | **OK, 21 tests** |
+| `TMPDIR=/tmp PATH=/tmp/pc5-venv/bin:$PATH make stubtest64` | **`64-BIT STUB FIRMWARE OK: 45/45 checks passed`** (was 41) |
+| `python3 -m unittest tests.test_boot64_stub.KernelImageHeaderTests` | **OK, 4 tests, 15.4 s** |
+| `python3 -m unittest tests.test_ovmf_gate_profiles tests.test_ovmf_harness` | **OK, 87 tests** (2 skipped: no QEMU/OVMF in this unit run) |
+| `python3 -m unittest tests.test_release_esp tests.test_tools tests.test_kimage64` | **OK, 41 tests** |
+| `SOURCE_DATE_EPOCH=1700000000 make PC5_UEFI=64 iso verify` | `VALID` (ISO `ae38b319d293ad52…`), `MANIFEST VALID`, and the new `KERNEL64.BIN in the ISO is a valid PC5 64-bit kernel image` row reports `v1, 208896 bytes, entry 0x1000, .bss 172032 bytes, payload checksum verified` |
+| `python3 tools/docs_check.py` | `DOCS OK: 80 Markdown files, 38 make targets` |
+
+**The unit layer.** `tests/test_kimage64.py` cross-pins `tools/kimage64.py`'s field table and
+the C struct against the header's `#define`s — names, offsets, widths and the total — compiles
+the loader's *real* validator for the host with GCC and drives all fifteen named refusals
+through it, requires the C verdict and the Python verdict to agree over a corpus of hand-built
+images, and walks a truncation ladder: 0, 8, 64, 120 bytes are all `kimage64-truncated`, 128 —
+a header that declares a 208896-byte image which is not there — is `kimage64-image-size`.
+
+**The emulator layer.** `make stubtest64` gained four checks over the loader's own serial
+lines, read as fields rather than substring-matched: `image` equals the image the stub was
+given and the address range the loader reports is exactly `base + image_size`; `entry` equals
+`JUMP entry - load base` (a header saying `0x1000` while the loader jumped at `+0` is the
+failure this exists for, and the first build drew it); `header_crc` is recomputed here with an
+independent FNV implementation; and `arch`/`machine` must agree with the host and with each
+other. `tests/test_boot64_stub.py::KernelImageHeaderTests` then boots the **release**
+`BOOTX64.EFI` — the same bytes, the same link, which is why `artifacts()` builds them rather
+than reusing the objects other cases hand-compile — fourteen times over `tools/kimage64.py`'s
+mutations, plus a truncation: each must abort with exactly the refusal that mutation earns,
+and must never reach `PC5-64-LOADER-JUMP`. `mutate_bytes` self-checks the mutation→refusal
+mapping, so a mutant that stays valid is a tool failure rather than a vacuous pass.
+
+**The firmware layer.** `tests/ovmf_boot.py` reads the kernel header kind from the bytes of the
+ESP it was handed, and its `HEADER_VOCABULARY_CHECK` now compares the *refusal vocabulary* the
+gate claims against what the artifact is: `bios8` ⟺ the 32-bit `PC5K` check, `kimage64` ⟺ the
+named `kimage64-*` set. Its x64 profile gained three good-path stages (header validated,
+declared length == file == FAT record, and the jump target equal to `load_base + entry_offset`
+as declared) and three mutant boots (`arch`, `image-size`, `checksum`) alongside the
+`magic`/bad-signature row, each of which additionally fails if the log contains `JUMP` or
+`BANNER`. `required_rows()` derives one control row per declared refusal, so adding a refusal
+without a control breaks the matrix instead of going unmeasured.
+
+**Two bugs in the tests, found by running them.** Both are the reason this section exists
+alongside the code.
+
+- `tests/test_ovmf_gate_profiles.py` grades the x64 stages against a **hand-written log
+  fixture**, not the artifact. The moment the stages began reading `kernel-header …` out of the
+  loader's serial line, three rows failed — `image_size` reported `None vs 208896` — because
+  the fixture still showed the pre-header log, where the jump went to `0x100000` and no header
+  line existed. The fixture is now a header-era log. The lesson is written into the file: a
+  fixture that describes an older artifact makes a *correct* implementation look broken, and
+  the only defence is that the same commit updates both.
+- `tests/test_release_esp.py::ReleaseAttributionRebuild` builds in a `git clone` of HEAD and
+  then copies **one** named file (`Makefile`) into it — so every case in that class graded the
+  committed tree while reporting the working one, and an uncommitted build change was invisible
+  to exactly the tests meant to catch it. With the header's new sources untracked, seven cases
+  failed in the clone for reasons that had nothing to do with their assertions. `_scratch()` now
+  installs everything `git status` reports, skips build output and the evidence directory, and
+  commits it with `git add -A` (a fixed list plus `commit --all` cannot see a *new* file, and
+  `git clone` hands out HEAD). Asserting "the Makefile arrived" on the copied list was itself
+  briefly a false green: the porcelain line's two status columns mean `stdout.strip()` shifts
+  the first path left by a character — `kefile` — so the parse is now explicit and the Makefile
+  is verified by comparing bytes.
+
+**Both firmware legs re-run at this HEAD, and both are green.**
+
+| Command | Result | Checks | Matrix rows |
+| --- | --- | --- | --- |
+| `make PC5_UEFI=64 ovmf-test` | **exit 0**, `PC5-OVMF-BOOT-OK` | 88 PASS, 0 FAIL, 1 NOT TESTED (89) | **49** = 43 + 6 kernel-header rows |
+| `make ovmf-test` (32-bit) | **exit 0**, `PC5-OVMF-BOOT-OK` | 63 PASS, 0 FAIL, 1 NOT TESTED (64) | 35 — byte-for-byte the previous run's counts |
+
+The 64-bit cold and warm logs each carry
+`PC5-64-LOADER kernel-header version=1 header=128 image=208896 entry=0x1000 bss=172032
+arch=x86-64 machine=62 checksum=ok` followed by `LOADER-JUMP entry=0x101000`, and the report's
+derived markers agree with the serial text in both boots (`kernel_header_image ==
+kernel_bytes_read == handoff_bytes == 208896`, `kernel_jump_entry == kernel_load_base +
+kernel_entry_declared`). Four mutant ISOs booted under the same firmware and were refused by
+name — `kimage64-magic`, `kimage64-arch`, `kimage64-image-size`, `kimage64-checksum` — each with
+`kernel_entry: false` in the report and no `JUMP`/`BANNER` in its log. The release ISO is
+`ae38b319d293ad52…` (`make PC5_UEFI=64 iso verify`'s own line), recorded in the report next to
+`commit: 1fdb24e519d59b49152011ecc52e5da4ad57dadd`; the 32-bit ISO is `c3714d7978010e39…`.
+`docs/evidence/2026-11-24-kernel-image-header/` holds the six new logs, both reports, both
+matrices and a `verification.sh` that re-derives all of it; `docs/evidence/2026-11-23-64bit-boot-gate/`
+(`OK (43 checks)`) stays as the record of the run *before* the header existed, and its
+`0x32000`/204800 numbers describe that artifact, not this one — which is why it is kept rather
+than corrected.

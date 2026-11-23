@@ -33,6 +33,7 @@
 #include "../uefi/efi.h"
 #include "pc5_boot64.h"
 #include "pc5_map.h"
+#include "pc5_kimage64.h"
 #include "handover64.h"
 #include "pagetables.h"
 
@@ -48,6 +49,12 @@ static u16 KERNEL_NAME[] = {'\\', 'K', 'E', 'R', 'N', 'E', 'L',
 #define MEMMAP_DESCRIPTOR_VERSION 1u
 #define KERNEL_STACK_PAGES 4ull
 #define EXIT_RETRIES 8
+
+/* Where execution starts, once the image has said where execution starts.  Held here
+ * rather than in `struct pc5_boot64` because it is the loader's decision, not a fact the
+ * kernel has to be told: the handover protocol is versioned and its size is checked on both
+ * sides, and an entry point that only the loader reads does not belong in it. */
+static u64 g_kernel_entry;
 
 /* Published for the image test and the stub harness: the 64-bit loader's own
  * protocol record, not the 32-bit handover descriptor. */
@@ -512,6 +519,42 @@ static void load_kernel(efi_handle image, struct pc5_boot64 *boot_info)
     serial_write(" bytes=");
     serial_dec(size);
     serial_write("\n");
+
+    /* The image now has to account for itself before anything jumps into it.
+     *
+     * This is the check the 64-bit path did not have.  A corrupted `KERNEL64.BIN` used to
+     * boot: the loader read the file, jumped to its first byte, and whatever those bytes
+     * happened to decode to ran with the handover structure in RDI.  "It is the file at the
+     * path we opened" was the whole of the validation, which is a statement about the
+     * medium, not about the code.  So a mutant that flipped a byte in the middle of the
+     * kernel -- where there is no signature, no magic, and nothing that knows what it
+     * interrupted -- was a *passing* release.
+     *
+     * `pc5_kimage64_validate` is the same function the host test runs against a battery of
+     * malformed headers, and it returns the name of the property that failed rather than a
+     * boolean: a refusal that can be quoted is a refusal that can be *expected*, which is
+     * what makes the negative controls in `tests/ovmf_boot.py` assert that corrupting the
+     * architecture field is refused as `kimage64-arch` and not merely refused. */
+    {
+        struct pc5_kimage64 kimage;
+        const char *refusal = pc5_kimage64_validate((const u8 *)buffer, size, physical,
+                                                    &kimage);
+
+        if (refusal)
+            die(refusal);
+        g_kernel_entry = kimage.entry_address;
+        serial_write("PC5-64-LOADER kernel-header version=");
+        serial_dec(kimage.header_version);
+        serial_write(" header=");
+        serial_dec(kimage.header_size);
+        serial_write(" image=");
+        serial_dec(kimage.image_size);
+        serial_write(" entry=");
+        serial_hex(kimage.entry_offset);
+        serial_write(" bss=");
+        serial_dec(kimage.bss_size);
+        serial_write(" arch=x86-64 machine=62 checksum=ok\n");
+    }
 }
 
 /* ------------------------------------------------------------ framebuffer */
@@ -908,14 +951,16 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
     serial_hex(cr4);
     serial_write(" long-mode=1\n");
     serial_write("PC5-64-LOADER-JUMP entry=");
-    serial_hex(boot_info->kernel_base);
+    serial_hex(g_kernel_entry);
     serial_write(" bootinfo=");
     serial_hex(boot_info_physical);
     serial_write(" stack=");
     serial_hex(boot_info->stack_top);
     serial_write("\n");
 
-    if (pc5_enter_kernel64(pt_physical, boot_info->kernel_base, boot_info) != 0)
+    /* The declared entry, never the base of the file: the first page of the image is the
+     * header, and jumping to byte zero would be executing it. */
+    if (pc5_enter_kernel64(pt_physical, g_kernel_entry, boot_info) != 0)
         die("cr3-not-installed");
     die("handoff-returned");
 }

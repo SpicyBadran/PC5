@@ -317,7 +317,8 @@ class Profile:
 
     def __init__(self, key, label, kernel_name, kernel_fat, success, stop,
                  failure_pattern, protocol_version, no_kernel_code,
-                 bad_signature_code, uefi_path):
+                 bad_signature_code, uefi_path, kernel_header_kind=None,
+                 kernel_refusals=()):
         self.key = key
         self.label = label
         self.kernel_name = kernel_name          # name inside the ISO/ESP
@@ -334,6 +335,18 @@ class Profile:
         # How the build record inside the ISO spells this path (`uefi-path: 32`),
         # which is the only place an image says what it is once it has left the tree.
         self.uefi_path = uefi_path
+        # Which image format this path's loader validates, if any: `bios8` is the
+        # 8-byte `PC5K` header in front of `KERNEL.BIN`, `kimage64` the 128-byte
+        # versioned header in front of `KERNEL64.BIN`.  `None` means the loader of this
+        # path reads a bare binary and has nothing to check -- which the gate reports as
+        # NOT TESTED with that reason rather than as a control that passed.
+        self.kernel_header_kind = kernel_header_kind
+        # Fields this format can be broken in that the release boot is made to prove are
+        # refused, as (reason, mutation) pairs.  Deliberately short: what runs on real
+        # firmware is the three or four corruptions whose *consequence* differs, and the
+        # full battery of thirteen runs in `tests/test_boot64_stub.py` and
+        # `tests/test_kimage64.py`, where each case costs a second instead of a boot.
+        self.kernel_refusals = tuple(kernel_refusals)
 
     def no_kernel_check(self):
         return ("loader reports the missing %s as %s when no volume has it "
@@ -351,6 +364,11 @@ class Profile:
                     "fault): %s has no header field to corrupt yet" % self.kernel_name)
         return ("loader refuses a kernel with a corrupted header (bootloader fault) "
                 "as %s" % self.bad_signature_code)
+
+    def kernel_refusal_check(self, mutation, code):
+        """One named field, one named refusal, one boot that must not reach the kernel."""
+        return ("loader refuses a %s whose %s is wrong as %s (bootloader fault)"
+                % (self.kernel_name, mutation, code))
 
     def markers(self, text):
         if self.key == "x64":
@@ -370,6 +388,7 @@ IA32 = Profile(
     no_kernel_code="E2",
     bad_signature_code="E4",
     uefi_path="32",
+    kernel_header_kind="bios8",
 )
 
 X64 = Profile(
@@ -385,10 +404,19 @@ X64 = Profile(
     failure_pattern=r"PC5-64-LOADER-FAIL=([a-z0-9-]+)",
     protocol_version=2,
     no_kernel_code="kernel-not-found",
-    # Set when the 64-bit image format carries a header the loader can check;
-    # until then the corrupt-kernel control on this path has nothing to assert.
-    bad_signature_code=None,
+    # `kimage64-magic` is the refusal `boot/uefi64/kimage64.c` reaches when the file on the
+    # medium is not a PC5 64-bit kernel image at all -- which is what a corrupt-signature
+    # mutant produces.  This row used to read `None`, and the control with it: the format
+    # gained a header (milestone 7 priority 2) so that "the file we opened is the file we
+    # will execute" stopped being an assumption.  Every other field the loader checks has a
+    # reason of its own, and the three whose consequences differ are booted below; all
+    # thirteen are executed against the real loader in `tests/test_boot64_stub.py`.
+    bad_signature_code="kimage64-magic",
     uefi_path="64",
+    kernel_header_kind="kimage64",
+    kernel_refusals=(("arch", "kimage64-arch"),
+                     ("image-size", "kimage64-image-size"),
+                     ("checksum", "kimage64-checksum")),
 )
 
 PROFILES = {profile.key: profile for profile in (IA32, X64)}
@@ -684,6 +712,20 @@ def _markers_x64(text, profile):
         "kernel_volume_image": "PC5-64-LOADER kernel-volume=image" in text,
         "kernel_read": "PC5-64-LOADER kernel at=" in text,
         "kernel_bytes_read": _number(text, r"PC5-64-LOADER kernel at=0x[0-9a-f]+ bytes=(\d+)"),
+        # The image's own account of itself, read off the loader's line.  Three rows below
+        # are computed from these numbers, each against something other than the line it
+        # came from: the declared length against the file on disk, the declared entry
+        # against where the loader actually jumped, and the validation against the presence
+        # of the field that only prints when the payload checksum matched.
+        "kernel_header_validated": ("PC5-64-LOADER kernel-header version=1" in text
+                                    and "checksum=ok" in text),
+        "kernel_header_image": _number(
+            text, r"PC5-64-LOADER kernel-header version=\d+ header=\d+ image=(\d+)"),
+        "kernel_load_base": _hex(text, r"PC5-64-LOADER kernel at=0x([0-9a-f]+)"),
+        "kernel_entry_declared": _hex(
+            text, r"PC5-64-LOADER kernel-header version=\d+ header=\d+ image=\d+ "
+                  r"entry=0x([0-9a-f]+)"),
+        "kernel_jump_entry": _hex(text, r"PC5-64-LOADER-JUMP entry=0x([0-9a-f]+)"),
         "boot_services_exited": "PC5-64-LOADER exit-boot-services=ok" in text,
         # The 64-bit loader prints the descriptor count and its own retry count on
         # one line, in the same meaning the 32-bit path splits across two.
@@ -930,6 +972,22 @@ def _kernel_size_matches_file(key):
     return proof
 
 
+def _entry_is_where_the_image_said(seen, ctx):
+    """`JUMP entry=` has to be `kernel at=` plus the header's `entry=`, or the jump lied.
+
+    The three numbers come from three lines printed three moments apart -- where the image
+    was placed, what the image said about itself, and where the loader decided to start -- so
+    their agreement is a property of the boot rather than of a constant.
+    """
+    base = seen.get("kernel_load_base")
+    declared = seen.get("kernel_entry_declared")
+    jumped = seen.get("kernel_jump_entry")
+    if None in (base, declared, jumped):
+        return False, "base=%r declared entry=%r jump=%r" % (base, declared, jumped)
+    return jumped == base + declared, "base=%#x + entry=%#x vs jump=%#x" % (
+        base, declared, jumped)
+
+
 #: The firmware-side stages, which both paths have to answer for in the same terms.
 #: (The paths share `classify`'s `_common_markers`, so these rows are identical; a
 #: path that could not produce them is not booting under real firmware at all.)
@@ -1042,6 +1100,20 @@ def x64_stages():
         Stage("the loader read the kernel file at its real size",
               "the loader read the kernel file at its real size",
               _kernel_size_matches_file("kernel_bytes_read")),
+        # The two rows the image format earns: the file agrees with its own declaration, and
+        # the handoff began where the declaration said the code starts.  Both are agreements
+        # between lines rather than constants, and the second is what stops a loader that
+        # validated a header and then jumped to byte zero of the file anyway -- into the
+        # header, executing it -- from counting as a pass.
+        Stage("the kernel image declared its own length and it matched",
+              "the kernel image declared its own length and it matched",
+              _kernel_size_matches_file("kernel_header_image")),
+        Stage("the loader validated the kernel image's header before jumping",
+              "the loader validated the kernel image's header before jumping",
+              _seen("kernel_header_validated")),
+        Stage("execution began at the entry point the image declared",
+              "the jump went to the load address plus the declared entry offset",
+              _entry_is_where_the_image_said),
         Stage("memory allocation and ownership are correct",
               "a memory map was handed over", _positive("memory_map_entries")),
         Stage("the kernel's own map agrees with the loader's count",
@@ -1565,6 +1637,14 @@ def required_rows(profile):
         (SMALL_MEMORY_CHECK, "OVMF negative run (small-memory)", SMALL_MEMORY_CHECK),
         (DEADLINE_CHECK, "OVMF negative run (deadline)", DEADLINE_CHECK),
     ])
+    # One row per kernel-image field this path's loader refuses on, derived from the profile
+    # so a path without the format gains no rows and a path with it cannot drop one.  These
+    # are the rows that make "corrupting the kernel does not prevent boot" a *failing* gate
+    # result rather than an observation about a previous milestone.
+    rows.extend((profile.kernel_refusal_check(mutation, code),
+                 "OVMF negative run (kernel-%s)" % mutation,
+                 profile.kernel_refusal_check(mutation, code))
+                for mutation, code in profile.kernel_refusals)
     return rows
 
 
@@ -1690,19 +1770,50 @@ PC5_KERNEL_VERSION_OFFSET = 6
 PC5_KERNEL_HEADER_SIZE = 8
 
 
-def kernel_has_header(kernel_bytes):
-    """Does this kernel image carry the signature the loader can refuse?
+#: The 64-bit kernel image format's own signature, and the header size it declares.  The
+#: gate does not re-implement the format: `tools/kimage64.py` is the reader (it is what
+#: `make verify` uses too), and these two numbers only have to be enough to *recognise*
+#: which of the two header vocabularies a file on the medium belongs to.
+PC5_KIMAGE64_MAGIC = b"PC5K64IM"
+PC5_KIMAGE64_HEADER_SIZE = 128
 
-    Measured from the bytes, not from a flag or a profile name: `KERNEL.BIN` carries
-    the 8-byte header, `KERNEL64.BIN` carries none (it begins with `cli; mov rbx,rdi`
-    -- the first instructions of `kernel64/start.S`).  A file without the field has
-    nothing for a mutant to corrupt, so the control would prove nothing about it in
-    either direction, and "the check passed" would really mean "the write landed in
-    the middle of an instruction stream nobody reads".
+
+def kernel_header_kind(kernel_bytes):
+    """Which kernel image format this file carries: `bios8`, `kimage64`, or None.
+
+    Measured from the bytes, never from a flag or a profile name, because the two paths
+    share a filename convention and an ISO name and differ in exactly this: what the front
+    of the kernel file is.  A file with no recognisable header has nothing for a mutant to
+    corrupt, so the control would prove nothing in either direction and "the check passed"
+    would really mean "the write landed in an instruction stream nobody reads".
     """
-    return (len(kernel_bytes) >= PC5_KERNEL_HEADER_SIZE and
-            kernel_bytes[PC5_KERNEL_SIG_OFFSET:PC5_KERNEL_SIG_OFFSET + 4] ==
-            PC5_KERNEL_SIG)
+    if (len(kernel_bytes) >= PC5_KERNEL_HEADER_SIZE
+            and kernel_bytes[PC5_KERNEL_SIG_OFFSET:PC5_KERNEL_SIG_OFFSET + 4]
+            == PC5_KERNEL_SIG):
+        return "bios8"
+    if (len(kernel_bytes) >= PC5_KIMAGE64_HEADER_SIZE
+            and kernel_bytes[0:len(PC5_KIMAGE64_MAGIC)] == PC5_KIMAGE64_MAGIC):
+        return "kimage64"
+    return None
+
+
+def kernel_has_header(kernel_bytes):
+    """Does this kernel image carry any header the loader can refuse?"""
+    return kernel_header_kind(kernel_bytes) is not None
+
+
+def corrupt_kernel_field(kernel_bytes, mutation):
+    """Break exactly one documented field of a 64-bit kernel image, by name.
+
+    Delegates to the repository's own format tool, so the gate cannot invent a mutation
+    the loader would never see -- and, as a side effect, refuses to hand back a file that
+    still verifies: `mutate_bytes` raises if the mutation does not produce the refusal it
+    is named after, which is the difference between a control and a copy.
+    """
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import kimage64  # noqa: E402  (path set above)
+
+    return kimage64.mutate_bytes(kernel_bytes, mutation)
 
 
 def negative_runs(report, args, found, data_dir, work, profile=IA32):
@@ -1712,15 +1823,14 @@ def negative_runs(report, args, found, data_dir, work, profile=IA32):
     # checks in `check_isolation`, so the medium and the mutant input are the
     # same bytes here and this measurement is a statement about the artifact.
     has_header = kernel_has_header(kernel_bytes)
+    kind = kernel_header_kind(kernel_bytes)
     report.check(HEADER_VOCABULARY_CHECK,
-                 has_header == (profile.bad_signature_code is not None),
-                 "%s in the boot ESP %s the PC5K header (first bytes %r); the %s "
-                 "profile claims %s" % (profile.kernel_name,
-                                        "carries" if has_header else "has",
-                                        bytes(kernel_bytes[:8]), profile.key,
-                                "a header the loader must refuse"
-                                if profile.bad_signature_code is not None
-                                else "no header field to refuse"))
+                 has_header == (profile.bad_signature_code is not None)
+                 and kind == profile.kernel_header_kind,
+                 "%s in the boot ESP carries the %s header (first bytes %r); the %s "
+                 "profile validates %s" % (profile.kernel_name, kind or "no",
+                                          bytes(kernel_bytes[:16]), profile.key,
+                                          profile.kernel_header_kind or "no header"))
     iso = {"code": found["code"], "iso": args.iso}
 
     def boot(name, iso_path, timeout=None):
@@ -1804,8 +1914,12 @@ def negative_runs(report, args, found, data_dir, work, profile=IA32):
     # the image a header and the row becomes enforced with no flag to remember.
     if has_header:
         try:
-            broken = bytearray(kernel_bytes)
-            broken[2:6] = b"XXXX"
+            if kind == "kimage64":
+                broken = corrupt_kernel_field(kernel_bytes, "magic")
+            else:
+                broken = bytearray(kernel_bytes)
+                broken[2:6] = b"XXXX"
+                broken = bytes(broken)
             path = build_mutant_iso("bad-signature", args.efi_image, kernel=bytes(broken),
                                 profile=profile)
             run = boot("bad-signature", path)
@@ -1817,15 +1931,38 @@ def negative_runs(report, args, found, data_dir, work, profile=IA32):
         except (OSError, subprocess.CalledProcessError) as exc:
             report.check(profile.bad_signature_check(), False,
                          f"mutant could not be built: {exc}")
+
+        # The rest of the format, one field per boot.  Why these three and not all
+        # thirteen: a control's value is what it rules *out*, and on real firmware the
+        # three that matter are "the loader noticed this is not our kernel at all"
+        # (`magic`, above), "it noticed the kernel was built for another architecture"
+        # (`arch`), "it noticed the file is not the length it claims" (`image-size`), and
+        # "it noticed a bit flip inside the code" (`checksum`) -- the last of which is the
+        # whole reason a signature would not have been enough.  The remaining fields are
+        # executed against the same loader code in `tests/test_boot64_stub.py`, where a
+        # case costs a second, and validated twice more in `tests/test_kimage64.py`.
+        for mutation, code in profile.kernel_refusals:
+            try:
+                broken = corrupt_kernel_field(kernel_bytes, mutation)
+                path = build_mutant_iso("kernel-%s" % mutation, args.efi_image,
+                                        kernel=bytes(broken), profile=profile)
+                run = boot("kernel-%s" % mutation, path)
+                seen = classify(run, profile)
+                report.check(profile.kernel_refusal_check(mutation, code),
+                             code in seen["failure_codes"] and not seen["kernel_entry"],
+                             seen["failure_codes"])
+            except (OSError, subprocess.CalledProcessError) as exc:
+                report.check(profile.kernel_refusal_check(mutation, code), False,
+                             f"mutant could not be built: {exc}")
     else:
         report.check(profile.bad_signature_check(), False,
-                     "there is no header field to corrupt: %s starts with %r, not with "
-                     "the PC5K signature at offset %d that the 32-bit loader reads.  "
-                     "The control is enforced as soon as the 64-bit image format "
-                     "carries a header (milestone 7 priority 2); today "
-                     "`boot/uefi64/uefi64_main.c` has nothing to reject"
-                     % (profile.kernel_name, bytes(kernel_bytes[:8]),
-                        PC5_KERNEL_SIG_OFFSET),
+                     "there is no header field to corrupt: %s starts with %r, which is "
+                     "neither the PC5K signature the 32-bit loader reads at offset %d nor "
+                     "the %r header of the 64-bit image format.  A path whose kernel has no "
+                     "header has nothing for `boot/uefi64/kimage64.c` to reject, so the row "
+                     "is a finding rather than a pass"
+                     % (profile.kernel_name, bytes(kernel_bytes[:16]),
+                        PC5_KERNEL_SIG_OFFSET, PC5_KIMAGE64_MAGIC.decode("ascii")),
                      applicable=False)
 
     # 5. A truncated ISO: firmware must fail to start anything at all.

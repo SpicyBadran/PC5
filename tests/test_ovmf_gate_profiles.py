@@ -36,19 +36,20 @@ PC5-64-LOADER-BANNER 64-bit UEFI path (experimental)
 PC5-64-LOADER firmware=EDK II revision=0x2 table-rev=0x10000
 PC5-64-LOADER watchdog=disabled
 PC5-64-LOADER kernel-volume=image
-PC5-64-LOADER kernel at=0x100000 bytes=204800
+PC5-64-LOADER kernel at=0x100000 bytes=208896
+PC5-64-LOADER kernel-header version=1 header=128 image=208896 entry=0x1000 bss=172032 arch=x86-64 machine=62 checksum=ok
 PC5-64-LOADER rsdp=0xf77e000
 PC5-64-LOADER pagetables=0xe1eb000 pages=6 mapped_2mib=2048 span=0x100000000
 PC5-64-LOADER stack=0xe1f6000-0xe1fa000
 PC5-64-LOADER image=0xe1f1000-0xe1f5190 below-span=1
 PC5-64-LOADER exit-boot-services=ok attempts=1 descriptors=98
 PC5-64-LOADER cr3-plan=0xe1eb000 cr0=0x80010033 cr4=0x668 long-mode=1
-PC5-64-LOADER-JUMP entry=0x100000 bootinfo=0xe5b6000 stack=0xe1fa000
+PC5-64-LOADER-JUMP entry=0x101000 bootinfo=0xe5b6000 stack=0xe1fa000
 PC5-64BIT-KERNEL-ENTRY
 PC5-64-IDT installed=256 present=32
 PC5-64-MAP entries=98 conventional_pages=53751 bytes=0xc40
-PC5-64-IMAGE base=0x100000 size=0x32000 range=ok
-PC5-64-PAGING enabled=1 root=0xe1eb000 pages=6 span=0x100000000 kernel=0x100000-0x132000 loaded=0x100000
+PC5-64-IMAGE base=0x100000 size=0x33000 range=ok
+PC5-64-PAGING enabled=1 root=0xe1eb000 pages=6 span=0x100000000 kernel=0x100000-0x133000 loaded=0x100000
 PC5-64-BOOTINFO magic=ok version=2 size=160 memdesc=32 flags=0xd exit_boot_services=1
 PC5-64-CPU vendor=AuthenticAMD
 PC5-64-CPU long_mode=1
@@ -113,7 +114,7 @@ class ClassifyX64(unittest.TestCase):
         self.assertTrue(seen["loader_banner"])
         self.assertTrue(seen["loader_firmware_edk2"])
         self.assertTrue(seen["kernel_volume_image"])
-        self.assertEqual(seen["kernel_bytes_read"], 204800)
+        self.assertEqual(seen["kernel_bytes_read"], 208896)
         self.assertEqual(seen["memory_map_entries"], 98)
         self.assertEqual(seen["exit_retries"], 1)
         self.assertEqual(seen["watchdog"], "disabled")
@@ -124,13 +125,13 @@ class ClassifyX64(unittest.TestCase):
         """`range=ok` is the kernel's verdict on the copy it was given.
 
         It comes from `PC5-64-IMAGE`, and `handoff_bytes` is that line's hex `size=`
-        field -- read as hex, because reading `0x32000` as a decimal is a comparison
+        field -- read as hex, because reading `0x33000` as a decimal is a comparison
         that silently never matches anything.
         """
         seen = ovmf.classify(run_of(X64_GOOD_LOG), ovmf.X64)
         self.assertTrue(seen["handoff_verified"])
-        self.assertEqual(seen["handoff_bytes"], 0x32000)
-        self.assertEqual(seen["handoff_bytes"], 204800)
+        self.assertEqual(seen["handoff_bytes"], 0x33000)
+        self.assertEqual(seen["handoff_bytes"], 208896)
 
     def test_the_kernel_agrees_with_the_loader_on_map_and_page_tables(self):
         seen = ovmf.classify(run_of(X64_GOOD_LOG), ovmf.X64)
@@ -183,7 +184,7 @@ class FirmwareOnlyNeverPasses(unittest.TestCase):
     def test_every_64bit_row_fails_on_a_firmware_only_log(self):
         report = ovmf.Report()
         ovmf.check_boot(report, run_of(FIRMWARE_ONLY_LOG, stopped_on=None), "cold",
-                        204800, ovmf.X64, 256)
+                        208896, ovmf.X64, 256)
         passed = {check["name"] for check in report.checks if check["state"] == "pass"}
         for stage in ovmf.x64_stages():
             if stage.check in FIRMWARE_ONLY_ALLOWANCE:
@@ -375,7 +376,7 @@ class MatrixRowsAreBound(unittest.TestCase):
         return report, {check["name"] for check in report.checks}
 
     def test_every_cold_row_names_an_emitted_check(self):
-        for profile, log, size in ((ovmf.X64, X64_GOOD_LOG, 204800),
+        for profile, log, size in ((ovmf.X64, X64_GOOD_LOG, 208896),
                                    (ovmf.IA32, IA32_GOOD_LOG, 67028)):
             _report, emitted = self._run(profile, log, size)
             for requirement, source, check_name in ovmf.required_rows(profile):
@@ -393,7 +394,7 @@ class MatrixRowsAreBound(unittest.TestCase):
         while the check behind it had failed, and renaming a stage left its row
         satisfied by an unrelated green check.
         """
-        for profile, log, size, stages in ((ovmf.X64, X64_GOOD_LOG, 204800,
+        for profile, log, size, stages in ((ovmf.X64, X64_GOOD_LOG, 208896,
                                             ovmf.x64_stages()),
                                            (ovmf.IA32, IA32_GOOD_LOG, 67028,
                                             ovmf.ia32_stages())):
@@ -419,7 +420,7 @@ class MatrixRowsAreBound(unittest.TestCase):
         crippled = "\n".join(line for line in X64_GOOD_LOG.splitlines()
                              if not line.startswith("PC5-64-MAP"))
         report = ovmf.Report()
-        ovmf.check_boot(report, run_of(crippled), "cold", 204800, ovmf.X64, 256)
+        ovmf.check_boot(report, run_of(crippled), "cold", 208896, ovmf.X64, 256)
         rows = ovmf.build_matrix(report, ovmf.X64)
         failed = [row["requirement"] for row in rows if row["state"] == "failed"]
         self.assertIn("the kernel's own map agrees with the loader's count", failed)
@@ -432,7 +433,7 @@ class MatrixRowsAreBound(unittest.TestCase):
 
     def test_the_rows_that_did_not_run_are_not_tested(self):
         """The warm row and the controls, when this run skipped the machines."""
-        report, _emitted = self._run(ovmf.X64, X64_GOOD_LOG, 204800)
+        report, _emitted = self._run(ovmf.X64, X64_GOOD_LOG, 208896)
         rows = ovmf.build_matrix(report, ovmf.X64)
         for row in rows:
             if row["source"].startswith("OVMF cold boot") or row["state"] == "external":
@@ -485,14 +486,34 @@ class MatrixRowsAreBound(unittest.TestCase):
                             "rebooting the same machine boots identically"):
             self.assertIn(requirement, ia32)
 
-    def test_the_64bit_corrupt_kernel_row_says_what_is_missing(self):
-        """Priority 2 is not done, and the matrix has to show that, not hide it."""
+    def test_the_64bit_corrupt_kernel_rows_are_enforced_by_the_image_format(self):
+        """The rewrite of a test that documented a gap, kept as the guard on the closure.
+
+        This row used to assert that `KERNEL64.BIN` had *no* header, and that the matrix said
+        so -- the honest shape of an unfinished control.  `kernel64/include/pc5_kimage64.h`
+        closed it, so the same expectations are now inverted, and the third assertion is the
+        one that keeps the inversion from being permanent: the NOT TESTED wording is derived
+        from the format, so a path with no header still gets it, and a path that loses its
+        header re-opens the gap in the matrix instead of silently passing.
+        """
         rows = [row for row in ovmf.required_rows(ovmf.X64) if "corrupted" in row[0]]
         self.assertEqual(len(rows), 1)
-        self.assertIn("KERNEL64.BIN has no header field to corrupt yet", rows[0][0])
-        self.assertIsNone(ovmf.X64.bad_signature_code)
+        self.assertIn("kimage64-magic", rows[0][0])
+        self.assertEqual(ovmf.X64.bad_signature_code, "kimage64-magic")
         self.assertEqual(ovmf.IA32.bad_signature_code, "E4")
         self.assertIn("E4", ovmf.IA32.bad_signature_check())
+        # Every field the profile says it refuses on has a row of its own, and the row names
+        # the mutant it was built from -- which is how `build_mutant_iso` is asked for it.
+        for mutation, code in ovmf.X64.kernel_refusals:
+            wanted = ovmf.X64.kernel_refusal_check(mutation, code)
+            self.assertIn((wanted, "OVMF negative run (kernel-%s)" % mutation, wanted),
+                          ovmf.required_rows(ovmf.X64))
+        bare = ovmf.Profile(key="test", label="test", kernel_name="KERNEL.TEST",
+                            kernel_fat="\\KERNEL.TEST", success=(), stop=(),
+                            failure_pattern=r"nope=([a-z]+)", protocol_version=9,
+                            no_kernel_code="x", bad_signature_code=None, uefi_path="32")
+        self.assertIn("no header field to corrupt yet", bare.bad_signature_check())
+        self.assertEqual(bare.kernel_refusals, ())
 
 
 class ReleaseEspIdentity(unittest.TestCase):
@@ -714,10 +735,22 @@ class HeaderVocabulary(unittest.TestCase):
         is pinned even when no build artifacts exist to boot.
         """
         self.assertEqual(ovmf.IA32.bad_signature_code, "E4")
-        self.assertIsNone(ovmf.X64.bad_signature_code)
+        self.assertEqual(ovmf.IA32.kernel_header_kind, "bios8")
+        self.assertEqual(ovmf.X64.bad_signature_code, "kimage64-magic")
+        self.assertEqual(ovmf.X64.kernel_header_kind, "kimage64")
         self.assertTrue(ovmf.kernel_has_header(
             b"\xeb\x00" + ovmf.PC5_KERNEL_SIG + bytes(64)))
         self.assertFalse(ovmf.kernel_has_header(b"\xfa\x48\x89\xfb" + bytes(64)))
+        # Each format is recognised as *itself*, not merely as "a header": the gate corrupts
+        # the field the profile's loader reads, and a 64-bit mutant built by scribbling at
+        # offset 2 -- where the BIOS signature lives -- would be a control testing nothing.
+        self.assertEqual(ovmf.kernel_header_kind(b"\xeb\x00" + ovmf.PC5_KERNEL_SIG
+                                                 + bytes(64)), "bios8")
+        kimage = bytearray(b"PC5K64IM" + bytes(120))
+        kimage[16:24] = (128).to_bytes(8, "little")
+        self.assertEqual(ovmf.kernel_header_kind(bytes(kimage)), "kimage64")
+        self.assertEqual(ovmf.kernel_header_kind(b"\xfa\x48\x89\xfb\x48\x8d\x25\xa5"
+                                                 + bytes(256)), None)
 
     def test_a_profile_can_find_the_code_it_promises_to_report(self):
         """A control that expects a code the profile's pattern cannot capture is dead."""

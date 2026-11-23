@@ -79,6 +79,30 @@ def checks_for(trace, expect_success=True):
     check("PC5 page tables were built and counted",
           "mapped_2mib=2048" in serial, "2048 x 2 MiB = 4 GiB")
 
+    # The kernel image has to account for itself before anything jumps into it, and the four
+    # rows below read the loader's verdict out of the log and recompute it from the *other*
+    # two lines.  Checking the numbers against each other rather than against constants is
+    # the difference between "the header line appeared" and "the thing the header says is the
+    # thing the load did": a kernel that grew by a page, or an entry point that moved, keeps
+    # these rows true only if both sides moved together.
+    header = fields(serial, "PC5-64-LOADER kernel-header", "version")
+    check("the loader validated the kernel image's own header",
+          header == "1", f"kernel-header line reported version={header}")
+    declared = fields(serial, "PC5-64-LOADER kernel-header", "image")
+    measured = fields(serial, "PC5-64-LOADER kernel at=", "bytes")
+    check("the image is exactly as long as its header declares",
+          declared is not None and declared == measured,
+          f"the header declares {declared} bytes, the file read {measured}")
+    entry = fields(serial, "PC5-64-LOADER kernel-header", "entry")
+    jumped = fields(serial, "PC5-64-LOADER-JUMP entry=", "entry")
+    check("execution started at the declared entry, not at byte zero of the file",
+          entry is not None and jumped is not None
+          and int(jumped, 16) == 0x100000 + int(entry, 16),
+          f"header entry={entry}, jump target={jumped}")
+    check("the payload checksum was verified, not merely present",
+          fields(serial, "PC5-64-LOADER kernel-header", "checksum") == "ok",
+          "a header whose checksum field was never compared would still print")
+
     # The loader no longer reads CR3 back itself: after installing the root it
     # never runs loader code again.  The read-back now comes from the kernel, which
     # is executing on the new map - a stronger statement than the loader checking

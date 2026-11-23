@@ -133,14 +133,16 @@ KERNEL64_CFLAGS := -m64 -std=gnu11 -O2 -Wall -Wextra -Werror -ffreestanding \
 KERNEL64_SRC := kernel64/start.S kernel64/main.c kernel64/serial64.c \
                 kernel64/cpu64.c kernel64/apic64.c kernel64/idt64.c \
                 kernel64/timer64.c kernel64/madt64.c kernel64/mem64.c \
-                kernel64/tss64.c kernel64/idt64.S
+                kernel64/tss64.c kernel64/kimage64_head.c kernel64/idt64.S
 KERNEL64_HDR := kernel64/include/pc5_boot64.h kernel64/include/pc5_map.h \
+                kernel64/include/pc5_kimage64.h \
                 kernel64/include/pc5_io.h kernel64/include/pc5_mem64.h \
                 kernel64/serial64.h kernel64/cpu64.h kernel64/apic64.h kernel64/idt64.h kernel64/timer64.h kernel64/madt64.h \
                 kernel64/tss64.h kernel64/kernel64.ld
 LOADER64_SRC := boot/uefi64/uefi64_main.c boot/uefi64/pagetables.c \
-                boot/uefi64/bootx64.S
+                boot/uefi64/kimage64.c boot/uefi64/bootx64.S
 LOADER64_HDR := boot/uefi64/pagetables.h boot/uefi64/handover64.h \
+                kernel64/include/pc5_kimage64.h \
                 boot/uefi64/../uefi/efi.h kernel64/include/pc5_boot64.h \
                 boot/uefi/bootx64.ld
 
@@ -166,13 +168,22 @@ $(BUILD)/kernel64/pc5-64.elf: $(BUILD)/kernel64/start.o $(BUILD)/kernel64/main.o
                               $(BUILD)/kernel64/idt64.o $(BUILD)/kernel64/timer64.o $(BUILD)/kernel64/madt64.o \
                               $(BUILD)/kernel64/mem64.o \
                               $(BUILD)/kernel64/tss64.o \
+                              $(BUILD)/kernel64/kimage64_head.o \
                               $(BUILD)/kernel64/idt64.S.o kernel64/kernel64.ld
 	$(LD) -m elf_x86_64 -T kernel64/kernel64.ld -nostdlib -o $@ $(filter %.o,$^)
 
 # .bss carries the kernel stack, so it has to travel with the image: a binary
 # that stops before .bss would put the stack outside the loaded window.
-$(BUILD)/kernel64/KERNEL64.BIN: $(BUILD)/kernel64/pc5-64.elf
-	objcopy -O binary --set-section-flags .bss=alloc,load,contents $< $@
+# The header is stamped into the *binary*, after objcopy, because the three values it
+# records -- the file's length, where `_start64` landed, and how much `.bss` travelled with
+# the image -- do not exist until the image is flat.  The tool reads them from the ELF's own
+# symbols, writes them, then re-reads the file with the rules the loader applies and refuses
+# to leave a stamped-but-invalid image on disk: a format bug has to fail the build, not
+# produce a kernel that boots slightly wrong.
+$(BUILD)/kernel64/KERNEL64.BIN: $(BUILD)/kernel64/pc5-64.elf tools/kimage64.py \
+                                kernel64/include/pc5_kimage64.h
+	objcopy -O binary --set-section-flags .bss=alloc,load,contents $(BUILD)/kernel64/pc5-64.elf $@
+	python3 tools/kimage64.py --stamp --elf $(BUILD)/kernel64/pc5-64.elf --bin $@
 	@size=$$(stat -c %s $@); echo "KERNEL64 OK: $$size bytes at 0x100000"
 
 kernel64: $(BUILD)/kernel64/KERNEL64.BIN
@@ -186,12 +197,22 @@ $(BUILD)/kernel64/uefi64_main.o: boot/uefi64/uefi64_main.c $(LOADER64_HDR) | $(B
 $(BUILD)/kernel64/bootx64-64.o: boot/uefi64/bootx64.S | $(BUILD)/kernel64
 	$(CC) -m64 -c $< -o $@
 
+# The image-header validator, compiled twice on purpose: once into BOOTX64.EFI, where it
+# decides whether the kernel is jumped to, and once on the host by
+# `tests/test_kimage64.py`, which feeds it every malformed header the format can be handed
+# and expects a named refusal.  One implementation, two rigs -- which is the only way the
+# host test says anything about what the loader does.
+$(BUILD)/kernel64/kimage64.o: boot/uefi64/kimage64.c $(LOADER64_HDR) | $(BUILD)/kernel64
+	$(CC) $(UEFI_CFLAGS) -Werror -Ikernel64/include -c $< -o $@
+
 $(BUILD)/uefi64/BOOTX64.EFI: $(BUILD)/kernel64/uefi64_main.o \
                              $(BUILD)/kernel64/pagetables.o \
+                             $(BUILD)/kernel64/kimage64.o \
                              $(BUILD)/kernel64/bootx64-64.o boot/uefi/bootx64.ld
 	@mkdir -p $(BUILD)/uefi64
 	$(LD) $(UEFI_LDFLAGS) -e _start $(BUILD)/kernel64/bootx64-64.o \
-	  $(BUILD)/kernel64/uefi64_main.o $(BUILD)/kernel64/pagetables.o -o $@
+	  $(BUILD)/kernel64/uefi64_main.o $(BUILD)/kernel64/pagetables.o \
+	  $(BUILD)/kernel64/kimage64.o -o $@
 	@python3 tools/eficheck.py $@ --require-relocs --max-bytes 196608
 
 # A separate ESP image: the release ESP never carries KERNEL64.BIN.
