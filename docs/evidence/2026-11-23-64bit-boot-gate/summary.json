@@ -1,0 +1,116 @@
+{
+  "commit": "d014a5b6ddc23dac50333d7b8886ebab8448799e",
+  "gates": {
+    "ia32": {
+      "build_exit": 0,
+      "checks_fail": 0,
+      "checks_not_tested": 1,
+      "checks_pass": 63,
+      "cold_stopped_on": "evidence",
+      "gate_exit": 0,
+      "iso": {
+        "bytes": "1601536",
+        "path": "build/pc5.iso",
+        "sha256": "ed98325d72fdb867d9e8c62af7b4bc6efab9227f5321d5c8372cff7a6c92aced"
+      },
+      "iso_buildinfo_measured_from_file": {
+        "build": "d014a5b",
+        "commit": "d014a5b6ddc23dac50333d7b8886ebab8448799e",
+        "date": "2023-11-14T22:13:20Z",
+        "esp-loader": "bfac126ca6471731",
+        "kernel": "32-bit PC5 bring-up kernel",
+        "uefi-path": "32",
+        "version": "0.2.0"
+      },
+      "iso_buildinfo_quoted_by_report": {
+        "build": "d014a5b",
+        "commit": "d014a5b6ddc23dac50333d7b8886ebab8448799e",
+        "date": "2023-11-14T22:13:20Z",
+        "esp-loader": "bfac126ca6471731",
+        "kernel": "32-bit PC5 bring-up kernel",
+        "uefi-path": "32",
+        "version": "0.2.0"
+      },
+      "iso_verify": "VALID + MANIFEST VALID",
+      "make_build": "make iso verify",
+      "make_gate": "make ovmf-test",
+      "matrix": {
+        "external": 5,
+        "verified": 30
+      },
+      "matrix_rows": 35,
+      "metadata_exit": 0,
+      "metadata_verdict": "PASS",
+      "not_tested_names": [
+        "disk-style UEFI boot (ESP attached as a block device)"
+      ],
+      "profile_read_from_medium": "the ESP root directory",
+      "qemu_version": "QEMU emulator version 11.0.2",
+      "release_esp_identical": true,
+      "release_esp_sha256": "a4c3042dd00f0defc4fa205f7e93020a6e0d3bf9501845e58e5e8fecd03e559b",
+      "serial_sha256": {
+        "serial-cold-32.log": "4d66ae3139fc10851c01622f9e4928bce71fe1d28febf48605344fa5c9d4320a",
+        "serial-warm-32.log": "4d66ae3139fc10851c01622f9e4928bce71fe1d28febf48605344fa5c9d4320a"
+      },
+      "warm_stopped_on": "evidence"
+    },
+    "x64": {
+      "build_exit": 0,
+      "checks_fail": 0,
+      "checks_not_tested": 2,
+      "checks_pass": 78,
+      "cold_stopped_on": "evidence",
+      "gate_exit": 0,
+      "iso": {
+        "bytes": "1806336",
+        "path": "build/pc5.iso",
+        "sha256": "1bae49a3284e92a82669053d381cf3950b7506958c61da8dbcd270bed6a3b620"
+      },
+      "iso_buildinfo_measured_from_file": {
+        "build": "d014a5b",
+        "commit": "d014a5b6ddc23dac50333d7b8886ebab8448799e",
+        "date": "2023-11-14T22:13:20Z",
+        "esp-loader": "95f6332d6de96a9d",
+        "kernel": "64-bit PC5 long-mode kernel",
+        "uefi-path": "64",
+        "version": "0.2.0"
+      },
+      "iso_buildinfo_quoted_by_report": {
+        "build": "d014a5b",
+        "commit": "d014a5b6ddc23dac50333d7b8886ebab8448799e",
+        "date": "2023-11-14T22:13:20Z",
+        "esp-loader": "95f6332d6de96a9d",
+        "kernel": "64-bit PC5 long-mode kernel",
+        "uefi-path": "64",
+        "version": "0.2.0"
+      },
+      "iso_verify": "VALID + MANIFEST VALID",
+      "make_build": "make PC5_UEFI=64 iso verify",
+      "make_gate": "make PC5_UEFI=64 ovmf-test",
+      "matrix": {
+        "external": 5,
+        "not-tested": 1,
+        "verified": 37
+      },
+      "matrix_rows": 43,
+      "metadata_exit": 0,
+      "metadata_verdict": "PASS",
+      "not_tested_names": [
+        "disk-style UEFI boot (ESP attached as a block device)",
+        "loader refuses a kernel with a corrupted header (bootloader fault): KERNEL64.BIN has no header field to corrupt yet"
+      ],
+      "profile_read_from_medium": "the ESP root directory",
+      "qemu_version": "QEMU emulator version 11.0.2",
+      "release_esp_identical": true,
+      "release_esp_sha256": "b0f4e3ea2b48f0675d557ffec725b163758554ff05547eb52bc9b351dde45514",
+      "serial_sha256": {
+        "serial-cold-64.log": "a0617a446747dbeb2f6c0969f34ce2ff9afc29b102ab126501efa5a8e31ae5fa",
+        "serial-cold.log": "aaf52617b9e4239557742c39349d20c311fed937f9f31d05d20e38a49daa6637",
+        "serial-warm-64.log": "d26c95d1f71384da4cbc002b46c435138ef0edda9d8e05b65b52f3deaf2a839f",
+        "serial-warm.log": "4af8e40c4e8af5ae9f5996952d52982f9d3b54c45a34b6708b78593cc4c10359"
+      },
+      "warm_stopped_on": "evidence"
+    }
+  },
+  "note": "Measured in the workspace that ran the gates. `build/pc5.iso` is one name shared by both modes, so a digest here means nothing without the commit label beside it -- which is why both copies of the build record are recorded, the one the boot read off the medium and the one read off the file."
+}

@@ -1,0 +1,73 @@
+python3 tests/ovmf_boot.py --iso build/pc5.iso --efi-image build/efi.img \
+  --kernel build/kernel.bin --json-out build/ovmf-report.json \
+  --matrix-out build/ovmf-matrix.json \
+  --serial-dir build/ovmf-serial 
+[PASS] the boot profile can be read from the medium
+[PASS] the ISO matches the boot profile it was graded with
+[PASS] the ISO's build record names the medium it describes
+[PASS] [cold] genuine firmware produced a boot manager log
+[PASS] [cold] the machine booted UEFI, not SeaBIOS
+[PASS] [cold] firmware started the El Torito UEFI image
+[PASS] [cold] the machine was stopped on evidence, not on the clock
+[PASS] [cold] the PC5 UEFI loader executed under it
+[PASS] [cold] the loader identified EDK II as its firmware
+[PASS] [cold] the kernel was found on the volume we booted from
+[PASS] [cold] the kernel image was read through the file protocol
+[PASS] [cold] the loader read the kernel file at its real size
+[PASS] [cold] a memory map was handed over
+[PASS] [cold] the loader's conventional-memory total is a real count within the memory the machine was given
+[PASS] [cold] the kernel's memory total is a real count within the memory the machine was given
+[PASS] [cold] the load window was checked against that map (E15 guard)
+[PASS] [cold] firmware watchdog was disabled while services were callable
+[PASS] [cold] boot services were exited exactly once
+[PASS] [cold] ExitBootServices reported its retry count
+[PASS] [cold] the kernel copy was read back at the handover address
+[PASS] [cold] the handover carried exactly the kernel file
+[PASS] [cold] the kernel reached its entry point
+[PASS] [cold] the kernel accepted the boot contract
+[PASS] [cold] the kernel reached PC5-BOOT-OK
+[PASS] [cold] no loader failure code was reported
+[PASS] [cold] a fresh variable store was used and written by firmware
+[PASS] [warm] genuine firmware produced a boot manager log
+[PASS] [warm] the machine booted UEFI, not SeaBIOS
+[PASS] [warm] firmware started the El Torito UEFI image
+[PASS] [warm] the machine was stopped on evidence, not on the clock
+[PASS] [warm] the PC5 UEFI loader executed under it
+[PASS] [warm] the loader identified EDK II as its firmware
+[PASS] [warm] the kernel was found on the volume we booted from
+[PASS] [warm] the kernel image was read through the file protocol
+[PASS] [warm] the loader read the kernel file at its real size
+[PASS] [warm] a memory map was handed over
+[PASS] [warm] the loader's conventional-memory total is a real count within the memory the machine was given
+[PASS] [warm] the kernel's memory total is a real count within the memory the machine was given
+[PASS] [warm] the load window was checked against that map (E15 guard)
+[PASS] [warm] firmware watchdog was disabled while services were callable
+[PASS] [warm] boot services were exited exactly once
+[PASS] [warm] ExitBootServices reported its retry count
+[PASS] [warm] the kernel copy was read back at the handover address
+[PASS] [warm] the handover carried exactly the kernel file
+[PASS] [warm] the kernel reached its entry point
+[PASS] [warm] the kernel accepted the boot contract
+[PASS] [warm] the kernel reached PC5-BOOT-OK
+[PASS] [warm] no loader failure code was reported
+[PASS] [warm] the warm boot proved the same stages as the cold boot
+[PASS] the second boot reused the variable store firmware had written
+[N/A ] disk-style UEFI boot (ESP attached as a block device)  (the ISO carries its ESP as an El Torito image inside ISO9660, so there is no ESP partition to attach)
+[PASS] the gate's kernel-header claims match the kernel image on the medium
+[PASS] firmware refuses an ESP without BOOTX64.EFI (firmware fault)
+[PASS] firmware rejects a boot image with a broken PE32+ header (firmware fault)
+[PASS] loader reports the missing KERNEL.BIN as E2 when no volume has it (bootloader fault)
+[PASS] loader refuses a kernel with a corrupted header (bootloader fault) as E4
+[PASS] firmware refuses a truncated ISO (firmware fault)
+[PASS] a boot that outlives its deadline is reported as a timeout, not as a pass
+[PASS] a small machine stops with a diagnostic or boots with its own memory
+[PASS] the ISO does not embed the firmware volume
+[PASS] no firmware image is carried in the repository
+[PASS] the ESP is not a firmware image
+[PASS] the ESP contains no firmware volume signature
+[PASS] the ISO embeds the release ESP the build produced
+
+PC5-OVMF-BOOT-OK: real OVMF firmware booted the PC5 kernel.
+1 path(s) NOT TESTED (see the N/A lines): they are neither passed nor failed.
+report: build/ovmf-report.json
+GATE_EXIT=0

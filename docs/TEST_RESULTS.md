@@ -2978,3 +2978,72 @@ NOT TESTED on this machine. The claim this section supports is that the page-tab
 hierarchy the loader installs covers the span it advertises and that the
 allocations it requests are satisfiable under the UEFI contract — nothing about
 real firmware.
+
+## 28. The 64-bit boot became a gate, and the release record became attributable
+
+**Run:** 2026-11-23, workspace at `d014a5b` (clean tree), QEMU 11.0.2 with the EDK II OVMF
+shipped in the same package, TCG only. **`make check` → `suite and all gates passed`, 1075
+tests OK (117 skipped).** The two firmware gates, run separately because they need an
+emulator:
+
+| Command | Result | Checks | Matrix rows |
+| --- | --- | --- | --- |
+| `make PC5_UEFI=64 ovmf-test` | **exit 0**, `PC5-OVMF-BOOT-OK` | 78 PASS, 0 FAIL, 2 NOT TESTED | 43 = 37 verified + 5 external + 1 not-tested |
+| `make ovmf-test` (32-bit) | **exit 0**, `PC5-OVMF-BOOT-OK` | 63 PASS, 0 FAIL, 1 NOT TESTED | 35 = 30 verified + 5 external |
+| `SOURCE_DATE_EPOCH=1700000000 make PC5_UEFI=64 iso verify` | `VALID`, `MANIFEST VALID`, exit 0 | ISO `1bae49a3284e92a8…`, 1806336 B | ESP `build/efi64-release.img` byte-identical to the copy inside the ISO |
+| `SOURCE_DATE_EPOCH=1700000000 make iso verify` | `VALID`, `MANIFEST VALID`, exit 0 | ISO `ed98325d72fdb867…`, 1601536 B | ESP `build/efi.img` byte-identical |
+| `make PC5_UEFI=64 metadata`, `make metadata` | exit 0, `checks=2 verdict=PASS` | `iso_structure` + `firmware_boot` | the firmware verdict is now part of the release record |
+
+**What changed, and what it caught.** `tests/ovmf_boot.py` had been grading every run with
+the 32-bit marker set; the 64-bit path speaks a different one (`PC5-64-LOADER-BANNER`,
+`PC5-64BIT-LONG-MODE-OK`, `PC5-64-DONE`, `PC5-64-LOADER-FAIL=<name>`), and grading a 64-bit
+log with 32-bit eyes means the *absence* of `PC5-BOOT-OK` — the failure condition — reads as
+nothing went wrong. The harness now holds two `Profile`s, each owning its banner, success and
+stop markers, failure pattern, boot-protocol version and log→stage mapping, and which one a
+run is graded with is **read from the medium**: both flavors are written to
+`build/pc5.iso`, both ESPs carry `EFI/BOOT/BOOTX64.EFI`, and the only medium-visible
+difference is `KERNEL.BIN` against `KERNEL64.BIN` inside the El Torito ESP. Three defects
+surfaced the moment the gate could see both paths, all in the artifacts rather than the logs:
+
+- a run booted `build/pc5.iso` while pointed at `build/efi64-release.img`, and the ISO still
+  held the 32-bit ESP — reported as four unrelated size failures. The gate now compares the
+  El Torito boot image against the file it was handed, byte for byte, and the *pairing* is
+  the failure that gets named;
+- the record inside the image (`BUILDINFO.TXT`) had drifted from the image: `uefi-path: 64`
+  over a 32-bit ESP, quoting the other mode's loader digest. `the ISO's build record names
+  the medium it describes` now re-derives that from the volume, and the build writes
+  `$(BUILD)/pc5.iso.stamp` (`mode=`, `commit=`, `loader=`) so a mode switch or a commit
+  regenerates the record instead of leaving a stale one — a timestamp-only dependency cannot
+  notice either, because in a shared `build/` directory no mtime the record depends on moves;
+- the negative controls inherited the same blindness: `missing kernel → E2` is 32-bit
+  vocabulary, so a 64-bit boot that *did* report `kernel-not-found` was graded as a
+  control that failed to fire. Expectations are per-profile now, and the small-memory control
+  stops on the profile's own markers.
+
+**Two NOT TESTED rows on the 64-bit leg, both stated with a reason.** The disk-style ESP
+partition path does not exist in this medium (structural). The corrupted-header control
+cannot be built, because `KERNEL64.BIN` carries no header to corrupt — it begins
+`cli; mov rbx, rdi`, the first instructions of `kernel64/start.S`. That row is reported
+rather than passed, and `the gate's kernel-header claims match the kernel image on the
+medium` fails the run if the claim and the medium ever disagree, so the control becomes
+enforced the moment the image format gains a header, with no flag left to remember. The
+32-bit leg keeps the enforced version (`… as E4`, PASS).
+
+**Attribution, which is what makes the numbers above belong to a commit.** `BUILDINFO.TXT`
+inside the ISO carries `build:` (with `-dirty` when tracked files differ from HEAD, so an
+artifact no commit produced cannot be read as one), `commit:` (full object id),
+`uefi-path:` and `esp-loader:`; `make metadata` embeds the firmware gate's verdict — profile,
+cold/warm stop markers, matrix row counts, ISO and ESP digests, firmware and QEMU versions,
+and the NOT TESTED row names — and refuses with exit 3, both digests quoted, when the report
+on disk describes a different image than the one being described. That refusal was observed on
+the real files while this was being written, not only in a test.
+
+**Evidence level.** Genuine TianoCore OVMF under TCG, the release artifact itself, cold and
+warm, with the negatives run against mutants built from it. Not physical hardware, not Sony
+firmware, not a PS5, and **not CI**: no GitHub Actions run backs any of this, and this
+milestone was not granted Actions activation. `tr=loaded` is not claimed — TR is still not
+loaded, `PC5-64-TSS … tr=not-loaded reason=ltr-unverifiable-here` is what the boots print,
+IST1/IST2 are allocated and validated but no exception has yet been shown to run on them, and
+`make emulator-probe` remains the record of what the emulator can and cannot establish. Full
+serial logs for all four boots, `summary.json`, and a `verification.sh` that re-derives 35
+assertions from them: `docs/evidence/2026-11-23-64bit-boot-gate/`.

@@ -1,0 +1,121 @@
+pc5: the ISO's build record now names mode=64 commit=d014a5b6ddc23dac50333d7b8886ebab8448799e
+python3 tools/mkiso.py \
+  --volume-id PC5 \
+  --boot-image build/loader.bin \
+  --mbr-code build/mbr.bin \
+  --desc-offset 0xE00 \
+  --uefi-image build/efi64-release.img \
+  --file KERNEL.BIN=build/kernel.bin \
+  --file KERNEL64.BIN=build/kernel64/KERNEL64.BIN \
+  --file README.TXT=build/iso/README.TXT \
+  --file BUILDINFO.TXT=build/iso/BUILDINFO.TXT \
+  --output build/pc5.iso \
+  --info build/build-info.json
+pc5: wrote build/pc5.iso (1806336 bytes, 882 sectors)
+pc5: sha256 1bae49a3284e92a82669053d381cf3950b7506958c61da8dbcd270bed6a3b620
+python3 tools/verify_iso.py build/pc5.iso --info build/build-info.json \
+  --expect-esp-loader build/uefi64/BOOTX64.EFI --expect-esp-file KERNEL64.BIN=build/kernel64/KERNEL64.BIN \
+  --json-out build/verify-report.json
+[PASS] image is a whole number of 2048-byte blocks  (1806336 bytes)
+[PASS] volume descriptor signature at LBA 16  (CD001)
+[PASS] primary volume descriptor type  (type 1)
+[PASS] logical block size is 2048  (2048)
+[PASS] volume size matches the file  (882 blocks)
+[PASS] path table size is recorded (both-endian)  (2048 bytes)
+[PASS] both path tables point inside the image  (L=19 M=21)
+[PASS] publisher identifier is at the ECMA-119 offset  (PC5 Project)
+[PASS] application identifier is at the ECMA-119 offset  (PC5)
+[PASS] volume space size is a valid both-endian field  (882)
+[PASS] root directory extent is present  (LBA 746)
+[PASS] volume contains a kernel file  (BUILDINF.TXT;1,KERNEL.BIN;1,KERNEL64.BIN;1,README.TXT;1)
+[PASS] boot record volume descriptor type  (type 0)
+[PASS] El Torito system identifier  (EL TORITO SPECIFICATION)
+[PASS] boot catalog pointer is inside the image  (LBA 23)
+[PASS] catalog validation header id  (0x1)
+[PASS] catalog validation signature 55AA  (55aa)
+[PASS] catalog validation checksum sums to zero  (0x0)
+[PASS] catalog has an initial entry
+[PASS] initial entry is the 80x86 BIOS default  (0x0)
+[PASS] every section advertises at least one entry  (1,1)
+[PASS] the last section header is 0x91 (no further sections)  (145)
+[PASS] no duplicate platform sections  ({0: 1, 239: 1})
+[PASS] default entry is bootable  (0x88)
+[PASS] default entry is no-emulation  (0)
+[PASS] boot image load segment is 0x7C0  (0x7c0)
+[PASS] boot image lies inside the image  (LBA 24)
+[PASS] boot image advertises at least one sector  (8)
+[PASS] image is a whole number of 512-byte sectors  (1806336 bytes)
+[PASS] hybrid MBR signature 55AA at offset 510  (55aa)
+[PASS] hybrid MBR carries a bootstrap  (440 code bytes)
+[PASS] hybrid MBR disk signature is set  (0x50433530)
+[PASS] hybrid MBR reserved bytes are zero  (0000)
+[PASS] hybrid MBR declares exactly one partition  (1 in use)
+[PASS] hybrid MBR boot indicator is 0x80  (0x80)
+[PASS] hybrid MBR partition type is 0x17  (0x17)
+[PASS] hybrid MBR partition covers every sector of the image  (LBA 0 +3528 of 3528)
+[PASS] hybrid MBR partition does not run past the end of the image  (3528 > 3528)
+[PASS] hybrid MBR partitions do not overlap  (1 partitions)
+[PASS] hybrid MBR partition ends on the last image sector  (3528 vs 3528)
+[PASS] hybrid MBR CHS start address is consistent with its LBA  (000100 -> LBA 0, expected 0)
+[PASS] hybrid MBR CHS end address is consistent with its LBA  (373f00 -> LBA 3527, expected 3527)
+[PASS] hybrid MBR names the El Torito boot image LBA  (96 vs 96)
+[PASS] hybrid MBR names the El Torito boot image length  (8 vs 8)
+[PASS] hybrid MBR boot image lies inside the partition  (96 +8 vs 3528)
+[PASS] El Torito boot image lies inside the partition  (96 +8)
+[PASS] UEFI section entry is bootable  (0x88)
+[PASS] UEFI section entry is no-emulation  (0)
+[PASS] UEFI entry loads at segment 0  (0x0)
+[PASS] UEFI image lies inside the ISO  (LBA 26 +2880 sectors)
+[PASS] UEFI image has a valid FAT boot sector
+[PASS] UEFI image is FAT12 or FAT16 (El Torito bootable form)  (2847 clusters -> FAT12)
+[PASS] ESP root directory contains EFI/
+[PASS] ESP contains EFI/BOOT
+[PASS] ESP contains EFI/BOOT/BOOTX64.EFI
+[PASS] BOOTX64.EFI content is readable through the FAT chain  (12872 bytes)
+[PASS] ESP loader is byte-identical to BOOTX64.EFI  (in-iso 12872 B 95f6332d6de9  built 12872 B 95f6332d6de9)
+[PASS] ESP KERNEL64.BIN is byte-identical to KERNEL64.BIN  (in-iso f97a22730bdd  built f97a22730bdd)
+[PASS] BOOTX64.EFI starts with the DOS 'MZ' signature  (4d5a)
+[PASS] BOOTX64.EFI has a PE header inside the file  (0x80)
+[PASS] BOOTX64.EFI PE signature  (50450000)
+[PASS] BOOTX64.EFI machine is x86-64  (0x8664)
+[PASS] BOOTX64.EFI is PE32+  (0x20b)
+[PASS] BOOTX64.EFI subsystem is EFI application  (10)
+[PASS] PC5 boot descriptor found in the boot image
+[PASS] boot descriptor CRC32 is valid  (stored 9d451a99 computed 9d451a99)
+[PASS] descriptor volume id matches the volume descriptor  ('PC5' vs 'PC5')
+[PASS] descriptor kernel LBA matches the directory record  (747 vs 747)
+[PASS] descriptor kernel size matches the directory record  (67028 vs 67028)
+[PASS] kernel image carries the PC5K signature  (eb055043354b01fa)
+[PASS] kernel image is not empty  (67028)
+[PASS] image SHA-256 matches build info  (1bae49a3284e92a8)
+[PASS] build info describes the hybrid MBR
+[PASS] build info MBR sector count matches the image  (3528 vs 3528)
+[PASS] build info MBR partition type matches the table  (0x17)
+[PASS] build info MBR boot image LBA matches the table  (96)
+[PASS] file KERNEL.BIN;1 is present
+[PASS] file KERNEL.BIN;1 content matches build info  (e58b71e431576892)
+[PASS] file KERNEL64.BIN;1 is present
+[PASS] file KERNEL64.BIN;1 content matches build info  (f97a22730bdd3107)
+[PASS] file README.TXT;1 is present
+[PASS] file README.TXT;1 content matches build info  (d81842bc1490b05a)
+[PASS] file BUILDINF.TXT;1 is present
+[PASS] file BUILDINF.TXT;1 content matches build info  (64f1e4117e94a5ef)
+
+VALID: build/pc5.iso  sha256=1bae49a3284e92a82669053d381cf3950b7506958c61da8dbcd270bed6a3b620
+python3 tools/iso_manifest.py build/pc5.iso --output build/pc5.iso.manifest.json
+manifest: build/pc5.iso.manifest.json (4 files, 4 boot entries, sha256 1bae49a3284e92a8)
+python3 tools/iso_manifest.py build/pc5.iso --verify build/pc5.iso.manifest.json
+MANIFEST VALID: build/pc5.iso matches build/pc5.iso.manifest.json
+BUILD_EXIT=0
+1bae49a3284e92a82669053d381cf3950b7506958c61da8dbcd270bed6a3b620  build/pc5.iso
+b0f4e3ea2b48f0675d557ffec725b163758554ff05547eb52bc9b351dde45514  build/efi64-release.img
+f97a22730bdd310791de6c2ec4040e5764e6fe5d42b6dcaa9618d6b1e9cdcd7a  build/kernel64/KERNEL64.BIN
+95f6332d6de96a9d12178896bc0a223d3574f8054753e84efe0a708bb666ebe2  build/uefi64/BOOTX64.EFI
+PC5
+version: 0.2.0
+build: d014a5b
+commit: d014a5b6ddc23dac50333d7b8886ebab8448799e
+date: 2023-11-14T22:13:20Z
+kernel: 64-bit PC5 long-mode kernel
+uefi-path: 64
+esp-loader: 95f6332d6de96a9d
