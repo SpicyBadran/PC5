@@ -26,6 +26,17 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
+# Naming `bash` explicitly is not a style choice.  On GitHub's Linux runners the *unspecified*
+# default for a `run` step is `bash -e {0}` -- no `pipefail` -- while naming the shell brings
+# `--noprofile --norc -eo pipefail`.  Every gate below is written `make <gate> | tee
+# build/logs/<gate>.log` so the log survives in the uploaded artifact, and without pipefail the
+# successful `tee` at the end of the pipe reports the step green after the gate failed.  A
+# pipeline that cannot fail is worse than no pipeline: it is the same class of defect measured in
+# docs/TEST_RESULTS.md §35, where a harness skipped 64 tests and still printed `OK`.
+defaults:
+  run:
+    shell: bash
+
 env:
   # The build reads both of these from the environment (see docs/BUILDING.md).
   # SOURCE_DATE_EPOCH is derived from the commit inside the job, because it is
@@ -81,18 +92,13 @@ jobs:
           mkdir -p build/logs
           make unit | tee build/logs/unit.log
 
-      - name: Host tool tests
-        run: python3 -m unittest discover -s tests -p 'test_*.py' -v 2>&1 | tee build/logs/host.log
-
-      # The architecture is machine-checked: the roadmap graph must validate,
-      # the generated milestone document must match the data, and the product
-      # identity in `roadmap.json` must still agree with the documents.  This
-      # is deliberately a separate gate from the unit tests so that a broken
-      # graph fails with the validator's message rather than a test traceback.
-      - name: Architecture and roadmap gate
-        run: make roadmap | tee build/logs/roadmap.log
-
-      - name: Execute the UEFI loader against the stub firmware
+      # The venv is built here, not only in the stub-firmware step below, because
+      # tests/test_kernel64.py and its siblings *skip* when `unicorn` is missing -- and a skip
+      # never fails a step, it simply does not run.  Measured locally: with the module absent that
+      # module reports `OK` after skipping 64 of its own cases, which is the difference between a
+      # certified boot and an unexecuted one.  The assertion after the install is what turns that
+      # into a red job instead of a quiet suite.
+      - name: Provision the harness venv
         run: |
           set -eu
           # Install into a virtual environment instead of system Python.
@@ -103,6 +109,57 @@ jobs:
           # `python3` resolve to it, so `make stubtest` actually finds unicorn.
           python3 -m venv .venv
           .venv/bin/pip install --disable-pip-version-check "unicorn==2.1.4"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          export PATH="$PWD/.venv/bin:$PATH"
+          python3 -c "import unicorn; print('unicorn', unicorn.__version__)"
+
+      - name: Host tool tests
+        run: |
+          set -eu
+          export PATH="$PWD/.venv/bin:$PATH"
+          python3 -m unittest discover -s tests -p 'test_*.py' -v 2>&1 | tee build/logs/host.log
+          # Read the count, not the verdict.  `OK` is compatible with a suite that barely ran, so
+          # the tally and every skip reason go into the job summary where a reviewer sees them.
+          tail -n 3 build/logs/host.log | sed -n 's/^/::notice title=Host suite ::/p' || true
+          {
+            echo "### Host suite"
+            echo
+            grep -E "^(Ran |OK|FAILED)" build/logs/host.log | sed 's/^/- /'
+            echo
+            echo "- skip reasons (each is an environment statement, never a pass):"
+            grep -oE "skipped '[^']*'" build/logs/host.log | sort | uniq -c | sed 's/^/  - /' \
+              || echo "  - none"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The architecture is machine-checked: the roadmap graph must validate,
+      # the generated milestone document must match the data, and the product
+      # identity in `roadmap.json` must still agree with the documents.  This
+      # is deliberately a separate gate from the unit tests so that a broken
+      # graph fails with the validator's message rather than a test traceback.
+      - name: Architecture and roadmap gate
+        run: make roadmap | tee build/logs/roadmap.log
+
+      # These are the gates `make check` runs that the pipeline used to omit, which left CI able
+      # to go green while the documents contradicted the code (docs-check), while a status figure
+      # drifted from roadmap.json (presentation-check), or while a commit citation pointed at an
+      # object no longer in the clone (citations-check).  `fetch-depth: 0` above is what makes the
+      # last one meaningful, and citation-refs fetches the pull-request heads the evidence cites --
+      # a dead citation is a statement about the checkout before it is one about the history.
+      - name: Documentation and evidence gates
+        run: |
+          set -eu
+          mkdir -p build/logs
+          make docs-check | tee build/logs/docs-check.log
+          make presentation-check | tee build/logs/presentation-check.log
+          make citation-refs | tee build/logs/citation-refs.log
+          make citations-check | tee build/logs/citations.log
+
+      - name: Execute the UEFI loader against the stub firmware
+        run: |
+          set -eu
+          # The venv provisioned above is already on PATH through $GITHUB_PATH; the export repeats
+          # it on purpose, because a silent fallback to the system python would turn the long-mode
+          # boot into a skip, and the line after it is what notices.
           export PATH="$PWD/.venv/bin:$PATH"
           python3 -c "import unicorn; print('unicorn', unicorn.__version__)"
           make stubtest | tee build/logs/stubtest.log
@@ -227,10 +284,13 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
+          persist-credentials: false   # as in the other two jobs: leave no token in .git/config
 
       - name: Provision QEMU and TianoCore OVMF
         run: |
           set -eu
+          mkdir -p build build/logs     # a fresh checkout has no build/, and two steps below
+                                        # tee into it before `make` would have created it
           ./tools/ovmf_setup.sh
           # Record exactly which firmware this run used.
           ./tools/ovmf_setup.sh --check | tee build/ovmf-setup.log || true
@@ -245,8 +305,22 @@ jobs:
       - name: Boot it under OVMF, including the Secure Boot policy check
         run: |
           set -eu
-          make ovmf-test OVMF_ARGS="--secure-boot"
           # any exit code other than 0 fails the step; 3 (NOT TESTED) included.
+          # With pipefail the tee below cannot hide that, and without it this whole job would be
+          # decorative: a runner with no firmware would print a green tick over an unexecuted boot.
+          make ovmf-test OVMF_ARGS="--secure-boot" 2>&1 | tee build/logs/ovmf-test.log
+          # Report what the firmware actually concluded, counting the harness's own markers rather
+          # than re-deriving a tally from the JSON (whose `checks` list and the requirement matrix
+          # are different counts, and conflating them is how 104 became 105 once already).
+          {
+            echo "### Genuine OVMF boot"
+            echo
+            echo "- gate log [PASS] lines: $(grep -c '^\[PASS\]' build/logs/ovmf-test.log || true)"
+            echo "- gate log [FAIL] lines: $(grep -c '^\[FAIL\]' build/logs/ovmf-test.log || true)"
+            echo "- not-tested lines: $(grep -cE 'NOT TESTED|\[N/A\]' build/logs/ovmf-test.log || true)"
+            echo
+            grep -E "PC5-OVMF-BOOT-OK|NOT TESTED" build/logs/ovmf-test.log | tail -n 4 | sed 's/^/> /'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep the firmware report, serial logs and the matrix
         if: always()
