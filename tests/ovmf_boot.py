@@ -231,9 +231,77 @@ def qemu_version(qemu):
 
 
 # ---------------------------------------------------------------- QEMU run
+def _qmp_inject_nmi(path, timeout=10.0):
+    """Ask QEMU to raise an NMI in the guest, over the machine's own QMP socket.
+
+    Returns a small dict rather than raising, because a run where the *harness* could not talk to
+    QEMU has to be reported as that, not as a kernel that failed to take an NMI.  Three facts come
+    back and all three are put in the report: whether the socket was reached, whether QEMU accepted
+    `inject-nmi` (a bare `{"error": ...}` means the command does not exist in this build, which is a
+    different story from the guest ignoring it), and the transcript.
+
+    The greeting is read first and `qmp_capabilities` is sent before any command: QMP refuses
+    everything else until the capability handshake is done, and a harness that skipped the step
+    would report a refusal it caused itself.
+    """
+    import socket
+
+    transcript = []
+    result = {"reached": False, "accepted": False, "error": None, "transcript": ""}
+    deadline = time.time() + timeout
+    sock = None
+    while time.time() < deadline:
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.settimeout(2.0)
+            sock.connect(path)
+            break
+        except OSError:
+            if sock is not None:
+                sock.close()
+            sock = None
+            time.sleep(0.2)
+    if sock is None:
+        result["error"] = "qmp socket not reachable at %s" % path
+        return result
+
+    def read_line():
+        data = b""
+        try:
+            while not data.endswith(b"\r\n"):
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                data += chunk
+        except (socket.timeout, OSError):
+            pass
+        return data.decode("latin-1", "replace").strip()
+
+    try:
+        transcript.append(read_line())                      # the greeting
+        sock.sendall(b'{"execute": "qmp_capabilities"}\r\n')
+        transcript.append(read_line())
+        sock.sendall(b'{"execute": "inject-nmi"}\r\n')
+        reply = read_line()
+        transcript.append(reply)
+        result["reached"] = True
+        result["accepted"] = reply.startswith("{") and '"error"' not in reply
+        if not result["accepted"]:
+            result["error"] = reply[:200] or "no reply to inject-nmi"
+    except OSError as exc:
+        result["error"] = "qmp write failed: %s" % exc
+    finally:
+        try:
+            sock.close()
+        except OSError:
+            pass
+    result["transcript"] = " | ".join(line for line in transcript if line)[:400]
+    return result
+
+
 def run_qemu(qemu, data_dir, iso, vars_path, serial_path, timeout, memory_mb=256,
              stop_markers=("PC5-BOOT-OK", "PC5-UEFI-FAILURE"), extra_wait=None,
-             secure=False):
+             secure=False, inject_nmi=False):
     """Boot the ISO once and stop the machine as soon as the log settles.
 
     Serial goes to stdout rather than to a file because QEMU buffers a file
@@ -260,6 +328,10 @@ def run_qemu(qemu, data_dir, iso, vars_path, serial_path, timeout, memory_mb=256
         "-cdrom", iso["iso"],
         "-serial", "stdio",
     ]
+    if inject_nmi:
+        # `wait=off` matters: without it QEMU blocks until a client connects, and a harness that
+        # cannot get to the socket would have hung the boot rather than reported it.
+        command += ["-qmp", "unix:%s,server=on,wait=off" % (serial_path + ".qmp")]
     if secure:
         command += ["-global", "driver=cfi.pflash01,property=secure,value=on"]
     if data_dir:
@@ -295,6 +367,37 @@ def run_qemu(qemu, data_dir, iso, vars_path, serial_path, timeout, memory_mb=256
     else:
         outcome = "timeout"
 
+    nmi = None
+    if inject_nmi:
+        nmi = {"requested": True, "at": outcome}
+        if outcome == "evidence":
+            # Injected *after* the boot settled, and that ordering is the design rather than a
+            # convenience.  The NMI handler reports and halts, which is what a handler for a
+            # non-maskable, unrecoverable event should do -- so injecting it during the boot would
+            # end the run early and the log would show an NMI that arrived at a moment chosen by
+            # the harness rather than one the kernel had finished defending.  After the marker, the
+            # only thing left to prove is that the vector still lands on its own stack.
+            nmi.update(_qmp_inject_nmi(serial_path + ".qmp"))
+            if nmi.get("accepted"):
+                # The guest has to be given time to notice, and the serial has to be drained
+                # *before* SIGTERM or the exception line is lost with the pipe.  The line is
+                # waited for rather than slept for: on a slow TCG host two seconds is sometimes
+                # not enough, and a fixed sleep that is too short reads as a kernel that did not
+                # take the NMI.
+                # Waiting on the log's own tail rather than on a window into the drain buffer.
+                # The first version recorded where the buffer had got to, then looked only in what
+                # arrived after that -- and the guest answered *during* the QMP exchange, so the
+                # window was empty, the count said `exception_lines: 0`, and the run waited out the
+                # whole timeout for lines it had already received.  A harness measuring its own
+                # polling is a harness with two answers; there is one log, so there is one source.
+                settle = time.time() + 20.0
+                while time.time() < settle and process.poll() is None:
+                    tail = "".join(chunks).split("PC5-64-DONE", 1)[-1]
+                    if "PC5-64-EXCEPTION halted" in tail:
+                        break          # the reporter's last word, so the line above it is flushed
+                    time.sleep(0.1)
+        else:
+            nmi["skipped"] = "the boot did not reach its marker (%s)" % outcome
     if process.poll() is None:
         if extra_wait:
             time.sleep(extra_wait)
@@ -309,9 +412,13 @@ def run_qemu(qemu, data_dir, iso, vars_path, serial_path, timeout, memory_mb=256
     elapsed = time.time() - started
 
     raw = "".join(chunks)
+    if nmi is not None and nmi.get("accepted"):
+        nmi["exception_lines"] = sum(
+            1 for line in raw.split("PC5-64-DONE", 1)[-1].splitlines()
+            if "PC5-64-EXCEPTION" in line)
     with open(serial_path, "w") as handle:
         handle.write(raw)
-    return {"command": command, "returncode": process.returncode,
+    return {"command": command, "nmi": nmi, "returncode": process.returncode,
             "killed": outcome == "timeout", "stopped_on": outcome,
             "seconds": round(elapsed, 1),
             "stderr": "".join(stderr_chunks).strip()[-400:],
@@ -812,6 +919,7 @@ def _markers_x64(text, profile):
         "tr_iomap": _number(text, r"PC5-64-TSS .*? iomap=(\d+)"),
         "ist_gate_df": _number(text, r"PC5-64-TSS .*? ist-df=(\d+)"),
         "ist_gate_nmi": _number(text, r"PC5-64-TSS .*? ist-nmi=(\d+)"),
+        "ist2_top": _hex(text, r"PC5-64-TSS .*? ist2=(0x[0-9a-f]+)"),
         "tr_reason": (re.search(r"PC5-64-TSS .*? reason=([a-z0-9-]+)", text).group(1)
                       if re.search(r"PC5-64-TSS .*? reason=([a-z0-9-]+)", text) else None),
         # The delivery probe, which is the consequence the whole TSS exists for.  The frame dump
@@ -840,6 +948,17 @@ def _markers_x64(text, profile):
         "probe_gate_restored": (re.search(r"PC5-64-TSS-DF .*? gate-restored=(\d)", text).group(1)
                                 if re.search(r"PC5-64-TSS-DF .*? gate-restored=(\d)", text)
                                 else None),
+        # The NMI, as the kernel itself saw it.  Only the *last* exception line is taken, and
+        # deliberately so: the reporter halts the machine, so more than one line means something
+        # went wrong earlier and the last line would be the least interesting of them.
+        "nmi_line": ([line.strip() for line in text.splitlines()
+                      if "PC5-64-EXCEPTION vector=2 " in line] or [None])[-1],
+        "nmi_after_done": ("PC5-64-EXCEPTION vector=2 " in text.split("PC5-64-DONE", 1)[-1]
+                           if "PC5-64-DONE" in text else False),
+        "nmi_rsp": _hex(text, r"PC5-64-EXCEPTION vector=2 .*?rsp=(0x[0-9a-f]+)")
+                   if "vector=2 " in text else None,
+        "nmi_ist": (_number(text, r"PC5-64-EXCEPTION vector=2 .*? ist=(\d+)")
+                    if "vector=2 " in text else None),
     }
 
 
@@ -1304,6 +1423,15 @@ def x64_stages():
         Stage("a #DF taken by the CPU was delivered on the IST1 stack",
               "the double-fault probe found its frame on the interrupt stack, not the faulting one",
               lambda seen, ctx: _probe_delivered(seen)),
+        # The other half of the arming rule, and the only event in this whole gate that the kernel
+        # did not cause.  An NMI arrives from outside -- QEMU raises it, the CPU delivers it, and
+        # nothing in the image had any say in the moment -- so it exercises the path the double-
+        # fault probe has to simulate: gate says slot 2, the loaded TSS says where slot 2 points,
+        # and the stack pointer the handler woke up on is inside it.  One event, two independent
+        # halves of the same claim, which is why both are required.
+        Stage("the NMI injected from outside arrived on the IST2 stack",
+              "QEMU's inject-nmi was taken by the guest on the stack its TSS names for slot 2",
+              lambda seen, ctx: _nmi_delivered(seen, ctx)),
     ]
 
 
@@ -1367,6 +1495,45 @@ def _probe_delivered(seen):
 
 
 
+def _nmi_delivered(seen, ctx):
+    """Judge the injected NMI from the exception line the guest printed.
+
+    Four things, in the order that keeps a harness failure from looking like a kernel failure: the
+    injection has to have been *accepted by QEMU* (a kernel cannot be blamed for an event nobody
+    raised, and a matrix row that passed on a refused injection would be a row about the harness);
+    the guest has to have reported vector 2 at all; the report has to come after the boot marker,
+    because an NMI that arrived mid-boot means the harness raced itself and the exception handler
+    halts the machine, which would silently shorten every other row; and the stack pointer has to
+    be inside the IST2 page, with the gate naming slot 2 on the same line.
+
+    The last pair is the whole point and is deliberately not inferred from the TSS report line: the
+    exception line carries `ist=` from the *live gate*, so a kernel that armed the TSS but not the
+    IDT, or the reverse, is caught here rather than in a comment.
+    """
+    nmi = ctx.get("nmi")
+    if nmi is None or not nmi.get("requested"):
+        return False, "the harness never asked for an injection, so nothing was measured"
+    if "skipped" in nmi:
+        return False, "not injected: %s" % nmi["skipped"]
+    if not nmi.get("accepted"):
+        return False, "QEMU refused the injection (error=%r); this row says nothing about the " \
+                      "guest" % (nmi.get("error"),)
+    line = seen["nmi_line"]
+    if line is None:
+        return False, "the injection was accepted and the guest never reported vector 2"
+    if not seen["nmi_after_done"]:
+        return False, "the NMI was taken during the boot, not after the marker: %s" % line
+    rsp, top = seen["nmi_rsp"], seen["ist2_top"]
+    detail = "line=%r rsp=%r ist2=%r ist=%r" % (line, rsp, top, seen["nmi_ist"])
+    if rsp is None or top is None:
+        return False, "rsp or the IST2 top is missing: " + detail
+    if not (top - PC5_TSS64_IST_PAGE <= rsp < top):
+        return False, "the NMI handler did not run on the IST2 page: " + detail
+    if seen["nmi_ist"] != PC5_TSS64_IST_NMI:
+        return False, "the live gate for vector 2 does not name slot 2: " + detail
+    return True, detail
+
+
 def _in_machine(seen, ctx, key):
     """A memory count that exists, is not zero, and does not exceed the guest.
 
@@ -1387,12 +1554,19 @@ def check_boot(report, run, stage, expected_kernel_bytes=None, profile=IA32,
                memory_mb=None):
     """Judge one boot against the profile's stages, and emit one check per stage."""
     seen = classify(run, profile)
-    ctx = {"expected_bytes": expected_kernel_bytes, "killed": run["killed"],
+    ctx = {"nmi": run.get("nmi"),
+           "expected_bytes": expected_kernel_bytes, "killed": run["killed"],
            "stopped_on": run["stopped_on"], "seconds": run["seconds"],
            "memory_mb": memory_mb}
     report.data[stage] = {"markers": seen, "seconds": run["seconds"],
                           "stopped_on": run["stopped_on"],
                           "returncode": run["returncode"],
+                          # What the harness asked QEMU for, and whether QEMU said yes.  Kept in
+                          # the report rather than only in the serial because the two can disagree
+                          # in the direction that matters: an NMI the *hypervisor* refused is not
+                          # evidence about the guest's IDT, and a reader of a green matrix needs to
+                          # be able to check that the injection was accepted at all.
+                          "nmi": run.get("nmi"),
                           "stages": {}}
     for stage_def in profile_stages(profile):
         ok, detail = stage_def.judge(seen, ctx)
@@ -1672,7 +1846,8 @@ def main(argv=None):
     shutil.copyfile(found["vars"], cold_vars)
     cold_serial = os.path.join(work, "serial-cold.log")
     cold = run_qemu(found["qemu"], data_dir, iso, cold_vars, cold_serial,
-                    args.timeout, args.memory_mb, stop_markers=profile.stop)
+                    args.timeout, args.memory_mb, stop_markers=profile.stop,
+                    inject_nmi=profile.key == "x64")
     report.data["cold_command"] = cold["command"]
     report.data["cold_stderr"] = cold["stderr"]
     check_boot(report, cold, "cold", expected_kernel, profile, args.memory_mb)
@@ -1685,7 +1860,8 @@ def main(argv=None):
     # warm path must boot identically (no "only works once" state).
     warm_serial = os.path.join(work, "serial-warm.log")
     warm = run_qemu(found["qemu"], data_dir, iso, cold_vars, warm_serial,
-                    args.timeout, args.memory_mb, stop_markers=profile.stop)
+                    args.timeout, args.memory_mb, stop_markers=profile.stop,
+                    inject_nmi=profile.key == "x64")
     report.data["warm_command"] = warm["command"]
     check_boot(report, warm, "warm", expected_kernel, profile, args.memory_mb)
     # "cold and warm independently validated" means the warm boot is judged on its own

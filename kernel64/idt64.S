@@ -38,6 +38,14 @@ pc5_exception_entry:
     movq 24(%rsp), %rcx        /* cs */
     movq 32(%rsp), %r8         /* rflags */
 
+    /* The stack the handler woke up on, taken *before* the alignment below -- after it, the
+     * number says where the reporter decided to put its frame rather than where the CPU
+     * delivered the exception, which is the whole question for a vector armed with an IST slot.
+     * Captured in %r9, the sixth argument, because the C reporter has five and the sixth costs
+     * nothing: a report that cannot answer "did the switch happen" is a report about a fault, not
+     * about its delivery. */
+    movq  %rsp, %r9
+
     /* A fault inside the reporter must not fault again. */
     cli
     andq $-16, %rsp

@@ -30,8 +30,10 @@ struct pc5_idt_ptr {
  * `PC5-64-EXCEPTION` and halts instead of triple-faulting. */
 void idt64_install(void);
 
-/* Called by the assembly trampoline with the frame already normalised. */
-void idt64_report(u64 vector, u64 error_code, u64 rip, u64 cs, u64 rflags);
+/* Called by the assembly trampoline with the frame already normalised.  `rsp` is the stack
+ * pointer the handler was entered with -- the CPU's own answer to "which stack did this arrive
+ * on", and the number that makes an IST-equipped gate checkable from the log. */
+void idt64_report(u64 vector, u64 error_code, u64 rip, u64 cs, u64 rflags, u64 rsp);
 
 /* Route one exception vector onto an interrupt stack (IST1..IST7 in the TSS), or take
  * the routing away again.  Returns 0 and changes nothing when the vector is not one of

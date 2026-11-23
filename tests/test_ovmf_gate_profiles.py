@@ -59,6 +59,7 @@ PC5-64-TSS status=ok arm-rules=1 tss=0x1000 gdt=0x129280 limit=47 gdtr=0x129280 
 PC5-64BIT-LONG-MODE-OK
 PC5-64-DONE
 PC5-64-TSS-DF status=ok reason=ok rsp=0x2fd8 rsp-before=0xe1f9c70 ist1=0x3000 resume=0x10245c gate-ist=1 df=0 frame=0x10245c,0x38,0x2,0xe1f9c70,0x30 stack-intact=1 gate-restored=1
+PC5-64-EXCEPTION vector=2 name=non-maskable-interrupt error=none rip=0x101234 cs=0x38 rflags=0x2 rsp=0x3fd8 ist=2
 """
 
 IA32_GOOD_LOG = """\
@@ -103,10 +104,18 @@ FIRMWARE_ONLY_ALLOWANCE = (
 )
 
 
-def run_of(text, stopped_on="PC5-64-DONE"):
+#: What `run_qemu` reports when it asked QEMU for an NMI and QEMU said yes.  The row that reads
+#: it is about the *guest*, so the fixture has to carry the harness half too -- and carrying it as
+#: data rather than assuming it is what lets the tests below say "QEMU refused" without editing the
+#: kernel's log.
+NMI_OK = {"requested": True, "at": "evidence", "reached": True, "accepted": True,
+          "transcript": "greeting | {ok} | {ok}", "exception_lines": 1}
+
+
+def run_of(text, stopped_on="PC5-64-DONE", nmi=NMI_OK):
     return {"serial": text, "raw_serial": text, "seconds": 3.5, "killed": False,
             "stopped_on": stopped_on, "returncode": -9, "command": ["qemu"],
-            "stderr": ""}
+            "nmi": nmi, "stderr": ""}
 
 
 class ClassifyX64(unittest.TestCase):
@@ -203,6 +212,51 @@ class ClassifyX64(unittest.TestCase):
         self.assertEqual(boastful.count("tr=loaded"), 1,
                          "the fixture no longer claims a loaded TR, so this test proves "
                          "nothing about claims")
+
+    def test_the_injected_nmi_row_needs_the_event_and_the_stack(self):
+        """The one row in this gate whose evidence arrives from outside the guest.
+
+        Each edit below keeps something consistent and breaks something else, which is the shape of
+        failure that matters here: the TSS line can be perfect while the exception landed on the
+        wrong stack, and the exception line can be perfect while nobody injected anything.
+        """
+        line = [l for l in X64_GOOD_LOG.splitlines()
+                if l.startswith("PC5-64-EXCEPTION vector=2")][0]
+
+        def row(log=None, nmi=NMI_OK):
+            report = ovmf.Report()
+            ovmf.check_boot(report, run_of(log if log is not None else X64_GOOD_LOG,
+                                           stopped_on=None, nmi=nmi),
+                            "cold", 208896, ovmf.X64, 256)
+            return [c for c in report.checks
+                    if c["name"].endswith("the stack its TSS names for slot 2")][0]
+
+        good = row()
+        self.assertEqual(good["state"], "pass", good["detail"])
+        # An NMI the hypervisor never raised: not the guest's fault, and not evidence either.
+        refused = row(nmi={"requested": True, "at": "evidence", "reached": True,
+                           "accepted": False,
+                           "error": '{"error": {"class": "GenericError"}}'})
+        self.assertEqual(refused["state"], "fail")
+        self.assertIn("QEMU refused the injection", refused["detail"])
+        # Not asked for at all: a row that would pass because nothing contradicted it.
+        self.assertEqual(row(nmi=None)["state"], "fail")
+        # The handler woke up on the kernel's own stack instead of on IST2.
+        self.assertEqual(row(log=X64_GOOD_LOG.replace(line,
+                                                     line.replace("rsp=0x3fd8",
+                                                                  "rsp=0xe1f9c70")))["state"],
+                         "fail", "an NMI that never switched stacks passed the row")
+        # The live gate for vector 2 stopped naming slot 2.
+        self.assertEqual(row(log=X64_GOOD_LOG.replace(line, line.replace("ist=2", "ist=0")))
+                         ["state"], "fail", "an unarmed gate passed the IST2 row")
+        # The event arrived during the boot rather than after the marker: the harness raced
+        # itself, and since the handler halts the machine every other row is suspect too.
+        early = X64_GOOD_LOG.replace(line + "\n", "").replace(
+            "PC5-64-DONE\n", line + "\nPC5-64-DONE\n")
+        self.assertNotEqual(early, X64_GOOD_LOG, "the fixture stopped exercising this case")
+        self.assertEqual(row(log=early)["state"], "fail")
+        # And no exception line at all.
+        self.assertEqual(row(log=X64_GOOD_LOG.replace(line + "\n", ""))["state"], "fail")
 
     def test_the_delivery_probe_is_read_as_the_machine_left_it(self):
         """The row passes on the numbers a real boot printed, and on nothing else.

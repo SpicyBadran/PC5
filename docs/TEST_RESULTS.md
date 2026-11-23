@@ -3288,3 +3288,59 @@ back correctly at the architectural offset.  A `#DF` arriving spontaneously beca
 could not be delivered is also not claimed — the probe invited the fault; a real double fault
 pushes an error code first, which is exactly the layout difference this design refuses to depend
 on.  And no claim here is backed by CI: none is granted, and none is asserted.
+
+
+## 32. An NMI from outside the guest, delivered on the stack the TSS names for slot 2
+
+**Run:** 2026-11-24, workspace on `arena/5e36f38b-pc5`, QEMU 11.0.2 with the EDK II OVMF from the
+same package, TCG only.  **Milestone 8, PR C.**  §31 invited a double fault; the claim still open
+was the one nobody can invite on purpose — that a vector arriving from *outside* also lands on its
+interrupt stack.
+
+**What was built.** `run_qemu(..., inject_nmi=True)` starts QEMU with `-qmp
+unix:<serial>.qmp,server=on,wait=off`, and once the boot has settled it completes the QMP handshake
+(`qmp_capabilities` — QMP refuses everything before it), sends `inject-nmi`, and waits for the
+guest to answer.  Only the 64-bit profile asks: the 32-bit kernel has no TSS, and injecting into it
+would just move a halt earlier.  `idt64_report` gained two fields, `rsp=` (the stack pointer the
+handler woke up on, captured by the trampoline *before* it aligns its own stack) and `ist=` (the
+IST field of the live gate that delivered it), and vector 2 gained its name.
+
+| Cold boot, after `PC5-64-DONE` | |
+| --- | --- |
+| `PC5-64-EXCEPTION vector=2 name=non-maskable-interrupt error=none rip=… cs=0x8 rflags=0x10046 rsp=0x3fc8 ist=2` | the NMI the hypervisor raised |
+| `PC5-64-TSS … ist2=0x4000 ist-df=1 ist-nmi=2 tr=loaded str=0x20 … iomap=104` | the TSS the same boot installed |
+| `rsp=0x3fc8` inside `[0x3000, 0x4000)` | `ist=2` naming the slot that page belongs to |
+
+**The row and its refusals.** `the NMI injected from outside arrived on the IST2 stack` (cold and
+warm, so 2 of the gate's 56 matrix rows).  It refuses, in this order: the harness never asked, QEMU
+refused the command, the guest never reported vector 2, the report arrived *before* the boot marker,
+`rsp` outside the IST2 page, and the gate's `ist` not equal to 2.  The ordering is deliberate — a
+kernel must not be blamed for an event that was never raised, which is why `accepted` is read out of
+QEMU's own reply and stored in the report (`report.data.cold.nmi`) rather than inferred from the
+presence of a log line.  `tests/test_ovmf_gate_profiles.py` drives all six.
+
+**Two things that were wrong in the harness, found by looking at its own output.** The first run
+recorded `exception_lines: 0` in a report whose serial log contained two exception lines.  The count
+had been taken over "the drain buffer from the index where the injection finished", and the guest
+answered *during* the QMP exchange, before that index was captured — so the window was empty and the
+run also waited out its full 20 s for lines it already had.  The field is now computed from the log
+the run produced, and the wait is on the reporter's last word (`PC5-64-EXCEPTION halted`) rather
+than on a first-match heuristic, so a truncated report cannot be mistaken for a delivered NMI.  The
+second was that `name=` read `unnamed` for the one vector this gate injects: a name table built from
+the SDM's *fault* list has no entry for an *interrupt*, and "the reporter does not know what it
+caught" is what a reader would take from it.
+
+| Command | Result |
+| --- | --- |
+| `make PC5_UEFI=64 ovmf-test` | **exit 0, 102 PASS / 0 FAIL / 1 NOT TESTED**, matrix **56 rows** (was 49 before §30; +5 TSS readback rows and the two delivery rows, cold and warm) — every NMI row passes on both boots |
+| `make stubtest64` | **`50/50 checks passed`** — the probe and the NMI are not reachable in the stub, and both absences are checked statements with named causes (§31) |
+| `python3 -m unittest tests.test_ovmf_gate_profiles tests.test_ovmf_harness tests.test_idt64 tests.test_tss64 tests.test_kernel64 tests.test_unicorn_soft_int` | **OK, 199 tests**, no skips with the harness venv on `PATH` |
+
+**Not claimed.** That an NMI arriving *during* the boot, or on a machine with interrupts enabled, or
+while a different stack is in use, behaves the same way: the injection lands after the boot has
+settled, with IF clear and one CPU, which is the environment this kernel actually runs in — and the
+`rsp`/`ist` agreement is about delivery, not about nesting or about the `IRETQ` that a returning NMI
+handler would need (this one halts, deliberately).  No claim is made about hardware: QEMU's TCG is
+not a CPU, and `in-window` agreement between an injected NMI and an invited `#DF` on two different
+emulators of the same architecture (§31 in Unicorn is *not* reachable, and is measured as such) is
+evidence about the ISA, not about a PS5.

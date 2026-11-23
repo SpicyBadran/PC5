@@ -195,6 +195,12 @@ static const char *vector_name(u64 vector)
     switch (vector) {
     case 0:  return "divide-error";
     case 1:  return "debug";
+    /* Only vector 2 is added below the SDM's fault names, and it is here because this kernel
+     * now *invites* that one: the firmware gate injects an NMI and reads this field back, so an
+     * `name=unnamed` on the line the gate quotes would read as "the reporter does not know what
+     * it caught".  Vectors 9, 15 and 20..31 are deliberately left unnamed rather than filled in
+     * from memory -- a name is a claim, and nothing here needs those claims. */
+    case 2:  return "non-maskable-interrupt";
     case 3:  return "breakpoint";
     case 4:  return "overflow";
     case 5:  return "bound-range";
@@ -215,7 +221,7 @@ static const char *vector_name(u64 vector)
     }
 }
 
-void idt64_report(u64 vector, u64 error_code, u64 rip, u64 cs, u64 rflags)
+void idt64_report(u64 vector, u64 error_code, u64 rip, u64 cs, u64 rflags, u64 rsp)
 {
     serial64_write("PC5-64-EXCEPTION vector=");
     serial64_dec(vector);
@@ -234,6 +240,15 @@ void idt64_report(u64 vector, u64 error_code, u64 rip, u64 cs, u64 rflags)
     serial64_hex(cs);
     serial64_write(" rflags=");
     serial64_hex(rflags);
+    /* Where the exception landed, and which IST slot the gate named to get it there.  Printed
+     * together because they are only meaningful together: `ist=0` and a stack pointer in the
+     * kernel's own stack are an ordinary delivery, `ist=2` with a stack pointer inside the page
+     * the TSS advertises for that slot is the whole claim of an interrupt stack, and either of
+     * those numbers alone can be printed by a kernel that did nothing.  The gate reads both. */
+    serial64_write(" rsp=");
+    serial64_hex(rsp);
+    serial64_write(" ist=");
+    serial64_dec(idt64_gate_ist(vector));
     serial64_write("\n");
 
     /* A page fault says which access failed in the error code; decoding it saves
