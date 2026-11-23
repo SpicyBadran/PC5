@@ -3311,8 +3311,9 @@ IST field of the live gate that delivered it), and vector 2 gained its name.
 | `PC5-64-TSS … ist2=0x4000 ist-df=1 ist-nmi=2 tr=loaded str=0x20 … iomap=104` | the TSS the same boot installed |
 | `rsp=0x3fc8` inside `[0x3000, 0x4000)` | `ist=2` naming the slot that page belongs to |
 
-**The row and its refusals.** `the NMI injected from outside arrived on the IST2 stack` (cold and
-warm, so 2 of the gate's 56 matrix rows).  It refuses, in this order: the harness never asked, QEMU
+**The row and its refusals.** `the NMI injected from outside arrived on the IST2 stack` (asked of
+both boots, so two of the report's 103 per-boot check rows; one of the 40 per-stage matrix rows,
+which the gate publishes for the cold boot only — §33).  It refuses, in this order: the harness never asked, QEMU
 refused the command, the guest never reported vector 2, the report arrived *before* the boot marker,
 `rsp` outside the IST2 page, and the gate's `ist` not equal to 2.  The ordering is deliberate — a
 kernel must not be blamed for an event that was never raised, which is why `accepted` is read out of
@@ -3332,7 +3333,7 @@ caught" is what a reader would take from it.
 
 | Command | Result |
 | --- | --- |
-| `make PC5_UEFI=64 ovmf-test` | **exit 0, 102 PASS / 0 FAIL / 1 NOT TESTED**, matrix **56 rows** (was 49 before §30; +5 TSS readback rows and the two delivery rows, cold and warm) — every NMI row passes on both boots |
+| `make PC5_UEFI=64 ovmf-test` | **exit 0, 102 PASS / 0 FAIL / 1 NOT TESTED**, matrix **56 rows** (49 before §30; +5 TSS readback rows, the `#DF` delivery row and the NMI delivery row, all published under the cold boot) — both NMI rows pass, cold and warm, in the report's per-boot list |
 | `make stubtest64` | **`50/50 checks passed`** — the probe and the NMI are not reachable in the stub, and both absences are checked statements with named causes (§31) |
 | `python3 -m unittest tests.test_ovmf_gate_profiles tests.test_ovmf_harness tests.test_idt64 tests.test_tss64 tests.test_kernel64 tests.test_unicorn_soft_int` | **OK, 199 tests**, no skips with the harness venv on `PATH` |
 
@@ -3344,3 +3345,70 @@ handler would need (this one halts, deliberately).  No claim is made about hardw
 not a CPU, and `in-window` agreement between an injected NMI and an invited `#DF` on two different
 emulators of the same architecture (§31 in Unicorn is *not* reachable, and is measured as such) is
 evidence about the ISA, not about a PS5.
+
+## 33. The evidence page for §30–§32, and the three numbers on it that were wrong
+
+**Run:** 2026-11-24, same tree as §32 (`50ebe7d`) plus documentation.  **Milestone 8, PR D.**  §30,
+§31 and §32 each ended with a claim about a boot; none of them could be re-checked by a reader, which
+is the job of `docs/evidence/2026-11-24-tss-delivery/`.  The citation had existed since §31 — in the
+sentence in `kernel64/tss64.h` that tells a reader where the delivery was measured — pointing at a
+directory that then held one script and no artifacts.
+
+**What the page holds.** The two 64-bit serial logs, both reports, both matrices, the stub gate's
+report, the Unicorn refusal capture and the command record; plus `verification.sh`, which
+re-derives the page's own claims from those files:
+
+```
+$ bash docs/evidence/2026-11-24-tss-delivery/verification.sh
+…
+OK (114 checks re-derived from 16 files in this directory)
+```
+
+The script was then pointed at a scratch copy with one field of the serial logs edited — the NMI's
+`rsp=0x3fc8` rewritten to `0x2fd8`, the `#DF`'s address, which is a number from the same log and so
+the least suspicious value available.  It exited 1 with seven failures, six of them the claim itself
+on both boots, and one of them the gate's parse disagreeing with the text it had just been edited in.
+A page that could not fail would not have been worth writing.
+
+It is not a summary of the logs.  It recomputes the windows — `0x2fd8 ∈ [0x2000, 0x3000)` for the
+invited `#DF` and `0x3fc8 ∈ [0x3000, 0x4000)` for the injected NMI, from `ist1`/`ist2` in the TSS
+line rather than from the gate's parse of them — asserts the two pages are *different*, re-derives
+the descriptor limit and the GDT bound from `sgdt`'s readback, and compares the gate's parsed values
+(`probe_rsp`, `ist2_top`, `nmi_rsp`, `nmi_ist`, `tr_selector`, `tr_busy`) against values computed
+from the raw text, so a gate that parses its own log wrongly fails the page even when it reports
+`PASS`.  The absences are checked the same way: `tr=loaded` present in the stub serial, the probe
+verdict and every `PC5-64-EXCEPTION` absent from it, and the single `cd 08` in the shipped image
+agreeing with the address Unicorn blamed.
+
+**Three numbers I got wrong while writing it, and what each one means.**
+
+| Wrong | How | The actual fact |
+| --- | --- | --- |
+| "the serial logs of the 64-bit boot", copied from `build/ovmf-serial/` | the copy was byte-identical to the 32-bit log; `grep` for `PC5-64-TSS status` returned nothing and the two files were the same length, which is what made it look plausible rather than alarming | the gate writes its serials to `$(BUILD)/ovmf-serial` for whichever profile it is running, so the 32-bit run that followed overwrote the 64-bit evidence.  The rerun went to `BUILD=/tmp/m8iso` and the page now files both profiles, with a check that the 32-bit log contains no `PC5-64-` marker |
+| "14 of the 56 matrix rows are the delivery rows, seven per boot" | counted from the report's `checks` list and then written as if it described the matrix | the matrix is keyed by *requirement*: 40 cold rows, **one** warm row repeating them, ten negative runs, five rows owned by other gates.  Seven of the 40 are the delivery rows; the warm boot's seven live in `checks`.  §32's closing table said the same thing wrongly and is corrected above |
+| "`report.data.cold.nmi.exception_lines` should read 2" | asserted from the fix, not from a run | §32's boot happened *before* the drain-window fix, so that run's report legitimately says `0`.  Only the rerun behind this page has the `2` — which is why `make PC5_UEFI=64 ovmf-test` was run again here rather than the earlier log being quoted |
+
+**One hazard found while naming the `cs=` field.** The kernel runs with a `CS` its own GDT does not
+describe until the first exception delivery replaces it: the frame the `#DF` probe examined saves
+`cs=0x38` (the loader's table, 48 bytes now installed, no slot 7), while the NMI's frame — taken
+*after* that `iretq` — saves `cs=0x8`.  Legal in 64-bit mode, where CS base and limit are ignored,
+and not what an exception handler should be relied on to fix by accident.  Recorded in
+`docs/KNOWN_LIMITATIONS.md` with both halves of the measurement; the fix is a far jump through the
+new table at the end of `pc5_tss64_install()`, which is a change to the handover's control flow and
+is deliberately not smuggled into the TSS work.
+
+**Gates, on the tree this page describes.**
+
+| Command | Result |
+| --- | --- |
+| `make check` | **`make check: suite and all gates passed`** — 1143 unit tests in 581 s, then `psm`, docs, citations, presentation, brand |
+| `make citations-check` | **`CITATIONS OK: 263 commit reference(s) resolve across 11 documents`** — this passed only once the directory §31 cited actually existed with artifacts in it |
+| `python3 tools/docs_check.py` | **DOCS OK: 82 Markdown files**, 38 make targets, links, anchors and commands resolve |
+| `make PC5_UEFI=64 ovmf-test` (rerun, `BUILD=/tmp/m8iso`) | exit 0 · 102 PASS / 0 FAIL / 1 NOT TESTED · both NMI rows pass with `name=non-maskable-interrupt` and `exception_lines=2` |
+| `make ovmf-test` (32-bit) | exit 0 · 63 PASS / 0 FAIL / 1 NOT TESTED, 35 matrix rows — the other path is unchanged, and filed as evidence of that rather than asserted |
+
+**Not claimed.** The page is a re-derivation from artifacts, not an independent measurement: if the
+logs themselves were fabricated, `verification.sh` would happily verify the fabrication — its
+cross-checks are between the gate's parse and the kernel's text, which is two sources rather than
+two *independent* tools.  Nothing about hardware, Secure Boot, NMI nesting, `IRETQ`, or CI is
+claimed here or anywhere in §30–§33.

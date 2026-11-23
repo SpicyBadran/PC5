@@ -1,0 +1,134 @@
+python3 tools/mkefiimg.py --size-kb 1440 \
+  --file /tmp/m8iso/uefi64/BOOTX64.EFI=EFI/BOOT/BOOTX64.EFI \
+  --file /tmp/m8iso/kernel64/KERNEL64.BIN=KERNEL64.BIN \
+  --file docs/ISO_README.txt=README.TXT \
+  --output /tmp/m8iso/efi64-release.img --info /tmp/m8iso/efi64-release-info.json
+pc5: the ISO's build record now names mode=64 commit=50ebe7d83460d1c038a75efbbf4f248d4416d353
+pc5: wrote /tmp/m8iso/efi64-release.img (FAT12, 1474560 bytes, 442/2847 clusters used)
+pc5: sha256 bf158dc8f55605d347776620eae840d3c252e5e72cefe900ff66a3222ffc4d3d
+RELEASE ESP (64-bit): 1474560 bytes sha256=bf158dc8f55605d347776620eae840d3c252e5e72cefe900ff66a3222ffc4d3d
+python3 tools/mkiso.py \
+  --volume-id PC5 \
+  --boot-image /tmp/m8iso/loader.bin \
+  --mbr-code /tmp/m8iso/mbr.bin \
+  --desc-offset 0xE00 \
+  --uefi-image /tmp/m8iso/efi64-release.img \
+  --file KERNEL.BIN=/tmp/m8iso/kernel.bin \
+  --file KERNEL64.BIN=/tmp/m8iso/kernel64/KERNEL64.BIN \
+  --file README.TXT=/tmp/m8iso/iso/README.TXT \
+  --file BUILDINFO.TXT=/tmp/m8iso/iso/BUILDINFO.TXT \
+  --output /tmp/m8iso/pc5.iso \
+  --info /tmp/m8iso/build-info.json
+pc5: wrote /tmp/m8iso/pc5.iso (1810432 bytes, 884 sectors)
+pc5: sha256 4acec3249d87ed19d6874e2a988f9b86248133bdc4697c51fc836bbb1ebc00e6
+python3 tests/ovmf_boot.py --iso /tmp/m8iso/pc5.iso --efi-image /tmp/m8iso/efi64-release.img \
+  --kernel /tmp/m8iso/kernel64/KERNEL64.BIN --json-out /tmp/m8iso/ovmf-report.json \
+  --matrix-out /tmp/m8iso/ovmf-matrix.json \
+  --serial-dir /tmp/m8iso/ovmf-serial 
+[PASS] the boot profile can be read from the medium
+[PASS] the ISO matches the boot profile it was graded with
+[PASS] the ISO's build record names the medium it describes
+[PASS] [cold] genuine firmware produced a boot manager log
+[PASS] [cold] the machine booted UEFI, not SeaBIOS
+[PASS] [cold] firmware started the El Torito UEFI image
+[PASS] [cold] the machine was stopped on evidence, not on the clock
+[PASS] [cold] the PC5 UEFI loader executed under it
+[PASS] [cold] the loader identified EDK II as its firmware
+[PASS] [cold] the kernel was found on the volume we booted from
+[PASS] [cold] the kernel image was read through the file protocol
+[PASS] [cold] the loader read the kernel file at its real size
+[PASS] [cold] the kernel image declared its own length and it matched
+[PASS] [cold] the loader validated the kernel image's header before jumping
+[PASS] [cold] the jump went to the load address plus the declared entry offset
+[PASS] [cold] a memory map was handed over
+[PASS] [cold] the kernel's own map agrees with the loader's count
+[PASS] [cold] the load window was checked against that map (E15 guard)
+[PASS] [cold] firmware watchdog was disabled while services were callable
+[PASS] [cold] boot services were exited exactly once
+[PASS] [cold] ExitBootServices reported its retry count
+[PASS] [cold] the kernel copy was read back at the handover address
+[PASS] [cold] the handover carried exactly the kernel file
+[PASS] [cold] the kernel accepted the boot contract
+[PASS] [cold] the kernel reached its entry point
+[PASS] [cold] the kernel reached PC5-64BIT-LONG-MODE-OK and PC5-64-DONE
+[PASS] [cold] no loader failure code was reported
+[PASS] [cold] the page-table root the kernel runs on is the one the loader built
+[PASS] [cold] the loader and the kernel agree on the page-table size
+[PASS] [cold] the kernel reported paging enabled in long mode
+[PASS] [cold] the IDT was installed before anything could fault
+[PASS] [cold] the frame allocator was built from the firmware map
+[PASS] [cold] the allocator's free count is its conventional total less what was claimed
+[PASS] [cold] the allocator's own self-test passed after handover
+[PASS] [cold] the kernel read real CPU state in long mode
+[PASS] [cold] the TSS line reports its own state, and does not over-claim TR
+[PASS] [cold] LTR executed, and STR returned the selector the kernel built
+[PASS] [cold] the descriptor read through GDTR names the TSS frame, with a 103-byte limit
+[PASS] [cold] the descriptor type went available -> busy across the instruction
+[PASS] [cold] the double-fault gate names IST1 and the NMI gate names IST2
+[PASS] [cold] the I/O-map base sits past the descriptor limit, as the TSS was written
+[PASS] [cold] the double-fault probe found its frame on the interrupt stack, not the faulting one
+[PASS] [cold] QEMU's inject-nmi was taken by the guest on the stack its TSS names for slot 2
+[PASS] [cold] a fresh variable store was used and written by firmware
+[PASS] [warm] genuine firmware produced a boot manager log
+[PASS] [warm] the machine booted UEFI, not SeaBIOS
+[PASS] [warm] firmware started the El Torito UEFI image
+[PASS] [warm] the machine was stopped on evidence, not on the clock
+[PASS] [warm] the PC5 UEFI loader executed under it
+[PASS] [warm] the loader identified EDK II as its firmware
+[PASS] [warm] the kernel was found on the volume we booted from
+[PASS] [warm] the kernel image was read through the file protocol
+[PASS] [warm] the loader read the kernel file at its real size
+[PASS] [warm] the kernel image declared its own length and it matched
+[PASS] [warm] the loader validated the kernel image's header before jumping
+[PASS] [warm] the jump went to the load address plus the declared entry offset
+[PASS] [warm] a memory map was handed over
+[PASS] [warm] the kernel's own map agrees with the loader's count
+[PASS] [warm] the load window was checked against that map (E15 guard)
+[PASS] [warm] firmware watchdog was disabled while services were callable
+[PASS] [warm] boot services were exited exactly once
+[PASS] [warm] ExitBootServices reported its retry count
+[PASS] [warm] the kernel copy was read back at the handover address
+[PASS] [warm] the handover carried exactly the kernel file
+[PASS] [warm] the kernel accepted the boot contract
+[PASS] [warm] the kernel reached its entry point
+[PASS] [warm] the kernel reached PC5-64BIT-LONG-MODE-OK and PC5-64-DONE
+[PASS] [warm] no loader failure code was reported
+[PASS] [warm] the page-table root the kernel runs on is the one the loader built
+[PASS] [warm] the loader and the kernel agree on the page-table size
+[PASS] [warm] the kernel reported paging enabled in long mode
+[PASS] [warm] the IDT was installed before anything could fault
+[PASS] [warm] the frame allocator was built from the firmware map
+[PASS] [warm] the allocator's free count is its conventional total less what was claimed
+[PASS] [warm] the allocator's own self-test passed after handover
+[PASS] [warm] the kernel read real CPU state in long mode
+[PASS] [warm] the TSS line reports its own state, and does not over-claim TR
+[PASS] [warm] LTR executed, and STR returned the selector the kernel built
+[PASS] [warm] the descriptor read through GDTR names the TSS frame, with a 103-byte limit
+[PASS] [warm] the descriptor type went available -> busy across the instruction
+[PASS] [warm] the double-fault gate names IST1 and the NMI gate names IST2
+[PASS] [warm] the I/O-map base sits past the descriptor limit, as the TSS was written
+[PASS] [warm] the double-fault probe found its frame on the interrupt stack, not the faulting one
+[PASS] [warm] QEMU's inject-nmi was taken by the guest on the stack its TSS names for slot 2
+[PASS] [warm] the warm boot proved the same stages as the cold boot
+[PASS] the second boot reused the variable store firmware had written
+[N/A ] disk-style UEFI boot (ESP attached as a block device)  (the ISO carries its ESP as an El Torito image inside ISO9660, so there is no ESP partition to attach)
+[PASS] the gate's kernel-header claims match the kernel image on the medium
+[PASS] firmware refuses an ESP without BOOTX64.EFI (firmware fault)
+[PASS] firmware rejects a boot image with a broken PE32+ header (firmware fault)
+[PASS] loader reports the missing KERNEL64.BIN as kernel-not-found when no volume has it (bootloader fault)
+[PASS] loader refuses a kernel with a corrupted header (bootloader fault) as kimage64-magic
+[PASS] loader refuses a KERNEL64.BIN whose arch is wrong as kimage64-arch (bootloader fault)
+[PASS] loader refuses a KERNEL64.BIN whose image-size is wrong as kimage64-image-size (bootloader fault)
+[PASS] loader refuses a KERNEL64.BIN whose checksum is wrong as kimage64-checksum (bootloader fault)
+[PASS] firmware refuses a truncated ISO (firmware fault)
+[PASS] a boot that outlives its deadline is reported as a timeout, not as a pass
+[PASS] a small machine stops with a diagnostic or boots with its own memory
+[PASS] the ISO does not embed the firmware volume
+[PASS] no firmware image is carried in the repository
+[PASS] the ESP is not a firmware image
+[PASS] the ESP contains no firmware volume signature
+[PASS] the ISO embeds the release ESP the build produced
+
+PC5-OVMF-BOOT-OK: real OVMF firmware booted the PC5 kernel.
+1 path(s) NOT TESTED (see the N/A lines): they are neither passed nor failed.
+report: ../../../tmp/m8iso/ovmf-report.json

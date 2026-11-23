@@ -663,6 +663,13 @@ static void report_tss(void)
  * otherwise: this returns because the fault was invited and its stack was known good, which is
  * precisely the situation a handler must never assume on its own.
  *
+ * It restores RSP and RFLAGS and pointedly not CS: an interrupt gate has already loaded CS from
+ * the gate's selector (`0x08`, the kernel's own code segment), and the value it replaced -- `0x38`,
+ * left by the loader's GDT and not described by the 48-byte table now installed -- is the one thing
+ * here that is *better* after the trap than before it.  Restoring the caller's CS would be the
+ * faithful thing for a general handler and the wrong thing for this one, so the choice is written
+ * down rather than inherited.  See the `CS` entry in `docs/KNOWN_LIMITATIONS.md`.
+ *
  * It runs only when TR was loaded, because an IST field on a gate is read out of *whatever TSS
  * TR names*: with TR pointing elsewhere, this would either deliver onto a stranger's stack or
  * fault while handling a fault, and both of those look like a passing test in the log. */

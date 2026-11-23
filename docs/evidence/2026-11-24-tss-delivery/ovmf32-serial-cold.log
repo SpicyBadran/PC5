@@ -1,0 +1,78 @@
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01HBdsDxe: loading Boot0001 "UEFI QEMU DVD-ROM QM00005 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)
+BdsDxe: starting Boot0001 "UEFI QEMU DVD-ROM QM00005 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)
+
+PC5 UEFI LOADER uefi-0.2.0
+
+PC5 UEFI loader uefi-0.2.0
+
+PC5 UEFI loader uefi-0.2.0
+PC5-UEFI: firmware_started
+PC5-UEFI: firmware_started
+PC5-UEFI: serial_probe=16550
+PC5-UEFI: serial_probe=16550
+PC5-UEFI: firmware=EDK II
+PC5-UEFI: firmware=EDK II
+PC5-UEFI: firmware_revision=65536
+PC5-UEFI: firmware_revision=65536
+PC5-UEFI: display_width=1280
+PC5-UEFI: display_width=1280
+PC5-UEFI: display_height=800
+PC5-UEFI: display_height=800
+PC5-UEFI: display_pitch=5120
+PC5-UEFI: display_pitch=5120
+PC5-UEFI: display_pixel_format=1
+PC5-UEFI: display_pixel_format=1
+PC5-UEFI: image_device=acpi
+PC5-UEFI: image_device=acpi
+PC5-UEFI: kernel_volume=image
+PC5-UEFI: kernel_volume=image
+PC5-UEFI: kernel_volume_opened
+PC5-UEFI: kernel_volume_opened
+PC5-UEFI: medium_readme_bytes=1273
+PC5-UEFI: medium_readme_bytes=1273
+PC5-UEFI: kernel_bytes_read=67068
+PC5-UEFI: kernel_bytes_read=67068
+PC5-UEFI: kernel_protocol_version=1
+PC5-UEFI: kernel_protocol_version=1
+PC5-UEFI: watchdog_disabled
+PC5-UEFI: watchdog_disabled
+PC5-UEFI: boot_services_exited
+PC5-UEFI: memory_map_entries=20
+PC5-UEFI: ExitBootServices_retries=0
+PC5-UEFI: handover_window_checked=1
+PC5-UEFI: memory_conventional_mib=210
+PC5-UEFI: kernel_handoff_verified=1
+PC5-UEFI: handoff_bytes=67068
+PC5-UEFI: kernel_loaded_at=0x00010000
+PC5-UEFI: entering 32-bit kernel
+
+PC5 KERNEL 0.2.0 (build 1fdb24e-dirty, 2026-11-23T02:19:35Z)
+PC5-LOG kernel_entry eip=0x10000
+PC5-LOG version=0.2.0 build=1fdb24e-dirty date=2026-11-23T02:19:35Z
+PC5-LOG protocol=1 magic=ok
+PC5-LOG display=framebuffer 1280x800 pitch=5120 font=none
+PC5-LOG cpu=AuthenticAMD family=15 model=107 logical=0 long=1 avx=0
+PC5-LOG cpu_brand=QEMU Virtual CPU version 2.5+
+PC5-LOG memory_mib=254 entries=20 top_mib=4096
+PC5-LOG pci=0 display=0 network=0 storage=0 audio=0 usb=0
+PC5-LOG gpu=none
+PC5-LOG net=none
+PC5-LOG smbios=absent version=0.0 system=  bios=
+PC5-LOG acpi=absent revision=0 tables=0
+PC5-LOG medium_volume= sectors=0 kernel_lba=0 pvd=unreadable
+PC5-LOG firmware supplied=no note=no firmware image or manifest in this build
+PC5-LOG input keyboard=8042-ok
+PC5-LOG storage drives=0 selected=-1 atapi=0 model=none
+PC5-LOG storage_mounted=no error=1
+PC5-LOG partitions device=0 scheme=none count=0 status=ok capacity=0
+PC5-LOG fat32 status=ok reason=no-mounted-fat32-volume
+PC5-LOG chain_blocked_at=4 stage=Storage stack for game installation
+PC5-LOG chain_blocked_evidence=boot medium read by firmware INT13h; kernel block layer could not mount the volume on this host
+PC5-LOG genuine_ps5_execution=no
+PC5 boot environment 0.2.0
+booting: display framebuffer, 254 MiB RAM, 0 PCI devices
+chain: genuine PS5 system software is not executing (see Status page)
+PC5-BOOT-OK
+PC5-BOOT-OK
+PC5 BOOT ENVIRONMENT  0.2.0   build 1fdb24e-dirty   no-volume-id 1 Status  2 Hardware  3 Firmware  4 Diagnostics  5 Log  6 Power  CHAIN: BLOCKED at stage 4/13 (Storage stack for game installation) - genuine PS5 software is not running arrows/1-6:pages  q=console   up 0s  fb 1280x8001 StatusPS5 COMPATIBILITY CHAIN  (each stage needs evidence measured on this machine) >  1. PC5 boot environment executing        OK    2. Host hardware inventoried             PARTIAL    3. Controller / input path               PARTIAL    4. Storage stack for game installation   BLOCKED    5. PS5 firmware image supplied           BLOCKED    6. Firmware format analysed              BLOCKED    7. Firmware loading pathway implemented  BLOCKED    8. Firmware initialisation attempted     NOT-STARTED    9. Firmware executing                    NOT-STARTED   10. PS5 system services operating         NOT-STARTED   11. Genuine PS5 home screen               NOT-STARTED   12. PS5 game installation                 NOT-STARTED   13. PS5 game execution                    NOT-STARTED evidence for the selected stage:kernel 0.2.0 running in 32-bit protected mode on AuthenticAMD
+pc5> 

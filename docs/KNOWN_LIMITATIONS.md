@@ -141,6 +141,18 @@ work that has secretly been done.
 Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
 §16). What that does **not** cover:
 
+* **The 64-bit kernel's `CS` is not a descriptor in its own GDT, until the first exception fixes
+  it.** `pc5_tss64_install()` loads a 48-byte GDT whose code segment is selector `0x08`, but loads
+  no new `CS`, so the selector the loader jumped in with (`0x38`, from the loader's table) stays
+  installed while the kernel runs — a value the live table does not describe. In 64-bit mode a CPU
+  ignores CS's base and limits, so nothing faults, and any exception delivery *corrects* it: an
+  interrupt gate loads CS from the gate's own selector, which is `0x08`. Both halves are visible in
+  `docs/evidence/2026-11-24-tss-delivery/ovmf64-serial-cold.log`, where a frame pushed before the
+  first delivery saves `cs=0x38` and the injected NMI's frame, taken after, saves `cs=0x8`. It is a
+  hazard rather than a fault — a task switch, a `RET-to-FAR`, or a CPU that validates the cached
+  selector would object — and fixing it means a far jump through the new table at the end of the
+  install, which is a change to the handover's control flow. Deliberately not attempted as a side
+  effect of the TSS work.
 * **Physical hardware.** No PC and no PS5 has booted this ISO through UEFI. OVMF
   is firmware, but it is firmware in an emulator; vendor firmware (AMI, Insyde,
   Phoenix, Apple) is untested and its quirks are unknown.
