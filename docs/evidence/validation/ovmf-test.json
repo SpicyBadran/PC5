@@ -1,16 +1,16 @@
 {
-  "code_revision": "a9b383ddf9419e4e97379b6767fe9098206fae54",
+  "code_revision": "86b862fc9cf27e3b28749c372c6e8f54583b2bd4",
   "command": "make ovmf-test",
-  "commit": "a9b383ddf9419e4e97379b6767fe9098206fae54",
-  "date": "2026-11-16",
+  "commit": "86b862fc9cf27e3b28749c372c6e8f54583b2bd4",
+  "date": "2026-11-23",
   "dirty": false,
-  "exit_code": 2,
+  "exit_code": 0,
   "gate": "ovmf-test",
   "level": "real firmware execution",
   "notes": "genuine TianoCore OVMF, if this machine has it",
-  "result": "not-tested",
+  "result": "passed",
   "schema": "pc5.validation/1",
   "source_date_epoch": 1763251200,
-  "summary": "NOT TESTED: genuine OVMF firmware and/or QEMU is not available on this machine.",
+  "summary": "",
   "tool": "tools/validation.py"
 }

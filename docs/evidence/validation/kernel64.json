@@ -1,8 +1,8 @@
 {
-  "code_revision": "a9b383ddf9419e4e97379b6767fe9098206fae54",
+  "code_revision": "86b862fc9cf27e3b28749c372c6e8f54583b2bd4",
   "command": "make kernel64",
-  "commit": "a9b383ddf9419e4e97379b6767fe9098206fae54",
-  "date": "2026-11-16",
+  "commit": "86b862fc9cf27e3b28749c372c6e8f54583b2bd4",
+  "date": "2026-11-23",
   "dirty": false,
   "exit_code": 0,
   "gate": "kernel64",

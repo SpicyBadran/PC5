@@ -1,16 +1,16 @@
 {
-  "code_revision": "19701cf303582c1a958541cce767c755297ee07d",
+  "code_revision": "86b862fc9cf27e3b28749c372c6e8f54583b2bd4",
   "command": "make boot-test",
-  "commit": "19701cf303582c1a958541cce767c755297ee07d",
-  "date": "2026-11-20",
+  "commit": "86b862fc9cf27e3b28749c372c6e8f54583b2bd4",
+  "date": "2026-11-23",
   "dirty": false,
-  "exit_code": 0,
+  "exit_code": 2,
   "gate": "boot-test",
   "level": "emulator execution",
   "notes": "PC5's own boot path under the v86 emulator",
-  "result": "passed",
+  "result": "skipped",
   "schema": "pc5.validation/1",
   "source_date_epoch": 1763251200,
-  "summary": "PASSED: boot evidence written to /home/user/pc5/build/test/boot-evidence.json",
+  "summary": "SKIP: node or the v86 emulator assets are not available",
   "tool": "tools/validation.py"
 }
