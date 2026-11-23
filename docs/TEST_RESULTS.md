@@ -3679,3 +3679,44 @@ here, no update slot, no rollback.  The PR title was changed to carry both the p
 the roadmap ids it advances, so the merge-time record matches the roadmap; the rule going forward is
 that a claim which could be read as a gating statement cites the **roadmap id**, and the delivery
 ordinal is treated as a filing number.
+
+
+## 37. CI activation was attempted, refused, and the pipeline was fixed before it was offered
+
+The merge gate for #49 ended with the owner choosing CI activation *before* the merge.  That choice
+was executed as far as this environment is able to take it, and the boundary is a hard one: the
+GitHub App whose token signs these pushes is not granted the **Workflows** permission, so GitHub
+refuses any commit that creates a file under `.github/workflows/`.  Two pushes of the pure rename
+were refused, twenty seconds apart, both quoting the sentence `ci/README.md` already records from
+three earlier attempts.  No workflow has ever been read by GitHub for this repository —
+`actions/workflows` reports `total_count: 0` — and the setting itself is not readable with this
+token (`actions/permissions` → `403 Resource not accessible by integration`), so the grant cannot be
+observed here, only tested by pushing.  Nothing was attempted that would side-step that check.
+
+**What landed instead is the part that was always in reach.**  Reading `ci/build.yml` against this
+milestone's own findings turned up five defects, and all five were fixed in place — `8c14d39`,
+`84e6325` — because a pipeline that cannot fail is worse than no pipeline, and the first run GitHub
+ever produces should not be a run of a broken one:
+
+| # | Defect | Effect if left |
+| --- | --- | --- |
+| 1 | The *unspecified* default shell on GitHub's Linux runners is `bash -e {0}` — no `pipefail` — while every gate is written `make <gate> \| tee log` | **every gate in the pipeline could fail and the job would report success** |
+| 2 | The harness venv was provisioned *after* the host test suite ran | `unicorn` missing ⇒ `tests/test_kernel64.py` skips 64 of its own cases under an `OK` (§35 measured exactly this) |
+| 3 | `docs-check`, `presentation-check`, `citation-refs`, `citations-check` had no CI step | CI strictly weaker than the local `make check`; a document contradicting the code would not be caught |
+| 4 | The `ovmf` job teed into `build/` before `build/` existed on a fresh checkout, and left checkout credentials behind | a confusing first-step failure, and a token in `.git/config` where the other two jobs keep none |
+| 5 | The firmware job reported nothing about its own verdict | a reviewer could not tell a measured PASS from an absent one without opening the artifact |
+
+Fix 1 is `defaults.run.shell: bash`, which brings `--noprofile --norc -eo pipefail`.  Fix 5 counts
+the harness's own `[PASS]`/`[FAIL]` log markers rather than re-deriving a tally from the report JSON,
+because `report["checks"]` (103 entries in the recorded run) and the requirement matrix (57 rows) are
+different counts — conflating them is how 104 became 105 once already, in §33.  The deliberate
+non-fix is the one that matters most: `tests/ovmf_boot.py` exiting 3 (NOT TESTED) still **fails** the
+`ovmf` job, so a runner without firmware is a red build rather than a green one.
+
+**What this section therefore does not claim.**  There is no CI run to report: no run URL, no
+successful build, no "required checks green".  The evidence for #49 remains the locally measured one —
+`Ran 1154 tests in 564.023s`, exit 0, `skipped=1`, at head `97b7066` — and `mergeable: CLEAN` on
+GitHub continues to mean only *no conflict*, with `statusCheckRollup: []` and `reviews: 0`.  The
+roadmap entry for M1b stays `blocked` with its blocker intact, and the living documents still point
+at `ci/build.yml`, because moving them to `.github/workflows/build.yml` would describe a location the
+repository does not have; that edit is a minute of work on the other side of the permission grant.

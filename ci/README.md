@@ -142,6 +142,25 @@ repository, then re-run the activation:
 No shell command available in this environment can grant that permission; it is
 an installation-level authorization held by the repository owner.
 
+The fourth and fifth attempts (2026-11-24) re-confirmed that from three directions, which is the
+only new information the attempts produced:
+
+| Probe | Result |
+|---|---|
+| `git push` of a commit whose diff is a pure rename (`0 insertions, 0 deletions`) | `remote rejected`, twice, quoting the same sentence |
+| `gh api repos/SpicyBadran/PC5/actions/workflows` | `total_count: 0` — GitHub has read no workflow in this repository, ever |
+| `gh api repos/SpicyBadran/PC5/actions/permissions` | `403 Resource not accessible by integration` — the setting is not readable with this token, so the grant cannot even be *observed* from here, only tested by pushing |
+
+Nothing was attempted that would side-step the check: no Git Data API, no contents API, no scratch
+repository, no alternate credentials, no commit that hides the file under a different path.  The
+local commit was reverted (`git reset --mixed HEAD~1`, `ci/build.yml` restored, `.github/workflows/`
+removed) and the tree verified clean against `84e6325`.
+
+What is different after these attempts is not the location of the pipeline — it is that the pipeline
+is now *worth running*: the five corrections in the section below this one were made first, precisely
+so that the first run GitHub produces is not a run in which every `make <gate> | tee` step could
+report success after its gate failed.
+
 ## Attempts, dated
 
 The instructions above have been carried out and refused three times. Recording the
@@ -153,6 +172,7 @@ because of a permission, not because it was forgotten" checkable later.
 | 2026-11-16 | `main` `237725d` | `git mv ci/build.yml .github/workflows/build.yml && git push` | `remote rejected … without workflows permission` |
 | 2026-11-16 | `main` `a266936` | same | same |
 | 2026-11-22 | `arena/b81a0441-pc5` off `aeca706e` | same, after `mkdir -p .github/workflows` (`git mv` does not create the parent) | `! [remote rejected] HEAD -> arena/b81a0441-pc5 (refusing to allow a GitHub App to create or update workflow `.github/workflows/build.yml` without workflows permission)` |
+| 2026-11-24 | `arena/5e36f38b-pc5` off `84e6325`, PR #49's merge gate | same, after the five corrections above had landed so the first run would not be a run of a pipeline that cannot fail | refused, twice, 20 s apart, quoting the sentence verbatim (see the two 2026-11-13 blocks above for the same text) |
 
 The third attempt was reverted (`git reset --mixed HEAD~1`, `ci/build.yml` restored, the
 new directory removed) and the tree was verified clean against `aeca706e` afterwards; the
