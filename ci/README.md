@@ -164,3 +164,36 @@ missing from it: `make stubtest64`, so the long-mode boot is executed, and
 `make emulator-probe --json`, so the run carries its own record of what the emulator could
 not prove.  `tests/test_release.py::CiLayoutTests` pins both, because a step that is
 merely intended is a step that will be dropped.
+
+### 2026-11-24, corrections made while the file is still editable
+
+Five defects were found by reading the pipeline against what the repository has learned since it
+was written.  All five are in `ci/build.yml` now, before any activation, because a pipeline that
+cannot fail is worse than no pipeline:
+
+1. **`make <gate> | tee build/logs/<gate>.log` could not fail the job.**  GitHub's *unspecified*
+   default shell on Linux runners is `bash -e {0}` — no `pipefail` — so the successful `tee` at the
+   end of every pipe would have reported green after the gate failed.  The workflow now names
+   `shell: bash`, which brings `--noprofile --norc -eo pipefail`.  This is the same failure mode
+   §35 of `docs/TEST_RESULTS.md` measured in a test harness: a wrapper that certifies what it did
+   not execute.
+2. **The harness venv was installed after the host suite ran.**  A missing `unicorn` makes
+   `tests/test_kernel64.py` *skip*, and a skip never fails a step — measured locally, the module
+   printed `OK` after skipping 64 of its own cases.  Provisioning moved above the suite, the suite
+   re-asserts the import, and every skip reason is written to the job summary: visible, never
+   folded into a pass.
+3. **The documents had no gate.**  `make docs-check`, `make presentation-check`,
+   `make citation-refs` and `make citations-check` run now, so CI cannot be weaker than the local
+   `make check`, and a dead citation is reported as what the tool already calls it — first a
+   statement about the clone, then about the history.
+4. **The firmware job teed into `build/` before `build/` existed**, on a fresh checkout, and left
+   checkout credentials behind where the other two jobs do not.
+5. **The firmware job now states its own verdict in the run**, counting the harness's `[PASS]` and
+   `[FAIL]` log markers and quoting its `NOT TESTED` line.  It counts the *log* rather than
+   re-deriving a tally from the JSON, because `report["checks"]` (103 entries in the recorded run)
+   and the requirement matrix (57 rows) are different counts, and conflating them is how 104 once
+   became 105.
+
+The exit-code contract is unchanged and deliberately *not* fixed: `tests/ovmf_boot.py` exiting 3
+(NOT TESTED) still fails the `ovmf` job, so a runner without firmware is a red build, not a green
+one.  Activation is still the owner-side grant below.
