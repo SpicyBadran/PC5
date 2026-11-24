@@ -199,6 +199,28 @@ is now *worth running*: the five corrections in the section below this one were 
 so that the first run GitHub produces is not a run in which every `make <gate> | tee` step could
 report success after its gate failed.
 
+## Reading a failed run
+
+The raw Actions log and every uploaded artifact are served from hosts outside this
+repository (`results-receiver.actions.githubusercontent.com`, then a blob store), and a
+sandboxed environment may be able to reach none of them: `gh run view --log`, `--log-failed`
+and `gh run download` all fail at the TLS layer, and `actions/runs/<id>/logs` only ever hands
+back those same redirects.  What *is* reachable with a plain repository token is:
+
+```sh
+gh api "repos/SpicyBadran/PC5/actions/runs/<run>" --jq '.jobs'      # which step, by name
+gh api "repos/SpicyBadran/PC5/check-runs/<job_id>/annotations" \
+   --jq '.[] | "\(.annotation_level) \(.message)"'                  # and what it said
+```
+
+so each failing job ends with `python3 tools/ci_report.py`, a step guarded by `if:
+failure()` that re-reads the gate logs and repeats their failure blocks as annotations and in
+the job summary.  The script always exits 0 — its first version did not, because a `grep` that
+matched nothing became a second red step while the real verdict stayed unread — and it quotes
+a *failed* verdict only, never a green gate's `OK`, so the report cannot point a reviewer at
+the wrong step.  `tests/test_ci_report.py` pins those properties, and one of them is a
+one-line assertion: a log line that looks like `::error::` must not become a command.
+
 ## Attempts, dated
 
 The instructions above were carried out and refused four times across five attempts, then

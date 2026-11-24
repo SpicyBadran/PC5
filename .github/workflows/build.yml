@@ -279,37 +279,24 @@ jobs:
       # endpoints that are reachable, so a failed gate quotes itself.  `if: failure()` means this runs
       # only when something already broke: it can neither turn a red job green nor add a step to a
       # passing one, and it re-reads logs no gate writes, so nothing existing is weakened.
+      # A gate that fails must leave its own text where it can be read without the run page.  The
+      # raw Actions log lives on a host a sandboxed environment cannot reach, and so does every
+      # uploaded artifact, which leaves a pipeline whose only diagnosis is "step 9 failed"
+      # undiagnosable from anywhere but a browser.  Annotations and the job summary come back from
+      # the endpoints that are reachable (`/repos/{o}/{r}/check-runs/{id}/annotations`), so a
+      # failed gate quotes itself.  `if: failure()` means this runs only when something already
+      # broke: it can neither turn a red job green nor add a step to a passing one, and it re-reads
+      # logs no gate writes, so nothing existing is weakened or reordered.
       - name: Report which gate failed, and what it said
         if: failure()
-        run: |
-          python3 - <<'PYEOF'
-          import glob, os, re, sys
-          summary = os.environ.get("GITHUB_STEP_SUMMARY")
-          parts = []
-          for path in sorted(glob.glob("build/logs/*.log")):
-              try:
-                  raw = open(path, "rb").read().decode("utf-8", "replace")
-              except OSError:
-                  continue
-              hits = re.findall(r"^(?:FAIL|ERROR): .*?(?=^(?:Ran [0-9]+ tests|OK(?: |$)|FAILED |=====))",
-                                raw, re.M | re.S)
-              tally = re.findall(r"^(?:Ran [0-9]+ tests in .*|FAILED .*|OK(?: \(.*\))?)$", raw, re.M)
-              tail = [l for l in raw.splitlines() if l.startswith(("make:", "ERROR:", "Traceback"))]
-              if not (hits or tally or tail):
-                  continue
-              body = "\n".join(hits)[:3000] or "\n".join(tail)[-1500:] or "(no failure block)"
-              parts.append("### failed gate: " + path + "\n```\n" + body + "\n```\n"
-                           + "\n".join(tally[-6:]))
-              ann = "\r".join((hits[0] if hits else "\n".join(tail))[:1500].splitlines())
-              print("::error title=" + os.path.basename(path) + "::" + ann)
-          if not parts:
-              parts.append("### failed job\n\nNo gate log was written: the failure happened before"
-                           " any recorded gate ran, or in a step that writes no log.")
-          out = "\n".join(parts)
-          if summary:
-              open(summary, "a", encoding="utf-8").write("\n" + out + "\n")
-          print(out[:4000])
-          PYEOF
+        # A gate that fails must leave its own text where a restricted caller can read it: the
+        # raw Actions log and every artifact live on hosts outside this repository, and the Checks
+        # API annotations do not.  The script quotes the failure blocks the gates already wrote,
+        # plus what the runner has installed, and always exits 0 so that describing a failure
+        # cannot become a second one.  `if: failure()` means it runs only when something already
+        # broke: it can neither turn a red job green nor add a step to a passing job, and it reads
+        # logs no gate writes, so nothing existing is weakened or reordered.
+        run: python3 tools/ci_report.py
 
       - name: Keep the logs
         if: always()
@@ -376,16 +363,20 @@ jobs:
             grep -E "PC5-OVMF-BOOT-OK|NOT TESTED" build/logs/ovmf-test.log | tail -n 4 | sed 's/^/> /'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Report what the firmware run said
+      # A gate that fails must leave its own text where it can be read without the run page.  The
+      # raw Actions log lives on a host a sandboxed environment cannot reach, and so does every
+      # uploaded artifact, which leaves a pipeline whose only diagnosis is "step 9 failed"
+      # undiagnosable from anywhere but a browser.  Annotations and the job summary come back from
+      # the endpoints that are reachable (`/repos/{o}/{r}/check-runs/{id}/annotations`), so a
+      # failed gate quotes itself.  `if: failure()` means this runs only when something already
+      # broke: it can neither turn a red job green nor add a step to a passing one, and it re-reads
+      # logs no gate writes, so nothing existing is weakened or reordered.
+      - name: Report what the firmware run concluded
         if: failure()
-        run: |
-          set -uo pipefail
-          echo "### OVMF failure report" >> "$GITHUB_STEP_SUMMARY"
-          for f in build/logs/ovmf-test.log; do
-            [ -f "$f" ] || { echo "- no gate log was written; the build step failed first" >> "$GITHUB_STEP_SUMMARY"; continue; }
-            tail -n 60 "$f" | sed 's/^/> /' >> "$GITHUB_STEP_SUMMARY"
-            echo '::error title=ovmf gate::'"$(grep -aE '^(\[FAIL\]|NOT TESTED|ERROR|make: \*\*\*)' "$f" | tail -n 12 | tr '\n' '\r')""
-          done
+        # Same script, same reason.  The firmware job writes build/logs/ovmf-test.log, which is
+        # where its verdict actually lives, and `NOT TESTED` is a line this step will quote rather
+        # than summarise - exit code 3 failing the job is the point, not something to soften here.
+        run: python3 tools/ci_report.py
 
       - name: Keep the firmware report, serial logs and the matrix
         if: always()
