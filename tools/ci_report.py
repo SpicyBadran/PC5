@@ -31,6 +31,13 @@ SUMMARY_LIMIT = 4000
 ANNOTATION_LIMIT = 5000
 MAX_BLOCKS_PER_LOG = 2
 
+#: How a block's lines are joined inside a workflow command.  ``\r`` is the documented
+#: line break for annotation bodies and keeps the traceback's shape -- and GitHub renders
+#: only its *first* line in the annotation list, which is how a whole failure block got
+#: reduced to the one line naming the test.  A space loses the shape and keeps the reason,
+#: so the reason wins, and the exact text stays in the job's log either way.
+SEPARATOR = " "
+
 #: The unittest failure block: from its ``FAIL:``/``ERROR:`` heading to the next
 #: separator or tally line.  ``re.M`` makes ``^`` a line start; ``re.S`` lets the
 #: body cross lines.  Both are needed: without the first, no block is ever found,
@@ -82,8 +89,11 @@ def extract(text):
 def annotations_for(path, text):
     """`::error::` workflow commands quoting this log's failure blocks.
 
-    Newlines become ``\\r`` because a workflow command must be one line; GitHub
-    renders the carriage returns back as line breaks in the annotation body.
+    A workflow command is one line, so a block's newlines are folded with `SEPARATOR`.
+    The measured reason is `SEPARATOR = " "` rather than the ``\\r`` the docs suggest for
+    annotation bodies: GitHub lists only the first line of a message containing real line
+    breaks, so a folded-with-``\\r`` block arrived here as nothing but `FAIL: test_name`,
+    and the assertion underneath it was unreachable from any endpoint.
     """
     blocks, tally, marks = extract(text)
     # A `FAILED (...)` tally *is* a verdict: a gate whose own output ended there, with
@@ -102,9 +112,9 @@ def annotations_for(path, text):
         body = chunk.strip("\n")
         if not body:
             continue
+        flat = SEPARATOR.join(l.strip() for l in body.splitlines() if l.strip())
         out.append("::error title=%s::%s"
-                   % (os.path.basename(path),
-                      "\r".join(body.splitlines())[:ANNOTATION_LIMIT]))
+                   % (os.path.basename(path), flat[:ANNOTATION_LIMIT]))
     return out
 
 

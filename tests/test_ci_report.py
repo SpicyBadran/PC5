@@ -124,6 +124,7 @@ class AnnotationProtocolTests(unittest.TestCase):
         self.assertTrue(annotations)
         for line in annotations:
             self.assertNotIn("\n", line, "a workflow command must be exactly one line")
+            self.assertNotIn("\r", line, "and it must not hide its body behind a line break")
             self.assertLessEqual(len(line), 8 + ci_report.ANNOTATION_LIMIT + 64)
             self.assertEqual(line.count("::error title="), 1,
                              "one annotation carries a forged second command")
@@ -138,10 +139,14 @@ class AnnotationProtocolTests(unittest.TestCase):
         annotations = ci_report.annotations_for("build/logs/host.log", HOST_LOG)
         self.assertEqual(len(annotations), 1)
         body = annotations[0].split("::", 2)[-1]
-        folded = body.replace("\r", "\n")
-        self.assertIn("FAIL: test_moving_head", folded)
-        self.assertIn("AssertionError", folded)
-        self.assertEqual(body.count("\n"), 0, "carriage returns, not newlines")
+        self.assertIn("FAIL: test_moving_head", body)
+        self.assertIn("AssertionError", body)
+        # GitHub shows only the first line of a message that contains real line breaks,
+        # so a *readable* annotation is a single-line one; the block's shape is traded
+        # away deliberately and the shape survives in the log and the job summary.
+        self.assertEqual(body.count("\n"), 0, "an annotation must be one physical line")
+        self.assertNotIn("\r", body, "a \r-separated body renders as its first line only")
+        self.assertEqual(ci_report.SEPARATOR, " ")
 
     def test_annotations_are_capped(self):
         big = ("FAIL: test_x (t.T.test_x)\n" + ("assertion noise\n" * 4000)
