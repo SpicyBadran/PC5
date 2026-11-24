@@ -303,10 +303,12 @@ jobs:
       # failed -- which is exactly how this pipeline's third run ended.  The only way to name
       # the module is to run them one at a time.  A diagnostic, not a gate: guarded by
       # `if: failure()` so it never runs on a green job, and it writes
-      # build/logs/triage.json for the reporter above to quote and the artifact step below to
-      # keep.  Order matters and `tests/test_ci_report.py` pins it: the reporter reads the
-      # gates first, so the summary leads with what the harness itself said, and the per-file
-      # tally follows as the artifact a reviewer opens when that is not enough.
+      # build/logs/triage.json -- which the reporter above does *not* read: it runs one step
+      # earlier, so triage.json does not exist yet.  What reaches a caller who cannot download
+      # an artifact is this step's own `::notice`/`::error` workflow commands, and the JSON is
+      # the copy kept for whoever can.  Order matters and `tests/test_ci_report.py` pins it:
+      # the reporter reads the gates first, so the summary leads with what the harness itself
+      # said, and the per-file tally follows as the deeper layer.
       - name: Name the module that killed the interpreter
         if: failure()
         run: |
@@ -400,10 +402,12 @@ jobs:
       # failed -- which is exactly how this pipeline's third run ended.  The only way to name
       # the module is to run them one at a time.  A diagnostic, not a gate: guarded by
       # `if: failure()` so it never runs on a green job, and it writes
-      # build/logs/triage.json for the reporter above to quote and the artifact step below to
-      # keep.  Order matters and `tests/test_ci_report.py` pins it: the reporter reads the
-      # gates first, so the summary leads with what the harness itself said, and the per-file
-      # tally follows as the artifact a reviewer opens when that is not enough.
+      # build/logs/triage.json -- which the reporter above does *not* read: it runs one step
+      # earlier, so triage.json does not exist yet.  What reaches a caller who cannot download
+      # an artifact is this step's own `::notice`/`::error` workflow commands, and the JSON is
+      # the copy kept for whoever can.  Order matters and `tests/test_ci_report.py` pins it:
+      # the reporter reads the gates first, so the summary leads with what the harness itself
+      # said, and the per-file tally follows as the deeper layer.
       # A firmware harness that dies takes its traceback with it, and this job boots QEMU
       # hundreds of times, so triaging all 118 modules here would be a second job inside the
       # first: `--only ovmf` narrows the walk to the suite that actually ran.

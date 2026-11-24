@@ -53,13 +53,30 @@ EXIT_NAMES = {
 }
 
 
-def test_files(root):
-    """The modules `unittest discover -p 'test_*.py'` would load, in the same order."""
+def test_files(root, only=""):
+    """The modules `unittest discover -p 'test_*.py'` would load, in the same order.
+
+    `only` is a comma-separated list of substrings and a *narrowing* filter: a module is
+    kept when its file name contains any of them.  It exists because the firmware job and
+    the host job do not have the same dependencies -- the job that boots OVMF installs no
+    virtualenv, so every unicorn-based module fails there for want of an import the build
+    job provides.  Walking all 47 files in the firmware job reported "6 did not return 0",
+    and a reviewer could not tell those six from a real defect.  `--only ovmf` keeps that
+    job to the modules that could have gone wrong *there*.
+
+    A value that matches nothing selects nothing and says so in the note; it never falls
+    back to the full set, because a wrong selection that reads like a complete one is worse
+    than an obviously empty report.
+    """
     try:
         names = os.listdir(root)
     except OSError:
         return []
-    return sorted(n for n in names if re.fullmatch(r"test_.*\.py", n))
+    found = sorted(n for n in names if re.fullmatch(r"test_.*\.py", n))
+    picks = [p.strip() for p in (only or "").split(",") if p.strip()]
+    if not picks:
+        return found
+    return [n for n in found if any(p in n for p in picks)]
 
 
 def outcome_name(rc):
@@ -91,16 +108,23 @@ def run_file(python, cwd, module, timeout):
     return done.returncode, (done.stdout or "") + (done.stderr or "")
 
 
+#: The flags this helper accepts, as a name so a test can check a workflow's arguments
+#: against the parser instead of against a copy of it.  An unrecognised flag used to be
+#: dropped with a stderr line -- which is invisible from the annotations endpoint, and is
+#: how `--only ovmf` silently did nothing for one whole commit.
+FLAGS = frozenset(("--root", "--json-out", "--python", "--budget", "--only"))
+
+
 def parse(argv):
     opts = {"root": "tests", "json_out": "", "python": sys.executable or "python3",
-            "budget": TIME_BUDGET_SECONDS}
+            "budget": TIME_BUDGET_SECONDS, "only": ""}
     i = 0
     while i < len(argv):
         key = argv[i]
         if key in ("-h", "--help"):
             print(__doc__)
             return None, opts
-        if key in ("--root", "--json-out", "--python", "--budget") and i + 1 < len(argv):
+        if key in FLAGS and i + 1 < len(argv):
             name = key[2:].replace("-", "_")
             value = argv[i + 1]
             if name == "budget":
@@ -123,8 +147,9 @@ def main(argv=None):
     if ok is None:
         return 0
     root = opts["root"]
-    files = test_files(root)
-    if not files:
+    every = test_files(root)
+    files = test_files(root, opts["only"])
+    if not every:
         print("::warning title=triage::no test files under %s; nothing to say" % root)
         return 0
     started = time.time()
@@ -145,13 +170,19 @@ def main(argv=None):
     bad = [r for r in results if r["returncode"] != 0]
     note = ("ran %d of %d files in %.0fs; %d did not return 0; interpreter %s"
             % (len(results), len(files), time.time() - started, len(bad), opts["python"]))
+    if opts["only"]:
+        # Say which selector was applied and how many files it saw, so an empty report is
+        # never mistaken for an all-clear.
+        note += "; --only %r matched %d of %d%s" % (
+            opts["only"], len(files), len(every), "" if files else ", so nothing ran")
     if stopped_at:
         note += "; budget exhausted, not reached: " + stopped_at
     print("::notice title=triage::" + note)
     if opts["json_out"]:
         try:
             with open(opts["json_out"], "w", encoding="utf-8") as handle:
-                json.dump({"note": note, "files_total": len(files), "files_run": len(results),
+                json.dump({"note": note, "files_total": len(files), "only": opts["only"],
+                           "files_found": len(every), "files_run": len(results),
                            "nonzero": len(bad), "stopped_at": stopped_at,
                            "interpreter": opts["python"],
                            "results": bad}, handle, indent=1)

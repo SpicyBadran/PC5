@@ -116,6 +116,249 @@ class ExtractionTests(unittest.TestCase):
         self.assertIn("FAILED (errors=3)", annotations[0])
 
 
+#: The ovmf job's log, as run `45338046314` left it: the harness raised outside `unittest`,
+#: so there is no `FAIL:` block, and the two lines the old reporter kept -- the `Traceback`
+#: header and the `make:` status -- name neither the error nor its site.  Everything between
+#: them is what the annotation channel was missing.
+CRASH_LOG = (
+    "python3 tests/ovmf_boot.py --iso build/pc5.iso --efi-image build/pc5-esp.img "
+    "--kernel build/kernel64.bin --secure-boot\n"
+    "Traceback (most recent call last):\n"
+    '  File "/home/runner/work/pc5/pc5/tests/ovmf_boot.py", line 1729, in _make_medium\n'
+    "    subprocess.run(command, check=True, capture_output=True)\n"
+    '  File "/usr/lib/python3.12/subprocess.py", line 571, in run\n'
+    "    raise CalledProcessError(retcode, process.args,\n"
+    "subprocess.CalledProcessError: Command '['python3', 'tools/mkiso.py']' returned "
+    "non-zero exit status 1.\n"
+    "make: *** [Makefile:637: ovmf-test] Error 1\n"
+)
+
+#: The same crash with the exception line missing -- what a log truncated by a signal looks
+#: like.  There is a traceback and no cause, and the reporter must say so instead of
+#: promoting the `make:` line into the thing that raised.
+STUMPED_LOG = ("Traceback (most recent call last):\n"
+               '  File "tests/ovmf_boot.py", line 1907, in main\n'
+               "    shutil.copyfile(found[\"vars\"], cold_vars)\n"
+               "make: *** [Makefile:637: ovmf-test] Error 2\n")
+
+
+class TracebackCauseTests(unittest.TestCase):
+    """The cause of a harness crash has to survive into the one channel that is reachable.
+
+    `extract()` keeps lines that *start* with a known prefix, which is how a Python
+    traceback lost every frame and its exception line: the header (`Traceback ...`) and the
+    make status (`make: ...`) are prefixed, `subprocess.CalledProcessError: ...` is not.  So
+    a red firmware job arrived as "Traceback / Error 1" and no endpoint in reach could say
+    more.  These tests pin the fix and, just as important, pin the honesty limits: a log that
+    does not contain an exception line must not be given one.
+    """
+
+    def test_the_exception_line_and_its_site_reach_the_annotation(self):
+        annotations = ci_report.annotations_for("build/logs/ovmf-test.log", CRASH_LOG)
+        self.assertTrue(annotations, "a crash log must not be silent")
+        first = annotations[0]
+        self.assertIn("subprocess.CalledProcessError", first,
+                      "the exception type is the cause; it must lead the annotation")
+        self.assertIn("returned non-zero exit status 1", first)
+        self.assertIn("tests/ovmf_boot.py", first.replace("/home/runner/work/pc5/pc5/", ""),
+                      "the innermost frame says where it was raised")
+        self.assertIn("make: *** [Makefile:637: ovmf-test] Error 1", first,
+                      "and the exit status still travels with it")
+
+    def test_the_crash_annotation_is_added_to_the_marker_line_not_substituted(self):
+        """A new channel may not become the only channel: nothing already reported vanishes."""
+        before = [l for l in CRASH_LOG.splitlines() if l.startswith(ci_report.MARK_PREFIXES)]
+        annotations = ci_report.annotations_for("build/logs/ovmf-test.log", CRASH_LOG)
+        self.assertGreaterEqual(len(annotations), 2,
+                                "the marker scan that existed before must still be there")
+        joined = "\n".join(annotations)
+        for line in before:
+            self.assertIn(line, joined, "%r was dropped" % line[:40])
+
+    def test_a_traceback_already_inside_a_failure_block_is_not_quoted_twice(self):
+        """`FAIL:` blocks carry their own exception line; duplicating it is not evidence."""
+        annotations = ci_report.annotations_for("build/logs/host.log", HOST_LOG)
+        self.assertEqual(len(annotations), 1,
+                         "HOST_LOG's AssertionError sits in the block that quotes it, so the "
+                         "traceback path must add a second copy of nothing")
+        self.assertEqual(annotations[0].count("AssertionError"), 1)
+        self.assertEqual(ci_report.unquoted_tracebacks(HOST_LOG, ci_report.extract(HOST_LOG)[0]),
+                         [], "the block already quotes that AssertionError, so the traceback "
+                            "path must not add a second copy of it")
+
+    def test_a_truncated_traceback_says_it_has_no_exception_rather_than_inventing_one(self):
+        found = ci_report.tracebacks(STUMPED_LOG)
+        self.assertEqual(len(found), 1)
+        exception, frame = found[0]
+        self.assertIn("no exception line", exception,
+                      "the honest reading is that the log ends there: %r" % exception)
+        self.assertNotIn("Error 2", exception,
+                         "`make: ... Error 2` is an exit status, not the exception")
+        self.assertIn("shutil.copyfile", frame,
+                      "the statement that raised is the most useful half of the frame")
+        self.assertIn("tests/ovmf_boot.py", frame, "and the harness's own file, not a stdlib one")
+        annotation = ci_report.annotations_for("build/logs/ovmf-test.log", STUMPED_LOG)[0]
+        self.assertIn("no exception line", annotation)
+        self.assertIn("Error 2", annotation, "and the exit status stays, unadorned")
+
+    def test_the_live_exception_of_a_chained_traceback_is_the_last_one(self):
+        text = ("Traceback (most recent call last):\n"
+                '  File "a.py", line 1, in f\n    x()\n'
+                "FileNotFoundError: no qemu on PATH\n"
+                "During handling of the above exception, another exception occurred:\n"
+                "\n"
+                "Traceback (most recent call last):\n"
+                '  File "b.py", line 9, in g\n    y()\n'
+                "RuntimeError: firmware did not start\n")
+        self.assertEqual([e for e, _f in ci_report.tracebacks(text)],
+                         ["FileNotFoundError: no qemu on PATH",
+                          "RuntimeError: firmware did not start"])
+        self.assertIn("RuntimeError: firmware did not start",
+                      ci_report.annotations_for("build/logs/x.log", text)[0])
+
+    def test_a_unittest_block_heading_is_not_reported_as_an_exception(self):
+        text = ("Traceback (most recent call last):\n"
+                '  File "t.py", line 3, in t\n    z()\n'
+                "ERROR: test_t (tests.test_x.C.test_t)\n")
+        exception = ci_report.tracebacks(text)[0][0]
+        self.assertIn("no exception line", exception,
+                      "a block heading beneath a traceback is structure, not a cause")
+
+    def test_malformed_input_cannot_raise_in_the_reporter(self):
+        """The step describes a failure; a reporter that crashes is a second failure."""
+        for junk in ("", "\n", "Traceback (most recent call last):\n",
+                     "\x00\x01binary\x02", "Traceback (most recent call last)",
+                     "  File \"unterminated.py\", line 9,\n",
+                     "Traceback:\n:\n:\n:\n", CRASH_LOG.replace("\n", "\r\n"),
+                     "  " * 400 + "\n"):
+            with self.subTest(text=repr(junk[:24])):
+                out = ci_report.annotations_for("build/logs/j.log", junk)
+                self.assertIsInstance(out, list)
+                for line in out:
+                    self.assertTrue(line.startswith("::error title="))
+                    self.assertLessEqual(len(line), 8 + ci_report.ANNOTATION_LIMIT + 64)
+                self.assertIsInstance(ci_report.report_for("build/logs/j.log", junk), str)
+
+    def test_an_annotation_about_a_crash_is_still_one_physical_line_and_capped(self):
+        huge = CRASH_LOG.replace("non-zero exit status 1.", "x" * 20000)
+        for line in ci_report.annotations_for("build/logs/ovmf-test.log", huge):
+            self.assertNotIn("\n", line)
+            self.assertNotIn("\r", line)
+            self.assertLessEqual(len(line), 8 + ci_report.ANNOTATION_LIMIT + 64)
+            self.assertEqual(line.count("::error title="), 1)
+
+    def test_the_summary_puts_the_raising_frame_on_its_own_line(self):
+        body = ci_report.report_for("build/logs/ovmf-test.log", CRASH_LOG)
+        self.assertIn("Traceback(s):", body)
+        self.assertIn("subprocess.CalledProcessError", body)
+        # `SEPARATOR` folds annotation bodies onto one line; the summary is markdown and
+        # keeps the frames separate, which is the only place the shape survives.
+        self.assertIn("\n  subprocess.CalledProcessError", body)
+
+    def test_the_frame_quoted_is_the_deepest_one_in_the_project_not_the_entry_point(self):
+        """`sys.exit(main())` is where the process died; the bug is three frames down.
+
+        The outermost frame is the harness's entry point and the innermost is usually CPython
+        raising inside `shutil` on the library's behalf.  Neither tells a reader which line
+        of this repository to open, so the reporter names the deepest frame whose path is
+        under the working directory and counts what it skipped past.
+        """
+        here = os.getcwd()
+        text = ("Traceback (most recent call last):\n"
+                '  File "%s/tests/ovmf_boot.py", line 2496, in <module>\n'
+                "    sys.exit(main())\n"
+                '  File "%s/tests/ovmf_boot.py", line 1970, in main\n'
+                "    secure_boot_run(report, args)\n"
+                '  File "/usr/lib/python3.12/shutil.py", line 235, in copyfile\n'
+                "    if _samefile(src, dst):\n"
+                '  File "<frozen genericpath>", line 100, in samefile\n'
+                "TypeError: stat: path should be string, not Profile\n") % (here, here)
+        exception, site = ci_report.tracebacks(text)[0]
+        self.assertEqual(exception, "TypeError: stat: path should be string, not Profile")
+        self.assertIn("line 1970, in main", site, "the deepest frame in the project's files")
+        self.assertIn("secure_boot_run(report, args)", site)
+        self.assertNotIn("line 2496", site, "the entry point is not where the bug is")
+        self.assertIn("[+2 frame(s) below]", site,
+                      "and the reader is told how much of the stack was skipped")
+
+    def test_a_passing_gate_with_no_crash_still_reports_nothing(self):
+        text = "test_a ... ok\nRan 1154 tests in 400.0s\n\nOK (skipped=1)\n"
+        self.assertEqual(ci_report.annotations_for("build/logs/unit.log", text), [])
+        self.assertEqual(ci_report.report_for("build/logs/unit.log", text), "")
+
+
+class WorkflowFlagTests(unittest.TestCase):
+    """Every flag the workflow passes to a helper must be a flag that helper accepts.
+
+    `6293d65` added `--only ovmf` to the firmware job's triage step and `--only` did not
+    exist in `tools/ci_triage.py`.  The helper printed one warning line to stderr, exited 0,
+    and walked all 47 modules -- in a job that installs no virtualenv, so six of them failed
+    on import.  A reviewer read "6 did not return 0" as six defects.  Nothing caught it
+    because nothing asked the two files whether they agreed.
+    """
+
+    def test_the_triage_flags_the_workflow_passes_are_accepted(self):
+        wf = load_workflow(self)
+        seen = 0
+        for name in ("build", "ovmf"):
+            for step in wf["jobs"][name]["steps"]:
+                body = str(step.get("run", ""))
+                if "tools/ci_triage.py" not in body:
+                    continue
+                flags = [t for t in body.replace("\\", " ").split() if t.startswith("--")]
+                self.assertTrue(flags, "%s's triage step passes no flags?" % name)
+                seen += 1
+                with tempfile.TemporaryDirectory() as tmp:
+                    tests = os.path.join(tmp, "tests")
+                    os.makedirs(tests)
+                    with open(os.path.join(tests, "test_probe.py"), "w",
+                              encoding="utf-8") as handle:
+                        handle.write("import unittest\n\n\nclass T(unittest.TestCase):\n"
+                                     "    def test_a(self):\n        pass\n")
+                    # the workflow's own flags, against a one-file tree: only `--root` and
+                    # `--json-out` values are redirected, so the flag names are the live ones
+                    # only the helper's own arguments: `set -uo pipefail` and the
+                    # interpreter line are shell, and feeding them to the tool would test
+                    # the shell rather than the flag names
+                    toks = body.replace("\\", " ").split()
+                    start = toks.index([t for t in toks if t.endswith("ci_triage.py")][0]) + 1
+                    cmd = [sys.executable, os.path.join(ROOT, "tools", "ci_triage.py")]
+                    skip_next = False
+                    for tok in toks[start:]:
+                        if skip_next:
+                            skip_next = False
+                            continue
+                        if tok in ("--root", "--json-out"):
+                            skip_next = True      # drop the flag too: it is re-added below
+                            continue
+                        if tok == "--python":
+                            cmd += ["--python", sys.executable]
+                            skip_next = True
+                            continue
+                        cmd.append(tok)
+                    cmd += ["--root", tests,
+                            "--json-out", os.path.join(tmp, "t.json")]
+                    done = subprocess.run(cmd, cwd=tmp, capture_output=True, text=True,
+                                          timeout=300)
+                self.assertEqual(done.returncode, 0, done.stderr[-400:])
+                self.assertNotIn("ignoring unknown argument", done.stderr,
+                                 "%s passes flags the helper does not know: %s"
+                                 % (name, " ".join(flags)))
+
+    def test_the_ovmf_job_narrows_the_triage_and_the_build_job_does_not(self):
+        """The narrowing is the point: a job without the venv must not be judged by it."""
+        wf = load_workflow(self)
+        bodies = {}
+        for name in ("build", "ovmf"):
+            for step in wf["jobs"][name]["steps"]:
+                if "tools/ci_triage.py" in str(step.get("run", "")):
+                    bodies[name] = str(step["run"])
+        self.assertIn("--only ovmf", bodies.get("ovmf", ""),
+                      "the firmware job should diagnose the modules it can actually run")
+        self.assertNotIn("--only", bodies.get("build", ""),
+                         "the host job installs the venv and is supposed to walk everything")
+
+
 class AnnotationProtocolTests(unittest.TestCase):
     def test_an_annotation_is_one_line_and_log_content_cannot_forge_another(self):
         hostile = (HOST_LOG + "::error title=pwned::this line was written by the log\n"
