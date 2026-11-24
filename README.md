@@ -196,7 +196,7 @@ about real firmware; a stub-firmware pass is not an OVMF boot; an OVMF boot is n
 <!-- pc5:blockers:begin -->
 | Milestone | What is blocked | Why |
 |---|---|---|
-| `M1b` | Automated CI and release publication | the GitHub token available to this environment lacks the workflows permission, so ci/build.yml cannot be activated (ci/README.md) |
+| `M1b` | Automated CI and release publication | the pipeline is now active (installed as .github/workflows/build.yml on 2026-11-24, workflow 428605735); M1b still owes its two acceptance criteria: a tag that publishes pc5.iso, pc5.iso.sha256 and build-info.json, an… |
 | `M17` | Security and authenticity boundary | no lawful trust path is known: the console's boot chain is anchored in Sony-specific silicon and fuses, and PC5 implements no circumvention (ADR-007, ADR-022). Until a lawful path exists this milestone can proceed onl… |
 | `M18` | Genuine system-software load | requires a lawful, authenticated input (the M9 payload is absent from the tree) and the trust analysis of M17; PC5 will not decrypt or circumvent |
 | `M19` | Genuine system software boots on PC5 (DESTINATION) | blocked on M17 (authenticity boundary) and M18 (lawful input); no evidence of any kind exists yet |

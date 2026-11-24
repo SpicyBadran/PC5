@@ -1,29 +1,27 @@
-# CI pipeline (not yet active)
+# CI pipeline (active)
 
-`ci/build.yml` is the PC5 build-and-release pipeline. It is **stored here rather
-than in `.github/workflows/` on purpose**: the GitHub App that authored this
-branch has repository admin rights but not the *workflows* permission, so GitHub
-rejects any push or API call that creates a file under `.github/workflows/`
-(`refusing to allow a GitHub App to create or update workflow ... without
-workflows permission`).
+`build.yml` is the PC5 build-and-release pipeline, installed at
+`.github/workflows/build.yml` on 2026-11-24 in `2c3cd5c` — a pure rename of
+`ci/build.yml` (`R100`, 0 insertions, 0 deletions, one commit, so the acceptance or
+refusal belonged to that one act) — after the repository owner granted the GitHub App
+*Workflows: Read and write*. GitHub then read the workflow as `active`
+(`total_count: 1`, id 428605735) and ran it on the push that installed it.
 
-Nothing about the pipeline is missing — only the location. To activate it:
+Before that grant the file lived here, not because it was unfinished but because GitHub
+rejected every push that created anything under `.github/workflows/`
+(`refusing to allow a GitHub App to create or update workflow ... without workflows
+permission`). Five of those refusals are quoted in *Attempts, dated* below; they stay
+quoted, because the reason the pipeline slept for eleven days is part of what it means to
+trust the pipeline now.
 
-```sh
-# 1. from a checkout of main with this file present
-git mv ci/build.yml .github/workflows/build.yml
-git commit -m "ci: activate the build and release pipeline"
-git push
-
-# 2. (or grant the GitHub App the "Workflows" permission and let an agent do it)
-```
-
-Then cut a release:
+**Installation is not execution and execution is not the milestone.** What remains is
+`M1b`'s own acceptance: publish the assets for a tag, and show the published hash equals
+a local rebuild at the same `SOURCE_DATE_EPOCH`.
 
 ```sh
 git tag -a v0.2.0 -m "PC5 0.2.0"
-git push origin v0.2.0
-gh run watch
+git push origin v0.2.0          # the `release` job is gated on refs/tags/, so this is the trigger
+gh run list --workflow build --limit 5
 gh release view v0.2.0 --json assets
 ```
 
@@ -64,8 +62,13 @@ identity, the destination or the forbidden-claim list drifts from the documents.
 
 * Proven locally: the exact workflow steps run on this machine and produce two
   byte-identical images; the publish script executes correctly against a stub.
-* Not proven: that GitHub Actions runs it and accepts the upload — that needs
-  the file in `.github/workflows/`, which needs the permission above.
+* Proven on the platform since 2026-11-24: that GitHub Actions reads the workflow, starts it
+  from a push, and that the actions it pins resolve on a hosted runner. The run record —
+  job by job, with the artifacts it uploaded — is in the *First runs* section at the end.
+* Still not proven, and therefore not claimed anywhere in this repository: that a tag
+  published `pc5.iso`, `pc5.iso.sha256` and `build-info.json` whose hash equals a local
+  rebuild. No tag has been pushed; the `release` job has never executed. That gap is
+  `M1b`'s `blocker` field, not a footnote.
 
 ## Activation attempts (milestone B3)
 
@@ -154,11 +157,13 @@ repository, then re-run the activation:
    python3 -m unittest tests.test_release          # pins the pipeline file's contents, both paths
    ```
 
-   Step (b) is deliberately *not* applied in advance: `.github/workflows/build.yml` in a document is a
-   claim about the repository, and until the push is accepted the claim would be false.  Milestone
-   `M1b` stays `blocked`, and the living documents keep pointing at `ci/build.yml`, for the same
-   reason.  Dated records (the audit reports at the root, `docs/evidence/**`, the historical
-   `TEST_RESULTS` sections) are never retargeted: they reported the location that was true then.
+   Step (b) was withheld until (a) was accepted, on the rule that a path in a document is a claim
+   about the repository: writing `.github/workflows/build.yml` into eight living files while the push
+   could still be refused would have made those documents false on purpose.  Both halves landed on
+   2026-11-24, in that order, in two commits.  Dated records (the audit reports at the root,
+   `docs/evidence/**`, the historical `TEST_RESULTS` sections) were *not* retargeted: they reported
+   the location that was true when written, and a record rewritten to match a later state stops
+   being evidence.
 
    Then read the first run before believing anything about it:
 
@@ -196,9 +201,11 @@ report success after its gate failed.
 
 ## Attempts, dated
 
-The instructions above have been carried out and refused three times. Recording the
-refusals here, rather than only in a chat log, is what keeps "the pipeline is dormant
-because of a permission, not because it was forgotten" checkable later.
+The instructions above were carried out and refused four times across five attempts, then
+accepted on the fifth. Recording the refusals here, rather than only in a chat log, is what
+keeps "the pipeline slept because of a permission, not because it was forgotten" checkable
+later — and what makes the fifth row mean something: the same command, the same path, the
+only difference being a permission the owner granted.
 
 | When | Against | Command | Result |
 |---|---|---|---|
@@ -206,22 +213,22 @@ because of a permission, not because it was forgotten" checkable later.
 | 2026-11-16 | `main` `a266936` | same | same |
 | 2026-11-22 | `arena/b81a0441-pc5` off `aeca706e` | same, after `mkdir -p .github/workflows` (`git mv` does not create the parent) | `! [remote rejected] HEAD -> arena/b81a0441-pc5 (refusing to allow a GitHub App to create or update workflow `.github/workflows/build.yml` without workflows permission)` |
 | 2026-11-24 | `arena/5e36f38b-pc5` off `84e6325`, PR #49's merge gate | same, after the five corrections above had landed so the first run would not be a run of a pipeline that cannot fail | refused, twice, 20 s apart, quoting the sentence verbatim (see the two 2026-11-13 blocks above for the same text) |
+| 2026-11-24 | `arena/5e36f38b-pc5` off `0aaa881`, **after the owner granted *Workflows: Read and write*** | `mkdir -p .github/workflows && git mv ci/build.yml .github/workflows/build.yml && git commit && git push` | **accepted**: `0aaa881..2c3cd5c`, and GitHub read the workflow as `active` within eight seconds |
 
 The third attempt was reverted (`git reset --mixed HEAD~1`, `ci/build.yml` restored, the
 new directory removed) and the tree was verified clean against `aeca706e` afterwards; the
 commit it created no longer exists locally, which is the point of quoting the rejection
 verbatim above.
 
-Meanwhile `ci/build.yml` itself is freely editable, and it now runs the gates that were
-missing from it: `make stubtest64`, so the long-mode boot is executed, and
+Meanwhile the pipeline file itself was freely editable — `ci/` is not a protected path, only `.github/workflows/` is — and it now runs the gates that were missing from it: `make stubtest64`, so the long-mode boot is executed, and
 `make emulator-probe --json`, so the run carries its own record of what the emulator could
 not prove.  `tests/test_release.py::CiLayoutTests` pins both, because a step that is
 merely intended is a step that will be dropped.
 
-### 2026-11-24, corrections made while the file is still editable
+### 2026-11-24, corrections made before the file moved (kept verbatim, including the date-stamped framing)
 
 Five defects were found by reading the pipeline against what the repository has learned since it
-was written.  All five are in `ci/build.yml` now, before any activation, because a pipeline that
+was written.  All five are in the workflow now, committed to `ci/build.yml` at `8c14d39` and carried across by the rename, because a pipeline that
 cannot fail is worse than no pipeline:
 
 1. **`make <gate> | tee build/logs/<gate>.log` could not fail the job.**  GitHub's *unspecified*

@@ -17,7 +17,7 @@ python3 -m venv .venv
 export PATH="$PWD/.venv/bin:$PATH"
 ```
 
-That is the same provisioning `ci/build.yml` performs. `pip install` straight into a
+That is the same provisioning `.github/workflows/build.yml` performs. `pip install` straight into a
 distribution Python is refused under PEP 668, so the venv is not a preference here.
 
 The UEFI application in `boot/uefi/` uses the *same* toolchain: it is a PE32+
@@ -237,18 +237,18 @@ serial logs under `build/ovmf/`, and never commits firmware to the repository.
 
 ## Continuous integration and releases
 
-The pipeline is written and validated, but **not yet active on GitHub**: it lives
-in `ci/build.yml` because the GitHub App that authored it has repository admin
-rights but not the *workflows* permission, so GitHub refuses any push that
-creates `.github/workflows/build.yml`. Activating it is one command:
+The pipeline is **active**: `.github/workflows/build.yml` was installed on 2026-11-24 by a pure rename of
+`ci/build.yml`, after the repository owner granted the GitHub App the *Workflows:
+Read and write* permission. Until that grant, GitHub refused every push that
+created a file under `.github/workflows/`, and the pipeline sat in `ci/` as a
+definition that ran nowhere; `ci/README.md` keeps the five dated attempts and what
+was proven without it.
 
-```sh
-git mv ci/build.yml .github/workflows/build.yml
-git commit -m "ci: activate the build and release pipeline" && git push
-```
-
-`ci/README.md` records why, and what has been proven without it. The description
-below is what the pipeline does once it is in `.github/workflows/`.
+The distinction that matters for reading this page: an *installed* pipeline is not
+a *successful* one, and neither is a milestone closed. `M1b`'s acceptance is a tag
+that publishes `pc5.iso`, `pc5.iso.sha256` and `build-info.json`, with a published
+hash equal to a local rebuild at the same `SOURCE_DATE_EPOCH`. The description
+below is what the pipeline does on every push, pull request, dispatch and tag.
 
 | Trigger | What runs | What is published |
 |---|---|---|

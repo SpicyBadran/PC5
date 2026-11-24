@@ -54,7 +54,7 @@ fail loudly.
 | I4 | **The legacy kernel survives.** The freestanding PC5 kernel stays buildable and bootable as long as it is the only environment that can diagnose a machine with no working Linux. | `make iso`, `make boot-test` remain release-gating |
 | I5 | **One status source.** Where a chain stage and a document disagree, the chain wins and the document is a bug. | audit procedure (`REPOSITORY_AUDIT_2026-11-15.md` §6) |
 | I6 | **No proprietary material in the tree.** Firmware, keys and derived binaries never enter git or a release. | `.gitignore`, `docs/SECURITY.md`, tool design (`tools/firmware.py` analyses, never parses encrypted payloads) |
-| I7 | **Reproducible artefacts.** Same commit, same `SOURCE_DATE_EPOCH` ⇒ identical bytes. | `make`, `ci/build.yml`, `docs/TEST_RESULTS.md` §5 |
+| I7 | **Reproducible artefacts.** Same commit, same `SOURCE_DATE_EPOCH` ⇒ identical bytes. | `make`, `.github/workflows/build.yml`, `docs/TEST_RESULTS.md` §5 |
 | I8 | **Emulation is not hardware.** An emulated or stub-firmware run is labelled as such in every artefact it produces. | boot/stub test wording, `docs/TESTING_STRATEGY.md` |
 | I9 | **Interfaces before implementations.** A new subsystem lands behind a named interface with a test, or it does not land. | §6 of this document |
 | I10 | **Reversible decisions are cheap; irreversible ones are reviewed.** Boot chain, partitioning, update signing and anything touching user data need independent review. | governance §10 |

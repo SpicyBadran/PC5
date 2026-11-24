@@ -320,7 +320,7 @@ the honest result is **NOT TESTED** and the reason is stated with the result.
 `make ovmf-setup` (`tools/ovmf_setup.sh`) installs QEMU and OVMF from the
 distribution's packages and prints the paths and SHA-256 of the exact CODE and
 VARS images the run will use, which then belong in the report. `make ovmf-check`
-does the discovery half only. The `ovmf` job in `ci/build.yml` runs the same
+does the discovery half only. The `ovmf` job in `.github/workflows/build.yml` runs the same
 script on a hosted runner and treats exit code 3 from the harness as a failure,
 so a pipeline that never executed firmware cannot pass quietly.
 

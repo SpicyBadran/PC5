@@ -17,7 +17,7 @@ previous report.
 | Did visual evidence exist to publish? | No screenshot of a boot exists in the repository, and there is no physical boot to photograph. The available real evidence is textual: test output, serial-log excerpts, verification reports. |
 | Was there a status summary? | A large hand-maintained table in the README, duplicating states that also live in `roadmap.json`. It could drift silently. |
 | Was there a graph to draw from? | Yes — `docs/architecture/roadmap.json`, 35 milestones in 14 workstreams, with states, dependencies, evidence lists and a named destination milestone. |
-| Was there CI to badge? | No activated workflow. `ci/build.yml` is a pipeline definition stored in the tree because the token used here cannot create workflows; `ci/README.md` says so. **No CI badge is shown and no claim of automated builds is made.** |
+| Was there CI to badge? | Not when this page was written: `ci/build.yml` was a pipeline definition stored in the tree because the token in use could not create workflows (`ci/README.md` kept the record). **No CI badge was shown and no claim of automated builds was made.** The workflow has since been installed as `.github/workflows/build.yml`; a badge is still not added here, because a badge is a promise about every future run and this page reports what was measured. |
 | Were there contributor documents? | `LICENSE`, `docs/SECURITY.md`, `docs/BUILDING.md`, `docs/INSTALLATION.md`; no `CONTRIBUTING.md`. |
 | What already tested the README? | `tests/test_architecture.py` (every markdown link resolves), `tests/test_product_identity.py` (the identity line, forbidden claims from data), `tests/test_project_independence.py` (no vendored project, no borrowed identity). |
 
