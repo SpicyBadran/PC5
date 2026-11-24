@@ -117,7 +117,12 @@ jobs:
         run: |
           set -eu
           export PATH="$PWD/.venv/bin:$PATH"
-          python3 -m unittest discover -s tests -p 'test_*.py' -v 2>&1 | tee build/logs/host.log
+          # Record the interpreter inside the log: the venv is first on PATH here, and the
+          # runner's Python is not this repository's Python, so a version-dependent failure has
+          # to be attributable from the log alone.
+          python3 -VV 2>&1 | tee build/logs/host.log
+          python3 -c 'import unicorn; print("unicorn", unicorn.__version__)' 2>&1 | tee -a build/logs/host.log
+          python3 -m unittest discover -s tests -p 'test_*.py' -v 2>&1 | tee -a build/logs/host.log
           # Read the count, not the verdict.  `OK` is compatible with a suite that barely ran, so
           # the tally and every skip reason go into the job summary where a reviewer sees them.
           tail -n 3 build/logs/host.log | sed -n 's/^/::notice title=Host suite ::/p' || true
@@ -267,6 +272,45 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # A gate that fails must leave its own text where it can be read without the run page.  The
+      # raw Actions log lives on a host a sandboxed environment cannot reach, and so does every
+      # uploaded artifact - which leaves a pipeline whose only diagnosis is "step 9 failed"
+      # undiagnosable from anywhere but a browser.  Job summaries and annotations come back from the
+      # endpoints that are reachable, so a failed gate quotes itself.  `if: failure()` means this runs
+      # only when something already broke: it can neither turn a red job green nor add a step to a
+      # passing one, and it re-reads logs no gate writes, so nothing existing is weakened.
+      - name: Report which gate failed, and what it said
+        if: failure()
+        run: |
+          python3 - <<'PYEOF'
+          import glob, os, re, sys
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          parts = []
+          for path in sorted(glob.glob("build/logs/*.log")):
+              try:
+                  raw = open(path, "rb").read().decode("utf-8", "replace")
+              except OSError:
+                  continue
+              hits = re.findall(r"^(?:FAIL|ERROR): .*?(?=^(?:Ran [0-9]+ tests|OK(?: |$)|FAILED |=====))",
+                                raw, re.M | re.S)
+              tally = re.findall(r"^(?:Ran [0-9]+ tests in .*|FAILED .*|OK(?: \(.*\))?)$", raw, re.M)
+              tail = [l for l in raw.splitlines() if l.startswith(("make:", "ERROR:", "Traceback"))]
+              if not (hits or tally or tail):
+                  continue
+              body = "\n".join(hits)[:3000] or "\n".join(tail)[-1500:] or "(no failure block)"
+              parts.append("### failed gate: " + path + "\n```\n" + body + "\n```\n"
+                           + "\n".join(tally[-6:]))
+              ann = "\r".join((hits[0] if hits else "\n".join(tail))[:1500].splitlines())
+              print("::error title=" + os.path.basename(path) + "::" + ann)
+          if not parts:
+              parts.append("### failed job\n\nNo gate log was written: the failure happened before"
+                           " any recorded gate ran, or in a step that writes no log.")
+          out = "\n".join(parts)
+          if summary:
+              open(summary, "a", encoding="utf-8").write("\n" + out + "\n")
+          print(out[:4000])
+          PYEOF
+
       - name: Keep the logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -331,6 +375,17 @@ jobs:
             echo
             grep -E "PC5-OVMF-BOOT-OK|NOT TESTED" build/logs/ovmf-test.log | tail -n 4 | sed 's/^/> /'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report what the firmware run said
+        if: failure()
+        run: |
+          set -uo pipefail
+          echo "### OVMF failure report" >> "$GITHUB_STEP_SUMMARY"
+          for f in build/logs/ovmf-test.log; do
+            [ -f "$f" ] || { echo "- no gate log was written; the build step failed first" >> "$GITHUB_STEP_SUMMARY"; continue; }
+            tail -n 60 "$f" | sed 's/^/> /' >> "$GITHUB_STEP_SUMMARY"
+            echo '::error title=ovmf gate::'"$(grep -aE '^(\[FAIL\]|NOT TESTED|ERROR|make: \*\*\*)' "$f" | tail -n 12 | tr '\n' '\r')""
+          done
 
       - name: Keep the firmware report, serial logs and the matrix
         if: always()
