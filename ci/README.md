@@ -285,6 +285,7 @@ makes the readout a measurement rather than a flake:
 | Run | Head | Build job | Firmware job | Release job |
 |---|---|---|---|---|
 | `45338046314` / `45338053015` | `247c5a3` | `failure` at `Host tool tests` | `failure` at `Boot it under OVMF` | `skipped` |
+| `45463229126` / `45463245850` | `d5e4f01` | **`success`** | `failure` at the same step, now a verdict rather than a crash | `skipped` |
 
 The LFS fault is gone: no `smudge filter lfs failed`, no exit `128`, and `ReleaseAttributionRebuild`
 reached a *different* assertion, which is the evidence that the guard in `2ce12c3` works on a cold
@@ -313,6 +314,15 @@ order; the Makefile appends the marker to whichever base won, via `override`), e
 fails against the old code — a static binding check for the call site, and a case that runs `make`
 with the runner's environment.  A sweep over every internal call in the harness reports no other
 role mismatch, and it is kept as a test so the class of bug stays closed rather than this instance.
+
+**Run 7 closed both and opened a third thing.**  At `d5e4f01` the build job is green on both twins, and
+the firmware job no longer crashes: `make ovmf-test` grades the boot and reports exactly one failed
+required row, `the loader names the firmware it is running on`.  That row greps the serial text for the
+literal `firmware=EDK II`, while the loader prints whatever `g_st->firmware_vendor` the firmware hands
+it, so it is the runner's OVMF build that disagrees — and the string it actually reported sits in
+`build/ovmf-serial/` inside an unreachable artifact, so it is not named here.  §39 of
+`docs/TEST_RESULTS.md` records both options and why neither was taken silently, since each changes what
+the gate *means*.
 
 Two properties of the pipeline are confirmed by these runs whatever the tests eventually do:
 a failing gate fails the job (no `tee` hid it, no skip was counted as a pass), and

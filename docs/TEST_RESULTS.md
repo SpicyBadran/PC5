@@ -3917,11 +3917,73 @@ statement and none of them promoted to a pass:
 inferred from a locally reproduced crash at the same `Makefile:637`, in the same function, reached only
 when the Secure Boot pair is installed — which the provisioning step does install, and which the
 sandbox here does not have (no `qemu` binary, no `/usr/share/OVMF`), so discovery is what the local
-reproduction substitutes and nothing about a boot is.  The next run's annotation is the confirmation, and if it names
-a different exception this section is wrong and will say so.  A stub QEMU producing 45 failures is the
+reproduction substitutes and nothing about a boot is.  The next run's annotation is the confirmation — run 7, below,
+carried no exception at all, because there was no longer a crash to report; the prediction is
+recorded as tested, not as assumed.  A stub QEMU producing 45 failures is the
 *correct* answer for a stub and is not a boot; the firmware gate passed nothing here and nothing in this
 diff makes it able to.  `make ovmf-test` still exits 3 when firmware is absent and that still fails the
 job.
+
+**Run 7, and the prediction it settled.**  Both runs at `d5e4f01` finished, identically — the
+`push` twin `45463229126` and the `pull_request` twin `45463245850`:
+
+| Job | push run | PR run | What changed |
+|---|---|---|---|
+| `build and verify` | **success** | **success** | first green build job on this branch; the `BUILD_ID` fix is why |
+| `UEFI boot under genuine OVMF` | `failure` | `failure` | no longer a crash: the step now returns a verdict |
+| `publish release assets` | `skipped` | `skipped` | non-tag ref, as designed |
+
+The prediction below was that the next annotation would carry the exception line.  It carried no
+traceback at all, because there is no longer one to carry: `make ovmf-test` reached its
+`[FAIL]`/`[PASS]` output and exited with a graded verdict at `Makefile:643` — the target sits six
+lines lower than the `637` every earlier run quoted, because the fix added comment lines above it, and
+the step's name is unchanged.  Both the `TypeError` and the `Error 1`-after-a-traceback shape are gone
+from both runs, which is the confirmation this section asked for.  The `--only` fix reads back the
+same way: `ran 2 of 2 files in 336s … --only 'ovmf' matched 2 of 47`, where run 6 said 47 of 47.
+
+**What the firmware job reports now, and what is deliberately not touched.**  The gate's failure
+annotations, identical across the twins (`300.169s`/`300.211s`, `34.332s`/`35.336s`):
+
+    [FAIL] [cold] the loader identified EDK II as its firmware  (loader_firmware_edk2=False)
+    [FAIL] [warm] the loader identified EDK II as its firmware  (loader_firmware_edk2=False)
+    [FAIL] every required matrix row this run claims to verify is verified
+           (matrix rows failed: the loader names the firmware it is running on)
+
+One required row, in both the cold and the warm run.  Every other required row of the matrix is
+reported as holding on the runner — including the ones no hosted run had ever reached: the firmware
+recognising the boot medium, the loader executing, the kernel image read through the file protocol,
+the handoff, the kernel reaching its initialisation point.  That is a statement about PC5's own UEFI
+boot path on real EDK II firmware and nothing more: it is not evidence about Sony system software, and
+no such claim is made here or anywhere else in this repository.
+
+The failing row compares a *string the firmware chooses to say about itself*.  The 64-bit loader prints
+`PC5-64-LOADER firmware=` followed by `g_st->firmware_vendor` verbatim (`boot/uefi64/uefi64_main.c`,
+the `serial_write_ascii16` call in `efi_main64`), and the harness grades the run by searching the
+serial text for the literal `PC5-64-LOADER firmware=EDK II` (`tests/ovmf_boot.py`, in the 64-bit
+profile's marker table; the 32-bit profile looks for `PC5-UEFI: firmware=EDK II` in the same way).  So
+the row asserts one particular vendor string from one particular build of the firmware, and the
+runner's `ovmf` package evidently reports something else; the local `result: passed` record at
+`86b862f` was produced by a different OVMF build, on a machine where the string happens to match.  What
+the runner printed is in `build/ovmf-serial/` inside the uploaded artifact, and artifacts are
+unreachable from here — so the observed value is not known, and this section does not guess it.
+
+That is the point the brief said to stop at: a genuine firmware-path finding, reported rather than
+patched.  No kernel or loader source was modified.  Two candidate next steps, each needing an owner's
+decision because both change what the gate *means* rather than what it does:
+
+1. make the evidence reachable — quote the observed `FirmwareVendor` bytes in that check's detail, so
+   the annotation names what the runner's firmware actually said instead of `=False`; the assertion
+   and its exit semantics stay exactly as they are; or
+2. decide the row's contract — whether the row should require a specific vendor *string*, or require
+   that the loader printed *the string it was given*.  Quietly narrowing it to the latter would be
+   weakening a test, which is why it is not done in this commit.
+
+The two host modules the triage names in that job (`Ran 43 … errors=1`, `Ran 53 … failures=1,
+skipped=1`) are the same coupling one level down: those modules invoke the harness for real, so on a
+machine that owns QEMU they spend 300s and 35s inside a boot, where here 96 of their tests finish in
+0.336s with 6 skipped.  A test whose duration and outcome depend on whether the machine has firmware is
+a test that should pin its own environment; that is named as the next item and not slipped into this
+commit, because the failure it would remove is not the one this brief was about.
 
 **M1b stays `blocked`.**  Both acceptance criteria are still unpaid — no tag has been pushed, so
 `publish release assets` has still never executed.  What changed is that the pipeline can now describe
