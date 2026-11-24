@@ -221,6 +221,20 @@ a *failed* verdict only, never a green gate's `OK`, so the report cannot point a
 the wrong step.  `tests/test_ci_report.py` pins those properties, and one of them is a
 one-line assertion: a log line that looks like `::error::` must not become a command.
 
+What that first version could *not* carry was the cause of a crash.  `extract()` keeps lines that
+begin with a known prefix — `make:`, `ERROR:`, `Traceback`, `[FAIL]`, `NOT TESTED` — and a Python
+traceback's exception line begins with neither: it is not indented, so it is not a frame, and it is
+not `FAIL:`-prefixed, so no block claims it.  Every hosted firmware run therefore arrived as the
+same two lines, `Traceback (most recent call last):` and `make: *** [Makefile:637: ovmf-test]
+Error 1`, with the actual exception sitting unread in the log between them.  The reporter now also
+scans for tracebacks and publishes `exception | raised at <deepest frame in this repository> | make
+status`, choosing the deepest project frame because the outermost is `sys.exit(main())` and the
+innermost is CPython inside `shutil`.  Two honesty limits are pinned by tests: a traceback whose log
+was truncated before the exception line is reported as *truncated*, never by promoting the `make:`
+line into the exception; and a `FAIL:` block that already quotes its own exception line is not
+quoted twice.  Neither can move a verdict — the step still exits 0, still runs only under
+`if: failure()`, and a firmware job that crashes is still red.
+
 A second case needed a second instrument.  When the interpreter *dies* — the run at
 `169fe94` ended `Process completed with exit code 139` — there is no `FAIL:` block, no
 traceback and no tally, because no test failed: `discover` never got to report anything, and
@@ -262,6 +276,43 @@ Neither variant is reproducible from this sandbox, and that is worth recording r
 over: a `git clone file://…` inherits the source repository's `objects/` path, so git-lfs finds the
 pointer's absence unremarkable and the smudge succeeds with or without the guard.  The failure is
 CI's measurement, not a local deduction — which is the whole argument for having the pipeline.
+
+### What runs six and seven measured
+
+Both heads ran twice (a `push` and its `pull_request` twin, same SHA, same verdicts), which is what
+makes the readout a measurement rather than a flake:
+
+| Run | Head | Build job | Firmware job | Release job |
+|---|---|---|---|---|
+| `45338046314` / `45338053015` | `247c5a3` | `failure` at `Host tool tests` | `failure` at `Boot it under OVMF` | `skipped` |
+
+The LFS fault is gone: no `smudge filter lfs failed`, no exit `128`, and `ReleaseAttributionRebuild`
+reached a *different* assertion, which is the evidence that the guard in `2ce12c3` works on a cold
+cache rather than only in the clone it was written in.  Two distinct faults remained, and neither was
+in the image:
+
+1. **`make ovmf-test` crashed inside the harness, not in the boot.**  Its only reachable content was a
+   `Traceback` header and a `make:` status, because the reporter could not carry the exception line
+   (above).  With that line capturable — and with firmware *discovery* substituted locally, since the
+   sandbox has no QEMU and no `/usr/share/OVMF` — the same crash reproduces here on demand:
+   `TypeError: stat: path should be string, bytes, os.PathLike or integer, not Profile`, raised at
+   `shutil.copyfile(vars_template, secure_vars)` in `secure_boot_run`.  The cause is a transposed
+   argument pair: the signature ends `(..., profile, vars_template)` and the call site passed
+   `found["secure_vars"], profile`.  It is CI-only because the branch needs *both* Secure Boot firmware
+   files, which `tools/ovmf_setup.sh` installs and a developer machine usually does not have — so the
+   gate died before QEMU started and the Secure Boot assertion was never graded.
+2. **The dirty label was silently disabled on every runner.**  The build job failed
+   `test_the_dirty_label_and_the_loader_digest_stay_honest` with `build:` equal to a *forty-character*
+   sha, which `git rev-parse --short HEAD` never prints.  That is the whole diagnosis in one detail:
+   the value came from the workflow's own `env: BUILD_ID: ${{ github.sha }}`, and the Makefile's
+   `BUILD_ID ?=` yields to an environment variable — so the `-dirty` marker, written *inside* that
+   default, was discarded.  Exporting `BUILD_ID` locally reproduces the hosted failure byte for byte.
+
+Both are fixed at the source (`tests/ovmf_boot.py` names the three arguments it cannot be trusted to
+order; the Makefile appends the marker to whichever base won, via `override`), each with a test that
+fails against the old code — a static binding check for the call site, and a case that runs `make`
+with the runner's environment.  A sweep over every internal call in the harness reports no other
+role mismatch, and it is kept as a test so the class of bug stays closed rather than this instance.
 
 Two properties of the pipeline are confirmed by these runs whatever the tests eventually do:
 a failing gate fails the job (no `tee` hid it, no skip was counted as a pass), and

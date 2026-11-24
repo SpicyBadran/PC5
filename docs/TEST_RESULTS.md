@@ -3783,3 +3783,147 @@ executed, and `blocker` now reads as an owed pair of criteria rather than a perm
 this section is a claim that CI passed: as of this writing it has never been green, and the first
 thing it ever caught was itself.
 
+---
+
+## 39. Two hosted failures, both real, neither in the image — and the instruments that hid them
+
+§38 closed with the LFS fault fixed at the same head whose run had reported it.  This section records
+what came back from that run, because the return was *not* the single remaining failure the previous
+correction had implied: two jobs were still red, and the one line each of them could say turned out to
+be an instrument defect rather than a verdict.
+
+**Phase 1, evidence as it is reachable.**  Head `247c5a3`, run `45338046314` (`push`) and its twin
+`45338053015` (`pull_request`), identical conclusions, so the readout reproduces across two executions
+of the same SHA:
+
+| Job | check-run | conclusion | failed step |
+|---|---|---|---|
+| `build and verify` | `138254819433` | `failure` | `Host tool tests` (step 16 of 21) |
+| `UEFI boot under genuine OVMF` | `138254819799` | `failure` | `Boot it under OVMF…` (step 5 of 7) |
+| `publish release assets` | `138264732741` | `skipped` | — (non-tag ref, as designed) |
+
+The firmware job's steps 3 (`Provision`, `./tools/ovmf_setup.sh`) and 4 (`Build`, `make iso && make uefi`)
+both returned `success`, so QEMU and the OVMF images were *present*: this is not a "the runner had no
+firmware" story, and it is not the exit-3 `NOT TESTED` path, which the assertions still honour.  Raw logs
+and artifacts remain unreachable from here (`gh api actions/jobs/<id>/logs` redirects to the results
+host, which refuses the handshake), so everything above and below comes from
+`check-runs/<job>/annotations`.  Nothing in this section quotes a log line that the API did not return.
+
+**Two instrumentation defects had to be fixed before either cause could be named.**
+
+1. `--only ovmf` did not exist.  `.github/workflows/build.yml` has passed it to `tools/ci_triage.py`
+   since `6293d65`, but `parse()` accepted only `--root/--json-out/--python/--budget`, printed
+   `ci_triage: ignoring unknown argument` to *stderr*, and exited 0.  The firmware job therefore walked
+   all 47 modules without a virtualenv, and its annotation read "6 did not return 0" — six unicorn-import
+   failures that a reader could only take as six defects.  That number is instrumentation noise and is
+   retracted here; §38's claim that the flag had landed was checked against the tree and was wrong.
+   `--only` is now implemented, with `files_found` beside `files_run` in the JSON and a note that says
+   `--only 'ovmf' matched 2 of 47`, so an empty selection can never read as an all-clear.
+2. The reporter could not carry a traceback body.  `extract()` filters on line *prefixes*, so the
+   `Traceback (most recent call last):` header survived and every frame and the exception line beneath
+   it were dropped — which is precisely why the hosted annotation said `Traceback … Error 1` and
+   nothing else.  `tracebacks()` now reads the block, takes the last one, and quotes
+   `exception | raised at <deepest project frame> | make status`.  It will not invent: a log truncated
+   before its exception line is published as `(no exception line: log ends after the traceback)` rather
+   than by promoting `make: … Error 1` into an exception, a `FAIL:` block that already carries its
+   exception is not quoted twice, and a chained traceback reports the last link.  Every one of those is
+   a test, and the step still cannot change a verdict: always exit 0, still `if: failure()`.
+
+   A third claim was corrected rather than implemented: `ci_report.triage_text()` says the triage "runs
+   immediately before this step precisely so its verdict can be quoted here", and the workflow's own
+   comment said the same.  The triage step is the one *after* the reporter, so the glob could never find
+   `triage.json`.  Reordering CI to match the prose would have meant rewriting four pinned wiring tests
+   for no gain — the triage's `::notice` lines were already the annotations that carried it — so the
+   prose now says which order is real and what would make the other path live.
+
+**Cause one, the firmware job.**  With the exception line capturable, the crash reproduces locally on
+demand by substituting firmware *discovery* only (`PC5_QEMU`, `PC5_OVMF_CODE`, `PC5_OVMF_VARS`,
+`PC5_OVMF_SECBOOT_CODE`, `PC5_OVMF_SECBOOT_VARS` pointed at files shaped like the real thing — the
+sandbox has no QEMU, so no boot is simulated and none is claimed):
+
+```
+TypeError: stat: path should be string, bytes, os.PathLike or integer, not Profile
+  raised at tests/ovmf_boot.py, line 2146, in secure_boot_run:
+            shutil.copyfile(vars_template, secure_vars)   [+3 frame(s) below]
+make: *** [Makefile:637: ovmf-test] Error 1
+```
+
+`secure_boot_run(report, args, qemu, data_dir, work, iso_path, code_path, profile, vars_template)` was
+called with its last two arguments the other way round, so the *vars template* slot held the boot
+`Profile` and the first statement of the function died on a `shutil` type check — before QEMU was
+launched, and so before the Secure Boot assertion anyone thought was being graded had ever run.  It is
+CI-only because the branch requires *both* Secure Boot firmware files: `tools/ovmf_setup.sh` installs
+the `ovmf` package, which ships `OVMF_CODE*.secboot.fd` and `OVMF_VARS*.ms.fd`, while a developer
+machine typically has neither and takes the `applicable=False` path instead.  Nothing in Python can see
+a swap between two same-shaped positional arguments; `pyflakes` cannot see it either.
+
+The call site now names `code_path`, `profile` and `vars_template`.  Three tests cover it: the function
+driven with the types its signature asks for (it fails on the old order because `profile.stop` does not
+exist on a path), a static check that binds the call site's arguments against the definition, and a
+sweep over every internal call in the harness that reports a role-shaped name bound to a parameter
+sharing no role token.  The sweep finds exactly one offender in 162 calls — the one above — and was
+run against the pre-fix file to confirm it names line 1970 and nothing else.  Both the behavioural and
+the wiring test were then run against a copy of the tree with the bug re-introduced, and both fail
+there; a guard that cannot fail is not a guard.
+
+**Cause two, the build job.**  `test_the_dirty_label_and_the_loader_digest_stay_honest` failed with
+
+```
+AssertionError: False is not true : the label hides that no commit produced this image:
+'247c5a375f6c9f36b30aa4e9d7f85eb1051ca3c5'
+```
+
+Forty characters.  `BUILD_ID` is built from `git rev-parse --short HEAD`, which prints seven, so the
+value in the record did not come from the repository at all — it came from the workflow's own
+`env: BUILD_ID: ${{ github.sha }}`, and `BUILD_ID ?=` *yields* to an environment variable.  The
+`$(if $(PC5_DIRTY),-dirty)` marker lived inside that default, so on every runner the marker was
+discarded and no local run could see it: export the variable here and the hosted failure reproduces
+byte for byte, message and all.
+
+The Makefile keeps the override (a release *should* stamp the sha it was handed, and
+`docs/BUILDING.md` documents `make BUILD_ID=…`) and moves the marker outside it —
+`override BUILD_ID := $(BUILD_ID)$(if $(PC5_DIRTY),-dirty)` — so the dirty state is appended to
+whichever base won, from the environment or the command line.  A new case pins both halves of that:
+a handed-in id passes through *unmarked* on a clean tree (which is what keeps a published
+`build-info.json` byte-identical to a local rebuild) and gains `-dirty` the moment the tree moves under
+it.  `tests/test_release_esp.py` was then run with `BUILD_ID` exported — the runner's shape, which the
+suite had never been run in — and all 21 cases pass.
+
+**Why no local run had ever seen cause one, even the one that passed.**  The only `make ovmf-test`
+success on record is `docs/evidence/validation/ovmf-test.json` — `result: passed`, `exit_code: 0`,
+`level: real firmware execution`, at `86b862f` — and its `command` field reads `make ovmf-test`, with
+no `--secure-boot`.  That flag is what routes the harness into `secure_boot_run`, and only the workflow
+passes it (`OVMF_ARGS="--secure-boot"`, step 5).  So the branch that died has been executed exactly
+twice in this repository's history: on a runner that installs the Secure Boot firmware pair, and here,
+with discovery substituted.  Both produce the same `TypeError`.  This is also the answer to "why is
+there no failing test for it": there was no test that called `secure_boot_run` with a real-looking
+argument list either — `SecureBootTests` graded `secure_boot_verdict`, a pure function two calls past
+the crash, so the unit test and the integration gate were both true and neither implied the other.
+
+**Locally, at this head:** `make check` → exit 0, `Ran 1207 tests in 526.855s`, `OK (skipped=3)`; the
+suite grew by 35 cases over the `1172` §38 recorded at `247c5a3`.  The three skips, each an environment
+statement and none of them promoted to a pass:
+
+- `test_release_esp`: `no build/pc5.iso and build/efi64-release.img to compare` — deferred by build
+  order, since the gate is `make iso` and the release ESP is built by another target;
+- `test_release.CiLayoutTests.test_readme_explains_activation_when_not_installed`: `pipeline is active`
+  — the README's dormancy note is only owed while the pipeline is dormant, which §36 ended;
+- `test_roadmap_dependencies.FoundationTests.test_no_64bit_milestone_is_complete_while_ovmf_is_untested`:
+  `OVMF ran on this machine; the ceiling no longer applies`, because the evidence record quoted above
+  says `result: passed`.  It says so about a *local* machine and about a run without `--secure-boot`;
+  it is not, and has never been claimed as, evidence that the hosted firmware job passes.
+
+**What is *not* claimed.**  The hosted firmware log has still not been read: its exception line is
+inferred from a locally reproduced crash at the same `Makefile:637`, in the same function, reached only
+when the Secure Boot pair is installed — which the provisioning step does install, and which the
+sandbox here does not have (no `qemu` binary, no `/usr/share/OVMF`), so discovery is what the local
+reproduction substitutes and nothing about a boot is.  The next run's annotation is the confirmation, and if it names
+a different exception this section is wrong and will say so.  A stub QEMU producing 45 failures is the
+*correct* answer for a stub and is not a boot; the firmware gate passed nothing here and nothing in this
+diff makes it able to.  `make ovmf-test` still exits 3 when firmware is absent and that still fails the
+job.
+
+**M1b stays `blocked`.**  Both acceptance criteria are still unpaid — no tag has been pushed, so
+`publish release assets` has still never executed.  What changed is that the pipeline can now describe
+its own failures: after this, a red firmware job will say which exception it raised, and a red build job
+will not be lying about the tree it came from.
