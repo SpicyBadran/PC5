@@ -11,6 +11,7 @@ because a helper written to explain a failure became a second failure once alrea
 (`tools/ci_report.py` documents how).
 """
 
+import io
 import json
 import os
 import subprocess
@@ -99,7 +100,7 @@ class RunTests(unittest.TestCase):
             self.assertIn("SIGSEGV", done.stdout)
             self.assertIn("test_fails.py", done.stdout)
             self.assertNotIn("not_a_test", done.stdout)
-            data = json.load(open(os.path.join(tmp, "triage.json"), encoding="utf-8"))
+            data = json.load(io.open(os.path.join(tmp, "triage.json"), encoding="utf-8"))
             self.assertEqual(sorted(r["file"] for r in data["results"]),
                              ["test_fails.py", "test_segv.py"])
             self.assertEqual(data["files_total"], 4)
@@ -167,7 +168,7 @@ class RunTests(unittest.TestCase):
                     "--json-out", os.path.join(tmp, "t.json")]
             done = subprocess.run(argv, cwd=tmp, capture_output=True, text=True, timeout=600)
             self.assertEqual(done.returncode, 0, done.stderr[-400:])
-            data = json.load(open(os.path.join(tmp, "t.json"), encoding="utf-8"))
+            data = json.load(io.open(os.path.join(tmp, "t.json"), encoding="utf-8"))
             self.assertTrue(data["stopped_at"].startswith("test_slow_"),
                             "a truncated walk must say where it stopped: %r" % data)
             self.assertLess(data["files_run"], data["files_total"])

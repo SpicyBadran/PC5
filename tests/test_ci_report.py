@@ -172,8 +172,31 @@ class AlwaysSucceedsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             done = self._run(tmp)
             self.assertEqual(done.returncode, 0, done.stderr[-500:])
-            self.assertIn("No gate log was written", done.stdout)
+            self.assertIn("No gate log held a verdict", done.stdout)
             self.assertIn("::error title=no gate log::", done.stdout)
+            # the fallback must name what it looked at: an absent log and a log truncated by a
+            # signal are different diagnoses, and the annotation is all a restricted caller gets
+            self.assertIn("none found", done.stdout)
+            self.assertIn("Interpreter:", done.stdout)
+
+    def test_a_truncated_log_is_distinguished_from_an_absent_one(self):
+        """`host.log=41B` in the fallback is the difference between two failure kinds.
+
+        Run 4 died with `exit 139` and the reporter said "no gate log was written" while a
+        41-byte log sat on disk: the size is what tells a segfault's truncated output apart
+        from a step that never wrote anything, so it has to be in the message.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            logs = os.path.join(tmp, "build", "logs")
+            os.makedirs(logs)
+            with open(os.path.join(logs, "host.log"), "w", encoding="utf-8") as handle:
+                handle.write("test_a ... ok" + chr(10) + "test_b ... ")
+            done = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "ci_report.py")],
+                                  cwd=tmp, capture_output=True, text=True, timeout=600)
+            self.assertEqual(done.returncode, 0, done.stderr[-400:])
+            self.assertIn("host.log=", done.stdout)
+            self.assertIn("B)", done.stdout, "the size must be quoted with a unit")
+            self.assertNotIn("Traceback", done.stdout)
 
     def test_exit_zero_when_a_log_is_empty_a_directory_or_binary(self):
         with tempfile.TemporaryDirectory() as tmp:

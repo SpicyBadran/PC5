@@ -26,6 +26,7 @@ Two properties are load-bearing, and ``tests/test_ci_report.py`` pins both:
 import glob
 import os
 import re
+import sys
 
 SUMMARY_LIMIT = 4000
 ANNOTATION_LIMIT = 5000
@@ -183,8 +184,23 @@ def main(argv=None):
         if block:
             parts.append(block)
     if not parts:
-        note = ("No gate log was written: the failure was reported by a step that writes no "
-                "log, or happened before the first recorded gate ran.")
+        # Say what was looked at and how big it was: an absent log and a log truncated
+        # mid-write by a signal look identical from the annotation list, and "exit 139"
+        # only makes sense next to "host.log exists and is 41 bytes".  The interpreter
+        # travels with it for the same reason -- a failure that exists only on the runner
+        # is nearly always a version difference, and the summary should not have to wait
+        # for someone to think to ask.
+        seen = []
+        for path in gate_logs():
+            try:
+                seen.append("%s=%dB" % (os.path.basename(path), os.path.getsize(path)))
+            except OSError:
+                seen.append("%s=unreadable" % os.path.basename(path))
+        note = ("No gate log held a verdict (%s). The failure came from a step that writes "
+                "no log, died before flushing one, or ran before the first recorded gate. "
+                "Interpreter: %s %s."
+                % (", ".join(seen) if seen else "none found",
+                   sys.implementation.name, " ".join(sys.version.split()[:1])))
         parts.append("### failed job\n\n" + note)
         print("::error title=no gate log::" + note[:ANNOTATION_LIMIT])
     triage = triage_text()
