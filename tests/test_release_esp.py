@@ -648,11 +648,24 @@ class ReleaseAttributionRebuild(unittest.TestCase):
         what the workspace happened to look like when the test ran.  Committing turns "clean"
         and "dirty" into states the test creates instead of inherits, and it makes the clone
         a tree whose HEAD contains the rules being judged, which is the closest thing to a
-        release build this can be without touching `main`.
+        release build this can be without touching `main`.  Being *committed* also means the
+        clone is checked out, which is why the LFS smudge has to be switched off: see the
+        note at the `git clone`.
         """
         tree = os.path.join(tmp, tag)
+        # `GIT_LFS_SKIP_SMUDGE`, deliberately: `.gitattributes` routes `PS5UPDATE.PUP`
+        # through LFS, the LFS store has no object for that pointer, and a clone
+        # *fetches and smudges* by default -- so on any machine without the payload
+        # cached, the clone dies in the filter (`remote missing object 42ea0e5…`,
+        # `fatal: PS5UPDATE.PUP: smudge filter lfs failed`, exit 128) and every case in
+        # this class fails before it builds anything.  That is what CI measured on the
+        # hosted runner, while a developer machine with a warm LFS cache passes and
+        # learns nothing is wrong.  The payload is irrelevant here: `make iso` reads no
+        # `.pup`, and no assertion in this class is about the pointer's contents.  A
+        # test may not make the network a prerequisite.
         clone = subprocess.run([git, "clone", "--no-hardlinks", ROOT, tree],
-                               capture_output=True, text=True, timeout=600)
+                               capture_output=True, text=True, timeout=600,
+                               env=dict(os.environ, GIT_LFS_SKIP_SMUDGE="1"))
         self.assertEqual(clone.returncode, 0, clone.stdout + clone.stderr)
         copied = []
         for relative in self._scratch_paths(git):
@@ -691,6 +704,22 @@ class ReleaseAttributionRebuild(unittest.TestCase):
             ["make", "-C", tree, "BUILD=" + build, "PC5_UEFI=" + mode] + list(targets),
             capture_output=True, text=True, timeout=1800,
             env=dict(os.environ, TMPDIR="/tmp", SOURCE_DATE_EPOCH="1700000000"))
+
+    def test_the_scratch_clone_does_not_need_the_lfs_payload(self):
+        """A clone that fetches is a clone that fails wherever the object is missing.
+
+        Asserted as text rather than by running `git clone`: the failure this pins is a
+        property of the *command*, and it has to hold on a machine where the LFS store is
+        reachable too (mine), where an unguarded clone would succeed and a behavioural
+        test would pass against the regression.
+        """
+        import inspect
+
+        src = inspect.getsource(ReleaseAttributionRebuild._scratch)
+        self.assertIn("GIT_LFS_SKIP_SMUDGE=\"1\"", src,
+                      "the scratch clone must not depend on an LFS object being fetchable")
+        self.assertIn("PS5UPDATE.PUP", src,
+                      "and it must say why, in the file, or the next reader removes it")
 
     def test_moving_head_rebuilds_the_image_that_names_it(self):
         git = shutil.which("git")

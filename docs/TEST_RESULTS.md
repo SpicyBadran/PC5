@@ -3720,3 +3720,66 @@ GitHub continues to mean only *no conflict*, with `statusCheckRollup: []` and `r
 roadmap entry for M1b stays `blocked` with its blocker intact, and the living documents still point
 at `ci/build.yml`, because moving them to `.github/workflows/build.yml` would describe a location the
 repository does not have; that edit is a minute of work on the other side of the permission grant.
+
+
+## 38. CI was activated, ran for real, and the first red it found was in the tests, not the image
+
+§37 ended on a refusal.  It is superseded, and superseded *as recorded*: after the owner granted the
+GitHub App *Workflows: Read and write*, the same operation that had been rejected five times was
+accepted — `ci/build.yml` → `.github/workflows/build.yml`, a pure rename, `R100`, blob `9359c2bf`
+unchanged byte-for-byte, commit `2c3cd5c`, pushed `0aaa881..2c3cd5c`.  GitHub read the workflow within
+eight seconds: `actions/workflows` → `total_count: 1`, `id=428605735`, `state=active`.  The two probes
+that could not see the grant from the inside (`actions/permissions` and `actions/permissions/workflow`,
+both still `403 Resource not accessible by integration`, because those need `actions: read`, which was
+not granted and was not needed) are worth keeping in the record: the only way to verify a *workflows*
+grant in this environment is to attempt the push.
+
+Then five runs, and the pipeline earned its keep by failing.
+
+| Head | Outcome | What the platform said |
+|---|---|---|
+| `2c3cd5c` | `cancelled` ×2 | superseded by the next push, through `concurrency.cancel-in-progress` |
+| `4d0c358` | `failure` (`build`, `ovmf`), `skipped` (`release`) | failed steps named: `Host tool tests`, `Boot it under OVMF…`; no reason retrievable |
+| `0be97f9` | `failure` ×2 | first annotation from the reporter: `FAIL: test_moving_head_rebuilds_the_image_that_names_it`, one line, nothing under it |
+| `169fe94` | `failure` ×2 | `exit 139` in `Host tool tests`; firmware `Traceback` + `make: *** [Makefile:637: ovmf-test] Error 1` |
+| `cc12956` | `failure` (`build`), then `6293d65` in flight | full failure blocks, the per-file tally (`ran 47 of 47 files in 607s; 2 did not return 0`) and the reason |
+
+**The reason is an LFS fetch, and it is not a product fault.**  `ReleaseAttributionRebuild._scratch`
+clones the working tree to build in; `git clone` smudges LFS by default; `.gitattributes` routes
+`PS5UPDATE.PUP` through LFS; and the LFS store has no object for that pointer — the `404` recorded in
+`docs/PS5_SYSTEM_SOFTWARE_TARGET.md` and `docs/BUILDING.md`, three times, as *expected*.  So on a
+runner with a cold cache the clone dies inside the filter (`remote missing object 42ea0e5…`,
+`fatal: PS5UPDATE.PUP: smudge filter lfs failed`, exit 128) and both cases fail before building
+anything, while a developer machine whose cache holds the object passes and learns nothing is wrong.
+This is the §35 class again — a check whose verdict depends on which machine asked — with the polarity
+reversed: there a missing dependency made tests *skip* green, here a missing object made them *fail*
+red, and in both cases the environment, not the code, was the variable.
+
+Fixed by `GIT_LFS_SKIP_SMUDGE=1` on that clone (the build reads no `.pup`; no assertion in the class
+concerns the pointer's contents), plus a regression test written as a source assertion rather than a
+behavioural one, because on this machine both variants pass — a `file://` clone inherits the source's
+`objects/` path, so the failure is not reproducible here at all and only CI can grade it.  Recorded as
+CI's measurement, not a local deduction.
+
+**What the activation did *not* do.**  No gate was loosened along the way: `defaults.run.shell: bash`
+still supplies `pipefail` to all 21 `| tee` steps, the harness venv is still provisioned before the
+host suite, the six `make check` gates still have their own steps, `tests/ovmf_boot.py` exit 3
+(NOT TESTED) still fails the `ovmf` job, `publish release assets` still reports `skipped` on every
+non-tag ref, and no `secrets.*` reference exists anywhere in the file.  Three diagnostic steps were
+*added*, all guarded by `if: failure()`, all exit-0, and `tests/test_ci_report.py` +
+`tests/test_ci_triage.py` (27 tests between them) pin the part that is easy to get wrong: a reporter
+that can fail becomes a second failure (it did, once, via a `grep` under `pipefail`), and a green
+gate's `OK (skipped=3)` must never be quoted as an error.
+
+**Locally, at the same heads:** `Ran 1172 tests in 773.884s` → `OK (skipped=3)`, exit 0, "suite and
+all gates passed" at `cc12956`; `Ran 1154 in 763.261s` → `OK (skipped=10)` at `4d0c358`, the extra
+skips all of the form `no build/pc5.iso; run \`make iso\` first`, i.e. tests deferred by build order,
+not by missing capability.
+
+**M1b stays `blocked`.**  A green run would not have closed it either: its acceptance is a tag that
+publishes `pc5.iso`, `pc5.iso.sha256` and `build-info.json`, and a published hash equal to a local
+rebuild at the same `SOURCE_DATE_EPOCH`.  No tag has been pushed, so the `release` job has never
+executed, and `blocker` now reads as an owed pair of criteria rather than a permission.  Nothing in
+this section is a claim that CI passed: as of this writing it has never been green, and the first
+thing it ever caught was itself.
+

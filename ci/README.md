@@ -240,7 +240,28 @@ that matched nothing.
 | push | `2c3cd5c` | `cancelled` | superseded by the next push, by `concurrency.cancel-in-progress` — the design working, not a fault |
 | push + PR | `4d0c358` | `failure` ×2 | `Host tool tests` (build) and `Boot it under OVMF` (firmware) failed; the annotations could only say which step |
 | push | `169fe94` | `failure` ×2 | build: `exit 139` in `Host tool tests`; firmware: `make: *** [Makefile:637: ovmf-test] Error 1` after a `Traceback` |
-| push | `cc12956` | pending | the run that gets the reporter's whole block, not just its heading |
+| push | `cc12956` | `failure` ×2 | the reporter quoted the *blocks* now: the build job's two failures are `git clone` dying in the LFS smudge filter, and the firmware job's is a `Traceback` inside `make ovmf-test` |
+| push | `6293d65` | build job green-or-red below the fold | triage step ran; the readout is the point of that run, not its colour |
+
+**The build job's failure was never about the image.**  `ReleaseAttributionRebuild._scratch` clones
+the working tree to build in, `git clone` fetches and smudges LFS by default, `.gitattributes` routes
+`PS5UPDATE.PUP` through LFS, and the LFS store holds no object for that pointer (`docs/BUILDING.md`
+has recorded a `404` for it since the provenance work).  So on a runner with a cold cache the clone
+dies — `remote missing object 42ea0e5…`, `fatal: PS5UPDATE.PUP: smudge filter lfs failed`, exit 128
+— and both cases in that class fail before building anything, while a developer machine with the
+payload cached passes and learns nothing is wrong.  `169fe94`'s `exit 139` is the same clone with its
+output truncated by a signal (`tee`'s buffer lost); run 5, whose log survived, is the clean form of
+the identical fault.  `169fe94` is the same fault with a truncated log — `exit 139`, `tee`'s buffer lost with the
+   signal, nothing left for the reporter to quote; *why* that run died by signal rather than by
+   `git`'s exit 128 is not recoverable from what survived, so it is recorded as the noisy form of
+   this fault and not explained further.  The fix is `GIT_LFS_SKIP_SMUDGE=1` on that clone — the build reads no `.pup`,
+and no assertion in the class is about the pointer's contents — pinned by a test written as text, so
+it holds on machines where the fetch would succeed.
+
+Neither variant is reproducible from this sandbox, and that is worth recording rather than papering
+over: a `git clone file://…` inherits the source repository's `objects/` path, so git-lfs finds the
+pointer's absence unremarkable and the smudge succeeds with or without the guard.  The failure is
+CI's measurement, not a local deduction — which is the whole argument for having the pipeline.
 
 Two properties of the pipeline are confirmed by these runs whatever the tests eventually do:
 a failing gate fails the job (no `tee` hid it, no skip was counted as a pass), and
