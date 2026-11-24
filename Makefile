@@ -18,7 +18,13 @@ COMMIT       ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 # from an uncommitted diff misdates the artifact -- and the ISO is a *file*, so it
 # survives a `git commit` and would otherwise keep naming the previous tree.
 PC5_DIRTY    := $(shell test -n "$$(git status --porcelain --untracked-files=no 2>/dev/null)" && echo dirty)
-BUILD_ID     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo local)$(if $(PC5_DIRTY),-dirty)
+BUILD_ID     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo local)
+# The marker is appended to whatever base won, not folded into the default above.  `?=`
+# yields to an environment `BUILD_ID` -- and `.github/workflows/build.yml` exports the commit
+# sha for every step -- so a `-dirty` written *inside* the default was silently discarded on
+# every runner: the published label said "built from <sha>" for an image no commit produced.
+# `override` also covers `make BUILD_ID=…`, the form docs/BUILDING.md tells a releaser to use.
+override BUILD_ID := $(BUILD_ID)$(if $(PC5_DIRTY),-dirty)
 TAG          ?=
 # Use $(SOURCE_DATE_EPOCH) rather than $$SOURCE_DATE_EPOCH so that a value given
 # on the command line (make SOURCE_DATE_EPOCH=...) pins the timestamp too; a

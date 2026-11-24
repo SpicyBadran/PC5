@@ -699,11 +699,19 @@ class ReleaseAttributionRebuild(unittest.TestCase):
                          "this run is not the property under test")
         return tree
 
-    def _make(self, tree, build, *targets, mode="64"):
+    def _make(self, tree, build, *targets, mode="64", env=None):
+        """`make -C <scratch tree>`, with the variables a caller needs to override.
+
+        `env` *adds* to the inherited environment rather than replacing it, because the
+        point of one case below is to reproduce what `.github/workflows/build.yml` does --
+        export `BUILD_ID` -- and a helper that dropped everything else would test a build
+        no runner ever performs.
+        """
+        run_env = dict(os.environ, TMPDIR="/tmp", SOURCE_DATE_EPOCH="1700000000")
+        run_env.update(env or {})
         return subprocess.run(
             ["make", "-C", tree, "BUILD=" + build, "PC5_UEFI=" + mode] + list(targets),
-            capture_output=True, text=True, timeout=1800,
-            env=dict(os.environ, TMPDIR="/tmp", SOURCE_DATE_EPOCH="1700000000"))
+            capture_output=True, text=True, timeout=1800, env=run_env)
 
     def test_the_scratch_clone_does_not_need_the_lfs_payload(self):
         """A clone that fetches is a clone that fails wherever the object is missing.
@@ -886,11 +894,48 @@ class ReleaseAttributionRebuild(unittest.TestCase):
             # The record's claim, checked the way the gate checks it.
             sys.path.insert(0, os.path.join(ROOT, "tools"))
             import mkefiimg
-            esp = open(os.path.join(build, "efi64-release.img"), "rb").read()
+            with open(os.path.join(build, "efi64-release.img"), "rb") as handle:
+                esp = handle.read()
             entry = mkefiimg.FatVolume(esp).walk().get("EFI/BOOT/BOOTX64.EFI") or {}
             loader = entry.get("data") or entry.get("bytes")
             self.assertEqual(dirty["esp-loader"],
                              hashlib.sha256(loader).hexdigest()[:16])
+
+    def test_a_build_id_from_the_environment_still_says_when_the_tree_is_dirty(self):
+        """The runner's own shape: `BUILD_ID` exported, clean tree, then a dirty one.
+
+        `.github/workflows/build.yml` exports the commit sha as `BUILD_ID` for every step,
+        and the Makefile's `BUILD_ID ?=` yields to an environment variable -- so the
+        `-dirty` marker, which used to live *inside* that default, was discarded on every
+        hosted run and survived every local one.  The build job's failure quoted
+        `247c5a375f6c9f36b30aa4e9d7f85eb1051ca3c5`: forty characters, which
+        `git rev-parse --short` never prints.  That is the whole diagnosis, and this case
+        keeps the fix honest from both sides -- a handed-in id passes through *unmarked* on
+        a clean tree, because that is what stamps a release's `build-info.json`, and the
+        marker is added when the tree has moved under it.
+        """
+        git = shutil.which("git")
+        if git is None:
+            self.skipTest("git is not installed")
+        with tempfile.TemporaryDirectory(prefix="pc5-env-build-id-") as tmp:
+            tree = self._scratch(git, tmp, "clone")
+            build = os.path.join(tmp, "b")
+            stamp = os.path.join(build, "iso", "BUILDINFO.TXT")
+            given = "0" * 40
+            clean = self._make(tree, build, "iso", env={"BUILD_ID": given})
+            self.assertEqual(clean.returncode, 0, (clean.stdout + clean.stderr)[-1500:])
+            self.assertEqual(self._fields(stamp)["build"], given,
+                             "a clean tree must publish the id it was handed, unmarked; "
+                             "adding a suffix here would change every published artifact")
+            source = os.path.join(tree, "boot", "uefi64", "uefi64_main.c")
+            with open(source, "a", encoding="utf-8") as handle:
+                handle.write("\n/* attribution fixture: dirty again */\n")
+            self._settle()
+            dirty = self._make(tree, build, "iso", env={"BUILD_ID": given})
+            self.assertEqual(dirty.returncode, 0, (dirty.stdout + dirty.stderr)[-1500:])
+            self.assertEqual(self._fields(stamp)["build"], given + "-dirty",
+                             "an id that arrived from the environment is not a licence to "
+                             "drop the marker -- the image still came from an uncommitted tree")
 
 
 if __name__ == "__main__":
