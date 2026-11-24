@@ -14,12 +14,14 @@ a real boot comes only from `make ovmf-test` on a machine that has OVMF.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import io
 import json
 import os
 import pathlib
 import subprocess
+from types import SimpleNamespace
 import sys
 import tempfile
 import unittest
@@ -306,6 +308,153 @@ class SecureBootTests(unittest.TestCase):
     def test_a_refused_image_is_the_expected_result(self):
         ok, _ = ovmf.secure_boot_verdict({"boot_ok": False, "firmware_refused": True})
         self.assertTrue(ok)
+
+    def test_the_vars_template_is_copied_to_the_work_dir_before_qemu_starts(self):
+        """The whole function, driven with the types its signature asks for.
+
+        `secure_boot_run(report, args, qemu, data_dir, work, iso, code, profile,
+        vars_template)` was called with the last two arguments the other way round, so
+        `shutil.copyfile(vars_template, ...)` was handed a `Profile` and raised
+        `TypeError: stat: path should be string, bytes, os.PathLike or integer, not
+        Profile`.  That is the first statement in the function: the gate died before QEMU
+        was ever launched, and the Secure Boot assertion was never graded.  This pins what
+        the *function* promises -- argument nine is a path, argument eight is a profile --
+        which is half the story; the other half, that the call site honours it, is
+        `HarnessCallShapeTests`, because a contract test cannot see the caller.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            work = os.path.join(tmp, "work")
+            os.makedirs(work)
+            vars_template = write(os.path.join(tmp, "OVMF_VARS.ms.fd"), b"VARS-TEMPLATE")
+            code = fake_firmware(os.path.join(tmp, "OVMF_CODE.secboot.fd"))
+            iso = write(os.path.join(tmp, "pc5.iso"), b"")
+            calls = []
+            original = ovmf.run_qemu
+
+            def fake_run_qemu(qemu, data_dir, media, vars_path, serial_path, timeout,
+                              memory_mb, secure=False, stop_markers=None):
+                calls.append({"media": media, "vars_path": vars_path, "secure": secure,
+                              "stop_markers": stop_markers})
+                return {"command": ["true"], "serial": "", "seconds": 0.0,
+                        "stopped_on": "exit"}
+
+            ovmf.run_qemu = fake_run_qemu
+            try:
+                seen = ovmf.secure_boot_run(
+                    ovmf.Report(), SimpleNamespace(timeout=10, memory_mb=256), "qemu",
+                    os.path.join(tmp, "data"), work, iso, code, ovmf.IA32, vars_template)
+            finally:
+                ovmf.run_qemu = original
+            with open(os.path.join(work, "vars-secure.fd"), "rb") as handle:
+                copied = handle.read()
+            self.assertEqual(copied, b"VARS-TEMPLATE",
+                             "the writable copy of the vars template is what QEMU boots "
+                             "from; this is the line that raised")
+            self.assertEqual(len(calls), 1, "run_qemu was never reached -- the crash again")
+            self.assertEqual(calls[0]["media"]["code"], code,
+                              "`code_path` must be the firmware, not the vars template")
+            self.assertEqual(calls[0]["vars_path"], os.path.join(work, "vars-secure.fd"))
+            self.assertTrue(calls[0]["secure"], "this is the Secure Boot run; the flag is "
+                                                "what makes the policy in force")
+            self.assertEqual(calls[0]["stop_markers"], ovmf.IA32.stop,
+                              "`profile` reached the function that uses it")
+            self.assertFalse(seen["boot_ok"])
+            self.assertTrue(seen["firmware_refused"] or not seen["kernel_entry"],
+                            "an unsigned image with the policy on must read as a refusal")
+
+    def test_a_passing_object_for_the_vars_template_is_still_a_type_error(self):
+        """The inverse: a `Profile` in the path slot must fail, not silently skip."""
+        with tempfile.TemporaryDirectory() as tmp:
+            work = os.path.join(tmp, "work")
+            os.makedirs(work)
+            with self.assertRaises(TypeError):
+                ovmf.secure_boot_run(ovmf.Report(), SimpleNamespace(timeout=1, memory_mb=256),
+                                     "qemu", tmp, work, os.path.join(tmp, "pc5.iso"),
+                                     os.path.join(tmp, "code.fd"), ovmf.IA32, ovmf.IA32)
+
+
+class HarnessCallShapeTests(unittest.TestCase):
+    """Every internal call in the harness, bound against its own definition.
+
+    Eleven hosted runs died on the transposition below and no local run could see it,
+    because the branch needs *both* Secure Boot firmware files and a developer machine has
+    either neither or (rarely) both.  A checker that reads the two names side by side finds
+    it in either case, on any machine, with no firmware installed.
+    """
+
+    #: Names that describe *what* an argument is, so a mismatch means a swap rather than a
+    #: rename.  `work`, `args`, `report` and `out` are excluded by requiring the parameter
+    #: to carry a role token too.
+    ROLES = frozenset(("profile", "vars", "code", "iso", "image", "template", "serial"))
+
+    def _calls(self):
+        with open(os.path.join(ROOT, "tests", "ovmf_boot.py"), encoding="utf-8") as handle:
+            tree = ast.parse(handle.read())
+        defs = {n.name: [a.arg for a in n.args.args]
+                for n in tree.body if isinstance(n, ast.FunctionDef)}
+        return tree, defs
+
+    def test_no_positional_call_hands_a_role_to_the_wrong_parameter(self):
+        tree, defs = self._calls()
+        offenders = []
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+                continue
+            params = defs.get(node.func.id)
+            if not params or len(params) < 4 or len(node.args) != len(params):
+                continue          # different arity is a TypeError, which Python already sees
+            for arg, param in zip(node.args, params):
+                if not isinstance(arg, ast.Name):
+                    continue
+                at = set(arg.id.split("_"))
+                pt = set(param.split("_"))
+                if not (at & self.ROLES) or not (pt & self.ROLES):
+                    continue      # neither side is role-shaped; nothing to compare
+                if not (at & pt):
+                    offenders.append("%d: %s(%s=%s)" % (node.lineno, node.func.id, param,
+                                                         arg.id))
+        self.assertEqual(offenders, [],
+                         "a positional argument whose role name matches no parameter is a "
+                         "swap waiting to happen (or, if it has one, the bug):\n"
+                         + "\n".join(offenders))
+
+    def test_the_secure_boot_call_site_names_the_arguments_it_cannot_be_trusted_to_order(self):
+        """The fix itself: three same-shaped arguments, each bound by name.
+
+        Asserted against the *source*, because a call that uses keywords cannot be
+        transposed by the next edit and a call that uses positions can -- which is how this
+        file lost eleven runs.  `vars_template` must be the vars file and `profile` must be
+        the profile; those two are the pair that was swapped.
+        """
+        with open(os.path.join(ROOT, "tests", "ovmf_boot.py"), encoding="utf-8") as handle:
+            source = handle.read()
+        tree = ast.parse(source)
+        defs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+        params = [a.arg for a in defs["secure_boot_run"].args.args]
+        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+                 and isinstance(n.func, ast.Name) and n.func.id == "secure_boot_run"]
+        self.assertEqual(len(calls), 1, "the harness should call it from exactly one place")
+        call = calls[0]
+        bound = {}
+        for i, arg in enumerate(call.args):
+            self.assertLess(i, len(params), "one positional argument too many")
+            bound[params[i]] = ast.get_source_segment(source, arg)
+        for kw in call.keywords:
+            self.assertIn(kw.arg, params, "%s is not a parameter of secure_boot_run" % kw.arg)
+            self.assertNotIn(kw.arg, bound, "%s was passed twice" % kw.arg)
+            bound[kw.arg] = ast.get_source_segment(source, kw.value)
+        self.assertEqual(sorted(bound), sorted(params),
+                         "every parameter must be bound exactly once: %s" % sorted(bound))
+        for name, want in (("profile", "profile"),
+                          ("vars_template", 'found["secure_vars"]'),
+                          ("code_path", 'found["secure_code"]')):
+            self.assertEqual(bound[name], want,
+                             "`%s` should be %s, and the call gives it %s"
+                             % (name, want, bound[name]))
+        for kw in call.keywords:
+            self.assertIn(kw.arg, ("code_path", "profile", "vars_template"),
+                          "the three role-shaped arguments are named; a positional one "
+                          "could be transposed again without any checker noticing")
 
 
 class MatrixTests(unittest.TestCase):

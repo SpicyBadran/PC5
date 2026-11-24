@@ -1962,8 +1962,14 @@ def main(argv=None):
     # ------------------------------------------------------- Secure Boot
     if args.secure_boot:
         if found["secure_code"] and found["secure_vars"]:
+            # Named, not positional.  The signature ends `(..., profile, vars_template)` and
+            # this call had the last two the other way round, so `shutil.copyfile` was handed
+            # the *Profile*: `TypeError: stat: path should be string, ... not Profile`, a
+            # traceback and `Error 1`, with QEMU never started.  Three same-shaped arguments
+            # in a row is what a positional list gets wrong and Python cannot check.
             secure_boot_run(report, args, found["qemu"], data_dir, work, args.iso,
-                            found["secure_code"], found["secure_vars"], profile)
+                            code_path=found["secure_code"], profile=profile,
+                            vars_template=found["secure_vars"])
         else:
             report.check("Secure Boot: firmware enforced its trust policy on the "
                          "unsigned image", False,
