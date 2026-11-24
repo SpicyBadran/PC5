@@ -245,6 +245,27 @@ class PipelineWiringTests(unittest.TestCase):
             self.skipTest("no pipeline file in the tree")
         self.yaml = load_workflow(self)
 
+    def test_both_failing_jobs_call_the_triage_helper(self):
+        """`discover` cannot describe a dead interpreter; the per-file triage can.
+
+        Three properties, each something a future edit breaks from the other side of the
+        file: exactly one triage step per failing job, `if: failure()` so a green job does
+        not spend its budget being diagnosed, and *after* the reporter — the gate's own
+        words lead the summary, the per-file tally is the deeper layer.
+        """
+        for name in ("build", "ovmf"):
+            steps = self.yaml["jobs"][name]["steps"]
+            hits = [i for i, st in enumerate(steps)
+                    if "tools/ci_triage.py" in str(st.get("run", ""))]
+            self.assertEqual(len(hits), 1, "%s should carry exactly one triage step" % name)
+            self.assertEqual(steps[hits[0]].get("if"), "failure()",
+                             "%s's triage must never run on a green job" % name)
+            reporter = [i for i, st in enumerate(steps)
+                        if "ci_report.py" in str(st.get("run", ""))]
+            self.assertTrue(reporter, "%s lost its reporter" % name)
+            self.assertGreater(hits[0], min(reporter),
+                               "%s: the triage should follow the reporter" % name)
+
     def test_both_failing_jobs_call_the_reporter(self):
         calls = {}
         for name, job in self.yaml["jobs"].items():
@@ -266,9 +287,14 @@ class PipelineWiringTests(unittest.TestCase):
             self.assertEqual(steps[idx].get("if"), "failure()",
                              "%s's reporter must run only once a step has already failed" % name)
             for later in steps[idx + 1:]:
-                self.assertEqual(later.get("if"), "always()",
-                                 "%s: only artifact uploads may follow the reporter, so that it "
-                                 "sees every gate log and no gate sees this one" % name)
+                body = str(later.get("run", "")) + str(later.get("name", ""))
+                allowed = ("ci_triage.py" in body or later.get("if") == "always()")
+                self.assertTrue(
+                    allowed,
+                    "%s: only the triage diagnostic and artifact uploads may follow the "
+                    "reporter. A gate after it would be quoted as passed or absent before it "
+                    "ran, and a step without `if:` would make a green job pay for a diagnosis "
+                    "it does not need" % name)
 
     def test_every_gate_is_followed_by_the_reporter_inside_its_own_job(self):
         """A reporter placed before a gate, or in another job, would have nothing to read."""

@@ -131,6 +131,27 @@ def report_for(path, text):
     return "### failed gate: %s\n```\n%s\n```\n%s" % (path, body, "\n".join(tally[-6:]))
 
 
+def triage_text():
+    """The per-file triage's JSON, if the job ran one.
+
+    `tools/ci_triage.py` runs immediately before this step precisely so its verdict can be
+    quoted here: a per-file tally in a JSON nobody downloads is as unreachable as the log.
+    """
+    out = []
+    for path in sorted(glob.glob("build/logs/*.json")):
+        try:
+            with open(path, "rb") as handle:
+                raw = handle.read().decode("utf-8", "replace")
+        except OSError:
+            continue
+        if "results" not in raw and "nonzero" not in raw:
+            continue
+        picks = [l.strip() for l in raw.splitlines()
+                 if re.search(r'"(?:outcome|nonzero|note|stopped_at|file|returncode)"', l)]
+        out.append("### " + path + "\n```\n" + "\n".join(picks[:40])[:3000] + "\n```")
+    return "\n".join(out)
+
+
 def environment_lines():
     lines = []
     for cmd in PROBES:
@@ -166,6 +187,12 @@ def main(argv=None):
                 "log, or happened before the first recorded gate ran.")
         parts.append("### failed job\n\n" + note)
         print("::error title=no gate log::" + note[:ANNOTATION_LIMIT])
+    triage = triage_text()
+    if triage:
+        parts.append(triage)
+        for line in triage.splitlines():
+            if "outcome" in line or "SIGSEGV" in line.upper():
+                print("::notice title=per-file triage::" + line.strip()[:1500])
     parts.append("### runner environment\n" + "\n".join(environment_lines()))
     out = "\n".join(parts)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")

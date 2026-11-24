@@ -221,6 +221,34 @@ a *failed* verdict only, never a green gate's `OK`, so the report cannot point a
 the wrong step.  `tests/test_ci_report.py` pins those properties, and one of them is a
 one-line assertion: a log line that looks like `::error::` must not become a command.
 
+A second case needed a second instrument.  When the interpreter *dies* — the run at
+`169fe94` ended `Process completed with exit code 139` — there is no `FAIL:` block, no
+traceback and no tally, because no test failed: `discover` never got to report anything, and
+its half-written log ends mid-line.  A reporter that quotes logs cannot describe a run that
+wrote none.  So each failing job also runs `tools/ci_triage.py`, which runs the same modules
+`discover` runs, one interpreter per file, and names the first that does not return 0
+(`SIGSEGV`, `SIGKILL (out of memory…)`, `exit N`), with `--only ovmf` in the firmware job so
+it walks the suite that actually ran.  It is a diagnostic and never a gate: `if: failure()`,
+read-only apart from `build/logs/triage.json`, and it swallows its own crashes — a helper
+written to explain a failure became one once already, in bash, under `pipefail`, via a `grep`
+that matched nothing.
+
+### What the first four runs measured
+
+| Run | Head | Result | What it says |
+|---|---|---|---|
+| push | `2c3cd5c` | `cancelled` | superseded by the next push, by `concurrency.cancel-in-progress` — the design working, not a fault |
+| push + PR | `4d0c358` | `failure` ×2 | `Host tool tests` (build) and `Boot it under OVMF` (firmware) failed; the annotations could only say which step |
+| push | `169fe94` | `failure` ×2 | build: `exit 139` in `Host tool tests`; firmware: `make: *** [Makefile:637: ovmf-test] Error 1` after a `Traceback` |
+| push | `cc12956` | pending | the run that gets the reporter's whole block, not just its heading |
+
+Two properties of the pipeline are confirmed by these runs whatever the tests eventually do:
+a failing gate fails the job (no `tee` hid it, no skip was counted as a pass), and
+`publish release assets` reports `skipped` on every non-tag ref, which is its correct answer
+rather than a hole.  A third is confirmed by the cancelled first run: `cancel-in-progress`
+means a push while a run is in flight supersedes it, so a branch that commits often will
+finish only its last run — read the newest, not the first.
+
 ## Attempts, dated
 
 The instructions above were carried out and refused four times across five attempts, then

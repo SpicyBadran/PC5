@@ -298,6 +298,23 @@ jobs:
         # logs no gate writes, so nothing existing is weakened or reordered.
         run: python3 tools/ci_report.py
 
+      # `discover` says nothing when the interpreter *dies*: exit 139 arrives at the shell,
+      # the log stops mid-line, and there is no `FAIL:` block to quote because no test
+      # failed -- which is exactly how this pipeline's third run ended.  The only way to name
+      # the module is to run them one at a time.  A diagnostic, not a gate: guarded by
+      # `if: failure()` so it never runs on a green job, and it writes
+      # build/logs/triage.json for the reporter above to quote and the artifact step below to
+      # keep.  Order matters and `tests/test_ci_report.py` pins it: the reporter reads the
+      # gates first, so the summary leads with what the harness itself said, and the per-file
+      # tally follows as the artifact a reviewer opens when that is not enough.
+      - name: Name the module that killed the interpreter
+        if: failure()
+        run: |
+          set -uo pipefail
+          python3 tools/ci_triage.py --root tests --python python3 \
+            --json-out build/logs/triage.json
+
+
       - name: Keep the logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -377,6 +394,26 @@ jobs:
         # where its verdict actually lives, and `NOT TESTED` is a line this step will quote rather
         # than summarise - exit code 3 failing the job is the point, not something to soften here.
         run: python3 tools/ci_report.py
+
+      # `discover` says nothing when the interpreter *dies*: exit 139 arrives at the shell,
+      # the log stops mid-line, and there is no `FAIL:` block to quote because no test
+      # failed -- which is exactly how this pipeline's third run ended.  The only way to name
+      # the module is to run them one at a time.  A diagnostic, not a gate: guarded by
+      # `if: failure()` so it never runs on a green job, and it writes
+      # build/logs/triage.json for the reporter above to quote and the artifact step below to
+      # keep.  Order matters and `tests/test_ci_report.py` pins it: the reporter reads the
+      # gates first, so the summary leads with what the harness itself said, and the per-file
+      # tally follows as the artifact a reviewer opens when that is not enough.
+      # A firmware harness that dies takes its traceback with it, and this job boots QEMU
+      # hundreds of times, so triaging all 118 modules here would be a second job inside the
+      # first: `--only ovmf` narrows the walk to the suite that actually ran.
+      - name: Name the module that killed the interpreter
+        if: failure()
+        run: |
+          set -uo pipefail
+          python3 tools/ci_triage.py --root tests --python python3 --only ovmf \
+            --json-out build/logs/triage.json
+
 
       - name: Keep the firmware report, serial logs and the matrix
         if: always()
