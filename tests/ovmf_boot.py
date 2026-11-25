@@ -850,10 +850,9 @@ FIRMWARE_LINE_X64 = r"PC5-64-LOADER firmware=([^\r\n]*?)(?=[ ]revision=|\r|\n|$)
 def classify_firmware_identity(raw, profile_key="ia32"):
     """(implementation, distribution, accepted, refusal) for one `firmware=` string.
 
-    Pure by construction -- no file, no process, no ambient state -- because the twelve
-    cases in the contract have to grade identically on both profiles, and a verdict that
-    depends on which machine asked is the failure mode `docs/TEST_RESULTS.md` §35 and §37
-    are about.  `raw` is what the loader printed; nothing here rewrites it, trims it in
+    Pure by construction -- no file, no process, no ambient state -- because every row of
+    the contract has to grade identically on both profiles, and a verdict that depends on
+    which machine asked is the failure mode `docs/TEST_RESULTS.md` §35 and §37 are about.  `raw` is what the loader printed; nothing here rewrites it, trims it in
     place, or substitutes a canonical spelling, so the report can always quote the
     firmware's own words.  `refusal` is empty exactly when `accepted` is true.
     """
@@ -870,8 +869,9 @@ def classify_firmware_identity(raw, profile_key="ia32"):
     match = EDK2_DISTRIBUTION_RE.match(trimmed)
     if match:
         # D1: the distributor is recorded, never asserted, and it cannot change the verdict.
-        # `unrecognised:` is deliberately not a status -- it is a label on a field nothing
-        # gates on, kept so the record does not silently launder an unusual string.
+        # There is deliberately no `unrecognised distributor` status to add here -- a second
+        # taxonomy over a field nothing gates on would invite someone later to gate on it,
+        # which is the claim ADR-026 refuses to make.
         return EDK2, match.group("dist"), True, ""
     # `UNKNOWN`, not a guess: an identity this contract has no evidence for is refused and
     # named, which is what makes adding it later a decision rather than a repair.
