@@ -15,6 +15,7 @@ a real boot comes only from `make ovmf-test` on a machine that has OVMF.
 from __future__ import annotations
 
 import ast
+import contextlib
 import importlib.util
 import io
 import json
@@ -684,5 +685,140 @@ class MatrixTests(unittest.TestCase):
                              [stage.requirement for stage in stages])
             self.assertEqual([check for _r, _s, check in rows],
                              ["[cold] " + stage.check for stage in stages])
+class FirmwareEvidenceTests(unittest.TestCase):
+    """The row that fails on the firmware's *name* must say which name it saw.
+
+    Run 7's firmware job reached this row for real and reported it as
+    `loader_firmware_edk2=False`.  That is a true statement and an useless one: three
+    different defects produce it -- the firmware told the loader something else, the loader
+    printed it with different spacing, or nothing was printed at all -- and the serial log
+    already distinguishes them.  Quoting the observed string is the half of §39's option 1
+    that changes no contract; the other half (whether the row should require the literal
+    `EDK II` at all) is a decision about what the gate *means* and stays open.
+    """
+
+    #: (the line the loader prints, the profile that reads it).  `classify` asks the
+    #: *profile* which words to look for -- the two paths use different prefixes on
+    #: purpose -- so a 64-bit line classified as IA32 proves nothing either way, and each
+    #: case below has to say which path it is speaking about.
+    IA32 = ("PC5-UEFI: firmware=%s\r\n", "IA32")
+    SIXTY4 = ("PC5-64-LOADER firmware=%s\r\n", "X64")
+
+    def _seen(self, shape, path):
+        template, profile = path
+        return ovmf.classify({"serial": template % shape}, profile=getattr(ovmf, profile))
+
+    def _row(self, shape, path):
+        return ovmf._firmware_named("loader_firmware_edk2", "loader_firmware_said")(
+            self._seen(shape, path), {})
+
+    def test_the_required_name_still_passes_and_says_nothing(self):
+        ok, detail = self._row("EDK II", self.IA32)
+        self.assertTrue(ok, "the predicate is unchanged: a pass must stay a pass")
+        self.assertEqual(detail, "")
+
+    def test_a_different_name_is_quoted_not_summarised(self):
+        ok, detail = self._row("EFI Development Kit II", self.IA32)
+        self.assertFalse(ok)
+        self.assertIn("loader_firmware_edk2=False", detail,
+                      "the old wording survives inside the new one; anything reading the "
+                      "detail for the key must still find it")
+        self.assertIn("EFI Development Kit II", detail)
+
+    def test_an_absent_line_says_it_is_absent(self):
+        seen = ovmf.classify({"serial": "PC5-UEFI: watchdog_disable_refused=3"})
+        ok, detail = ovmf._firmware_named("loader_firmware_edk2", "loader_firmware_said")(seen, {})
+        self.assertFalse(ok)
+        self.assertIn("no `firmware=` line at all", detail)
+        self.assertNotIn("firmware=''", detail, "an absent string and an empty one are "
+                                                "different facts; only the second may be quoted")
+
+    def test_the_64_bit_path_carries_the_same_evidence(self):
+        ok, detail = self._row("EDK Entropy", self.SIXTY4)
+        self.assertFalse(ok)
+        self.assertIn("EDK Entropy", detail,
+                      "the two paths print the line with different prefixes, and the hosted "
+                      "failure could come from either")
+
+    def test_quoting_can_never_move_the_verdict(self):
+        # The strongest form of the claim: for every serial shape, the boolean this proof
+        # returns is the boolean `_seen` returns.  A diagnostic that could flip a row would
+        # be a new gate, which is what the whole `if: failure()` discipline is there to stop.
+        shapes = ["EDK II", "edk ii", "EDK II  ", "EDK", "", "SeaBIOS",
+                  "EDK II (ACCID=0x6564)", "0x6564 EDK II"]
+        for path in (self.IA32, self.SIXTY4):
+            for shape in shapes:
+                with self.subTest(shape=shape, profile=path[1]):
+                    seen = self._seen(shape, path)
+                    plain = ovmf._seen("loader_firmware_edk2")(seen, {})[0]
+                    quoted = ovmf._firmware_named("loader_firmware_edk2",
+                                                  "loader_firmware_said")(seen, {})[0]
+                    self.assertEqual(plain, quoted)
+
+
+class MutantBuildFailureTests(unittest.TestCase):
+    """A failed `mkiso.py` must arrive with its own complaint, not just an exit status.
+
+    `build_mutant_iso` ran the repository's ISO tool with `check=True, capture_output=True`.
+    The child died, said why, and every word of it landed in the exception's `stdout`/
+    `.stderr` attributes, which nothing prints on the way out: the traceback that reaches
+    the shell ends with `Command '[...]' returned non-zero exit status 1`, which names no
+    cause.  That is the same hole `tools/ci_report.py` was just widened for, one level down
+    -- the reporter can now carry an exception line, but here there was no exception *line*
+    worth carrying.  Unlike the transposed `secure_boot_run` arguments, this one reproduces
+    with no QEMU and no OVMF at all, because the child never gets as far as the ISO.
+    """
+
+    def _build_and_fail(self, tmp):
+        """The one build that must die, with the harness's output captured and its `BUILD`
+        redirected into `tmp` so nothing is written to the repository's own tree."""
+        err, out = io.StringIO(), io.StringIO()
+        saved, ovmf.BUILD = ovmf.BUILD, tmp
+        try:
+            with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+                with self.assertRaises(subprocess.CalledProcessError) as caught:
+                    ovmf.build_mutant_iso("pc5-no-input", os.path.join(tmp, "absent.esp"))
+        finally:
+            ovmf.BUILD = saved
+        return caught.exception, err.getvalue()
+
+    def test_the_childs_reason_reaches_the_log(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            exc, text = self._build_and_fail(tmp)
+            self.assertEqual(exc.returncode, 1, "the same non-zero verdict `check=True` gave")
+            self.assertIn("mkiso.py failed (exit 1)", text)
+            self.assertIn("FileNotFoundError", text,
+                          "the missing input is the whole reason; it must not stay inside an "
+                          "exception attribute that nothing prints")
+            self.assertIn("loader.bin", text, "named by the child, not inferred by us")
+
+    def test_naming_the_childs_reason_does_not_move_the_verdict(self):
+        # The exception is what the gate dies on.  Same type, same status, same command: the
+        # added output is a witness statement, not a second verdict, and a mutant that builds
+        # cleanly still returns a path rather than a printout.
+        with tempfile.TemporaryDirectory() as tmp:
+            exc, _text = self._build_and_fail(tmp)
+            self.assertIsInstance(exc, subprocess.CalledProcessError)
+            self.assertEqual(exc.returncode, 1)
+            self.assertTrue(any("mkiso.py" in part for part in exc.cmd), exc.cmd)
+
+    def test_the_output_is_written_when_there_is_a_reason_to_write(self):
+        # The inverse control: a child that succeeds prints nothing through this path, so the
+        # harness cannot manufacture an error line on a green build -- and the gate profiles,
+        # which call `build_mutant_iso` six times per run, would otherwise be annotated six
+        # times over with nothing wrong.
+        src = pathlib.Path(ROOT, "tests", "ovmf_boot.py").read_text()
+        window = src[src.index("def build_mutant_iso"):src.index("# ---------------------------------------------------------------- main")]
+        self.assertIn("if built.returncode != 0:", window,
+                      "the child's output must be printed only when the child failed")
+        self.assertIn("check_returncode", window,
+                      "and the raise must be the same `CalledProcessError` `check=True` gave, "
+                      "not a new exit path")
+        self.assertNotIn("run(command, check=True", window,
+                         "asserted against the call, not the word: this function's comment "
+                         "explains why `check=True` was dropped, and a test that matched that "
+                         "prose would fail for describing the fix")
+
+
 if __name__ == "__main__":
     unittest.main()

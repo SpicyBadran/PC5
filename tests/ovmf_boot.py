@@ -790,11 +790,28 @@ def _common_markers(text):
     }
 
 
+def _said(text, pattern):
+    """The text a line actually carried, or None.  Evidence, never a verdict.
+
+    The `_number` and `_hex` readers below pull a *count* out of the serial log because a
+    count is what their rows assert.  This pulls the *string*, for the one place where the
+    assertion is about a name: `loader_firmware_edk2` is a substring test, and a failure
+    that quotes only `=False` leaves the reader to guess whether the firmware said
+    something else, said it with different spacing, or said nothing at all.  Those three
+    are different defects, and the serial log already knows which.
+    """
+    match = re.search(pattern, text)
+    return match.group(1).strip() if match else None
+
+
 def _markers_ia32(text, profile):
     """The 32-bit kernel path's own lines."""
     return {
         "loader_banner": "PC5 UEFI loader" in text or "PC5 UEFI LOADER" in text,
         "loader_firmware_edk2": "PC5-UEFI: firmware=EDK II" in text,
+        # What the loader was *told*, for the row's failure detail.  Deliberately not part
+        # of the predicate above, which stays exactly as strict as it was.
+        "loader_firmware_said": _said(text, r"PC5-UEFI: firmware=([^\r\n]*)"),
         "kernel_volume_image": "PC5-UEFI: kernel_volume=image" in text,
         "kernel_read": "PC5-UEFI: kernel_bytes_read=" in text,
         "boot_services_exited": "PC5-UEFI: boot_services_exited" in text,
@@ -840,6 +857,7 @@ def _markers_x64(text, profile):
     return {
         "loader_banner": "PC5-64-LOADER-BANNER" in text,
         "loader_firmware_edk2": "PC5-64-LOADER firmware=EDK II" in text,
+        "loader_firmware_said": _said(text, r"PC5-64-LOADER firmware=([^\r\n]*)"),
         "kernel_volume_image": "PC5-64-LOADER kernel-volume=image" in text,
         "kernel_read": "PC5-64-LOADER kernel at=" in text,
         "kernel_bytes_read": _number(text, r"PC5-64-LOADER kernel at=0x[0-9a-f]+ bytes=(\d+)"),
@@ -1095,6 +1113,26 @@ def _seen(key):
     return proof
 
 
+def _firmware_named(key, said_key):
+    """`_seen(key)`, except a failure says what the log actually held.
+
+    The verdict is `bool(seen[key])` and nothing else -- the same expression `_seen`
+    computes -- so this cannot turn a row green or red.  What changes is the `detail`,
+    which travels into the matrix row's note and into the annotation, and on the hosted
+    run was the difference between `loader_firmware_edk2=False` and a name a reader can
+    check against the firmware the runner installed.
+    """
+    def proof(seen, ctx):
+        value = seen.get(key)
+        if value:
+            return True, ""
+        said = seen.get(said_key)
+        return False, ("%s=%r; " % (key, value)
+                       + ("the loader printed firmware=%r" % said if said is not None
+                          else "the loader printed no `firmware=` line at all"))
+    return proof
+
+
 def _positive(key):
     """A count that has to exist and be greater than zero."""
     def proof(seen, ctx):
@@ -1261,7 +1299,7 @@ def ia32_stages():
               "the PC5 UEFI loader executed under it", _seen("loader_banner")),
         Stage("the loader names the firmware it is running on",
               "the loader identified EDK II as its firmware",
-              _seen("loader_firmware_edk2")),
+              _firmware_named("loader_firmware_edk2", "loader_firmware_said")),
         Stage("required files are located and loaded",
               "the kernel was found on the volume we booted from",
               _seen("kernel_volume_image")),
@@ -1336,7 +1374,7 @@ def x64_stages():
               "the PC5 UEFI loader executed under it", _seen("loader_banner")),
         Stage("the loader names the firmware it is running on",
               "the loader identified EDK II as its firmware",
-              _seen("loader_firmware_edk2")),
+              _firmware_named("loader_firmware_edk2", "loader_firmware_said")),
         Stage("required files are located and loaded",
               "the kernel was found on the volume we booted from",
               _seen("kernel_volume_image")),
@@ -1726,7 +1764,22 @@ def build_mutant_iso(name, efi_image, kernel=None, drop_kernel=False,
     ]
     if kernel is None and not drop_kernel:
         command += ["--file", "%s=%s" % (profile.kernel_name, kernel_path)]
-    subprocess.run(command, check=True, capture_output=True)
+    built = subprocess.run(command, capture_output=True, text=True)
+    if built.returncode != 0:
+        # `check=True` is a bad witness, and this is the same hole the reporter was just
+        # widened for from the other end: `capture_output=True` puts everything the child
+        # said into `CalledProcessError.stdout`/`.stderr`, which nothing prints when the
+        # traceback reaches the shell, and the message that survives names only the status
+        # -- `Command '[...]' returned non-zero exit status 1`.  A mutant that could not be
+        # built would then reach an annotation as a verdict with no cause, exactly as the
+        # transposed `secure_boot_run` arguments did.  Say what the child said, then raise
+        # the same exception: same type, same status, same command, and the reason is now
+        # on the line above it in the log the reporter quotes.
+        for stream in (built.stderr, built.stdout):
+            if stream and stream.strip():
+                sys.stderr.write("mkiso.py failed (exit %d); its own output:\n%s\n"
+                                 % (built.returncode, stream.strip()))
+        built.check_returncode()
     return iso_path
 
 
