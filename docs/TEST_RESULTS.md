@@ -4388,6 +4388,15 @@ the annotations, and the per-reason list goes to the step summary — so they ar
 environment statement and counted as nothing. The executed count is what makes the green mean
 something: 1212 tests ran on the runner.
 
+The commit carrying §41's corrections and this section, `bfc462e`, was then measured the same way,
+because a correction that is not verified at its own HEAD is a claim again: PR run `45677833204`
+and push run `45677818950`, **both `completed/success`** — `build and verify` 27.2 m and 24.2 m,
+`UEFI boot under genuine OVMF` 14.8 m and 14.6 m, `publish release assets` `skipped` on both, and
+the runner's own host-suite notice reading `Ran 1227 tests in 588.553s` → `OK (skipped=13)`. The
+`1227` against the pushed parent's `1225` is the two corpus cases executing on the runner, so the
+new gate is not merely present in the tree; it ran there and passed there. `mergeStateStatus`
+returned to `CLEAN` with no pending checks.
+
 **6b. This correction broke a gate, and the gate was right.** The first run after §41's edits came
 back `Ran 1227 tests in 771.293s` → `FAILED (failures=2, skipped=2)`, exit 2, and both failures were
 `test_docs_check`, each carrying one complaint: the documents name a goal called *build*, and the
