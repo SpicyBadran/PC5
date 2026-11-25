@@ -756,6 +756,214 @@ class FirmwareEvidenceTests(unittest.TestCase):
                     self.assertEqual(plain, quoted)
 
 
+class FirmwareIdentityContractTests(unittest.TestCase):
+    """ADR-026: the row asserts an *implementation* and records a *distribution*.
+
+    The hosted runner's OVMF prints `Ubuntu distribution of EDK II`, because Ubuntu
+    overrides edk2's build-time `PcdFirmwareVendor` (upstream value: the literal
+    `EDK II`, which is what all sixteen genuine serial logs under `docs/evidence/`
+    contain).  The predicate that was here before was a substring test, so it was loose at
+    one end and strict at the other: it accepted `EDK II-beta` and refused the Ubuntu
+    build.  The contract below is anchored, keeps the firmware's own words verbatim, and
+    refuses anything it cannot name -- including this repository's own stub, which sets
+    the same system-table field to `PC5 stub firmware` and must never certify a real boot.
+
+    Both profiles are exercised because the two loaders print the field differently: the
+    32-bit line ends at the vendor string and prints nothing at all when the field is
+    missing, while the 64-bit line continues with ` revision=`/` table-rev=` and spells a
+    NULL pointer `absent` and a zero-length string `empty`.
+    """
+
+    #: (what the firmware printed, accepted?, implementation, distribution).  Every row is
+    #: checked on both profiles, so the contract is one rule and not two dialects.
+    MATRIX = [
+        ("EDK II", True, ovmf.EDK2, "upstream default"),
+        ("Ubuntu distribution of EDK II", True, ovmf.EDK2, "Ubuntu distribution"),
+        ("Fedora distribution of EDK II", True, ovmf.EDK2, "Fedora distribution"),
+        ("  EDK II  ", True, ovmf.EDK2, "upstream default"),
+        # D3: the tightening.  The old substring test let all four of these through.
+        ("EDK II (ACCID=0x6564)", False, "UNKNOWN", None),
+        ("EDK IIx", False, "UNKNOWN", None),
+        ("edk ii", False, "UNKNOWN", None),
+        ("EDK II-like", False, "UNKNOWN", None),
+        # D2: plausible but unevidenced.  Refused as UNKNOWN, and named, so adding one later
+        # is a decision taken against a captured log rather than a widening typed in now.
+        ("TianoCore", False, "UNKNOWN", None),
+        ("EFI Development Kit II", False, "UNKNOWN", None),
+        ("OVMF", False, "UNKNOWN", None),
+        # The stub, and a stub that renames itself to fit the grammar.
+        ("PC5 stub firmware", False, None, None),
+        ("PC5 of EDK II", False, None, None),
+        # D4: three distinct absences, never one.
+        ("absent", False, None, None),
+        ("empty", False, None, None),
+        # Row 11 (>= the profile's print limit) and row 12 (non-printable mangling).
+        ("Ubuntu distribution of EDK II fir", False, "UNKNOWN", None),
+        ("EDK II?", False, "UNKNOWN", None),
+    ]
+
+    LINES = {"ia32": "PC5-UEFI: firmware=%s\r\n",
+             "x64": "PC5-64-LOADER firmware=%s revision=0x2 table-rev=0x10000\r\n"}
+
+    def _ident(self, shape, key):
+        return ovmf.classify({"serial": self.LINES[key] % shape},
+                             profile=ovmf.IA32 if key == "ia32" else ovmf.X64)
+
+    def test_every_row_grades_the_same_way_on_both_profiles(self):
+        for shape, accepted, impl, dist in self.MATRIX:
+            verdicts = {}
+            for key in ("ia32", "x64"):
+                seen = self._ident(shape, key)
+                with self.subTest(shape=shape, profile=key):
+                    self.assertEqual(seen["loader_firmware_edk2"], accepted)
+                    self.assertEqual(seen["loader_firmware_impl"], impl)
+                    self.assertEqual(seen["loader_firmware_distribution"], dist)
+                    self.assertIsInstance(seen["loader_firmware_edk2"], bool,
+                                          "the row's key must stay a bool: the matrix, the "
+                                          "gate-profile tests and `--secure-boot` all read it")
+                    self.assertEqual(bool(seen["loader_firmware_refusal"]), not accepted,
+                                     "a refusal carries a reason, a pass carries none")
+                verdicts[key] = accepted
+            self.assertEqual(verdicts["ia32"], verdicts["x64"],
+                             "one contract, not a dialect per profile")
+
+    def test_the_raw_string_is_preserved_verbatim(self):
+        # Nothing canonicalises the firmware's own words: the case, the padding and the
+        # junk are the evidence, and a report that stored only the classification would
+        # make ADR-026 unauditable.
+        for key in ("ia32", "x64"):
+            shape = "  Ubuntu distribution of EDK II  "
+            raw = self.LINES[key] % shape
+            seen = ovmf.classify({"serial": raw}, profile=ovmf.IA32 if key == "ia32" else ovmf.X64)
+            with self.subTest(profile=key):
+                self.assertEqual(seen["loader_firmware_said"], shape.strip(),
+                                 "`_said` trims the line for comparison; the *content* is the "
+                                 "firmware's own, unaltered")
+                self.assertNotIn("EDK IIx", seen["loader_firmware_said"])
+                self.assertEqual(ovmf.identity_record(seen)["raw"], shape.strip())
+
+    def test_a_self_issued_label_can_never_certify_a_boot(self):
+        # The stub firmware sets `SystemTable->FirmwareVendor` to `PC5 stub firmware`
+        # itself.  Refusal is by shape (`SELF_ISSUED_MARK`) rather than by that literal, so
+        # a stub that renamed itself into the accepted grammar is still refused -- which is
+        # the one way this row could be satisfied without genuine firmware.
+        self.assertTrue(ovmf.SELF_ISSUED_MARK in "PC5 stub firmware")
+        for shape in ("PC5 stub firmware", "PC5 of EDK II", "EDK II by PC5"):
+            for key in ("ia32", "x64"):
+                with self.subTest(shape=shape, profile=key):
+                    self.assertFalse(self._ident(shape, key)["loader_firmware_edk2"])
+        self.assertIn("cannot certify genuine firmware",
+                      self._ident("PC5 of EDK II", "ia32")["loader_firmware_refusal"])
+
+    def test_absence_is_three_distinct_refusals(self):
+        no_line = ovmf.classify({"serial": "PC5-UEFI: kernel_volume=image\r\n"})
+        absent = self._ident("absent", "x64")
+        empty = self._ident("empty", "x64")
+        reasons = [no_line["loader_firmware_refusal"], absent["loader_firmware_refusal"],
+                   empty["loader_firmware_refusal"]]
+        for reason in reasons:
+            self.assertTrue(reason, "every refusal must say which absence it is")
+        self.assertEqual(len(set(reasons)), 3,
+                         "NULL pointer, zero-length string and no line at all are three facts "
+                         "about the machine; collapsing them loses the only signal naming which")
+        self.assertIn("NULL", absent["loader_firmware_refusal"])
+        self.assertIn("zero-length", empty["loader_firmware_refusal"])
+        self.assertIn("no `firmware=` line", no_line["loader_firmware_refusal"])
+
+    def test_truncation_is_ambiguous_rather_than_wrong(self):
+        # `utf16_to_ascii` into a 32-byte buffer stops at 31 characters, so a firmware that
+        # calls itself something longer cannot be told apart from one whose name merely got
+        # cut.  Both are refused, but only the first may say "truncated" -- and a short
+        # mismatch must not claim it.
+        long_so_far = "Ubuntu distribution of EDK II fir"
+        self.assertGreaterEqual(len(long_so_far), ovmf.PRINT_LIMIT["ia32"])
+        self.assertIn("may be truncated", self._ident(long_so_far, "ia32")["loader_firmware_refusal"])
+        short = "EDK IIx"
+        self.assertLess(len(short), ovmf.PRINT_LIMIT["ia32"])
+        self.assertNotIn("truncated", self._ident(short, "ia32")["loader_firmware_refusal"])
+        self.assertIn("not the EDK II implementation token",
+                      self._ident(short, "ia32")["loader_firmware_refusal"])
+
+    def test_a_mangled_string_is_reported_as_mangled(self):
+        refusal = self._ident("EDK II?", "ia32")["loader_firmware_refusal"]
+        self.assertIn("non-printable", refusal,
+                      "the loader substitutes `?`, so a refusal should say the encoding was "
+                      "lost rather than leave a reader to spot the question mark")
+
+    def test_the_distribution_is_recorded_and_nothing_gates_on_it(self):
+        # D1.  The distributor goes into the report and the refusal detail, and no row keys
+        # on it -- because anyone building EDK II can write any distributor name into that
+        # PCD, so a gate on it would be a gate on a claim the string cannot support, and it
+        # would go red on the next distro upgrade for a reason that is not a defect.  Checked
+        # against the stage table itself, which is where a future widening would appear.
+        for shape in ("Ubuntu distribution of EDK II", "Fedora distribution of EDK II"):
+            seen = self._ident(shape, "ia32")
+            self.assertTrue(seen["loader_firmware_edk2"])
+            # Verbatim: the clause before ` of EDK II`, exactly as printed.  Trimming it to
+            # `Ubuntu` would be interpreting the distribution -- the same overreach D1 rules
+            # out, in the other direction.
+            self.assertEqual(seen["loader_firmware_distribution"],
+                             shape.split(" of EDK II")[0])
+        for profile in (ovmf.IA32, ovmf.X64):
+            for stage in ovmf.profile_stages(profile):
+                text = " ".join((stage.requirement, stage.check, stage.name("cold"))).lower()
+                self.assertNotIn("distribution", text,
+                                 "a stage named for the distributor would assert what D1 "
+                                 "forbids: %r" % text)
+                self.assertNotIn("ubuntu", text)
+
+    def test_the_64bit_marker_does_not_swallow_the_revision_fields(self):
+        # The 64-bit loader continues the same line with ` revision=` and ` table-rev=`.  A
+        # pattern that captured to end of line would read the identity as
+        # `EDK II revision=0x2 table-rev=0x10000`, refuse it, and turn sixteen committed
+        # genuine boots red -- the one way this change could have looked safe in isolation
+        # and been wrong everywhere.
+        seen = ovmf.classify({"serial":
+                              "PC5-64-LOADER firmware=EDK II revision=0x2 table-rev=0x10000\r\n"},
+                             profile=ovmf.X64)
+        self.assertEqual(seen["loader_firmware_said"], "EDK II")
+        self.assertTrue(seen["loader_firmware_edk2"])
+        ubuntu = ovmf.classify({"serial":
+                                "PC5-64-LOADER firmware=Ubuntu distribution of EDK II "
+                                "revision=0x2 table-rev=0x10000\r\n"}, profile=ovmf.X64)
+        self.assertTrue(ubuntu["loader_firmware_edk2"])
+        self.assertEqual(ubuntu["loader_firmware_distribution"], "Ubuntu distribution")
+
+    def test_the_row_verdict_is_the_classifiers_verdict(self):
+        # The row and the marker must not be able to disagree: one predicate, read twice.
+        proof = ovmf._firmware_named("loader_firmware_edk2", "loader_firmware_said")
+        for shape, accepted, _impl, _dist in self.MATRIX:
+            for key in ("ia32", "x64"):
+                seen = self._ident(shape, key)
+                with self.subTest(shape=shape, profile=key):
+                    self.assertEqual(proof(seen, {})[0], accepted)
+
+    def test_the_report_carries_the_identity_block(self):
+        # The artifact, not just the annotation: an accepted boot records the raw string,
+        # the implementation and the distribution; a refused one records all three too, with
+        # the refusal, so a reader of `build/ovmf-report.json` can audit the verdict.
+        run = {"serial": self.LINES["ia32"] % "Ubuntu distribution of EDK II",
+               "killed": False, "stopped_on": "marker", "seconds": 1.0, "returncode": 0,
+               "nmi": None}
+        report = ovmf.Report()
+        ovmf.check_boot(report, run, "cold")
+        identity = report.data["cold"]["firmware_identity"]
+        self.assertEqual(identity["raw"], "Ubuntu distribution of EDK II")
+        self.assertEqual(identity["implementation"], "EDK II")
+        self.assertEqual(identity["distribution"], "Ubuntu distribution")
+        self.assertTrue(identity["accepted"])
+        self.assertEqual(identity["refusal"], "")
+
+        refused = dict(run, serial=self.LINES["ia32"] % "PC5 stub firmware")
+        report = ovmf.Report()
+        ovmf.check_boot(report, refused, "cold")
+        identity = report.data["cold"]["firmware_identity"]
+        self.assertFalse(identity["accepted"])
+        self.assertIsNone(identity["implementation"])
+        self.assertIn("cannot certify", identity["refusal"])
+        self.assertEqual(identity["raw"], "PC5 stub firmware")
+
+
 class MutantBuildFailureTests(unittest.TestCase):
     """A failed `mkiso.py` must arrive with its own complaint, not just an exit status.
 

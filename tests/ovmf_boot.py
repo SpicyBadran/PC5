@@ -804,14 +804,126 @@ def _said(text, pattern):
     return match.group(1).strip() if match else None
 
 
+#: --- firmware identity contract -------------------------------------------------------
+#: What a `firmware=` line may be used to claim, and no more.  Both loaders print
+#: `SystemTable->FirmwareVendor` verbatim; edk2's upstream value for it is the literal
+#: `EDK II` (`MdeModulePkg.dec`, `PcdFirmwareVendor|L"EDK II"`), and a distributor may
+#: override that same build-time PCD to name itself -- which is how the hosted runner came
+#: to print `Ubuntu distribution of EDK II` while every serial log committed under
+#: `docs/evidence/` says `EDK II`.  The distribution clause is a claim about *who built the
+#: image*, and anyone building EDK II can write anything there, so no gate here asserts it;
+#: what the row can assert is the implementation token, exactly.  Written as data rather
+#: than prose in the spirit of ADR-024: an identity outside this grammar is refused, not
+#: forgiven.  See ADR-026.
+EDK2 = "EDK II"
+#: Anchored at both ends, unlike the substring test this replaces: the old predicate
+#: accepted any string *beginning* `EDK II` (so `EDK II-beta` passed) while refusing
+#: `Ubuntu distribution of EDK II` -- too loose at the tail and too strict at the head at
+#: once.  A vendor string that itself contains ` revision=` is indistinguishable from the
+#: next field on the 64-bit line, because the marker vocabulary delimits fields with a
+#: space, not with quoting; such a string is refused as ambiguous rather than guessed at.
+EDK2_DISTRIBUTION_RE = re.compile(r"^(?P<dist>\S(?:.*\S)?) of EDK II$")
+#: A label this repository writes is never evidence of third-party firmware.  The stub
+#: firmware sets the same system-table field to `PC5 stub firmware`
+#: (`tests/uefi_stub_firmware.py`) on purpose; the rule is by shape, not by that one string,
+#: so a stub cannot certify a real boot by naming itself something else either.
+SELF_ISSUED_MARK = "PC5"
+#: The two words the 64-bit loader prints for a NULL pointer and a zero-length string
+#: (`serial_write_ascii16`), against the 32-bit loader printing no line at all when either
+#: holds.  Kept as three separate refusals on purpose: they are three different facts about
+#: the machine, and collapsing them discards the only signal saying which one occurred.
+ABSENT_FORMS = {"absent": "the firmware vendor pointer was NULL",
+                "empty": "the firmware reported a zero-length vendor string"}
+#: Characters each profile can print before its own limit bites: `utf16_to_ascii` into a
+#: 32-byte buffer stops at 31 (the last byte is the NUL), `serial_write_ascii16(…, 32)`
+#: streams up to 32.  A string of exactly that length which does not parse is *truncated*,
+#: and a truncated string is ambiguous -- reporting it as a mismatch would blame the
+#: firmware for the loader's buffer size.
+PRINT_LIMIT = {"ia32": 31, "x64": 32}
+
+#: The two markers' line prefixes.  The 64-bit one has to stop at ` revision=`, because
+#: that loader continues the same line with ` revision=` and ` table-rev=`.
+FIRMWARE_LINE_IA32 = r"PC5-UEFI: firmware=([^\r\n]*)"
+FIRMWARE_LINE_X64 = r"PC5-64-LOADER firmware=([^\r\n]*?)(?=[ ]revision=|\r|\n|$)"
+
+
+def classify_firmware_identity(raw, profile_key="ia32"):
+    """(implementation, distribution, accepted, refusal) for one `firmware=` string.
+
+    Pure by construction -- no file, no process, no ambient state -- because the twelve
+    cases in the contract have to grade identically on both profiles, and a verdict that
+    depends on which machine asked is the failure mode `docs/TEST_RESULTS.md` §35 and §37
+    are about.  `raw` is what the loader printed; nothing here rewrites it, trims it in
+    place, or substitutes a canonical spelling, so the report can always quote the
+    firmware's own words.  `refusal` is empty exactly when `accepted` is true.
+    """
+    if raw is None:
+        return None, None, False, "the loader printed no `firmware=` line at all"
+    if SELF_ISSUED_MARK in raw:
+        return None, None, False, ("`%s` is a label this project writes itself; a stub "
+                                   "cannot certify genuine firmware" % raw)
+    if raw in ABSENT_FORMS:
+        return None, None, False, "%s: %s" % (raw, ABSENT_FORMS[raw])
+    trimmed = raw.strip()
+    if trimmed == EDK2:
+        return EDK2, "upstream default", True, ""
+    match = EDK2_DISTRIBUTION_RE.match(trimmed)
+    if match:
+        # D1: the distributor is recorded, never asserted, and it cannot change the verdict.
+        # `unrecognised:` is deliberately not a status -- it is a label on a field nothing
+        # gates on, kept so the record does not silently launder an unusual string.
+        return EDK2, match.group("dist"), True, ""
+    # `UNKNOWN`, not a guess: an identity this contract has no evidence for is refused and
+    # named, which is what makes adding it later a decision rather than a repair.
+    reason = "`%s` is not the %s implementation token; refused as UNKNOWN" % (trimmed, EDK2)
+    if "?" in trimmed:
+        reason += " (and carries `?`, which the loader substitutes for a non-printable unit)"
+    limit = PRINT_LIMIT.get(profile_key, 31)
+    if len(raw) >= limit:
+        reason += " (ambiguous: exactly this profile's %d-character print limit, so the " \
+                  "string may be truncated rather than wrong)" % limit
+    return "UNKNOWN", None, False, reason
+
+
+def _firmware_identity(text, line_pattern, profile_key):
+    """The marker keys the firmware-identity row, the matrix and the report are built from.
+
+    `loader_firmware_edk2` keeps its name and its bool type -- the row, `--matrix-out` and
+    `tests/test_ovmf_gate_profiles.py` all read it -- and is now the classifier's verdict
+    instead of an unbounded substring test.  The sibling keys carry the evidence alongside
+    it, so a refusal can be read without re-deriving the grammar.
+    """
+    raw = _said(text, line_pattern)
+    impl, dist, accepted, refusal = classify_firmware_identity(raw, profile_key)
+    return {
+        "loader_firmware_edk2": accepted,
+        "loader_firmware_said": raw,
+        "loader_firmware_impl": impl,
+        "loader_firmware_distribution": dist,
+        "loader_firmware_refusal": refusal,
+    }
+
+
+def identity_record(seen):
+    """The report's first-class view of the identity claim, raw string included.
+
+    The same facts sit in `markers`, which everything already reads; they are also lifted
+    out because "record the distribution, do not assert it" is only honest if the record is
+    somewhere a reviewer can find without knowing which marker carries it -- and somewhere
+    that keeps the firmware's own words even when the verdict is a refusal.
+    """
+    return {"raw": seen.get("loader_firmware_said"),
+            "implementation": seen.get("loader_firmware_impl"),
+            "distribution": seen.get("loader_firmware_distribution"),
+            "accepted": bool(seen.get("loader_firmware_edk2")),
+            "refusal": seen.get("loader_firmware_refusal") or ""}
+
+
 def _markers_ia32(text, profile):
     """The 32-bit kernel path's own lines."""
     return {
         "loader_banner": "PC5 UEFI loader" in text or "PC5 UEFI LOADER" in text,
-        "loader_firmware_edk2": "PC5-UEFI: firmware=EDK II" in text,
-        # What the loader was *told*, for the row's failure detail.  Deliberately not part
-        # of the predicate above, which stays exactly as strict as it was.
-        "loader_firmware_said": _said(text, r"PC5-UEFI: firmware=([^\r\n]*)"),
+        **_firmware_identity(text, FIRMWARE_LINE_IA32, "ia32"),
         "kernel_volume_image": "PC5-UEFI: kernel_volume=image" in text,
         "kernel_read": "PC5-UEFI: kernel_bytes_read=" in text,
         "boot_services_exited": "PC5-UEFI: boot_services_exited" in text,
@@ -856,8 +968,8 @@ def _markers_x64(text, profile):
     kernel_size = _hex(text, r"PC5-64-IMAGE base=0x[0-9a-f]+ size=(0x[0-9a-f]+) range=ok")
     return {
         "loader_banner": "PC5-64-LOADER-BANNER" in text,
-        "loader_firmware_edk2": "PC5-64-LOADER firmware=EDK II" in text,
-        "loader_firmware_said": _said(text, r"PC5-64-LOADER firmware=([^\r\n]*)"),
+        # Same classifier, same rules; only the line prefix and the print limit differ.
+        **_firmware_identity(text, FIRMWARE_LINE_X64, "x64"),
         "kernel_volume_image": "PC5-64-LOADER kernel-volume=image" in text,
         "kernel_read": "PC5-64-LOADER kernel at=" in text,
         "kernel_bytes_read": _number(text, r"PC5-64-LOADER kernel at=0x[0-9a-f]+ bytes=(\d+)"),
@@ -1127,9 +1239,13 @@ def _firmware_named(key, said_key):
         if value:
             return True, ""
         said = seen.get(said_key)
-        return False, ("%s=%r; " % (key, value)
-                       + ("the loader printed firmware=%r" % said if said is not None
-                          else "the loader printed no `firmware=` line at all"))
+        parts = ["%s=%r" % (key, value)]
+        if said is not None:
+            parts.append("the loader printed firmware=%r" % said)
+        refusal = seen.get("loader_firmware_refusal")
+        if refusal:
+            parts.append(refusal)
+        return False, "; ".join(parts)
     return proof
 
 
@@ -1667,6 +1783,7 @@ def check_boot(report, run, stage, expected_kernel_bytes=None, profile=IA32,
                           # be able to check that the injection was accepted at all.
                           "nmi": run.get("nmi"),
                           "stages": {}}
+    report.data[stage]["firmware_identity"] = identity_record(seen)
     for stage_def in profile_stages(profile):
         ok, detail = stage_def.judge(seen, ctx)
         report.check(stage_def.name(stage), ok is True, detail,
@@ -2205,6 +2322,7 @@ def secure_boot_run(report, args, qemu, data_dir, work, iso_path, code_path, pro
     seen = classify(run, profile)
     report.data["secure_boot"] = {
         "command": run["command"], "markers": seen,
+        "firmware_identity": identity_record(seen),
         "seconds": run["seconds"], "stopped_on": run["stopped_on"],
         "firmware": describe_firmware(code_path),
     }
