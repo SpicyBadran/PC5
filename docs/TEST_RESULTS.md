@@ -4182,10 +4182,55 @@ sandbox has no `qemu-system-x86_64` and no `/usr/share/OVMF`.
 tests in 783.513s` → `OK (skipped=10)`, exit 0, `make check: suite and all gates passed`. Skips, named rather than
 counted as passes: `OVMF ran on this machine; the ceiling no longer applies` (1); `build/efi.img is not built` (1); `build/pc5.iso not built` (1); `need both build/pc5.iso and build/efi.img` (1); `no build/pc5.iso and build/efi64-release.img to compare` (1); `no build/pc5.iso; run `make iso` first` (4); `pipeline is active` (1). Targeted, the modules that read these markers: `Ran 167 tests in 0.616s -> OK (skipped=7)`.
 
-**Hosted.** Not yet measured at this commit. What is predicted, so that the run can be checked
-against it rather than admired: the `[cold]`/`[warm]` identity rows pass on the runner's own
+**Hosted, predicted before measured.** What follows was written from the local run alone, before
+any hosted result existed for `330d471`, so that the run could be checked against a prediction
+rather than admired afterwards; it is kept as written, and the measurement is the addendum below: the `[cold]`/`[warm]` identity rows pass on the runner's own
 string, the `every required matrix row…verified` row clears with them, and `build and verify` stays
 green — while `test_ovmf_harness`'s single error in that job, the gate-profile module's single
 failure, and `publish release assets`'s `skipped` are untouched by this change and remain. M1b
 stays `blocked` until a tag publishes the three artifacts and a published hash matches a local
 rebuild at the same `SOURCE_DATE_EPOCH`; PR #49 stays open and unmerged.
+
+**Hosted, measured.** Run `45543361657` (`pull_request`, `330d471`) → **`completed/success`**:
+
+| job | conclusion | steps |
+| --- | --- | --- |
+| `build and verify` | **success** | 22 of 24 (the two `if: failure()` diagnostic steps are `skipped`, as designed) |
+| `UEFI boot under genuine OVMF` | **success** | 8 of 10 (same two) |
+| `publish release assets` | `skipped` | 0 of 0 — non-tag ref |
+
+The firmware job's annotation list is now a single warning about Node 20 deprecation in
+`actions/checkout`/`upload-artifact` — no `::error::`, because the step that writes them runs only
+under `if: failure()`. **This is the first green `UEFI boot under genuine OVMF` in the branch's
+history**, and it is green with `--secure-boot`, under the runner's own Ubuntu OVMF, on the strength
+of a contract that still refuses four strings a substring test would have forgiven.
+
+**What the push twin shows, and why it is not a verdict.** The matching push run `45543356695`
+reports `completed/cancelled`: its `build and verify` died mid-step at
+`Verify, test and stage the release assets`, because `concurrency.group: build-${{ github.ref }}`
+with `cancel-in-progress: true` puts both runs of a single push in one group and the PR run —
+created three seconds later on the same ref — superseded it. Its firmware job did complete
+`success`, so both runs agree on the one question this section is about, but the green
+`build and verify` rests on `45543361657` alone. **A cancelled job is not a passed job**, and
+nothing here reads it as one. The grouping is a pre-existing property of the workflow, not a
+regression from this change; narrowing it (`github.ref` plus `event`) is an owner decision about CI
+behaviour and is deliberately not bundled into a firmware-contract commit.
+
+**Prediction against outcome, kept because it is the honest part.** §41 predicted: identity rows
+pass, the `every required matrix row…verified` row clears with them, `build and verify` stays
+green, `publish release assets` stays `skipped`. All four held. It also predicted the two
+host-module items would *remain* — that was wrong in a way worth writing down: those modules are
+executed in that job only by the triage step, which did not run because nothing failed, so at
+`330d471` their hosted status is **unmeasured**, not green. Their earlier hosted failures were this
+same row asserted through the harness, and the row now passes on the runner's evidence; but the
+next red in that job will name them again through triage, and until then this section claims no
+pass for them. Same discipline for the artifact: `pc5-ovmf-<sha>` holds `ovmf-report.json` (which
+would show `firmware_identity.distribution: Ubuntu distribution`), and uploaded artifacts live on
+the blob host this sandbox cannot reach, so the report is *not* quoted as evidence here — the
+job's own conclusion is.
+
+**M1b stays `blocked`.** `publish release assets` has still never executed on this branch: no tag
+has published `pc5.iso`, `pc5.iso.sha256` and `build-info.json`, and no published hash has been
+compared with a local rebuild at the same `SOURCE_DATE_EPOCH`. A green firmware job is not a
+released artifact. PR #49 remains open and unmerged, and this section is recorded before any
+further authorization.
