@@ -3989,3 +3989,109 @@ commit, because the failure it would remove is not the one this brief was about.
 `publish release assets` has still never executed.  What changed is that the pipeline can now describe
 its own failures: after this, a red firmware job will say which exception it raised, and a red build job
 will not be lying about the tree it came from.
+## 40. The firmware gate grades instead of crashing, and the two places a cause could still hide
+
+**Live state, re-read rather than copied.** §39 recorded a fix in flight, so the pipeline was
+queried again at `e1aa9ec` instead of trusting the note: runs `45468263882` (push) and
+`45468276720` (`pull_request`), both `completed/failure`. The *shape* of that failure is what
+changed:
+
+| job | conclusion | failed step |
+| --- | --- | --- |
+| `build and verify` | **success** | — |
+| `UEFI boot under genuine OVMF` | failure | `Boot it under OVMF, including the Secure Boot policy check` |
+| `publish release assets` | `skipped` | never executes off a tag |
+
+The firmware job's annotations, which are the whole of what is reachable (`ci/README.md`,
+"Reading a failed run"):
+
+```
+notice   ran 2 of 2 files in 336s; 2 did not return 0; interpreter python3; --only 'ovmf' matched 2 of 47
+failure  exit 1 | ------ / Ran 43 tests in 300.136s / FAILED (errors=1)
+failure  exit 1 | ------ / Ran 53 tests in 35.332s / FAILED (failures=1, skipped=1)
+failure  [FAIL] [cold] the loader identified EDK II as its firmware  (loader_firmware_edk2=False)
+         [FAIL] [warm] the loader identified EDK II as its firmware  (loader_firmware_edk2=False)
+         [FAIL] every required matrix row this run claims to verify is verified  (matrix rows failed:
+         the loader names the firmware it is running on)  make: *** [Makefile:643: ovmf-test] Error 1
+```
+
+Four things that were broken are now demonstrably not, each by the run rather than by the diff:
+the scratch clone fetches no LFS object, so `smudge filter lfs failed` and exit `128` are gone;
+`--only` narrows the walk (`matched 2 of 47`, where the same job once counted six broken files it
+had no business examining); there is no traceback, because the gate reaches QEMU, boots, and
+reports named assertions (`1e5e41d`); and `build and verify` is green for the first time in the
+branch's history (`23dfa04`).
+
+**A note on process, because it cost a turn.** The sandbox rolled back to the shallow baseline
+`dbd7500` again — HEAD and index at the merge of #48, working tree at `247c5a3` plus new edits, so
+`git status` reported all 27 branch commits as uncommitted changes and `citations-check` could not
+resolve any commit reference. The recorded recovery (read the ref from the API,
+`GIT_LFS_SKIP_SMUDGE=1 git fetch --unshallow --no-tags origin`, `git reset --mixed`) surfaced a
+second fact: the ref had moved five commits past the recorded head, and the diagnosis being
+re-derived in parallel was already committed — and committed better. A `tracebacks()` that quotes
+the deepest *project* frame beat one that quoted the last indented line (which is CPython's `^^^^`
+ruler); an `--only` taking a comma-separated list, reporting "`--only 'ovmf'` matched 2 of 47, so
+nothing ran", and cross-checked against the flags the workflow passes beat a substring filter with
+a warning; and the dirty marker belongs in the Makefile as `override BUILD_ID := $(BUILD_ID)$(if
+$(PC5_DIRTY),-dirty)`, not in one test's environment, because the mislabelling was real for every
+build the runner ever made. All three replacements were dropped rather than committed over the top
+of them. What follows is only what the tree did not have.
+
+**A cause could still hide in a failed mutant build.** `build_mutant_iso` ran the repository's own
+ISO tool with `subprocess.run(command, check=True, capture_output=True)`. The child dies, writes
+its complaint into `CalledProcessError.stdout`/`.stderr`, and nothing on the way out prints those:
+the surviving message is `Command '[…]' returned non-zero exit status 1`, which names no cause —
+the same hole `a6da2bd` widened from the reporter's end, one level down, where there was no
+exception *line* worth carrying. It now writes what the child said and raises the same exception
+via `check_returncode()`. Unlike the `secure_boot_run` transposition this reproduces on a machine
+with no QEMU and no `/usr/share/OVMF`, because the child never reaches a boot:
+
+```
+mkiso.py failed (exit 1); its own output:
+  File "…/tools/mkiso.py", line 559, in main
+    with open(args.boot_image, "rb") as fh:
+FileNotFoundError: [Errno 2] No such file or directory: '…/loader.bin'
+```
+
+Three cases in `tests/test_ovmf_harness.py` (`MutantBuildFailureTests`) hold it: the reason reaches
+the log, the exception's type/status/command are unchanged, and the print is conditional on the
+child having failed — six gate-profile rows call this function per run, and a green build must not
+accompany six error lines.
+
+**The remaining red quotes a verdict, not an observation.** `(loader_firmware_edk2=False)` is true
+and useless: the row is a substring test for `firmware=EDK II`, and three different defects produce
+that annotation — the firmware told the loader a different name, the loader printed the name with
+different text around it, or the line never appeared. The serial log already distinguishes them, so
+`classify` now also carries what it saw (`_said`, `loader_firmware_said`) and the row's proof quotes
+it (`_firmware_named`) while its predicate stays the substring test:
+
+| the loader printed | verdict | detail |
+| --- | --- | --- |
+| `firmware=EDK II` | pass | — |
+| `firmware=EDK II (ACCID=0x6564)` | pass | — |
+| `firmware=EFI Development Kit II` | fail | `loader_firmware_edk2=False; the loader printed firmware='EFI Development Kit II'` |
+| no `firmware=` line | fail | `loader_firmware_edk2=False; the loader printed no \`firmware=\` line at all` |
+
+`test_quoting_can_never_move_the_verdict` asserts the load-bearing half directly: for every shape and
+on *both* profiles — `classify` asks the profile which words to look for, and a 64-bit line read as
+IA32 proves nothing either way — the boolean equals `_seen`'s. What the runner's firmware actually
+said is still not known; that is what the next run is for. §39's other option — whether the row
+should require the literal `EDK II` at all — is a decision about what the gate *means*, and it stays
+open, unweakened and unmade.
+
+**Locally, at `e1aa9ec` plus this change.** `make check` with the harness venv on `PATH`, as CI
+provisions it: `Ran 1215 tests in 514.048s` → `OK (skipped=10)`, exit 0, "make check: suite and all
+gates passed". The ten skips are named, not counted as passes: four `no build/pc5.iso; run
+\`make iso\` first`, and one each of `build/pc5.iso not built`, `no build/pc5.iso and
+build/efi64-release.img to compare`, `need both build/pc5.iso and build/efi.img`,
+`build/efi.img is not built` (all deferred by build order, not by capability), plus
+`pipeline is active` and `OVMF ran on this machine; the ceiling no longer applies`, both of which
+skip because the condition they guard against is absent here. `tests.test_ovmf_harness` run alone:
+`Ran 51 tests in 0.349s` → `OK (skipped=1)` (`test_the_real_esp_is_not_firmware`,
+`build/efi.img is not built`).
+
+**M1b stays `blocked`.** `publish release assets` reported `skipped` on every run of this branch and
+has still never executed, so neither acceptance criterion is met: no tag has published
+`pc5.iso`, `pc5.iso.sha256` and `build-info.json`, and no published hash has been compared with a
+local rebuild at the same `SOURCE_DATE_EPOCH`. And nothing here is a claim that CI is healthy: the
+firmware job is red at the head of this section, for a reason the pipeline can now describe in words.
