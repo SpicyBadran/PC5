@@ -4201,20 +4201,47 @@ rebuild at the same `SOURCE_DATE_EPOCH`; PR #49 stays open and unmerged.
 
 The firmware job's annotation list is now a single warning about Node 20 deprecation in
 `actions/checkout`/`upload-artifact` — no `::error::`, because the step that writes them runs only
-under `if: failure()`. **This is the first green `UEFI boot under genuine OVMF` in the branch's
+under `if: failure()`.
+
+HEAD `42e6034` reproduces the same result on **both** refs — push run `45547056596` and PR run
+`45547062544`, each `completed/success`, so the green is not a single-run accident on a
+docs-only descendant of the implementation commit. **This is the first green `UEFI boot under genuine OVMF` in the branch's
 history**, and it is green with `--secure-boot`, under the runner's own Ubuntu OVMF, on the strength
 of a contract that still refuses four strings a substring test would have forgiven.
 
-**What the push twin shows, and why it is not a verdict.** The matching push run `45543356695`
-reports `completed/cancelled`: its `build and verify` died mid-step at
-`Verify, test and stage the release assets`, because `concurrency.group: build-${{ github.ref }}`
-with `cancel-in-progress: true` puts both runs of a single push in one group and the PR run —
-created three seconds later on the same ref — superseded it. Its firmware job did complete
-`success`, so both runs agree on the one question this section is about, but the green
-`build and verify` rests on `45543361657` alone. **A cancelled job is not a passed job**, and
-nothing here reads it as one. The grouping is a pre-existing property of the workflow, not a
-regression from this change; narrowing it (`github.ref` plus `event`) is an owner decision about CI
-behaviour and is deliberately not bundled into a firmware-contract commit.
+**What the push twin shows, and what actually cancelled it — a correction, because my first
+explanation was wrong.** The matching push run `45543356695` reports `completed/cancelled`, its
+`build and verify` dying mid-step at `Verify, test and stage the release assets`. §41 as first
+written blamed `concurrency.group: build-${{ github.ref }}` with `cancel-in-progress: true` and said
+the PR run had superseded it. That is refuted by two facts: the two runs are **not** in one group
+(`pull_request` runs on `refs/pull/49/merge`, `push` on the branch ref), and the cancellation
+happened at 04:26:42 — 96 s *before* the next push existed at 04:28:18. The measured cause is the
+job's own ceiling: `timeout-minutes: 30`, with the job starting 03:56:23 and ending 04:26:42 =
+**30.3 minutes**. A step killed by a timeout is reported `cancelled`, which is why it looked like
+supersession.
+
+The two mechanisms are separable, and both are now visible in the log of runs around this change:
+
+| run | ref/event | `build and verify` | duration | cause |
+| --- | --- | --- | --- | --- |
+| `45543356695` | push `330d471` | `cancelled` | 30.3 m | exceeded `timeout-minutes: 30` |
+| `45543361657` | PR `330d471` | **success** | 29.1 m | finished, 54 s of margin |
+| `45546994695` / `45547001893` | push + PR `239df3d` | `cancelled` | 0.8 / 0.7 m | superseded by the next push, same ref each — the concurrency case, which is real but was not the one here |
+| `45547056596` | push `42e6034` | **success** | 26.9 m | — |
+| `45547062544` | PR `42e6034` | **success** | 23.9 m | — |
+
+The finding that matters for anyone reading a red `build and verify` on this branch afterwards:
+**the job runs at the edge of its own timeout** — 23.9 to 30.3 minutes across five attempts of the
+same three commits, on identical code — so the same tree can pass at 29.1 m and cancel at 30.3 m
+purely on runner speed. A cancelled `build and verify` here is therefore not evidence about the
+code, and it must not be read as a pass either. Raising `timeout-minutes` would fix the flakiness
+but it is a workflow change unrelated to the firmware contract, so it is **not bundled into this
+commit** and is reported to the owner as a separate decision instead.
+
+The firmware question itself is not in doubt: `UEFI boot under genuine OVMF` completed `success` in
+**both** runs at `330d471` and **both** runs at `42e6034` — four independent job results, two of
+them on the push ref where no cancellation occurred. **A cancelled job is not a passed job**, and
+nothing above reads it as one.
 
 **Prediction against outcome, kept because it is the honest part.** §41 predicted: identity rows
 pass, the `every required matrix row…verified` row clears with them, `build and verify` stays
