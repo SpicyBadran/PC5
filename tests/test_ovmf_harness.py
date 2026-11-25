@@ -21,6 +21,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import subprocess
 from types import SimpleNamespace
 import sys
@@ -761,8 +762,9 @@ class FirmwareIdentityContractTests(unittest.TestCase):
 
     The hosted runner's OVMF prints `Ubuntu distribution of EDK II`, because Ubuntu
     overrides edk2's build-time `PcdFirmwareVendor` (upstream value: the literal
-    `EDK II`, which is what all sixteen genuine serial logs under `docs/evidence/`
-    contain).  The predicate that was here before was a substring test, so it was loose at
+    `EDK II`, which is what every committed genuine boot that carries the marker prints
+    (16 of the 17 logs under `docs/evidence/`, 22 occurrences).  The predicate that was here
+    before was a substring test, so it was loose at
     one end and strict at the other: it accepted `EDK II-beta` and refused the Ubuntu
     build.  The contract below is anchored, keeps the firmware's own words verbatim, and
     refuses anything it cannot name -- including this repository's own stub, which sets
@@ -1026,6 +1028,79 @@ class MutantBuildFailureTests(unittest.TestCase):
                          "asserted against the call, not the word: this function's comment "
                          "explains why `check=True` was dropped, and a test that matched that "
                          "prose would fail for describing the fix")
+
+
+class FirmwareEvidenceCorpusTests(unittest.TestCase):
+    """Every `firmware=` line this repository has actually captured must satisfy the contract.
+
+    §41's "0 regressions" was a hand-run replay, and a hand-run replay is not a gate: it gets
+    re-run only when someone remembers to.  The corpus is the one place where an accepted
+    identity has been *observed* rather than invented, so the direction this pins is
+    over-strictness -- a narrowing that turns a genuine boot red while every synthetic case
+    still passes in isolation, which is exactly how the 64-bit ` revision=` trap would have
+    landed.  The opposite direction (accepting too much) belongs to
+    `FirmwareIdentityContractTests.MATRIX`, not here: this class would pass a classifier that
+    accepted everything, and the `raw == EDK II` assertion is what stops it being vacuous,
+    because a pattern that swallowed a trailing field changes `raw` while leaving the verdict
+    looking fine.
+    """
+
+    EVIDENCE = pathlib.Path(ROOT, "docs", "evidence")
+    PATTERNS = (("ia32", ovmf.FIRMWARE_LINE_IA32), ("x64", ovmf.FIRMWARE_LINE_X64))
+    #: The one committed genuine boot whose log predates the marker.  Named rather than
+    #: filtered out, so "16 of the 17 logs carry a line" can never be read as a silent skip.
+    NO_LINE_DIRS = ["2026-11-23-64bit-genuine-ovmf-boot"]
+
+    def setUp(self):
+        self.files = sorted(self.EVIDENCE.glob("*/ovmf*serial*.log"))
+
+    @staticmethod
+    def text_of(path):
+        return path.read_text(encoding="utf-8", errors="replace")
+
+    def test_the_corpus_is_present_and_fully_examined(self):
+        self.assertTrue(self.files, "no committed OVMF serial logs: the corpus moved")
+        self.assertTrue(all(path.stat().st_size for path in self.files),
+                        "a zero-byte log grades as `no occurrences` and reads as a pass")
+        silent = sorted(path.parent.name for path in self.files
+                        if not any(re.search(pattern, self.text_of(path))
+                                   for _key, pattern in self.PATTERNS))
+        self.assertEqual(silent, self.NO_LINE_DIRS,
+                         "a log with no `firmware=` line is a fact about the corpus and has to "
+                         "be named here, not discovered later by someone diffing the counts")
+
+    def test_every_committed_firmware_line_is_accepted_verbatim(self):
+        counts = {"ia32": 0, "x64": 0}
+        for path in self.files:
+            text = self.text_of(path)
+            for key, pattern in self.PATTERNS:
+                for match in re.finditer(pattern, text):
+                    raw = match.group(1)
+                    impl, distribution, accepted, refusal = \
+                        ovmf.classify_firmware_identity(raw, key)
+                    counts[key] += 1
+                    where = "%s (%s)" % (path.name, key)
+                    self.assertTrue(accepted,
+                                    "the contract refuses a boot we captured: %s said %r -- %s"
+                                    % (where, raw, refusal))
+                    self.assertEqual(refusal, "", "%s was accepted and still refused" % where)
+                    self.assertEqual(impl, ovmf.EDK2, "%s graded as %r" % (where, impl))
+                    # The capture is asserted alongside the verdict, because this is the
+                    # field the report quotes back: a pattern that changed it -- a swallowed
+                    # trailing field, padding that stopped stripping -- shows up here even
+                    # where a verdict would still read `accepted`.  Measured against the
+                    # mutations in §42: this class catches the end-of-line capture and a
+                    # narrowing that refuses the captured string, and it does NOT catch
+                    # over-loosening, which is the MATRIX's direction.
+                    self.assertEqual(raw, ovmf.EDK2,
+                                     "%s: the marker captured %r rather than the string the "
+                                     "loader printed" % (where, raw))
+        self.assertGreaterEqual(counts["ia32"], 12,
+                                "measured at HEAD: %r -- a corpus this small cannot grade a "
+                                "rule it never exercises" % counts)
+        self.assertGreaterEqual(counts["x64"], 10,
+                                "without a 64-bit occurrence the ` revision=` boundary is "
+                                "unpinned: %r" % counts)
 
 
 if __name__ == "__main__":
