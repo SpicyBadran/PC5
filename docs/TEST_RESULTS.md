@@ -4095,3 +4095,21 @@ has still never executed, so neither acceptance criterion is met: no tag has pub
 `pc5.iso`, `pc5.iso.sha256` and `build-info.json`, and no published hash has been compared with a
 local rebuild at the same `SOURCE_DATE_EPOCH`. And nothing here is a claim that CI is healthy: the
 firmware job is red at the head of this section, for a reason the pipeline can now describe in words.
+**The run after that commit answered the open question, in the annotation itself.** Run
+`45528590239`/`45528583614` at `d86054a`: `build and verify` **success**, `UEFI boot under genuine
+OVMF` failure at `Boot it under OVMF, including the Secure Boot policy check`,
+`publish release assets` `skipped` — and the firmware row now reads
+
+```
+[FAIL] [cold] the loader identified EDK II as its firmware
+       (loader_firmware_edk2=False; the loader printed firmware='Ubuntu distribution of EDK II')
+```
+
+So the remaining red is not a boot failure, not the loader, and not the firmware: the loader read
+the vendor string correctly and echoed it, the runner's EDK II build reports
+`Ubuntu distribution of EDK II`, and the row asks for the literal `firmware=EDK II`. It is §39's
+option 2, stated as a fact rather than a guess — a contract question about what that row requires,
+which belongs to the owner and is not answered by widening a substring test in a commit that wants
+a green badge. What the two harness modules still report alongside it (`Ran 51 … errors=1`,
+`Ran 53 … failures=1, skipped=1`) is unchanged in kind from the run before, and is named here as
+the next item rather than folded into this one.
