@@ -971,3 +971,69 @@ that every claim about how far it has got is machine-checked.**
   `vendor/`, `docs/PROJECT_AUDIT.md` §3 (the assessment, kept, renamed),
   `docs/architecture/REPOSITORY_AUDIT_2026-11-15.md` §8.1 (repository weight, now
   resolved), and `docs/TEST_RESULTS.md` §20 for the executed gates.
+
+---
+
+## ADR-026 — Firmware identity is the implementation token; the distribution is recorded, never asserted
+
+* **Context**: the OVMF gate's row *"the loader names the firmware it is running on"* was a
+  substring test for `firmware=EDK II`. It had held for every boot this repository has ever
+  captured — all sixteen genuine serial logs under `docs/evidence/` print `EDK II` — and it
+  failed on the hosted runner, where the same firmware reports
+  `Ubuntu distribution of EDK II`. The reason is that the string is a build-time PCD
+  (`PcdFirmwareVendor`, whose upstream value in `MdeModulePkg.dec` is exactly `L"EDK II"`) and
+  distributors override it to name themselves. The same predicate was also loose where it
+  should have been strict: an unbounded substring match accepts `EDK II-beta` and
+  `EDK II (whatever follows)`. One row was therefore simultaneously asserting a
+  distributor's choice of build flag and forgiving arbitrary trailing text — the two
+  properties a gate on identity may not have at the same time.
+* **Decision**:
+  1. **The gate asserts the implementation, exactly.** `classify_firmware_identity` accepts
+     the literal `EDK II`, or `<clause> of EDK II` anchored at both ends. Nothing else is read
+     into the string, and the case-sensitive form is kept because the firmware's own bytes are
+     the evidence.
+  2. **The distribution is recorded, never asserted.** The clause before ` of EDK II` is
+     captured verbatim into `loader_firmware_distribution` and into
+     `report.data[<stage>]["firmware_identity"]`, and no row, stage or matrix requirement may
+     key on it — `tests/test_ovmf_harness.py` asserts the stage table stays free of it. A
+     distributor name is not evidence of a distributor: anyone building EDK II can write any
+     name into that PCD, which is also why no document may call this row a provenance check.
+  3. **The raw string survives verbatim, including on a refusal.** `loader_firmware_said`
+     keeps what the loader printed. Classification is recorded *beside* it, never instead of
+     it, so an unexpected identity can be audited after the fact rather than only the verdict.
+  4. **`UNKNOWN` is a refusal with a name.** `TianoCore`, `EFI Development Kit II` and `OVMF`
+     are refused, each with its raw string quoted, because they are plausible spellings this
+     project has no captured boot for. Adding one is a decision taken against a log, in the
+     ADR-024 sense; it is not a repair to be inferred from the fact that the words look right.
+  5. **A self-issued label cannot certify a boot.** Any vendor string containing `PC5` is
+     refused whatever its shape, because `tests/uefi_stub_firmware.py` sets that same
+     system-table field to `PC5 stub firmware` deliberately. The row's power is stub-versus-
+     genuine firmware, and the rule is by shape so it cannot be recovered by renaming a stub
+     into the accepted grammar.
+  6. **Three absences stay three.** No line at all (the 32-bit loader prints none when the
+     field is NULL or empty), `absent` (NULL pointer) and `empty` (zero-length string) are
+     refused under distinct reasons; and a string of exactly the profile's own print limit
+     (31 for `utf16_to_ascii` into a 32-byte buffer, 32 for `serial_write_ascii16`) is refused
+     as *ambiguous*, not as a mismatch — the loader's buffer would be the cause, not the
+     firmware's identity.
+* **Alternatives considered**: accept any string containing `EDK II` (rejected — it is the
+  defect being repaired, and it leaves the false accept in place); an allowlist of recognised
+  distributors, refusing anything else (rejected — it asserts exactly the provenance claim the
+  string cannot support, and would turn red on the next distribution upgrade for a reason that
+  is not a defect); making the loader print a canonical identity, or trim the field itself
+  (rejected — the loader's job is to echo `SystemTable->FirmwareVendor`, and normalising it in
+  the product would leave the gate measuring our own formatting; ADR-023 keeps firmware an
+  external dependency); narrowing the row to "a `firmware=` line was printed" (rejected — that
+  is a weaker claim than the one under test, dressed as a simpler one).
+* **Consequences**: the hosted runner's OVMF now passes the row on its own evidence; four
+  strings that previously passed refuse, which is the tightening this record exists to make
+  visible rather than to slip through; the report gained fields, so a verdict can be audited
+  from the artifact; and an unfamiliar firmware arrives as a named `UNKNOWN` refusal carrying
+  its own raw string — evidence for a decision, instead of a mystery in an annotation.
+* **Evidence**: `tests/ovmf_boot.py` (`EDK2`, `EDK2_DISTRIBUTION_RE`, `SELF_ISSUED_MARK`,
+  `ABSENT_FORMS`, `PRINT_LIMIT`, `classify_firmware_identity`, `identity_record`,
+  `FIRMWARE_LINE_IA32`/`FIRMWARE_LINE_X64`), `tests/test_ovmf_harness.py`
+  (`FirmwareIdentityContractTests`: every row on both profiles, the self-issued refusal, the
+  three absences, truncation-versus-mismatch, and the 64-bit `revision=` boundary),
+  `boot/uefi/README.md` (the marker chain), `docs/TEST_RESULTS.md` §40–§41 (the hosted
+  annotation that started this), and edk2's `MdeModulePkg.dec` for the default PCD value.

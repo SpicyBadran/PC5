@@ -4069,6 +4069,10 @@ it (`_firmware_named`) while its predicate stays the substring test:
 | --- | --- | --- |
 | `firmware=EDK II` | pass | — |
 | `firmware=EDK II (ACCID=0x6564)` | pass | — |
+
+*The table above records what §40's commit did. ADR-026 (see §41) anchored the grammar
+afterwards, so `EDK II (ACCID=0x6564)` is now refused as an ambiguous tail and the detail also
+carries the classification.*
 | `firmware=EFI Development Kit II` | fail | `loader_firmware_edk2=False; the loader printed firmware='EFI Development Kit II'` |
 | no `firmware=` line | fail | `loader_firmware_edk2=False; the loader printed no \`firmware=\` line at all` |
 
@@ -4113,3 +4117,75 @@ which belongs to the owner and is not answered by widening a substring test in a
 a green badge. What the two harness modules still report alongside it (`Ran 51 … errors=1`,
 `Ran 53 … failures=1, skipped=1`) is unchanged in kind from the run before, and is named here as
 the next item rather than folded into this one.
+
+## 41. The firmware identity contract, ruled and implemented: implementation asserted, distribution recorded
+
+§40 left the row quoting a verdict (`loader_firmware_edk2=False`) where it could have quoted an
+observation, and named the two things it refused to guess about. Both are now settled — the
+observation is recorded, and the contract that reads it is ADR-026.
+
+**The ruling.** Accepted: **D1** the distribution is recorded, never gated; **D2** an
+implausible-but-real-sounding identity (`TianoCore`, `EFI Development Kit II`, `OVMF`) is refused
+as `UNKNOWN` until a captured boot supports it; **D3** the grammar is anchored at both ends, so an
+ambiguous tail is refused; **D4** the three kinds of absence keep three distinct reasons.
+
+**What the gate asserts now.** `classify_firmware_identity` in `tests/ovmf_boot.py` is a pure
+function of the string the loader printed, and it is the only predicate behind
+`loader_firmware_edk2` on both profiles. It accepts `EDK II` — edk2's own upstream
+`PcdFirmwareVendor` value, and what all sixteen committed genuine serial logs contain — and
+`<clause> of EDK II`, capturing the clause verbatim as `loader_firmware_distribution`. It refuses,
+with the raw string quoted in the refusal: `PC5`-containing labels (the stub sets that field
+itself, so a stub cannot certify a genuine boot, whatever it renames itself to), `absent`/
+`empty`/no-line as three separate facts, a string at the profile's own print limit as *ambiguous*
+rather than wrong, and everything else as `UNKNOWN`. `report.data[<stage>]["firmware_identity"]`
+carries `raw`/`implementation`/`distribution`/`accepted`/`refusal`, so the artifact holds the
+claim and its evidence even when the verdict is a refusal.
+
+**The four strings that used to pass.** A repair that only widened the head would be a
+relaxation, so the tail was closed too, and it is recorded here rather than left in the diff:
+
+| firmware printed | before | now |
+| --- | --- | --- |
+| `EDK II (ACCID=0x6564)` | pass | refuse (D3: ambiguous tail) |
+| `EDK IIx`, `EDK II-like` | pass | refuse (`UNKNOWN`) |
+| `edk ii` | pass | refuse (case is part of the firmware's own bytes) |
+| `EDK II revision=0x2 table-rev=0x10000` read as one identity | — | refuse; the 64-bit pattern stops at ` revision=` |
+
+That last row is the trap in this change rather than a hypothesis: the 64-bit loader continues the
+same line with ` revision=` and ` table-rev=`, so a pattern that captured to end-of-line would
+read a perfectly good EDK II as an unknown string and turn **sixteen committed genuine boots** red
+while the new acceptance cases still passed in isolation. It is measured, not assumed: the matrix
+cases were replayed over `docs/evidence/*/ovmf*serial*.log` (16 genuine boots, 0 regressions), and
+`test_the_64bit_marker_does_not_swallow_the_revision_fields` pins the boundary.
+
+**The suite can fail, which is the part worth checking.** Four mutations of the new contract were
+applied one at a time and each was caught, then reverted:
+
+| mutation | result |
+| --- | --- |
+| restore the old `firmware=EDK II in text` predicate | `FAILED (failures=33)` |
+| drop the ` revision=` lookahead | `FAILED (failures=15)` |
+| remove the `PC5` self-issued refusal | `FAILED (failures=10)` |
+| accept any tail (`EDK2_DISTRIBUTION_RE` neutered) | `FAILED (errors=22)` |
+| all reverted | `OK` |
+
+**Deliberately unchanged.** `boot/**` and `kernel64/**` are untouched: the loader prints
+`SystemTable->FirmwareVendor` verbatim and does not normalise, pad, case-fold or truncate it for
+the gate's convenience — a product that formatted its own evidence would leave the row measuring
+ours. The Secure Boot rows, the refusal-based policy verdict (ADR-023 §4), the matrix's
+no-inheritance rule, `make ovmf-test`'s exit codes (0 pass, 2 fail, 3 NOT TESTED failing the job)
+and the substring semantics of every *other* marker are as they were. Nothing in this section
+claims a host booted anything: the classifier has never been run against QEMU here, because this
+sandbox has no `qemu-system-x86_64` and no `/usr/share/OVMF`.
+
+**Locally.** `make check` with the harness venv on `PATH`, as CI provisions it: `Ran 1225
+tests in 783.513s` → `OK (skipped=10)`, exit 0, `make check: suite and all gates passed`. Skips, named rather than
+counted as passes: `OVMF ran on this machine; the ceiling no longer applies` (1); `build/efi.img is not built` (1); `build/pc5.iso not built` (1); `need both build/pc5.iso and build/efi.img` (1); `no build/pc5.iso and build/efi64-release.img to compare` (1); `no build/pc5.iso; run `make iso` first` (4); `pipeline is active` (1). Targeted, the modules that read these markers: `Ran 167 tests in 0.616s -> OK (skipped=7)`.
+
+**Hosted.** Not yet measured at this commit. What is predicted, so that the run can be checked
+against it rather than admired: the `[cold]`/`[warm]` identity rows pass on the runner's own
+string, the `every required matrix row…verified` row clears with them, and `build and verify` stays
+green — while `test_ovmf_harness`'s single error in that job, the gate-profile module's single
+failure, and `publish release assets`'s `skipped` are untouched by this change and remain. M1b
+stays `blocked` until a tag publishes the three artifacts and a published hash matches a local
+rebuild at the same `SOURCE_DATE_EPOCH`; PR #49 stays open and unmerged.
