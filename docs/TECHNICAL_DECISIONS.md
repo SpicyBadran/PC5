@@ -978,7 +978,8 @@ that every claim about how far it has got is machine-checked.**
 
 * **Context**: the OVMF gate's row *"the loader names the firmware it is running on"* was a
   substring test for `firmware=EDK II`. It had held for every boot this repository has ever
-  captured — all sixteen genuine serial logs under `docs/evidence/` print `EDK II` — and it
+  captured — every committed genuine boot that carries the marker prints `EDK II` (16 of the
+  17 serial logs under `docs/evidence/`, 22 occurrences) — and it
   failed on the hosted runner, where the same firmware reports
   `Ubuntu distribution of EDK II`. The reason is that the string is a build-time PCD
   (`PcdFirmwareVendor`, whose upstream value in `MdeModulePkg.dec` is exactly `L"EDK II"`) and
@@ -1025,9 +1026,9 @@ that every claim about how far it has got is machine-checked.**
   the product would leave the gate measuring our own formatting; ADR-023 keeps firmware an
   external dependency); narrowing the row to "a `firmware=` line was printed" (rejected — that
   is a weaker claim than the one under test, dressed as a simpler one).
-* **Consequences**: the hosted runner's OVMF now passes the row on its own evidence; four
-  strings that previously passed refuse, which is the tightening this record exists to make
-  visible rather than to slip through; the report gained fields, so a verdict can be audited
+* **Consequences**: the hosted runner's OVMF now passes the row on its own evidence; five
+  shapes that previously passed now refuse (§41's replay), which is the tightening this record
+  exists to make visible rather than to slip through; the report gained fields, so a verdict can be audited
   from the artifact; and an unfamiliar firmware arrives as a named `UNKNOWN` refusal carrying
   its own raw string — evidence for a decision, instead of a mystery in an annotation.
 * **Evidence**: `tests/ovmf_boot.py` (`EDK2`, `EDK2_DISTRIBUTION_RE`, `SELF_ISSUED_MARK`,

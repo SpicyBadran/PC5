@@ -4132,7 +4132,9 @@ ambiguous tail is refused; **D4** the three kinds of absence keep three distinct
 **What the gate asserts now.** `classify_firmware_identity` in `tests/ovmf_boot.py` is a pure
 function of the string the loader printed, and it is the only predicate behind
 `loader_firmware_edk2` on both profiles. It accepts `EDK II` — edk2's own upstream
-`PcdFirmwareVendor` value, and what all sixteen committed genuine serial logs contain — and
+`PcdFirmwareVendor` value, and what every committed genuine boot that carries the marker
+prints — 17 serial logs under `docs/evidence/`, 16 of them with a `firmware=` line, 22
+occurrences in all — and
 `<clause> of EDK II`, capturing the clause verbatim as `loader_firmware_distribution`. It refuses,
 with the raw string quoted in the refusal: `PC5`-containing labels (the stub sets that field
 itself, so a stub cannot certify a genuine boot, whatever it renames itself to), `absent`/
@@ -4141,22 +4143,39 @@ rather than wrong, and everything else as `UNKNOWN`. `report.data[<stage>]["firm
 carries `raw`/`implementation`/`distribution`/`accepted`/`refusal`, so the artifact holds the
 claim and its evidence even when the verdict is a refusal.
 
-**The four strings that used to pass.** A repair that only widened the head would be a
-relaxation, so the tail was closed too, and it is recorded here rather than left in the diff:
+**What the anchoring changes, measured against the predicate it replaced.** A repair that
+only widened the head would be a relaxation, so the tail was closed too.  The predicate
+this replaced was `"PC5-UEFI: firmware=EDK II" in text` and its `PC5-64-LOADER` twin:
+case-sensitive, bounded at the front by the line's own prefix, unbounded at the back.
+Replaying both over every shape in the contract (§42) gives **five** shapes that used to
+pass and now refuse, and **two** that used to fail and now pass:
 
-| firmware printed | before | now |
-| --- | --- | --- |
-| `EDK II (ACCID=0x6564)` | pass | refuse (D3: ambiguous tail) |
-| `EDK IIx`, `EDK II-like` | pass | refuse (`UNKNOWN`) |
-| `edk ii` | pass | refuse (case is part of the firmware's own bytes) |
-| `EDK II revision=0x2 table-rev=0x10000` read as one identity | — | refuse; the 64-bit pattern stops at ` revision=` |
+| firmware printed | old | new | why |
+| --- | --- | --- | --- |
+| `EDK II (ACCID=0x6564)` | pass | refuse | D3: an ambiguous tail |
+| `EDK IIx`, `EDK II-like` | pass | refuse | `UNKNOWN` |
+| `EDK II` + 25 `x` (31 chars) | pass | refuse | exactly the 32-bit print limit → *ambiguous*, not wrong |
+| `EDK II?` | pass | refuse | the loader's own `?` for a non-printable unit |
+| `Ubuntu distribution of EDK II` | **fail** | **pass** | the hosted case this change exists for |
+| `Fedora distribution of EDK II` | **fail** | **pass** | the same rule, another distributor |
+
+Eight shapes are refused by both and were never loose: `edk ii`, `TianoCore`,
+`EFI Development Kit II`, `OVMF`, `PC5 stub firmware`, `PC5 of EDK II`, `absent`,
+`empty`. §41 as first written listed `edk ii` as a tightening and counted four strings
+instead of five; the replay above is what it should have said, and the correction is kept
+visible rather than smoothed. The 64-bit ` revision=0x2 table-rev=0x10000` tail is a
+separate matter from either count: the old predicate accepted it correctly, a naive new
+pattern would have refused it, and the lookahead is why it still passes.
 
 That last row is the trap in this change rather than a hypothesis: the 64-bit loader continues the
 same line with ` revision=` and ` table-rev=`, so a pattern that captured to end-of-line would
-read a perfectly good EDK II as an unknown string and turn **sixteen committed genuine boots** red
-while the new acceptance cases still passed in isolation. It is measured, not assumed: the matrix
-cases were replayed over `docs/evidence/*/ovmf*serial*.log` (16 genuine boots, 0 regressions), and
-`test_the_64bit_marker_does_not_swallow_the_revision_fields` pins the boundary.
+read a perfectly good EDK II as an unknown string and turn **every committed genuine boot**
+red while the new acceptance cases still passed in isolation. It is measured, not assumed: the
+cases were replayed over `docs/evidence/*/ovmf*serial*.log` — 17 logs, 16 carrying a
+`firmware=` line, 22 occurrences, all 22 accepted, 0 regressions — and the replay is a gate
+now rather than a memory: `FirmwareEvidenceCorpusTests` in `tests/test_ovmf_harness.py`
+(§42), which mutates to a failure if the capture boundary moves. The pattern-level rule stays
+pinned by `test_the_64bit_marker_does_not_swallow_the_revision_fields`.
 
 **The suite can fail, which is the part worth checking.** Four mutations of the new contract were
 applied one at a time and each was caught, then reverted:
@@ -4180,7 +4199,10 @@ sandbox has no `qemu-system-x86_64` and no `/usr/share/OVMF`.
 
 **Locally.** `make check` with the harness venv on `PATH`, as CI provisions it: `Ran 1225
 tests in 783.513s` → `OK (skipped=10)`, exit 0, `make check: suite and all gates passed`. Skips, named rather than
-counted as passes: `OVMF ran on this machine; the ceiling no longer applies` (1); `build/efi.img is not built` (1); `build/pc5.iso not built` (1); `need both build/pc5.iso and build/efi.img` (1); `no build/pc5.iso and build/efi64-release.img to compare` (1); `no build/pc5.iso; run `make iso` first` (4); `pipeline is active` (1). Targeted, the modules that read these markers: `Ran 167 tests in 0.616s -> OK (skipped=7)`.
+counted as passes: `OVMF ran on this machine; the ceiling no longer applies` (1); `build/efi.img is not built` (1); `build/pc5.iso not built` (1); `need both build/pc5.iso and build/efi.img` (1); `no build/pc5.iso and build/efi64-release.img to compare` (1); `no build/pc5.iso; run `make iso` first` (4); `pipeline is active` (1). Targeted, the two modules that read these markers: `Ran 114 tests` → `OK (skipped=7)` on a
+tree with no build artifacts, and `Ran 114 tests` → `OK` with **no skips at all** once
+`make iso` has run and the 64-bit release ESP (`build/efi64-release.img`) exists (§42). The harness venv changes
+nothing for these two: the same 114 with and without `unicorn`, because neither imports it.
 
 **Hosted, predicted before measured.** What follows was written from the local run alone, before
 any hosted result existed for `330d471`, so that the run could be checked against a prediction
@@ -4207,7 +4229,7 @@ HEAD `42e6034` reproduces the same result on **both** refs — push run `4554705
 `45547062544`, each `completed/success`, so the green is not a single-run accident on a
 docs-only descendant of the implementation commit. **This is the first green `UEFI boot under genuine OVMF` in the branch's
 history**, and it is green with `--secure-boot`, under the runner's own Ubuntu OVMF, on the strength
-of a contract that still refuses four strings a substring test would have forgiven.
+of a contract that still refuses five shapes a substring test would have forgiven.
 
 **What the push twin shows, and what actually cancelled it — a correction, because my first
 explanation was wrong.** The matching push run `45543356695` reports `completed/cancelled`, its
@@ -4246,12 +4268,16 @@ nothing above reads it as one.
 **Prediction against outcome, kept because it is the honest part.** §41 predicted: identity rows
 pass, the `every required matrix row…verified` row clears with them, `build and verify` stays
 green, `publish release assets` stays `skipped`. All four held. It also predicted the two
-host-module items would *remain* — that was wrong in a way worth writing down: those modules are
-executed in that job only by the triage step, which did not run because nothing failed, so at
-`330d471` their hosted status is **unmeasured**, not green. Their earlier hosted failures were this
-same row asserted through the harness, and the row now passes on the runner's evidence; but the
-next red in that job will name them again through triage, and until then this section claims no
-pass for them. Same discipline for the artifact: `pc5-ovmf-<sha>` holds `ovmf-report.json` (which
+host-module items would *remain* — that was wrong in a way worth writing down, and §42 settled
+it. `build and verify`'s `Host tool tests` step runs `python3 -m unittest discover -s tests -p
+'test_*.py'` with the venv first on `PATH`, so **both modules were executed on the runner all
+along**: the job's own `::notice title=Host suite ::` at `84c7b75` reads `Ran 1225 tests in
+479.098s` → `OK (skipped=13)`. What §41 had right is the narrower statement — the *firmware*
+job touches those modules only through the `if: failure()` triage step, so nothing in that
+job's green depends on them, and nothing in their green depends on it. The residual claim that
+a `unicorn` import error hung over them was also wrong: neither module imports `unicorn`, and
+the triage walk over the runner's bare `python3` reports `ran 2 of 2 files … 0 did not return
+0`. A skipped-or-unrun test is still never read as a pass — but here the tests did run. Same discipline for the artifact: `pc5-ovmf-<sha>` holds `ovmf-report.json` (which
 would show `firmware_identity.distribution: Ubuntu distribution`), and uploaded artifacts live on
 the blob host this sandbox cannot reach, so the report is *not* quoted as evidence here — the
 job's own conclusion is.
@@ -4261,3 +4287,132 @@ has published `pc5.iso`, `pc5.iso.sha256` and `build-info.json`, and no publishe
 compared with a local rebuild at the same `SOURCE_DATE_EPOCH`. A green firmware job is not a
 released artifact. PR #49 remains open and unmerged, and this section is recorded before any
 further authorization.
+## 42. Pre-merge verification of #49: the two modules run directly, the corpus replay becomes a gate, and a citation failure traced to the clone rather than to the documents
+
+**Why this section exists.** The owner's instruction was to establish that #49 is independently
+merge-ready *before* touching M1b permissions or CI infrastructure, and not to merge while doing
+it. Two items in §41 were recorded as unresolved, one number in §41 did not reproduce, and one
+sentence in §41 was flat wrong. This section closes all three, and records a sandbox recovery that
+had to be proved before anything could be believed.
+
+**1. The sandbox had been recreated underneath the branch.** Local HEAD was `dbd7500` — the branch
+base — while the newest file contents sat in the working tree: 68 paths dirty, and every file
+added since the base reported as untracked. Before moving a pointer, the remote tip was compared
+blob-by-blob against the working tree, all 431 tracked files: `missing=0 differs=0`, and no file on
+disk that the tip did not already have. Only then was the branch ref moved to `84c7b75` and the
+index refreshed with a mixed `git reset`, which does not touch files. No commit was created,
+rewritten or pushed by that step, and nothing was pushed to any ref: the remote was never the thing
+that needed fixing. **A recreated sandbox and a lost commit look identical in `git status`, so the
+proof came first.**
+
+**2. The two modules, run directly rather than inferred from a failure-only diagnostic.**
+
+| invocation | result |
+| --- | --- |
+| `python3 -m unittest tests.test_ovmf_gate_profiles`, no build artifacts | `Ran 53` → `OK (skipped=6)` |
+| `python3 -m unittest tests.test_ovmf_harness`, no build artifacts | `Ran 61` → `OK (skipped=1)`; the skip is `build/efi.img is not built` |
+| both, after `make iso` and the 64-bit release ESP (`build/efi64-release.img`) | **`Ran 114` → `OK`, no skips at all** |
+| both, harness venv vs. the runner's bare `python3` | `Ran 114` → `OK (skipped=7)` identically — neither module imports `unicorn` |
+| `tools/ci_triage.py --root tests --python python3 --only ovmf` | `ran 2 of 2 files in 1s; 0 did not return 0; interpreter python3; --only 'ovmf' matched 2 of 47` |
+
+So §40's residual worry is settled in both directions: these two modules do not depend on
+`unicorn`, and with the repository's own artifacts built, every one of their 114 cases executes
+rather than skipping. The artifacts measured: `build/pc5.iso` 1601536 bytes
+`sha256 7dd4d327f89defc8…`, `build/efi.img` `sha256 7c1fd37ec2800a5c…`, `build/efi64-release.img`
+1474560 bytes `sha256 5983798df38913df…`; the build's own PE gate reported 22/22 checks passed on
+`build/uefi/BOOTX64.EFI`. `build/` is ignored, so none of it entered the commit.
+
+**3. The corpus claim became a gate, and the corpus count got corrected.** §41 said "16 genuine
+boots, 0 regressions" from a replay anyone had to remember to run. Measured: `docs/evidence/
+*/ovmf*serial*.log` is **17** files; 16 of them carry a `firmware=` line; those lines number **22**
+(the 32-bit logs print the marker in both phases); all 22 grade `accepted` with `raw == "EDK II"`.
+The log with no line, `2026-11-23-64bit-genuine-ovmf-boot/ovmf64-serial.log`, predates the marker;
+the new test names it rather than filtering it, so "16 of 17" can never be read as a silent skip.
+
+| mutation of `tests/ovmf_boot.py`, applied in a scratch copy of the tree | corpus gate |
+| --- | --- |
+| x64 pattern captures to end-of-line — the historical trap | `FAILED (failures=1)` |
+| refuse the literal `EDK II` — a narrowing | `FAILED (failures=1)` |
+| accept any string | `OK`, by design: over-loosening is the MATRIX's direction, and the class says so |
+| none (control) | `OK` |
+
+**4. Five citation failures, and what they were not.** The first full run of the session ended
+`Ran 1225 tests in 766.206s` → `FAILED (failures=5, skipped=2)`, `make check FAILED in 'suite'`,
+exit 2. Every one was in `test_commit_citations`, phrased as "`141f91f` does not name any Git
+object". `git rev-parse --is-shallow-repository` returned `true` and `.git/shallow` carried the
+timestamp of the sandbox's recreation: the clone was depth-1 at `dbd7500`, so commits cited from
+the PR #26/#27 era were genuinely absent from the object store — the guard was correct that they
+could not be resolved *here*. Repaired by deepening the clone (`git fetch --unshallow origin`, 222
+commits, `.git/shallow` gone), after which `make citations-check` prints `CITATIONS OK: 263 commit
+reference(s) resolve across 11 documents` and the module reports `Ran 28 tests → OK`. **No
+document was edited to obtain that green.** The session has been caught by this failure mode before,
+which is exactly why the complaint was checked against the object store before anything was
+concluded about the prose — and why the converse discipline holds: a citations failure is a
+statement about the clone until the clone is shown to be complete.
+
+**5. The baseline at the pushed HEAD, with the clone repaired.** `make check` with the artifacts
+built and the venv on `PATH`: `Ran 1225 tests in 785.681s` → `OK (skipped=2)`, exit 0, `make
+check: suite and all gates passed`. The two skips, named: `OVMF ran on this machine; the ceiling no
+longer applies`, and `pipeline is active`. §41 recorded `skipped=10` on a tree without build
+products, so this run executed eight more cases than that one; the difference is artifacts, not
+code — which is worth writing down because it is the reason "the same suite, same count" can still
+mean different amounts of testing.
+
+**6. What was corrected, and what was not touched.** §41 and ADR-026 both said four strings that
+used to pass now refuse, and both counted `edk ii` among them. Replaying the replaced predicate
+(`"PC5-UEFI: firmware=EDK II" in text`) over every shape shows the old test was case-sensitive, so
+`edk ii` failed *before* as well; and the tightened set is **five**, not four:
+`EDK II (ACCID=0x6564)`, `EDK IIx`, `EDK II-like`, a 31-character `EDK IIxxxx…` (truncation →
+*ambiguous*, not wrong) and `EDK II?` (the loader's own `?`), against two widenings —
+`Ubuntu distribution of EDK II` and `Fedora distribution of EDK II`, the hosted case this change
+exists for. §41's `Ran 167 tests` line named a command that does not reproduce and is replaced by
+the two measured invocations above. §41's claim that the two host modules were **unmeasured** on
+the runner was wrong: `build and verify`'s `Host tool tests` step runs `unittest discover` over all
+of `tests/` with the venv first on `PATH`, and its own annotation at `84c7b75` reads `Ran 1225
+tests in 479.098s` → `OK (skipped=13)`. Every one of those is a documentation fix; the only code
+change in this section is `FirmwareEvidenceCorpusTests` and the `re` import it needs. `boot/**`,
+`kernel64/**`, `.github/**`, the `Makefile`, every predicate, every exit code and every Secure Boot
+row are untouched.
+
+**7. CI at the verified HEAD `84c7b75`.**
+
+| run | event | `build and verify` | `UEFI boot under genuine OVMF` | `publish release assets` |
+| --- | --- | --- | --- | --- |
+| `45550302243` | `pull_request` | `success` 04:58:04→05:21:58 (23.9 m) | `success` 04:58:04→05:12:12 (14.1 m) | `skipped` — non-tag ref |
+| `45550295187` | `push` | `success` 04:58:00→05:22:10 (24.2 m) | `success` 04:58:00→05:12:00 (14.0 m) | `skipped` |
+
+Four job results across two refs, and this time neither build job went near the 30-minute ceiling
+that cancelled the run in §41. The hosted suite skipped 13 of its 1225 where the local run skipped
+2; the reasons are not retrievable through this API surface — only the `Ran`/`OK` tail lines reach
+the annotations, and the per-reason list goes to the step summary — so they are recorded as an
+environment statement and counted as nothing. The executed count is what makes the green mean
+something: 1212 tests ran on the runner.
+
+**6b. This correction broke a gate, and the gate was right.** The first run after §41's edits came
+back `Ran 1227 tests in 771.293s` → `FAILED (failures=2, skipped=2)`, exit 2, and both failures were
+`test_docs_check`, each carrying one complaint: the documents name a goal called *build*, and the
+Makefile has no such target. The cause was my own prose — I had put an ESP file path into the
+backticks following a `make` invocation, and `docs_check.py` reads the first word there as a target
+name, which is how it guards every other command line in these documents. The phrasing was fixed and
+the checker was not; this paragraph is written so that it stays that way. Two things follow for
+anyone reading later: the two new corpus tests *were* collected (`Ran 1227` = 1225 + 2), and a
+documentation gate can fail a verification-only change — which is the reason this pass re-ran the
+gates instead of trusting an edit that looked inert.
+
+**Suite after these corrections.** `Ran 1227 tests in 790.538s` → `OK (skipped=2)`, exit 0,
+`make check: suite and all gates passed`. The 1227 is the 1225 executed at the pushed HEAD with
+artifacts present, plus the two corpus cases this section adds; the two skips are the same pair as
+the baseline (`OVMF ran on this machine; the ceiling no longer applies`, `pipeline is active`). The
+intermediate `FAILED (failures=2)` in §42's 6b was this section's own phrasing and is gone from the
+tree, not glossed over.
+
+**Verdict.** Everything the owner listed as required for merge-readiness is now measured rather
+than assumed: both modules run directly with zero skips against real build products, the corpus
+replay is a gate with a demonstrated failure mode, the CI matrix at the pushed HEAD is green on
+both refs, the four documents match the code, and the one failure the run produced was traced to
+this sandbox's clone depth and repaired there. **PR #49 is NOT merged**, and stays open at the
+commit this section ships in. **M1b remains `blocked`**: `publish release assets` has still never
+executed, no tag has published `pc5.iso`/`pc5.iso.sha256`/`build-info.json`, and no published hash
+has been compared with a local rebuild at the same `SOURCE_DATE_EPOCH`. The
+`github-workflows-write` grant (still `admin`-gated) and the `timeout-minutes` question are left
+alone by instruction, not by oversight.
