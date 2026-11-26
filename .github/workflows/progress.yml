@@ -47,25 +47,46 @@ jobs:
     name: refresh the progress dashboard
     # Only a successful verification of main may move the published figures.  A manual
     # dispatch is allowed so a maintainer can rehearse the whole path without a merge.
+    # The step below re-checks all of this in Python, where it can be tested; these clauses
+    # are here so a run that cannot possibly publish anything never starts a runner at all.
+    # `event: 'push'` and the repository match are what make `head_branch == 'main'` mean
+    # *this* main: a pull-request head from a fork can be called main without being merged.
     if: >-
       github.event_name == 'workflow_dispatch'
       || (github.event.workflow_run.conclusion == 'success'
-          && github.event.workflow_run.head_branch == 'main')
+          && github.event.workflow_run.head_branch == 'main'
+          && github.event.workflow_run.event == 'push'
+          && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Identify the verified commit
+        # Every field that comes out of the event reaches the shell through `env:`, never as a
+        # `${{ }}` inside `run:`: an expression is substituted before bash sees the line, so a
+        # payload field would become command text.  `env:` hands the same string over as data,
+        # and the step after this one decides what it may be used for.
         id: target
+        env:
+          PC5_EVENT: ${{ github.event_name }}
+          PC5_SHA: ${{ github.event.workflow_run.head_sha }}
+          PC5_RUN_ID: ${{ github.event.workflow_run.id }}
+          PC5_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          PC5_RUN_EVENT: ${{ github.event.workflow_run.event }}
+          PC5_RUN_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-            echo "run_id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
-            echo "conclusion=${{ github.event.workflow_run.conclusion }}" >> "$GITHUB_OUTPUT"
+          if [ "$PC5_EVENT" = "workflow_run" ]; then
+            echo "sha=$PC5_SHA" >> "$GITHUB_OUTPUT"
+            echo "run_id=$PC5_RUN_ID" >> "$GITHUB_OUTPUT"
+            echo "conclusion=$PC5_CONCLUSION" >> "$GITHUB_OUTPUT"
+            echo "run_event=$PC5_RUN_EVENT" >> "$GITHUB_OUTPUT"
+            echo "run_repo=$PC5_RUN_REPO" >> "$GITHUB_OUTPUT"
           else
-            echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
             echo "run_id=" >> "$GITHUB_OUTPUT"
             echo "conclusion=success" >> "$GITHUB_OUTPUT"
+            echo "run_event=dispatch" >> "$GITHUB_OUTPUT"
+            echo "run_repo=$GITHUB_REPOSITORY" >> "$GITHUB_OUTPUT"
           fi
 
       # `fetch-depth: 2` is what lets the next step ask what the merge *changed*: the
@@ -77,6 +98,32 @@ jobs:
           ref: ${{ steps.target.outputs.sha }}
           fetch-depth: 2
           persist-credentials: true
+
+      - name: Refuse a target that is not verified main
+        # The one write this workflow makes is a push to `main`, so what it accepts as input is
+        # the security boundary.  `tools/progress_record.py target` refuses a sha that is not a
+        # commit, a run that was not a push, a repository that is not this one, and a commit
+        # that is not an ancestor of `main` — the last of those is the only check that is a fact
+        # about the tree rather than about an event.  The checkout above is shallow
+        # (`fetch-depth: 2`), and ancestry cannot be judged on a truncated history, so this step
+        # un-shallows main first: a comparison that could not run has to be a refusal, never a
+        # pass.  Exit 4 is a refusal, and a refusal stops the job.
+        env:
+          PC5_SHA: ${{ steps.target.outputs.sha }}
+          PC5_CONCLUSION: ${{ steps.target.outputs.conclusion }}
+          PC5_RUN_EVENT: ${{ steps.target.outputs.run_event }}
+          PC5_RUN_REPO: ${{ steps.target.outputs.run_repo }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            git fetch --no-tags --unshallow origin "$GITHUB_REF_NAME" 2>/dev/null \
+              || git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          fi
+          python3 tools/progress_record.py target --json \
+            --event "$GITHUB_EVENT_NAME" --sha "$PC5_SHA" --ref-name "$GITHUB_REF_NAME" \
+            --run-event "$PC5_RUN_EVENT" --run-repo "$PC5_RUN_REPO" \
+            --repository "$GITHUB_REPOSITORY" --conclusion "$PC5_CONCLUSION" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Refuse to refresh from a refresh
         id: guard
@@ -99,9 +146,11 @@ jobs:
         if: steps.guard.outputs.skip != 'true' && steps.target.outputs.run_id != ''
         env:
           GH_REPO: ${{ github.repository }}
+        env:
+          PC5_RUN_ID: ${{ steps.target.outputs.run_id }}
         run: |
           set -euo pipefail
-          python3 tools/progress_record.py record --run-id "${{ steps.target.outputs.run_id }}"
+          python3 tools/progress_record.py record --run-id "$PC5_RUN_ID"
           ls -1 docs/evidence/ci/
 
       - name: Regenerate the figures and the generated blocks
@@ -125,6 +174,8 @@ jobs:
       - name: Decide whether an update is owed
         if: steps.guard.outputs.skip != 'true'
         id: decide
+        env:
+          PC5_CONCLUSION: ${{ steps.target.outputs.conclusion }}
         run: |
           set -euo pipefail
           # `git diff --quiet` is the whole idempotence test: identical output means
@@ -140,7 +191,7 @@ jobs:
           # refused -- and a refusal has to be *reported* while the run stays green,
           # because the model's answer for the last verified state is still correct.
           python3 tools/progress_record.py decide --json \
-            --conclusion "${{ steps.target.outputs.conclusion }}" \
+            --conclusion "$PC5_CONCLUSION" \
             --paths-file /tmp/pc5-paths.txt $changed | tee /tmp/pc5-decision.json || true
           action=$(python3 -c "import json;print(json.load(open('/tmp/pc5-decision.json'))['action'])")
           echo "action=$action" >> "$GITHUB_OUTPUT"
@@ -158,6 +209,8 @@ jobs:
 
       - name: Report what the dashboard now says
         if: always() && steps.guard.outputs.skip != 'true'
+        env:
+          PC5_ACTION: ${{ steps.decide.outputs.action || 'none' }}
         run: |
           set -euo pipefail
           {
@@ -167,5 +220,5 @@ jobs:
             python3 tools/completion.py summary
             echo '```'
             echo
-            echo "action: \`${{ steps.decide.outputs.action || 'none' }}\`"
+            echo "action: \`$PC5_ACTION\`"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -8,6 +8,10 @@ imported, unit-tested, or re-run on a laptop -- and this repository's rule for t
 dashboard is that a claim must be checkable by whoever reads it.
 
 Subcommands
+    target    refuse a commit this workflow may not publish from: the refresh is a write
+              to `main`, so its input has to be a commit *on* `main` whose *own*
+              verification succeeded — a branch name is not provenance, and neither is a
+              green run on somebody else's tree
     guard     refuse to act on the automation's own commit, which is what stops a
               dashboard update from triggering another dashboard update forever
     record    write `docs/evidence/ci/<run-id>.json` from a run's job list
@@ -22,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -31,6 +36,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import completion  # noqa: E402  sibling: the model and the policy, imported not restated
+
+#: Which ref the published dashboard may be regenerated from, and where the comparison
+#: against it comes from in a CI checkout.
+MAIN_REF = "refs/heads/main"
+ORIGIN_MAIN = "refs/remotes/origin/main"
 
 CI_DIR = "docs/evidence/ci"
 CI_SCHEMA = "pc5.ci/1"
@@ -47,6 +57,92 @@ def _run(argv: list[str], cwd: Path | None = None) -> str:
         raise ActionError(f"{' '.join(argv)}: exit {completed.returncode}: "
                           f"{(completed.stderr or completed.stdout).strip()[:300]}")
     return completed.stdout
+
+
+# ---------------------------------------------------------------- target
+def _git(argv: list[str], root: Path | None = None) -> tuple[int, str]:
+    completed = subprocess.run(["git", *argv], cwd=root or ROOT, capture_output=True,
+                               text=True, check=False)
+    return completed.returncode, (completed.stdout or completed.stderr).strip()
+
+
+def target_verdict(event: str, sha: str, ref_name: str = "", run_event: str = "",
+                   run_repo: str = "", repository: str = "", conclusion: str = "success",
+                   main_ref: str = ORIGIN_MAIN, root: Path | None = None) -> dict:
+    """May this refresh be published from `sha`?  Returns a verdict; never raises.
+
+    The workflow runs with `contents: write` and pushes to `main`, so the input it accepts
+    is the whole security boundary.  Four checks, each refusing for its own reason, because
+    "the trigger did not match" tells a maintainer nothing while four sentences tell them
+    which field moved:
+
+      1. **`sha` is shaped like a commit.**  Every value below arrives from an event payload
+         through `env:`, so none of it is trusted text; a 40-hex-digit check is the cheapest
+         way to keep a malformed field from reaching `git` at all.
+      2. **the triggering run was a `push`** — not a `pull_request`.  A pull-request run's
+         `head_branch` is the contributor's own branch name, so a fork with a branch called
+         `main` satisfies a name match while pointing at code nobody merged.
+      3. **the run belongs to this repository** — `head_repository.full_name` must equal the
+         repository the dashboard is written to, which is the same test in a fork's terms
+         rather than in a name's.
+      4. **the commit is an ancestor of `main`** — the only one of the four that is a fact
+         about the tree rather than about an event.  `git merge-base --is-ancestor` answers it
+         against the ref the job just fetched; an unavailable ref is a refusal, never a pass,
+         because a comparison that could not run proves nothing.
+
+    A `workflow_dispatch` is allowed only when it ran *on* `main`: a dispatch can be started
+    from any ref that carries this file, and the ref's own name is then the only claim about
+    where the tree came from.
+    """
+    checks: list[str] = []
+
+    def refusing(problem: str) -> dict:
+        return {"proceed": False, "reason": problem, "checks": checks, "sha": sha,
+                "event": event}
+
+    def passed(what: str) -> None:
+        checks.append(what)
+
+    if not re.fullmatch(r"[0-9a-f]{40}", sha or ""):
+        return refusing(f"`{sha!r}` is not a 40-character commit id, so it is not a sha")
+    passed("sha-shape")
+    if event == "workflow_dispatch":
+        if ref_name != "main":
+            return refusing(f"a manual refresh was dispatched on {ref_name!r}, not on main, "
+                            f"so its tree is not the published one")
+        passed("dispatch-on-main")
+        return {"proceed": True, "reason": f"{sha[:12]} dispatched on main", "checks": checks,
+                "sha": sha, "event": event}
+    if event != "workflow_run":
+        return refusing(f"the refresh was started by {event!r}, which has no verified "
+                        f"verification behind it")
+    if conclusion != "success":
+        return refusing(f"the triggering run concluded {conclusion!r}; only a success is "
+                        f"verified state")
+    passed("conclusion")
+    if run_event != "push":
+        return refusing(f"the triggering run was a {run_event!r}, not a push to a branch; a "
+                        f"pull-request head can be called main without being merged")
+    passed("push-event")
+    if repository and run_repo != repository:
+        return refusing(f"the triggering run belongs to {run_repo!r}, not {repository!r}")
+    passed("same-repository")
+    code, out = _git(["rev-parse", "--verify", "-q", f"{sha}^{{commit}}"], root)
+    if code != 0:
+        return refusing(f"git cannot resolve {sha[:12]} in this checkout, so the commit this "
+                        f"refresh would publish from is not the one that was verified")
+    passed("object-present")
+    code, _ = _git(["rev-parse", "--verify", "-q", main_ref], root)
+    if code != 0:
+        return refusing(f"{main_ref} is not available to compare against; refusing rather "
+                        f"than assuming the commit is on main")
+    code, _ = _git(["merge-base", "--is-ancestor", sha, main_ref], root)
+    if code != 0:
+        return refusing(f"{sha[:12]} is not an ancestor of {main_ref}: its gates are not "
+                        f"main's, and a dashboard commit cannot be published from it")
+    passed("ancestor-of-main")
+    return {"proceed": True, "reason": f"{sha[:12]} is on main ({', '.join(checks)})",
+            "checks": checks, "sha": sha, "event": event}
 
 
 # ---------------------------------------------------------------- guard
@@ -173,7 +269,15 @@ def git_output(argv: list[str], root: Path | None = None) -> str:
 # ---------------------------------------------------------------- cli
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("command", choices=("guard", "record", "decide", "commit"))
+    parser.add_argument("command", choices=("target", "guard", "record", "decide", "commit"))
+    parser.add_argument("--sha", default="", help="for target: the commit to publish from")
+    parser.add_argument("--event", default="", help="for target: the triggering event name")
+    parser.add_argument("--ref-name", default="", help="for target: the ref a dispatch ran on")
+    parser.add_argument("--run-event", default="", help="for target: the completed run's event")
+    parser.add_argument("--run-repo", default="", help="for target: the run's head repository")
+    parser.add_argument("--repository", default="", help="for target: this repository's full name")
+    parser.add_argument("--main-ref", default=ORIGIN_MAIN,
+                        help="for target: the ref to test ancestry against")
     parser.add_argument("--subject", default="", help="for guard: HEAD's commit subject")
     parser.add_argument("--author", default="", help="for guard: HEAD's commit author login")
     parser.add_argument("--run-id", default=None,
@@ -193,6 +297,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     root = Path(args.root).resolve() if args.root else None
+
+    if args.command == "target":
+        verdict = target_verdict(args.event, args.sha, ref_name=args.ref_name,
+                                 run_event=args.run_event, run_repo=args.run_repo,
+                                 repository=args.repository, conclusion=args.conclusion,
+                                 main_ref=args.main_ref, root=root)
+        print(json.dumps(verdict) if args.json else verdict["reason"])
+        return 0 if verdict["proceed"] else 4
 
     if args.command == "guard":
         verdict = guard(args.subject, args.author)

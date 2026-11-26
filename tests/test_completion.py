@@ -541,6 +541,114 @@ class DecisionTests(unittest.TestCase):
         self.assertIn("release blocked", line)
 
 
+class TargetBindingTests(unittest.TestCase):
+    """Which commit the dashboard may be regenerated from, and what makes that a refusal.
+
+    The workflow runs with `contents: write` and pushes to `main`, so `progress_record.py
+    target` is the boundary between "a verified commit" and "a string that said main".  These
+    run against a real throwaway repository, because the decisive check is `git
+    merge-base --is-ancestor`: a fake that always agrees would test the fixture.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = Path(tempfile.mkdtemp())
+        subprocess.run(["git", "init", "-q", "-b", "main", str(cls.root)], check=True)
+        for argv in (["config", "user.email", "t@example.invalid"],
+                     ["config", "user.name", "Test"],
+                     ["commit", "-q", "--allow-empty", "-m", "first"]):
+            subprocess.run(["git"] + argv, cwd=cls.root, check=True, capture_output=True)
+        cls.on_main = subprocess.run(["git", "rev-parse", "HEAD"], cwd=cls.root,
+                                     capture_output=True, text=True).stdout.strip()
+        # a branch that is *called* main in somebody else's repository, and an unrelated commit
+        subprocess.run(["git", "checkout", "-qb", "side"], cwd=cls.root, check=True,
+                       capture_output=True)
+        subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "unmerged"], cwd=cls.root,
+                       check=True, capture_output=True)
+        cls.orphan = subprocess.run(["git", "rev-parse", "HEAD"], cwd=cls.root,
+                                     capture_output=True, text=True).stdout.strip()
+        subprocess.run(["git", "branch", "-m", "side", "foreign-main"], cwd=cls.root,
+                       check=True, capture_output=True)
+        subprocess.run(["git", "update-ref", "refs/remotes/origin/main", cls.on_main],
+                       cwd=cls.root, check=True, capture_output=True)
+        subprocess.run(["git", "checkout", "-q", "main"], cwd=cls.root, check=True,
+                       capture_output=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def verdict(self, **over):
+        fields = {"event": "workflow_run", "sha": self.on_main, "run_event": "push",
+                  "run_repo": "pc5/PC5", "repository": "pc5/PC5", "conclusion": "success",
+                  "main_ref": "refs/remotes/origin/main", "root": self.root}
+        fields.update(over)
+        return R.target_verdict(fields.pop("event"), fields.pop("sha"), **fields)
+
+    def test_a_verified_commit_on_main_is_allowed(self):
+        verdict = self.verdict()
+        self.assertTrue(verdict["proceed"], verdict)
+        self.assertIn("ancestor-of-main", verdict["checks"])
+
+    def test_a_fork_head_named_main_is_refused_by_ancestry(self):
+        """The hole this closes: a pull-request run whose branch is called `main`."""
+        verdict = self.verdict(sha=self.orphan, run_event="pull_request",
+                               run_repo="someone-else/PC5")
+        self.assertFalse(verdict["proceed"])
+        self.assertIn("not a push", verdict["reason"])
+        # and with the event fields spoofed into shape, Git is the last line: the commit is
+        # simply not on main
+        verdict = self.verdict(sha=self.orphan)
+        self.assertFalse(verdict["proceed"], verdict)
+        self.assertIn("not an ancestor", verdict["reason"])
+
+    def test_each_refusal_says_which_field_moved(self):
+        cases = {
+            "not a sha": ({"sha": "18a9d7a"}, "not a 40-character commit id"),
+            "a non-push run": ({"run_event": "schedule"}, "not a push"),
+            "another repository": ({"run_repo": "elsewhere/PC5"}, "belongs to"),
+            "not a success": ({"conclusion": "cancelled"}, "concluded 'cancelled'"),
+            "an unknown event": ({"event": "repository_dispatch"}, "started by"),
+            "a dispatch off main": ({"event": "workflow_dispatch", "ref_name": "side"},
+                                    "dispatched on 'side'"),
+        }
+        for label, (over, expected) in cases.items():
+            with self.subTest(label):
+                verdict = self.verdict(**over)
+                self.assertFalse(verdict["proceed"], verdict)
+                self.assertIn(expected, verdict["reason"], verdict["reason"])
+
+    def test_a_dispatch_on_main_is_allowed_without_a_run(self):
+        verdict = self.verdict(event="workflow_dispatch", ref_name="main")
+        self.assertTrue(verdict["proceed"], verdict)
+        self.assertEqual(verdict["checks"], ["sha-shape", "dispatch-on-main"])
+
+    def test_an_unavailable_comparison_ref_is_a_refusal_not_a_pass(self):
+        verdict = self.verdict(main_ref="refs/remotes/origin/nope")
+        self.assertFalse(verdict["proceed"])
+        self.assertIn("not available to compare against", verdict["reason"])
+
+    def test_a_commit_the_checkout_does_not_have_is_refused(self):
+        verdict = self.verdict(sha="0" * 40)
+        self.assertFalse(verdict["proceed"])
+        self.assertIn("cannot resolve", verdict["reason"])
+
+    def test_the_cli_exits_four_on_a_refusal_and_zero_on_a_pass(self):
+        out = subprocess.run([sys.executable, str(REPO / "tools" / "progress_record.py"),
+                              "target", "--json", "--event", "workflow_run",
+                              "--sha", self.on_main, "--run-event", "push",
+                              "--run-repo", "pc5/PC5", "--repository", "pc5/PC5",
+                              "--main-ref", "refs/remotes/origin/main", "--root", str(self.root)],
+                             capture_output=True, text=True, check=False)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertTrue(json.loads(out.stdout)["proceed"])
+        bad = subprocess.run([sys.executable, str(REPO / "tools" / "progress_record.py"),
+                              "target", "--json", "--event", "workflow_run", "--sha", "nope"],
+                             capture_output=True, text=True, check=False)
+        self.assertEqual(bad.returncode, 4, bad.stdout + bad.stderr)
+        self.assertFalse(json.loads(bad.stdout)["proceed"])
+
+
 @unittest.skipUnless(WORKFLOW.exists(), "the maintenance workflow has not been installed yet")
 class WorkflowContractTests(unittest.TestCase):
     """The YAML is part of the implementation, so it is tested like one.
@@ -565,6 +673,24 @@ class WorkflowContractTests(unittest.TestCase):
     def test_it_only_publishes_after_a_successful_verification(self):
         self.assertRegex(self.text, r"conclusion\s*==\s*'success'")
         self.assertRegex(self.text, r"head_branch\s*==\s*'main'")
+        # a branch name alone is not provenance: the trigger also requires a push, and the
+        # run's own repository, before any runner is started
+        self.assertRegex(self.text, r"workflow_run\.event\s*==\s*'push'")
+        self.assertIn("head_repository.full_name == github.repository", self.text)
+
+    def test_it_binds_the_target_before_it_writes_anything(self):
+        """The refusal step is *before* the guard, the regeneration and the commit."""
+        self.assertIn("progress_record.py target", self.text)
+        target = self.text.index("Refuse a target that is not verified main")
+        for later in ("Refuse to refresh from a refresh", "Regenerate the figures",
+                      "Commit and push the refresh"):
+            self.assertLess(target, self.text.index(later), later)
+
+    def test_no_event_field_is_interpolated_into_a_shell(self):
+        """Every `github.event.*` reaches `run:` through `env:`, so none of it is command text."""
+        for block in re.finditer(r"run: \|\n((?:          .*(?:\n|$))+)", self.text):
+            for line in block.group(1).splitlines():
+                self.assertNotIn("${{", line, f"injected expression in: {line.strip()}")
 
     def test_least_privilege(self):
         permissions = re.search(r"^permissions:\n((?:[ ]{2}\w+: \w+\n)+)", self.text, re.M)

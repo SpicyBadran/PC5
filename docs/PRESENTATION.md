@@ -305,8 +305,8 @@ rejects any `![...]` whose file is missing or whose alt text is empty.
 
 `.github/workflows/progress.yml` reacts to `workflow_run` on `build` completing, plus
 `workflow_dispatch` for a dry run. Decisions live in `tools/progress_record.py`
-(`guard`, `record`, `decide`, `commit`) so they can be unit-tested and re-run locally; the
-YAML only sequences them.
+(`target`, `guard`, `record`, `decide`, `commit`) so they can be unit-tested and re-run
+locally; the YAML only sequences them.
 
 | Input | Outcome |
 |---|---|
@@ -314,6 +314,7 @@ YAML only sequences them.
 | `build` concluded `success`, nothing significant changed | no commit; the run reports `noop` |
 | regeneration byte-identical | no commit; `git diff --exit-code` is the whole test |
 | conclusion `failure`, `cancelled`, `skipped`, `action_required`, or still `in_progress` | **refuse**: the model keeps describing the last verified state, and the log says so |
+| the target is not a commit on *this* repository's `main` | **refuse, before anything is read**: `target` exits 4 and the job stops |
 | HEAD is itself a progress commit, or authored by `github-actions` | the guard skips; this is the second loop lock |
 | `workflow_dispatch` | the same path with no CI record filed, for rehearsal |
 
@@ -332,6 +333,22 @@ nothing new to say and turns the "last verified" row into a lie about freshness.
 `push: paths:` trigger plus `[skip ci]` would work but couples the refresh to the merge
 rather than to the verification, and a bot commit skipped by CI could then strand the
 figures behind the data.
+
+**Whose `main`.** A `workflow_run` event names a branch, and a name is not provenance: a pull
+request from a fork whose head branch is *called* `main` completes with
+`head_branch: 'main'` and `conclusion: 'success'`, and would otherwise hand this job — which
+holds `contents: write` — an unmerged tree to regenerate the published page from. Two clauses
+in the job's `if:` (`event == 'push'` and `head_repository.full_name == github.repository`)
+keep such a run from starting a runner at all, and the `target` step re-checks those plus two
+more in Python: the shape of the sha, and the only property that is a fact about the tree
+rather than about an event, `git merge-base --is-ancestor <sha> refs/remotes/origin/main`.
+That last one is why the step un-shallows `main` first: on the `fetch-depth: 2` checkout,
+ancestry cannot be judged, and a comparison that could not run has to be a refusal, never a
+pass. The same reasoning is why no `${{ github.event… }}` appears inside a `run:` line
+anywhere in the file — an expression is substituted before bash sees it, so every payload
+field is passed through `env:` as data. `tests/test_completion.py::TargetBindingTests` drives a
+real throwaway repository, so the ancestry refusal is tested against Git rather than a mock,
+and `WorkflowContractTests` pins the YAML's shape.
 
 **Loop control, and where the real limits are.** A push made with the run's own
 `GITHUB_TOKEN` does not start `push`-triggered workflows, so a dashboard commit does not
