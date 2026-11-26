@@ -177,6 +177,13 @@ id, a state outside the four `tools/roadmap.py` allows, a milestone with no `acc
 Each of those is a way a generator could produce a confident, wrong number, so the
 generator stops instead.
 
+**One reader.** `presentation.load_records()` is a delegation to
+`completion.load_records()`, not a second implementation of it. It used to be its own
+loop over the same directory with the same schema filter and a different tie-break, which
+is exactly how a figure and a stat card can end up describing two different verifications.
+`test_the_figure_and_the_model_share_one_reader` pins it; if a future edit re-introduces a
+second loader, the stamp test fails.
+
 **Determinism.** The model reads files and nothing else: no clock, no network, no `git log
 -1`. The verification stamp is the date recorded inside the newest
 `docs/evidence/validation/*.json`, not the day the figure was rendered. That is what makes

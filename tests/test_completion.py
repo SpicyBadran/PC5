@@ -219,6 +219,30 @@ class StampTests(unittest.TestCase):
         self.assertEqual(records["verify"]["_file"],
                          "docs/evidence/validation/a-earlier-filename-later-date.json")
 
+    def test_the_figure_and_the_model_share_one_reader(self):
+        """`presentation.load_records` is the model's reader, not a copy of it.
+
+        The dashboard used to have its own: same directory, same schema filter, a
+        different tie-break.  Pinning the delegation is what stops it coming back.
+        """
+        tmp = Path(tempfile.mkdtemp())
+        base = {"schema": "pc5.validation/1", "gate": "iso", "result": "passed",
+                "commit": "ccccccc00000000000000000000000000000000", "date": "2026-10-01",
+                "checks": {"passed": 6, "total": 6}}
+        (tmp / "a-old.json").write_text(json.dumps(base), encoding="utf-8")
+        (tmp / "zz-newer.json").write_text(json.dumps(dict(base, date="2026-11-05")),
+                                           encoding="utf-8")
+        self.assertEqual(P.load_records(tmp), C.load_records(tmp))
+        self.assertEqual(C.verified_at(P.load_records(tmp))["date"], "2026-11-05")
+
+    def test_a_malformed_tally_cannot_crash_a_stat_card(self):
+        """`checks` is a dict of counts or it is nothing; the generator never raises."""
+        record = {"schema": "pc5.validation/1", "gate": "verify", "result": "passed",
+                  "checks": 12, "date": "2026-11-27", "commit": "1" * 40}
+        text, _colour = P.record_line({"verify": record}, "verify")
+        self.assertIn("PASSED", text.upper())
+        self.assertNotIn("12", text)
+
     def test_no_records_says_so_instead_of_defaulting_to_today(self):
         stamp = C.verified_at({})
         self.assertEqual(stamp["date"], "no record")

@@ -567,18 +567,17 @@ STATE_LABEL = {"complete": "complete", "in_progress": "in progress",
 
 
 def load_records(directory: Path | None = None) -> dict:
-    """Every committed validation record, keyed by gate. Unreadable records are absent."""
-    found = {}
-    for path in sorted((directory or VALIDATION).glob("*.json")):
-        try:
-            record = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if record.get("schema") != "pc5.validation/1":
-            continue
-        record["file"] = f"docs/evidence/validation/{path.name}"
-        found[record.get("gate", path.stem)] = record
-    return found
+    """The committed gate records, read by the one reader this repository has.
+
+    Deliberately a delegation, not a sibling: `tools/completion.py` owns the record
+    shape, the schema filter and the rule that the newest date wins when a gate has
+    more than one file.  Two loaders over one directory drift by construction -- this
+    one used to key by gate and keep whichever filename sorted last, so the stamp the
+    completion block printed and the stamp the stat cards printed could disagree about
+    the same evidence -- and a dashboard whose rows come from different reads of the
+    same directory is not a dashboard.
+    """
+    return completion.load_records(directory)
 
 
 def distribution(data) -> dict:
@@ -596,8 +595,13 @@ def record_line(records: dict, gate: str) -> tuple:
     result = record.get("result", "error")
     colour = {"passed": GREEN, "not-tested": AMBER, "skipped": AMBER,
               "failed": RED, "error": RED}.get(result, MUTED)
-    checks = record.get("checks") or {}
-    detail = f" {checks['passed']}/{checks['total']}" if checks else ""
+    # `tools/validation.py` writes `checks` as {"passed": n, "total": m}; anything else
+    # (an int, a string, a hand-edited record) is not a tally, so it is dropped rather
+    # than indexed -- a malformed record must not be able to raise inside the generator
+    # and leave the README half-written.
+    checks = record.get("checks")
+    checks = checks if isinstance(checks, dict) else {}
+    detail = f" {checks['passed']}/{checks['total']}" if "passed" in checks and "total" in checks else ""
     return (f"{result}{detail} @ {record.get('commit', '')[:7]}", colour)
 
 
