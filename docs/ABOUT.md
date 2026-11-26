@@ -463,11 +463,13 @@ documentation change could otherwise invent a licence:
 - **a file whose header and grant name different versions.** That is what a half-finished
   relicensing looks like, and a page must not choose a side between them.
 
-A refusal is printed, not thrown: the row above says that `LICENSE` states no grant, and
-`make docs-check` reports the gap once against `LICENSE` — the file that needs the answer.
-Raising instead would have taken every figure and every block down with it, which is four
-false failures wrapped around one true statement, and the true one is a decision for the
-project owner rather than a rendering detail.
+A refusal is printed, not thrown. When `LICENSE` states no grant for PC5, the row above
+says so in those words, and `make docs-check` reports the gap once, against `LICENSE` — the
+file that needs the answer. Aborting instead would have taken every figure and every other
+block down with the one unclear file: four false failures wrapped around one true statement,
+and the true one is a decision for the project owner rather than a rendering detail. The
+maintenance workflow then fixes the row by regenerating it, which is what `make presentation`
+does here, and `make presentation-check` keeps any hand-restored identifier from surviving.
 
 `make docs-check` then compares every licence identifier in the documents that describe
 the project — the README, this page, [`CONTRIBUTING.md`](../CONTRIBUTING.md) and
