@@ -30,9 +30,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GRAPH = os.path.join(ROOT, "docs", "architecture", "roadmap.json")
 
 # Documents that must carry the product identity. Every user-facing entry point,
-# plus the documents a new contributor reads first.
+# plus the documents a new contributor reads first. `docs/ABOUT.md` is on this list
+# because it is the page written *for* a newcomer, and the identity sentence it quotes
+# is generated from this data — `tests/test_presentation.py::AboutPageTest` pins that.
 IDENTITY_DOCUMENTS = (
     "README.md",
+    "docs/ABOUT.md",
     "docs/ROADMAP.md",
     "docs/architecture/README.md",
     "docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md",

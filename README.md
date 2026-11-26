@@ -22,7 +22,7 @@ repository contains or has executed Sony's system software.
 | **Platform** | PC5 kernel and bootloader, freestanding, no Linux in the image |
 | **Licence** | GPL-2.0-only, no vendored third-party code ([ADR-025](docs/TECHNICAL_DECISIONS.md)) |
 
-**Navigate** · [Completion](#overall-project-completion) · [Dashboard](#dashboard) · [Status](#status-at-a-glance) ·
+**Navigate** · [About](#about-pc5) · [Completion](#overall-project-completion) · [Dashboard](#dashboard) · [Status](#status-at-a-glance) ·
 [Architecture](#architecture) · [Evidence](#what-has-actually-been-demonstrated) ·
 [Blockers](#what-is-blocked) · [Build](#quick-start) · [Docs](#documentation)
 
@@ -116,6 +116,33 @@ PC5-authored payloads, device models and conformance fixtures are engineering
 test scaffolding. A PC5 kernel boot is evidence about PC5, never evidence that
 Sony's software executed. [`docs/BRAND.md`](docs/BRAND.md) governs the PC5 marks
 and forbids placing them on anything that depicts Sony's software.
+
+## About PC5
+
+PC5 builds the PC-side substrate a foreign operating system needs before it can run on
+hardware that was not made for it: firmware handoff, exception delivery, memory
+ownership, interrupt routing, device control, and the platform contract that ties them
+together. It is aimed at one destination, stated in [`docs/ABOUT.md`](docs/ABOUT.md) in
+the project's own words, and every step of it is backed by a record in this repository
+rather than by an adjective. That page is the long form — identity, architecture, what
+actually works, the standards a claim has to meet, the licence, and how to take part;
+this README keeps the numbers and points at it.
+
+| Read this next | Where |
+|---|---|
+| The full orientation, with the evidence behind each claim | [`docs/ABOUT.md`](docs/ABOUT.md) |
+| How the system is put together | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), specification in [`PC5_ARCHITECTURE_SPEC_v2.md`](docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md) |
+| Where the work is going, milestone by milestone | [`docs/ROADMAP.md`](docs/ROADMAP.md), data in [`docs/architecture/roadmap.json`](docs/architecture/roadmap.json) |
+| How to build, verify and boot it | [`docs/BUILDING.md`](docs/BUILDING.md), [`docs/INSTALLATION.md`](docs/INSTALLATION.md) |
+| What each gate proves, and what it does not | [`docs/TESTING_STRATEGY.md`](docs/TESTING_STRATEGY.md), [`docs/GATES.md`](docs/GATES.md) |
+| The licence, and the no-vendoring rule | [`LICENSE`](LICENSE) (GPL-2.0-only), [ADR-025](docs/TECHNICAL_DECISIONS.md) |
+| How to contribute, and the rules a change has to keep | [`CONTRIBUTING.md`](CONTRIBUTING.md), [issue templates](.github/ISSUE_TEMPLATE) |
+
+**Status, stated once.** The completion figure above is generated from the milestone
+graph and the committed verification records by [`tools/completion.py`](tools/completion.py).
+[`docs/ABOUT.md`](docs/ABOUT.md) prints the same model rather than a copy of it, so the
+two pages cannot disagree, and `make presentation-check` fails if either one drifts from
+the data.
 
 ## Dashboard
 

@@ -17,7 +17,7 @@ previous report.
 | Did visual evidence exist to publish? | No screenshot of a boot exists in the repository, and there is no physical boot to photograph. The available real evidence is textual: test output, serial-log excerpts, verification reports. |
 | Was there a status summary? | A large hand-maintained table in the README, duplicating states that also live in `roadmap.json`. It could drift silently. |
 | Was there a graph to draw from? | Yes — `docs/architecture/roadmap.json`, 35 milestones in 14 workstreams, with states, dependencies, evidence lists and a named destination milestone. |
-| Was there CI to badge? | Not when this page was written: `ci/build.yml` was a pipeline definition stored in the tree because the token in use could not create workflows (`ci/README.md` kept the record). **No CI badge was shown and no claim of automated builds was made.** The workflow has since been installed as `.github/workflows/build.yml`; a badge is still not added here, because a badge is a promise about every future run and this page reports what was measured. |
+| Was there CI to badge? | Not when this page was written: the historical path `ci/build.yml` was a pipeline definition stored in the tree because the token in use could not create workflows (`ci/README.md` kept the record). **No CI badge was shown and no claim of automated builds was made.** The workflow has since been installed as `.github/workflows/build.yml`; a badge is still not added here, because a badge is a promise about every future run and this page reports what was measured. |
 | Were there contributor documents? | `LICENSE`, `docs/SECURITY.md`, `docs/BUILDING.md`, `docs/INSTALLATION.md`; no `CONTRIBUTING.md`. |
 | What already tested the README? | `tests/test_architecture.py` (every markdown link resolves), `tests/test_product_identity.py` (the identity line, forbidden claims from data), `tests/test_project_independence.py` (no vendored project, no borrowed identity). |
 
@@ -62,7 +62,8 @@ benchmarks, compatibility percentages, or evidence that does not exist.
 ### What is generated into the README
 
 Six blocks, each between its own pair of markers, each from one source. The completion
-block is first because it is the one the maintenance workflow exists to keep current:
+block is first because it is the one the maintenance workflow exists to keep current
+(`docs/ABOUT.md` carries three more, below):
 
 | Block | Markers | Source | Shows |
 |---|---|---|---|
@@ -73,9 +74,37 @@ block is first because it is the one the maintenance workflow exists to keep cur
 | Blockers | `<!-- pc5:blockers:begin -->` | `roadmap.json` | every blocked milestone with the blocker it records |
 | The PUP | `<!-- pc5:pup:begin -->` | the tracked `PS5UPDATE.PUP` | pointer size and hash, declared object size, payload absent, package unverified |
 
-**Statistics outside those blocks are rejected.** `make presentation-check` scans the
-prose for `N checks`, `N milestones`, `N workstreams`, `N-byte`, `N.N GB` and any `N%`,
-because those are exactly the numbers that used to be typed once and quietly rot.
+### What is generated into `docs/ABOUT.md`
+
+`docs/ABOUT.md` is the long-form orientation, and the generator owns three blocks in it
+for the same reason it owns the six above: those are the parts of the page that a data
+change must move by itself.
+
+| Block | Markers | Source | Shows |
+|---|---|---|---|
+| Identity | `<!-- pc5:about-identity:begin -->` | `roadmap.json`'s `product` object, plus `LICENSE` read as text | the identity and destination sentences verbatim, the success hierarchy, non-goals, what the destination cannot be satisfied by, the licence id, and the authority document with its version |
+| Capabilities | `<!-- pc5:about-capabilities:begin -->` | `roadmap.json` milestones and `foundations[]` | the five standings with their counts, every `complete` milestone with the evidence paths it cites, every `does_not_complete` line of each foundation, and the in-progress, planned and blocked sets |
+| Progress | `<!-- pc5:about-progress:begin -->` | `tools/completion.py`, the same model the README's completion block uses | the criteria-weighted percentage, the state counts, the current milestones, the last verified record, the newest hosted run, and release status |
+
+Both pages go through one `apply_block`, so one code path writes and checks either, and
+each page carries its own label in a failure message. Two properties are worth stating
+because they were the design decisions, not accidents:
+
+* **A page the generator owns is never created by it.** `sync` skips an absent page and
+  `check` fails it, so a deleted `docs/ABOUT.md` comes back through a deliberate commit
+  rather than reappearing on somebody else's run.
+* **Links inside a generated block are written for the page that receives them.** The
+  About page lives in `docs/`, so a block rendered into it says `evidence/…` and
+  `../tools/…` where the same text in the README says `docs/evidence/…` and `tools/…`.
+  Without that, a correct block would be a broken link depending on which file it landed
+  in — which is exactly how a generated page acquires dead links nobody typed.
+
+**Statistics outside those blocks are rejected, on both pages.** `make
+presentation-check` scans the prose for `N checks`, `N milestones`, `N workstreams`,
+`N-byte`, `N.N GB` and any `N%`, because those are exactly the numbers that used to be
+typed once and quietly rot. The scan removes the generated regions first, so a
+generated percentage is never reported as typed; the ban applies to the prose, where the
+staling happens.
 
 The milestone status table is generated into the block between
 `<!-- pc5:status:begin -->` and `<!-- pc5:status:end -->`. Milestone rows take their
@@ -88,7 +117,7 @@ reworded test record cannot leave a VERIFIED chip behind.
 ## 4. Generation and checking
 
 ```sh
-make presentation           # write: seven SVGs and six README blocks
+make presentation           # write: seven SVGs and nine blocks, in README.md and docs/ABOUT.md
 make presentation-check     # read: are they current?  also run by `make check`
 make completion             # read: the completion model as one line
 make completion-check       # read: is the completion data self-consistent?
@@ -97,7 +126,8 @@ make progress-record RUN=<id>   # write: file a hosted run as CI evidence
 make progress-decide            # read: does this merge owe a dashboard update?
 make progress-preview           # read: what would the maintenance commit write?
 make progress-commit            # write: commit and push it, only if there is a diff
-make docs-check             # read: every link, anchor and documented command in the tree
+make docs-check             # read: links, anchors and documented commands in the tree, plus
+                            #       the About contract (see below)
 make validation             # read: the committed records, and whether they are coherent
 make record-validation      # write: run the gates and replace the records (explicit only)
 ```
@@ -106,19 +136,49 @@ make record-validation      # write: run the gates and replace the records (expl
 run cannot rewrite tracked documentation. Writing is always an explicit act.
 
 `check` fails on: a stale figure (bytes differ from a fresh render), a hand-edited
-status block, a broken local link or image path in `README.md` or this document, an
-image without alt text, a figure that lost its `<title>`/`<desc>`, a README that stops
-embedding one of the figures, a missing honesty token, or one of the banned claims
-below.
+status block, a broken local link or image path in `README.md`, `docs/ABOUT.md` or this
+document, an image without alt text, a figure that lost its `<title>`/`<desc>`, a page
+that stops embedding a figure it is supposed to show, a missing honesty token, or one of
+the banned claims below.
 
 The banned list exists because presentation is where a project is most tempted to
 overstate itself: "runs PS5 games", "boots on any PC", "Secure Boot supported",
-"CI passing", "PS5 firmware included", "production ready". Each is false here for a
-specific reason recorded in the tool.
+"CI passing", "PS5 firmware included", "production ready", "fully compatible".
+Each is false here for a specific reason recorded in the tool, and the list is applied
+to every page the generator writes, so an About page cannot say what the front page may
+not.
+
+The honesty tokens are per page, not global: the README must contain "NOT TESTED",
+"BLOCKED", "Git LFS pointer" and the destination sentence, because it is the front
+page; `docs/ABOUT.md` must contain those and "nothing published", because a long-form
+orientation page that does not say what is missing has failed at its one job. A global
+list would let either page satisfy the other's obligations by accident.
 
 Determinism: no timestamps, no random ids, no locale-dependent formatting, sorted
 iteration, integer geometry. The same `roadmap.json` produces byte-identical figures on
 any machine, so a diff means the data changed — which is the point.
+
+### The About contract in `make docs-check`
+
+`tools/presentation.py` keeps the generated regions true. It cannot say anything about
+the prose *around* them, and prose is where an About page drifts: a section deleted, a
+licence named from memory, a milestone called "verified" because it sounds finished. So
+`tools/docs_check.py` gained five rules for the pages that speak about the project, all
+pure functions over text, each with a fixture test that must fail:
+
+| Rule | What it holds to |
+|---|---|
+| Required sections | `docs/ABOUT.md` carries its eight numbered headings, in order; a dropped or reordered section fails |
+| Generated regions present | the three `pc5:about-*` marker pairs exist, so the numbers on the page are still generated rather than quoted from a previous month |
+| Licence identity | every GPL/MIT/Apache identifier in `README.md`, `docs/ABOUT.md`, `CONTRIBUTING.md` and `docs/BRAND.md` must equal the id derived from `LICENSE` (a bare `GPL-2.0` family name is allowed, a different id is not). The file is canonical and the platform's detected badge is not consulted, because a badge is a heuristic over the licence header |
+| Cited paths | a backticked repository path with a directory and a suffix, in the documents that describe the tree, has to exist — with two exclusions, recorded rather than hidden: paths under a generated or external prefix (`build/…`, an EDK2 package), and a citation that names itself historical on its own line, because "the pipeline used to live at `ci/build.yml`" is a true sentence about a file that is gone |
+| Milestone standing | a clause that calls a milestone verified, experimental, blocked or planned is compared with that milestone's `state` in `roadmap.json`, clause by clause, so comparing two milestones in one sentence is allowed and calling open work "verified" is not |
+
+Two limits are deliberate. The rules read the page's prose, never a generated block —
+checking the generator's own output against the data it came from is `presentation.py`'s
+job, and a second validator for one fact is how two of them end up disagreeing. And a
+missing `docs/ABOUT.md` is reported by the link rule that pointed at it, not also by
+this one: one fact, one failure.
 
 ## 4b. Where the numbers come from
 

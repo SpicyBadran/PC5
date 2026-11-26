@@ -144,16 +144,48 @@ class StatusTableTest(unittest.TestCase):
             self.assertIn(f"| {title} |", block)
 
 
+def mirror(root: Path) -> None:
+    """Link the parts of the real tree a fixture lacks, except the files a test edits.
+
+    `docs/ABOUT.md` cites code by path (`../kernel/main.c`), so a fixture that mirrors
+    only `docs/` reports every citation as a dead link and the test then passes or fails
+    on the shape of the fixture rather than on the rule it is checking.  Linking the top
+    level costs nothing and keeps the link rules honest; the two generated pages stay
+    copies, because a test edits them and must not write through a link into the
+    repository.
+    """
+    for entry in REPO.iterdir():
+        if entry.name in (".git", ".arena", "build", "docs", "README.md", ".pytest_cache"):
+            continue
+        target = root / entry.name
+        if target.exists() or target.is_symlink():
+            continue
+        target.symlink_to(entry, target_is_directory=entry.is_dir())
+
+
+def page_copy(source: Path, destination: Path) -> None:
+    """Replace a symlinked page with a copy, so an edit stays in the fixture."""
+    if destination.is_symlink():
+        destination.unlink()
+    shutil.copy(source, destination)
+
+
 @contextlib.contextmanager
 def redirected(root: Path):
-    """Point the checker at a temporary copy of the two files it edits/reads."""
-    saved = (P.README, P.ASSETS)
+    """Point the checker at a temporary copy of the files it edits and reads.
+
+    `pages()` reads these module attributes when it is called, which is why they are
+    patched here rather than snapshotted: a test that only redirects the README would
+    have the About assertions run against the real repository, and would edit it.
+    """
+    saved = (P.README, P.ABOUT, P.ASSETS)
     P.README = root / "README.md"
+    P.ABOUT = root / "docs/ABOUT.md"
     P.ASSETS = root / "docs/assets"
     try:
         yield
     finally:
-        P.README, P.ASSETS = saved
+        P.README, P.ABOUT, P.ASSETS = saved
 
 
 class CheckTest(unittest.TestCase):
@@ -176,9 +208,18 @@ class CheckTest(unittest.TestCase):
         (self.tmp / "docs/assets").mkdir()
         for name, body in P.rendered(self.data).items():
             (self.tmp / "docs/assets" / name).write_text(body, encoding="utf-8")
+        # docs/ABOUT.md is copied rather than left as the symlink the loop
+        # created: a test that rewrites the page must not follow the link into the
+        # real repository and edit the file it is supposed to be checking.
+        about_link = self.tmp / "docs/ABOUT.md"
+        if about_link.is_symlink():
+            about_link.unlink()
+        shutil.copy(REPO / "docs/ABOUT.md", about_link)
         readme = (REPO / "README.md").read_text(encoding="utf-8")
         # the copy has no docs/PRESENTATION.md; the checker skips a missing file
         (self.tmp / "README.md").write_text(readme, encoding="utf-8")
+        mirror(self.tmp)
+        page_copy(REPO / "docs/ABOUT.md", self.tmp / "docs/ABOUT.md")
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -255,6 +296,176 @@ class CheckTest(unittest.TestCase):
         problems = self.check()
         self.assertTrue(any("does not embed docs/assets/pc5-boot-workflow.svg" in problem
                             for problem in problems), problems)
+
+
+class AboutPageTest(unittest.TestCase):
+    """`docs/ABOUT.md` is generated into, checked, and not allowed to embellish."""
+
+    def setUp(self):
+        self.data = roadmap()
+        self.tmp = Path(tempfile.mkdtemp())
+        (self.tmp / "docs").mkdir()
+        for entry in (REPO / "docs").iterdir():
+            if entry.name == "assets":
+                continue
+            (self.tmp / "docs" / entry.name).symlink_to(entry, target_is_directory=entry.is_dir())
+        (self.tmp / "docs/assets").mkdir()
+        for name, body in P.rendered(self.data).items():
+            (self.tmp / "docs/assets" / name).write_text(body, encoding="utf-8")
+        for name in ("CONTRIBUTING.md", "LICENSE", "requirements-harness.txt"):
+            source = REPO / name
+            (self.tmp / name).symlink_to(source, target_is_directory=source.is_dir())
+        mirror(self.tmp)
+        # docs/ is linked as a tree, so both owned pages become copies here: a test that
+        # rewrites a page must not follow a link into the repository and edit the file it
+        # is supposed to be checking
+        page_copy(REPO / "docs/ABOUT.md", self.tmp / "docs/ABOUT.md")
+        page_copy(REPO / "README.md", self.tmp / "README.md")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def check(self) -> list:
+        with redirected(self.tmp):
+            return P.check(self.data)
+
+    def about(self) -> str:
+        return (self.tmp / "docs/ABOUT.md").read_text(encoding="utf-8")
+
+    def write_about(self, text: str) -> None:
+        (self.tmp / "docs/ABOUT.md").write_text(text, encoding="utf-8")
+
+    def test_the_shipped_page_is_current(self):
+        self.assertEqual(P.check(self.data), [], "docs/ABOUT.md is out of date in the tree")
+
+    def test_the_real_page_carries_every_generated_block(self):
+        text = (REPO / "docs/ABOUT.md").read_text(encoding="utf-8")
+        for name in P.ABOUT_BLOCKS:
+            self.assertIn(f"<!-- pc5:{name}:begin -->", text)
+            self.assertIn(f"<!-- pc5:{name}:end -->", text)
+
+    def test_a_stale_about_block_is_caught(self):
+        text = self.about()
+        begin = "<!-- pc5:about-progress:begin -->"
+        end = "<!-- pc5:about-progress:end -->"
+        head, rest = text.split(begin, 1)
+        _, tail = rest.split(end, 1)
+        self.write_about(head + begin + "\n| | |\n|---|---|\n| **Overall completion** | **99.9%** |\n"
+                         + end + tail)
+        problems = self.check()
+        self.assertTrue(any("ABOUT.md" in problem and "about-progress" in problem
+                            for problem in problems), problems)
+
+    def test_a_removed_marker_is_reported_against_the_right_page(self):
+        """The failure has to name the file to fix, not the front page."""
+        self.write_about(self.about().replace("<!-- pc5:about-identity:begin -->", ""))
+        problems = self.check()
+        self.assertTrue(any("ABOUT.md" in problem and "about-identity" in problem
+                            for problem in problems), problems)
+        self.assertFalse(any("README.md is missing" in problem for problem in problems),
+                         problems)
+
+    def test_a_hand_typed_percentage_in_the_about_prose_is_caught(self):
+        text = self.about()
+        self.write_about(text.replace("## 9. What this page will not say",
+                                      "**PC5 is 71% complete.**\n\n## 9. What this page will not say", 1))
+        problems = self.check()
+        self.assertTrue(any("ABOUT.md" in problem and "71%" in problem
+                            and "outside a generated block" in problem
+                            for problem in problems), problems)
+
+    def test_a_percentage_inside_a_generated_block_is_not_flagged(self):
+        """The rule targets prose. Inside a block the number is the model's own output."""
+        with redirected(self.tmp):
+            blocks = P.render_blocks(self.data, P.load_records())
+        self.assertIn("%", blocks["about-progress"])
+        self.assertEqual([problem for problem in self.check() if "outside a generated block" in problem],
+                         [])
+
+    def test_a_forbidden_claim_on_the_about_page_is_caught(self):
+        text = self.about()
+        self.write_about(text.replace("## 9. What this page will not say",
+                                      "PC5 runs PS5 games today.\n\n## 9. What this page will not say", 1))
+        problems = self.check()
+        self.assertTrue(any("ABOUT.md" in problem and "runs ps5 games" in problem
+                            for problem in problems), problems)
+
+    def test_the_about_page_states_the_missing_evidence_it_owes(self):
+        for token in ("NOT TESTED", "Git LFS pointer", "nothing published"):
+            self.assertIn(token, self.about())
+        text = self.about().replace("nothing published", "shipping is close")
+        self.write_about(text)
+        self.assertTrue(any("honesty token" in problem for problem in self.check()),
+                        "a page that drops its own caveat must fail")
+
+    def test_the_identity_block_quotes_the_roadmap_verbatim(self):
+        with redirected(self.tmp):
+            block = P.render_blocks(self.data, P.load_records())["about-identity"]
+        identity = self.data["product"]["identity"]
+        self.assertIn(identity, block)
+        self.assertIn(self.data["product"]["destination"]["statement"], block)
+        for goal in self.data["product"]["non_goals"]:
+            self.assertIn(goal, block)
+        for forbidden in self.data["product"]["destination"]["must_not_be_satisfied_by"]:
+            self.assertIn(forbidden, block)
+
+    def test_the_licence_row_is_read_from_the_licence_file(self):
+        """Not from memory, not from a badge: from `LICENSE`, which is the grant."""
+        licence = P.licence_identity()
+        self.assertEqual(licence["spdx"], "GPL-2.0-only")
+        self.assertTrue(licence["no_vendored_third_party"])
+        with redirected(self.tmp):
+            block = P.render_blocks(self.data, P.load_records())["about-identity"]
+        self.assertIn("**GPL-2.0-only**", block)
+
+    def test_an_unclassifiable_licence_is_refused_rather_than_guessed(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            (tmp / "LICENSE").write_text("Copyright PC5 contributors.\n", encoding="utf-8")
+            with self.assertRaises(SystemExit) as caught:
+                P.licence_identity(tmp)
+            self.assertIn("GNU General Public", str(caught.exception))
+            (tmp / "LICENSE").write_text("GNU GENERAL PUBLIC LICENSE\nVersion 2, June 1991\n",
+                                         encoding="utf-8")
+            with self.assertRaises(SystemExit) as caught:
+                P.licence_identity(tmp)
+            # the wording is not the contract; the refusal is.  A file that grants
+            # "version 2" without saying "only" is genuinely ambiguous, and printing the
+            # likelier id would put a guess on an About page that a distributor may rely on
+            self.assertIn("the id cannot be derived", str(caught.exception))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_the_capability_buckets_are_the_roadmaps_own_fields(self):
+        with redirected(self.tmp):
+            block = P.render_blocks(self.data, P.load_records())["about-capabilities"]
+        states = {state: sum(1 for m in self.data["milestones"] if m["state"] == state)
+                  for state in ("complete", "in_progress", "not_started", "blocked")}
+        for state, count in states.items():
+            self.assertIn(f"| {count} |", block, f"{state} count did not reach the page")
+        self.assertEqual(block.count("Not completed:"),
+                         sum(len(f.get("does_not_complete") or []) for f in self.data["foundations"]),
+                         "every recorded non-completion has to appear")
+
+    def test_a_cited_evidence_link_resolves_from_the_about_page(self):
+        """A generated block is written into docs/, so its links are docs-relative."""
+        with redirected(self.tmp):
+            block = P.render_blocks(self.data, P.load_records())["about-capabilities"]
+        targets = re.findall(r"\]\(([^)\s#]+)", block)
+        self.assertTrue(targets)
+        for target in targets:
+            if target.startswith(("http://", "https://")):
+                continue
+            resolved = (REPO / "docs" / target) if not target.startswith("../") \
+                else (REPO / target[3:])
+            self.assertTrue(resolved.exists(), f"docs/ABOUT.md would link at a missing file: {target}")
+
+    def test_sync_is_idempotent_across_both_pages(self):
+        with redirected(self.tmp):
+            first = P.write(self.data)
+            second = P.write(self.data)
+        self.assertEqual(second, [], "a second sync changed a page it should have left alone")
+        self.assertIsInstance(first, list)
 
 
 class CommandContractTest(unittest.TestCase):
@@ -352,6 +563,10 @@ class CommandContractTest(unittest.TestCase):
                 (REPO / "README.md").read_text().replace(
                     P.status_markdown(roadmap()), P.BEGIN + "\n" + P.END),
                 encoding="utf-8")
+            mirror(tmp)
+            # the About page is a copy for the same reason the README is: `write()` below
+            # has to be able to fix it without fixing the repository with it
+            page_copy(REPO / "docs/ABOUT.md", tmp / "docs/ABOUT.md")
             with redirected(tmp):
                 self.assertTrue(P.check(roadmap()), "stale output must fail the check")
                 P.write(roadmap())
