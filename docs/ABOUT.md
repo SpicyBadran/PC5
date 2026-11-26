@@ -508,6 +508,17 @@ differ from what the file grants. The file is canonical. `make docs-check` check
 documents against `LICENSE`, not against the badge, so a drift here would be a build
 failure.
 
+One live discrepancy is named rather than tidied, because this page is the place a newcomer
+looks. As of 2026-11-26, `main` carries a `LICENSE` that is the verbatim GPL-3.0 text with no
+sentence granting anything to PC5 (added in `9e3fda6`, "Add LICENSE file"), while the front
+page's summary line and the branch this page was written on describe GPL-2.0-only, which is
+what this branch's `LICENSE` states. The tooling takes neither side: the row in §1 prints the
+id derived from the file in front of it, and on a file that states no grant it prints that
+fact instead of adopting the boilerplate's version. Settling it is a decision for the
+repository owner — the licence file, GitHub's detected badge, the controlled documents and
+[`tests/test_project_independence.py`](../tests/test_project_independence.py) then agree by
+construction, because they read the same sentence.
+
 ---
 
 ## 7. Getting involved
