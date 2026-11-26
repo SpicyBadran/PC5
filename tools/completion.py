@@ -106,7 +106,18 @@ def load_records(directory: Path | None = None) -> dict:
         if not isinstance(record, dict) or record.get("schema") != "pc5.validation/1":
             continue
         record["_file"] = f"docs/evidence/validation/{path.name}"
-        found[str(record.get("gate") or path.stem)] = record
+        gate = str(record.get("gate") or path.stem)
+        previous = found.get(gate)
+        # `tools/validation.py` keeps one file per gate, but this directory is also
+        # append-only history, and the dashboard's whole point is that it reports the
+        # *newest* verification.  So the newest date wins and the filename is only a
+        # stable tiebreak -- never the sort order of the directory, which would let a
+        # file named `zzz.json` decide the stamp by its spelling.
+        rank = (str(record.get("date") or ""), path.name)
+        if previous is not None:
+            if (str(previous.get("date") or ""), Path(previous["_file"]).name) >= rank:
+                continue
+        found[gate] = record
     return found
 
 

@@ -200,6 +200,25 @@ class StampTests(unittest.TestCase):
         self.assertRegex(stamp["short"], r"^[0-9a-f]{7}$")
         self.assertGreater(stamp["gates"], 0)
 
+    def test_the_newest_record_for_a_gate_wins_not_the_last_filename(self):
+        """Two files, one gate: the stamp follows the evidence, not alphabetical order.
+
+        A record named `a-late.json` must not lose to `verify.json` because of spelling --
+        nor win because of it.  The directory is append-only history, so this is the
+        ordinary case, not a curiosity.
+        """
+        tmp = Path(tempfile.mkdtemp())
+        base = {"schema": "pc5.validation/1", "gate": "verify", "result": "passed",
+                "checks": 11, "commit": "86b862f0000000000000000000000000000000", "date": "2026-11-23"}
+        (tmp / "verify.json").write_text(json.dumps(base), encoding="utf-8")
+        newer = dict(base, date="2026-12-01", checks=13, commit="abcdef1000000000000000000000000000000")
+        (tmp / "a-earlier-filename-later-date.json").write_text(json.dumps(newer), encoding="utf-8")
+        records = C.load_records(tmp)
+        self.assertEqual(len(records), 1, "one gate, one record")
+        self.assertEqual(C.verified_at(records)["date"], "2026-12-01")
+        self.assertEqual(records["verify"]["_file"],
+                         "docs/evidence/validation/a-earlier-filename-later-date.json")
+
     def test_no_records_says_so_instead_of_defaulting_to_today(self):
         stamp = C.verified_at({})
         self.assertEqual(stamp["date"], "no record")
