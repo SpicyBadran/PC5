@@ -674,9 +674,20 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertRegex(self.text, r"conclusion\s*==\s*'success'")
         self.assertRegex(self.text, r"head_branch\s*==\s*'main'")
         # a branch name alone is not provenance: the trigger also requires a push, and the
-        # run's own repository, before any runner is started
+        # repository match is re-checked in the tool, where a refusal is a tested exit code
         self.assertRegex(self.text, r"workflow_run\.event\s*==\s*'push'")
-        self.assertIn("head_repository.full_name == github.repository", self.text)
+        self.assertIn("--run-repo", self.text)
+
+    def test_the_trigger_never_reads_two_levels_below_the_event(self):
+        """`github.event.workflow_run.x.y` throws when `workflow_run` is absent.
+
+        A throwing `if:` fails the run before any job is created — a red CI run whose only
+        defect is an expression, which is exactly what a shallow pre-filter is for.
+        """
+        condition = re.search(r"if: >-\n((?: {6}.*\n)+)", self.text)
+        self.assertIsNotNone(condition, "the refresh job has no folded `if:` condition")
+        for deep in re.finditer(r"workflow_run\.\w+\.\w+", condition.group(1)):
+            self.fail(f"two-level access in the trigger: {deep.group(0)!r}")
 
     def test_it_binds_the_target_before_it_writes_anything(self):
         """The refusal step is *before* the guard, the regeneration and the commit."""

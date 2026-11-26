@@ -47,16 +47,17 @@ jobs:
     name: refresh the progress dashboard
     # Only a successful verification of main may move the published figures.  A manual
     # dispatch is allowed so a maintainer can rehearse the whole path without a merge.
-    # The step below re-checks all of this in Python, where it can be tested; these clauses
-    # are here so a run that cannot possibly publish anything never starts a runner at all.
-    # `event: 'push'` and the repository match are what make `head_branch == 'main'` mean
-    # *this* main: a pull-request head from a fork can be called main without being merged.
+    # Cheap pre-filter, deliberately shallow: `github.event.workflow_run` does not exist for
+    # every event this file can be evaluated under, and GitHub's expression language answers a
+    # *second-level* property access on an absent object by throwing, which fails the run
+    # before any job is created — so the repository match and the rest are checked by
+    # `tools/progress_record.py target` below, where a refusal is a tested exit code instead of
+    # an expression error.  `conclusion`/`head_branch`/`event` are one level deep and safe.
     if: >-
       github.event_name == 'workflow_dispatch'
       || (github.event.workflow_run.conclusion == 'success'
           && github.event.workflow_run.head_branch == 'main'
-          && github.event.workflow_run.event == 'push'
-          && github.event.workflow_run.head_repository.full_name == github.repository)
+          && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

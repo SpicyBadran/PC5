@@ -337,10 +337,9 @@ figures behind the data.
 **Whose `main`.** A `workflow_run` event names a branch, and a name is not provenance: a pull
 request from a fork whose head branch is *called* `main` completes with
 `head_branch: 'main'` and `conclusion: 'success'`, and would otherwise hand this job — which
-holds `contents: write` — an unmerged tree to regenerate the published page from. Two clauses
-in the job's `if:` (`event == 'push'` and `head_repository.full_name == github.repository`)
-keep such a run from starting a runner at all, and the `target` step re-checks those plus two
-more in Python: the shape of the sha, and the only property that is a fact about the tree
+holds `contents: write` — an unmerged tree to regenerate the published page from. The job's `if:` keeps
+`event == 'push'` as a cheap pre-filter, and the `target` step re-checks that plus three more
+properties in Python — the repository match, the sha's shape, and: the shape of the sha, and the only property that is a fact about the tree
 rather than about an event, `git merge-base --is-ancestor <sha> refs/remotes/origin/main`.
 That last one is why the step un-shallows `main` first: on the `fetch-depth: 2` checkout,
 ancestry cannot be judged, and a comparison that could not run has to be a refusal, never a
