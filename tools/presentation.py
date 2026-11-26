@@ -1,17 +1,22 @@
 """Generate and check PC5's presentation layer from the project's own data.
 
-Everything the README shows about status comes from `docs/architecture/roadmap.json`
-and from the evidence records under `docs/evidence/`. This tool renders those facts
-into four original SVG figures, writes the README status table in place between
-markers, and refuses to accept a repository whose figures or status block no longer
-match the data.
+Everything the README and `docs/ABOUT.md` show about status comes from
+`docs/architecture/roadmap.json`, from the evidence records under `docs/evidence/`, and
+from the licence grant in `LICENSE`. This tool renders those facts into seven original SVG
+figures and nine generated blocks — six in the README, three in the About page — writes
+them in place between markers, and refuses to accept a repository whose figures or blocks
+no longer match the data.
 
-    python3 tools/presentation.py sync     # regenerate assets + README block
+    python3 tools/presentation.py sync     # regenerate the figures and both pages
     python3 tools/presentation.py check    # fail if anything is stale or dishonest
 
 `check` is the point: a repository can always be made to *look* finished. The
-figures are derived, the labels are a function of milestone state, and any hand edit
-that overstates progress fails the check instead of shipping.
+figures are derived, the labels are a function of milestone state, no page is created by
+`sync` (an owned page that is absent is reported, not invented), and any hand edit that
+overstates progress fails the check instead of shipping. The prose rules — no statistic
+outside a generated block, no claim this repository cannot make, no dropped honesty token —
+are applied per page, so a second page cannot satisfy them by borrowing the first's
+sentences.
 
 No network access, no third-party assets, no fonts beyond the reader's own: the SVGs
 are plain geometry and `font-family="... monospace"` text, so they render on GitHub
@@ -1052,67 +1057,103 @@ def licence_identity(root: Path | None = None) -> dict:
 
     GitHub detects a repository licence by scanning the licence text's opening, so the
     platform's reported SPDX id can disagree with the file — and can disagree because the
-    file changed underneath it.  The file is canonical here: the About page prints what
-    this parser reads, `tools/docs_check.py` fails any controlled document that names a
-    different id, and a mismatch is therefore a build failure rather than a permanent
-    discrepancy on the front page.
+    file changed underneath it.  The file is canonical here: the About page prints what this
+    parser reads, `tools/docs_check.py` fails any controlled document that names a different
+    id, and a mismatch is therefore a build failure rather than a permanent discrepancy on
+    the front page.
 
-    Three refusals, each with a different reason, because "the licence is unclear" should
-    say *how*: the file has no grant sentence naming this project; the grant names a GPL
-    version without saying whether later versions are allowed; or the file's own header and
-    its grant sentence disagree, which is what a half-completed relicensing looks like.  An
-    unclassifiable file is never defaulted.  "Licence: unknown" is an honest sentence to
-    print; a guessed one is the kind of claim that outlives its author.
+    Three readings are refused, each with its own reason, because "the licence is unclear"
+    should say *how*: the file has no sentence granting anything to this project (a verbatim
+    copy of the FSF text is the licence, not a grant); a GPL grant that does not say whether
+    later versions are allowed; or a file whose header and grant name different versions,
+    which is what a half-finished relicensing looks like.
+
+    A refusal is returned as `{"spdx": None, "problem": ...}`, never raised.  Raising would
+    mean the page could not be generated or checked while the ambiguity is somebody else's to
+    resolve, and one unclear file would appear as a crash inside every figure and every block
+    — four false failures wrapped around one true statement.  The page instead prints that
+    the file states no grant, and `tools/docs_check.py` reports the gap once, against
+    `LICENSE`, where a reader can act on it.
     """
+    def refusing(problem, grant="", vendored=False):
+        return {"spdx": None, "major": None, "qualifier": "", "problem": problem,
+                "no_vendored_third_party": vendored, "source": "LICENSE",
+                "file": "LICENSE", "grant": grant}
+
+    def stating(spdx, sentence, major=None, qualifier="", vendored=False):
+        return {"spdx": spdx, "major": major, "qualifier": qualifier, "problem": "",
+                "no_vendored_third_party": vendored, "source": "LICENSE",
+                "file": "LICENSE", "grant": sentence.strip()}
+
     path = (root or ROOT) / "LICENSE"
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
-        raise SystemExit(f"LICENSE: unreadable ({exc}), so no licence can be stated")
+        return refusing(f"`LICENSE` is unreadable ({exc}), so no licence can be stated")
+    vendored = bool(re.search(r"no third-party source archive is\s+\w+", text, re.I))
     grant = LICENCE_GRANT.search(text)
     if not grant:
-        raise SystemExit("LICENSE: no sentence in the file states what PC5 is licensed "
-                         "under — the file may be the licence *text* without being a "
-                         "*grant*, and an id cannot be derived from a copy of somebody "
-                         "else's wording")
+        return refusing("no sentence in the file states what PC5 is licensed under: the file "
+                        "may be the licence *text* without being a *grant*, and an id cannot "
+                        "be derived from a copy of somebody else's wording")
     sentence = grant.group(0)
     clean = LICENCE_NOT_LATER.sub("", sentence)
-    if re.search(r"general public license|\bGPL\b", clean, re.I):
-        family = "GPL"
-    elif re.search(r"\bMIT\b", clean):
-        family, spdx, qualifier, major = "MIT", "MIT", "", None
-    elif "apache" in clean.lower():
-        family, spdx, qualifier, major = "Apache", "Apache-2.0", "", None
-    elif "bsd" in clean.lower():
-        family, spdx, qualifier, major = "BSD", "BSD", "", None
+    # A non-GPL family needs no version qualifier to be an id, so those three return
+    # immediately; the GPL path below is the only one with a "which version, and only or
+    # later?" question to answer.
+    if re.search(r"\bMIT\b", clean):
+        return stating("MIT", sentence, vendored=vendored)
+    if "apache" in clean.lower():
+        return stating("Apache-2.0", sentence, vendored=vendored)
+    if "bsd" in clean.lower():
+        return stating("BSD", sentence, vendored=vendored)
+    if not re.search(r"general public license|\bGPL\b", clean, re.I):
+        return refusing(f"the grant sentence names no licence family this tool can print "
+                        f"({sentence!r})")
+    version = LICENCE_VERSION.search(clean)
+    if not version:
+        return refusing("`LICENSE` names the GPL with no version number in its grant "
+                        "sentence; refusing to print a guess")
+    major = int(version.group(1))
+    # "only" and "or any later version" are mutually exclusive in a well-formed grant; a
+    # sentence that says neither is left unclassified rather than defaulted.
+    if re.search(rf"version\s+{major}\s+only", clean, re.I):
+        spdx, qualifier = f"GPL-{major}.0-only", "only"
+    elif re.search(r"or any later version", clean, re.I):
+        spdx, qualifier = f"GPL-{major}.0-or-later", "or any later version"
     else:
-        raise SystemExit(f"LICENSE: the grant sentence does not name a licence family "
-                         f"this tool can print ({sentence!r})")
-    if family == "GPL":
-        version = LICENCE_VERSION.search(clean)
-        if not version:
-            raise SystemExit("LICENSE: the grant names the GPL with no version number; "
-                             "refusing to print a guess")
-        major = int(version.group(1))
-        # "only" and "or any later version" are mutually exclusive in a well-formed grant;
-        # a sentence that says neither is left unclassified rather than defaulted.
-        if re.search(rf"version\s+{major}\s+only", clean, re.I):
-            spdx, qualifier = f"GPL-{major}.0-only", "only"
-        elif re.search(r"or any later version", clean, re.I):
-            spdx, qualifier = f"GPL-{major}.0-or-later", "or any later version"
-        else:
-            raise SystemExit(f"LICENSE: GPL version {major} with no 'only' or "
-                             f"'or any later version' grant; the id cannot be derived")
-        header = LICENCE_HEADER.search(text)
-        if header and int(header.group(1)) != major:
-            raise SystemExit(f"LICENSE: the file's header is the GPL version "
-                             f"{header.group(1)} text while its grant sentence names "
-                             f"version {major}; one of the two is stale, and a page must "
-                             f"not pick a side")
-    vendored = re.search(r"no third-party source archive is\s+\w+", text, re.I)
-    return {"spdx": spdx, "major": major, "qualifier": qualifier,
-            "no_vendored_third_party": bool(vendored),
-            "source": "LICENSE", "file": "LICENSE", "grant": sentence.strip()}
+        return refusing(f"`LICENSE` grants GPL version {major} without saying 'only' or "
+                        f"'any later version', so the id cannot be derived from it")
+    header = LICENCE_HEADER.search(text)
+    if header and int(header.group(1)) != major:
+        return refusing(f"`LICENSE` puts a GPL version {header.group(1)} header around a "
+                        f"grant of version {major}; one of the two is stale, and a page must "
+                        f"not pick a side")
+    return stating(spdx, sentence, major=major, qualifier=qualifier, vendored=vendored)
+
+
+def licence_row(licence: dict) -> str:
+    """The About page's licence line, phrased to whatever the file actually supports.
+
+    Two shapes, because there are two honest sentences to say: print the id the file grants,
+    or print that the file grants nothing and point at the section that explains the refusal.
+    What it will not do is print an identifier the file does not state — a licence claim on
+    an About page is exactly the claim a distributor relies on, and silence is recoverable
+    in a way a confident wrong answer is not.  The no-vendoring clause is attributed to its
+    own source for the same reason: it is true of the repository because ADR-025 records it,
+    and whether `LICENSE` happens to repeat it is a separate fact.
+    """
+    adr = "[ADR-025](" + about_link("docs/TECHNICAL_DECISIONS.md") + ")"
+    if licence.get("spdx"):
+        vendored = (f"no third-party source archive is vendored ({adr})"
+                    if licence.get("no_vendored_third_party")
+                    else f"the no-vendoring rule is recorded in {adr}, not restated by "
+                         f"`LICENSE`")
+        return (f"| **Licence** | **{licence['spdx']}**, read from the repository's "
+                f"`LICENSE` file; {vendored} |")
+    return (f"| **Licence** | **no identifier is printed** — {licence['problem']} (see §6 for "
+            f"what this tool refuses to derive). The no-vendoring rule is recorded in {adr} "
+            f"regardless. |")
 
 
 def about_link(target: str) -> str:
@@ -1169,9 +1210,7 @@ def about_identity_markdown(data) -> str:
              f"| **Hardware-enablement substrate** | {foundation['name']} — role "
              f"`{foundation['role']}`, `required_for_product: false`, exits at "
              f"`{foundation['exit_milestone']}` ({foundation['adr']}) |",
-             f"| **Licence** | **{licence['spdx']}**, read from the repository's "
-             f"`LICENSE` file; no third-party source archive is vendored "
-             f"([ADR-025]({about_link('docs/TECHNICAL_DECISIONS.md')})) |",
+             licence_row(licence),
              f"| **Roadmap authority** | [{data['authority'].split('/')[-1]}]"
              f"({about_link(data['authority'])}), document version `{data['document_version']}`, "
              f"updated {data['updated']} |",

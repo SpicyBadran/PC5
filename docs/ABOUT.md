@@ -463,6 +463,12 @@ documentation change could otherwise invent a licence:
 - **a file whose header and grant name different versions.** That is what a half-finished
   relicensing looks like, and a page must not choose a side between them.
 
+A refusal is printed, not thrown: the row above says that `LICENSE` states no grant, and
+`make docs-check` reports the gap once against `LICENSE` — the file that needs the answer.
+Raising instead would have taken every figure and every block down with it, which is four
+false failures wrapped around one true statement, and the true one is a decision for the
+project owner rather than a rendering detail.
+
 `make docs-check` then compares every licence identifier in the documents that describe
 the project — the README, this page, [`CONTRIBUTING.md`](../CONTRIBUTING.md) and
 [`docs/BRAND.md`](BRAND.md) — against the same derivation, so a change to the grant becomes
