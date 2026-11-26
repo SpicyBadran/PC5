@@ -592,8 +592,13 @@ class WorkflowContractTests(unittest.TestCase):
         # and the commit step comes after it, not before
         self.assertLess(checks.start(), self.text.index("Commit and push the refresh"))
 
+    def test_a_refusal_is_reported_rather_than_crashing_the_run(self):
+        """`refuse` is the policy speaking, not an error: the run stays green, loudly."""
+        self.assertIn("|| true", self.text)
+        self.assertIn('echo "::notice', self.text)
+
     def test_it_commits_only_when_something_changed(self):
-        self.assertIn("git diff --exit-code", self.text)
+        self.assertIn("git diff --quiet", self.text)
 
     def test_the_generator_is_the_same_command_locally_and_in_ci(self):
         self.assertIn("tools/presentation.py sync", self.text)

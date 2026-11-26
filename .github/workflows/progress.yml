@@ -127,19 +127,26 @@ jobs:
         id: decide
         run: |
           set -euo pipefail
-          # `git diff --exit-code` is the whole idempotence test: identical output means
+          # `git diff --quiet` is the whole idempotence test: identical output means
           # there is no commit to make, and the run ends green having changed nothing.
-          if git diff --exit-code --quiet; then changed=""; else changed="--changed"; fi
+          if git diff --quiet; then changed=""; else changed="--changed"; fi
           {
             git diff --name-only HEAD^ HEAD || true
             git diff --name-only || true
             git ls-files --others --exclude-standard -- docs/evidence/ci || true
           } | sort -u > /tmp/pc5-paths.txt
+          # `|| true` on purpose: `refuse` is a verdict, not a crash.  The `if:` above
+          # already excludes it, so a non-zero here would only ever mean the policy
+          # refused -- and a refusal has to be *reported* while the run stays green,
+          # because the model's answer for the last verified state is still correct.
           python3 tools/progress_record.py decide --json \
             --conclusion "${{ steps.target.outputs.conclusion }}" \
-            --paths-file /tmp/pc5-paths.txt $changed | tee /tmp/pc5-decision.json
+            --paths-file /tmp/pc5-paths.txt $changed | tee /tmp/pc5-decision.json || true
           action=$(python3 -c "import json;print(json.load(open('/tmp/pc5-decision.json'))['action'])")
           echo "action=$action" >> "$GITHUB_OUTPUT"
+          if [ "$action" = "refuse" ]; then
+            echo "::notice title=Progress refresh refused::an unverified progress update is never published"
+          fi
 
       - name: Commit and push the refresh
         if: steps.guard.outputs.skip != 'true' && steps.decide.outputs.action == 'commit'
