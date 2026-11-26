@@ -539,6 +539,47 @@ presentation:
 presentation-check:
 	python3 tools/presentation.py check
 
+# Completion and its maintenance.  `completion`/`*-check` targets read; `progress` and
+# `progress-*` write, and only ever through the generators, so a local refresh and the
+# `progress.yml` workflow produce the same bytes from the same tree.  The percentage is
+# never typed: it is arithmetic over docs/architecture/roadmap.json plus the committed
+# verification records, and `completion-check` is the gate that keeps it that way.
+CONCLUSION ?= success
+RUN ?=
+PATHS_FILE ?= /dev/null
+DASHBOARD_MESSAGE ?= docs: refresh the progress dashboard at $(shell git rev-parse --short HEAD)
+
+completion:
+	python3 tools/completion.py summary
+
+completion-model:
+	python3 tools/completion.py model
+
+completion-check:
+	python3 tools/completion.py check
+
+progress-check: presentation-check completion-check
+
+progress: presentation
+	python3 tools/progress_record.py guard --subject "$(shell git log -1 --format=%s)"
+
+progress-record:
+	@test -n "$(RUN)" || { echo 'usage: make progress-record RUN=<workflow-run-id>'; exit 2; }
+	python3 tools/progress_record.py record --run-id $(RUN)
+
+progress-decide:
+	python3 tools/progress_record.py decide --json --conclusion $(CONCLUSION) \
+	  --paths-file $(PATHS_FILE)
+
+progress-preview:
+	python3 tools/progress_record.py commit --json --message "$(DASHBOARD_MESSAGE)"
+
+progress-commit:
+	python3 tools/progress_record.py commit --apply --json --message "$(DASHBOARD_MESSAGE)"
+
+progress-selftest:
+	python3 -m unittest discover -s tests -p 'test_completion.py' -v
+
 # A citation is only evidence while Git can hand the object back, and a rebase
 # rewrites commit ids silently.  `docs-check` validates links, anchors and make
 # targets and cannot see this, so a rewrite used to be able to rot the whole

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import urllib.parse
 import sys
@@ -33,6 +34,7 @@ TOOLS = Path(__file__).resolve().parent
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 import brand  # noqa: E402 -- same-directory sibling, shared logo geometry
+import completion  # noqa: E402 -- same-directory sibling, the progress arithmetic
 
 ROADMAP = ROOT / "docs/architecture/roadmap.json"
 README = ROOT / "README.md"
@@ -234,6 +236,59 @@ def arrow(x, y1, y2, colour=LINE):
     )
 
 
+# ---------------------------------------------------------------- animation
+#: Every animation in PC5's figures is a one-shot entrance that freezes on its true
+#: value.  That is a correctness rule, not a taste rule: an SVG used as an image runs
+#: in the browser's "secure animated mode", where declarative animation plays but
+#: scripts do not, and where a renderer that ignores animation shows the *static*
+#: attribute.  Drawing the base attribute at the final value therefore means the
+#: figure tells the truth whether or not the reader's client animates it, and a
+#: looping animation would be motion that carries no information, which the figures
+#: here have never done.  `tests/test_completion.py` pins the rule.
+ANIM_DUR = "1.15s"
+EASE = ' keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"'
+
+
+def animate(attr: str, final: str, start: str, delay: str = "0s",
+            dur: str = ANIM_DUR) -> str:
+    """A child element that draws ``attr`` in from ``start`` and freezes at ``final``."""
+    return (f'<animate attributeName="{attr}" from="{start}" to="{final}" '
+            f'begin="{delay}" dur="{dur}" fill="freeze"{EASE}/>')
+
+
+def fade(body: str, delay: str = "0s", dur: str = "0.5s") -> str:
+    """Wrap generated markup in a one-shot fade.  ``opacity`` stays at 1 either way."""
+    return (f'  <g opacity="1">{body}{animate("opacity", "1", "0", delay, dur)}</g>\n')
+
+
+def arc(cx: float, cy: float, radius: float, fraction: float, colour: str,
+         thickness: float = 26.0) -> str:
+    """A ring drawn clockwise from twelve o'clock, animated by ``stroke-dashoffset``.
+
+    ``stroke-dashoffset`` is written at its final value first: the animation only
+    tweens toward it.  A fraction of 0 renders as an empty track, never as a full one.
+    """
+    circumference = 2.0 * math.pi * radius
+    offset = circumference * (1.0 - fraction)
+    ring = (f'  <circle cx="{cx}" cy="{cy}" r="{radius}" fill="none" stroke="{LINE}"'
+            f' stroke-width="{thickness}" stroke-opacity="0.5"/>\n')
+    ring += (f'  <circle cx="{cx}" cy="{cy}" r="{radius}" fill="none" stroke="{colour}"'
+             f' stroke-width="{thickness}" stroke-linecap="butt"'
+             f' stroke-dasharray="{circumference:.2f}" stroke-dashoffset="{offset:.2f}"'
+             f' transform="rotate(-90 {cx} {cy})">\n'
+             + f'    {animate("stroke-dashoffset", f"{offset:.2f}", f"{circumference:.2f}")}\n'
+             + '  </circle>\n')
+    return ring
+
+
+def grow_bar(x: float, y: float, width: float, height: float, colour: str,
+             opacity: str = "1", delay: str = "0s", rx: float = 6.0) -> str:
+    """A bar whose final width is the static attribute; it grows into place."""
+    return (f'  <rect x="{x}" y="{y}" width="{width}" height="{height}" rx="{rx}"'
+            f' fill="{colour}" fill-opacity="{opacity}">'
+            + animate("width", f"{width}", "0", delay) + '</rect>\n')
+
+
 # ---------------------------------------------------------------- figures
 def banner(data) -> str:
     by_id = milestones(data)
@@ -243,7 +298,11 @@ def banner(data) -> str:
     dest_label, dest_colour = STATE_STYLE[by_id["M19"]["state"]]
 
     body = ""
-    # the project's own monogram, from the same geometry as brand/pc5-mark.svg
+    # The mark and the wordmark arrive first, and the rule under the chips draws itself
+    # left to right.  Each of these is a one-shot entrance that freezes: `stroke-dashoffset`
+    # and `opacity` are written at their resting values, so a client that ignores SMIL
+    # shows the finished banner rather than a half-drawn one, and `animation_problems`
+    # below is what enforces that.
     body += f"  {brand.mark_paths(CYAN, brand.SYM_STROKE, 'translate(60,35) scale(0.234375)')}\n"
     body += text(200, 118, "PC5", size=64, weight="bold", spacing="4")
     body += text(206, 152,
@@ -256,9 +315,11 @@ def banner(data) -> str:
         (f"DESTINATION M19 {dest_label}", dest_colour),
     )
     x = 206
+    delay = 0.0
     for label, colour in chips:
         width = len(label) * 7 + 22
-        body += badge(x, 176, label, colour, w=width, size=11)
+        body += fade(badge(x, 176, label, colour, w=width, size=11), f"{delay:.2f}s")
+        delay += 0.12
         x += width + 12
 
     # the honest line, in the figure, not only in prose
@@ -266,7 +327,10 @@ def banner(data) -> str:
                  size=13, fill=INK)
     body += text(206, 264, "and none is executed. Physical PC boot: NOT TESTED.",
                  size=13, fill=AMBER)
-    body += (f'  <line x1="60" y1="292" x2="1140" y2="292" stroke="{LINE}"/>\n')
+    body += (f'  <line x1="60" y1="292" x2="1140" y2="292" stroke="{LINE}"\n'
+             + '    stroke-dasharray="1080" stroke-dashoffset="0">\n'
+             + f'    {animate("stroke-dashoffset", "0", "1080", "0.45s", "0.9s")}\n'
+             + '  </line>\n')
     body += text(60, 312, "docs/architecture/roadmap.json", size=11, fill=MUTED)
     body += text(1140, 312, "generated by tools/presentation.py", size=11,
                  fill=MUTED, anchor="end")
@@ -382,14 +446,18 @@ def progress(data) -> str:
         body += (f'  <rect x="{bar_x}" y="{y + 8}" width="{bar_w}" height="14" '
                  f'rx="7" fill="{LINE}"/>\n')
         offset = bar_x
+        # The state segments grow into place, one graph row behind the next, and each
+        # `rect` carries its real width as a static attribute.  A reader whose client
+        # does not animate SMIL therefore sees the finished bars, and a reader who
+        # watches them land sees the same numbers: one truth, two renderings.
+        bar_delay = f"{0.1 + index * 0.06:.2f}s"
         for state, colour in (("complete", GREEN), ("in_progress", CYAN),
                               ("blocked", RED)):
             if not counts[state]:
                 continue
             width = max(4, round(bar_w * counts[state] / count))
-            body += (f'  <rect x="{offset}" y="{y + 8}" width="{width}" height="14" '
-                     f'rx="7" fill="{colour}" fill-opacity="'
-                     f'{"1" if state == "complete" else "0.75"}"/>\n')
+            body += grow_bar(offset, y + 8, width, 14, colour,
+                             "1" if state == "complete" else "0.75", bar_delay, 7.0)
             offset += width
         body += text(bar_x + bar_w + 14, y + 21, f"{counts['complete']}/{count}", size=12,
                      fill=MUTED)
@@ -492,7 +560,7 @@ def workflow(data) -> str:
 
 # ---------------------------------------------------------------- validation records
 VALIDATION = ROOT / "docs/evidence/validation"
-BLOCKS = ("stats", "status", "evidence", "blockers", "pup")
+BLOCKS = ("completion", "stats", "status", "evidence", "blockers", "pup")
 
 STATE_LABEL = {"complete": "complete", "in_progress": "in progress",
                "not_started": "not started", "blocked": "blocked"}
@@ -691,6 +759,111 @@ def pup_markdown() -> str:
     return "\n".join(lines)
 
 
+
+
+def completion_chart(data, records=None) -> str:
+    """The signature figure: one honest number, drawn from the canonical graph.
+
+    The ring is the weighted completion, the stacked bar is the milestone graph, and
+    the six rows beneath it are the success hierarchy level by level, because a single
+    percentage flattens the thing PC5 actually cares about: level 1 (does it boot a
+    machine) and level 5 (does the system software run) are not the same distance from
+    done.  Everything here is arithmetic on `roadmap.json`; the only judgement is the
+    weight, and the weight is stated inside the figure so a reader can disagree with it.
+    """
+    model = completion.compute(data)
+    stamp = completion.verified_at(records if records is not None else load_records())
+    hosted = completion.hosted_summary()
+    counts, levels = model["counts"], model["levels"]
+    percent = model["percent"]
+
+    body = text(48, 46, "OVERALL PROJECT COMPLETION", size=20, weight="bold")
+    body += text(48, 70, "earned acceptance-criteria weight / total declared weight, from "
+                         "docs/architecture/roadmap.json", size=12, fill=MUTED)
+    body += text(48, 88, "in-progress milestones score 0 until their criteria are recorded; "
+                         "a percentage typed into prose fails presentation-check",
+                 size=11, fill=AMBER)
+
+    # ---- the ring, and the number it draws
+    body += fade(panel(48, 108, 320, 244), "0s")
+    body += arc(208, 222, 92.0, percent / 100.0, GREEN, 24.0)
+    body += text(208, 214, f"{percent}%", size=42, weight="bold", anchor="middle")
+    body += text(208, 240, "OF DECLARED SCOPE", size=10, fill=MUTED, anchor="middle",
+                 spacing="1.5")
+    body += text(208, 272, f"{counts['complete']}/{counts['total']} milestones", size=13,
+                 fill=INK, anchor="middle")
+    body += text(208, 292, f"{model['criteria']['complete']}/{model['criteria']['total']} criteria",
+                 size=11, fill=MUTED, anchor="middle")
+    body += text(208, 336, f"by milestone count {model['percent_by_count']}%", size=11,
+                 fill=CYAN, anchor="middle")
+
+    # ---- the graph itself, as one stacked bar
+    x0, span = 400, 752
+    body += text(x0, 132, "MILESTONE GRAPH BY STATE", size=12, fill=INK, weight="bold",
+                 spacing="1")
+    segments = (("complete", counts["complete"], GREEN, "1"),
+                ("in progress", counts["in_progress"], CYAN, "0.8"),
+                ("blocked", counts["blocked"], RED, "0.8"),
+                ("not started", counts["not_started"], MUTED, "0.45"))
+    offset, delay = x0, "0.15s"
+    body += f'  <rect x="{x0}" y="144" width="{span}" height="18" rx="9" fill="{LINE}" '
+    body += 'stroke="none"/>\n'
+    for label, count, colour, opacity in segments:
+        if not count:
+            continue
+        width = round(span * count / counts["total"], 1)
+        body += grow_bar(offset, 144, width, 18, colour, opacity, delay, 9.0)
+        offset += width
+        delay = f"{float(delay[:-1]) + 0.12:.2f}s"
+    legend = " · ".join(f"{count} {label}" for label, count, _c, _o in segments)
+    body += text(x0, 182, legend, size=11, fill=MUTED)
+
+    # ---- the success hierarchy, level by level
+    body += text(x0, 212, "THE SAME PROGRESS, BY LEVEL OF THE SUCCESS HIERARCHY", size=11,
+                 fill=INK, weight="bold", spacing="1")
+    row_y, row_delay = 222, "0.5s"
+    for index, level in enumerate(sorted(levels)):
+        bucket = levels[level]
+        y = row_y + index * 21
+        body += text(x0, y + 11, f"{level[1:]}  ", size=11, fill=CYAN, weight="bold")
+        body += f'  <rect x="{x0 + 34}" y="{y}" width="520" height="12" rx="6" '
+        body += f'fill="{LINE}" stroke="none"/>\n'
+        width = round(520 * bucket["percent"] / 100.0, 1)
+        if width:
+            body += grow_bar(x0 + 34, y, max(width, 6), 12,
+                             GREEN if bucket["percent"] >= 60 else CYAN, "0.9", row_delay, 6.0)
+        body += text(x0 + 566, y + 10, f"{bucket['percent']}%", size=11, fill=INK)
+        body += text(x0 + 620, y + 10, f"{bucket['complete']}/{bucket['total']} milestones",
+                     size=11, fill=MUTED)
+        row_delay = f"{float(row_delay[:-1]) + 0.1:.2f}s"
+
+    # ---- the four states that must not be confused
+    release = completion.release_state(data)
+    dest_state = model["destination"]["state"]
+    chips = ((f"DESTINATION {model['destination']['id']} "
+               f"{STATE_STYLE.get(dest_state, ('UNKNOWN', MUTED))[0]}",
+               STATE_STYLE.get(dest_state, (None, MUTED))[1]),
+             (f"RELEASE {release['milestone']} {release['state'].upper()}", RED),
+             (f"CI {hosted['conclusion'].upper()}" if hosted["available"] else "CI NO RECORD",
+              GREEN if hosted.get("light") == "green" else AMBER),
+             (f"VERIFIED {stamp['date']} @{stamp.get('short', 'none')}", CYAN))
+    x = x0
+    for label, colour in chips:
+        width = len(label) * 7 + 22
+        body += badge(x, 356, label, colour, w=width, size=11)
+        x += width + 12
+
+    body += text(48, 372, "tools/completion.py · weight = acceptance criteria per milestone · "
+                          "partial credit refused without a recorded criterion",
+                 size=10, fill=MUTED)
+    body += text(1152, 372, "generated, do not hand-edit", size=10, fill=MUTED, anchor="end")
+    return svg(1200, 386, body, "PC5 overall project completion",
+               f"{percent} percent of PC5's declared scope is complete: {counts['complete']} of "
+               f"{counts['total']} milestones, {model['criteria']['complete']} of "
+               f"{model['criteria']['total']} acceptance criteria. In-progress milestones score "
+               f"zero. Destination {model['destination']['id']} is "
+               f"{model['destination']['state']}, and nothing has been released.")
+
 def dashboard(data, records) -> str:
     counts = distribution(data)
     total = len(data["milestones"])
@@ -807,6 +980,9 @@ def record_hint(records: dict, gate: str) -> str:
 
 # ---------------------------------------------------------------- block plumbing
 BLOCK_RENDERERS = {
+    "completion": lambda data, records: completion.markdown(
+        completion.compute(data), completion.verified_at(records),
+        completion.release_state(data), completion.hosted_summary()),
     "stats": lambda data, records: stats_markdown(data, records),
     "status": lambda data, records: status_markdown(data),
     "evidence": lambda data, records: evidence_markdown(records),
@@ -842,6 +1018,10 @@ STRAY = (
     re.compile(r"\b\d+\s+workstreams\b", re.I),
     re.compile(r"\b\d+\s*[- ]byte", re.I),
     re.compile(r"\b\d\.\d+\s*GB\b", re.I),
+    # the completion figure is the one number a reader is most likely to hand-edit,
+    # and the likeliest to be stale by a whole milestone: it may only ever come from
+    # tools/completion.py inside a generated block.
+    re.compile(r"\b\d{1,3}(?:\.\d+)?\s*%(?!\w)"),  # `\b` after `%` never matches
 )
 
 
@@ -897,6 +1077,7 @@ FIGURES = {
     "pc5-progress.svg": lambda data, records: progress(data),
     "pc5-boot-workflow.svg": lambda data, records: workflow(data),
     "pc5-evidence.svg": evidence_ladder,
+    "pc5-completion.svg": completion_chart,
 }
 
 
@@ -966,6 +1147,44 @@ FORBIDDEN = (
 )
 
 
+def animation_problems(name: str, body: str) -> list:
+    """Every animation must freeze on a value the static markup already carries.
+
+    This is the rule that makes the animated figures safe to publish.  A client that
+    ignores SMIL, a proxy that flattens the image, a reader with motion disabled, and
+    a screenshot of the run page all see the *static* attribute; if that attribute
+    disagreed with the animation's end state, the same figure would tell two stories.
+    So each ``<animate>`` has to freeze, and its parent has to already hold the value
+    it animates toward.  A looping animation would fail here on purpose: motion that
+    never settles is decoration, and these figures are not decoration.
+    """
+    import xml.etree.ElementTree as ET
+    problems = []
+    for token in ("<script", "<style", "onload", "onclick", "javascript:", "https://"):
+        if token in body:
+            problems.append(f"docs/assets/{name}: {token!r} is not allowed in a figure")
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError as exc:
+        return [f"docs/assets/{name}: is not well-formed XML ({exc})"]
+    for parent in root.iter():
+        for child in list(parent):
+            if not child.tag.endswith("animate") and not child.tag.endswith("animateTransform"):
+                continue
+            if child.get("fill") != "freeze":
+                problems.append(f"docs/assets/{name}: an animation on "
+                                f"{child.get('attributeName')} does not freeze on a value")
+                continue
+            attribute = child.get("attributeName")
+            target = child.get("to")
+            if attribute and target is not None and parent.get(attribute) != target:
+                problems.append(
+                    f"docs/assets/{name}: {attribute} rests at {parent.get(attribute)!r} but "
+                    f"animates to {target!r}; a reader without animation would see a "
+                    f"different figure")
+    return problems
+
+
 def check(data, records=None) -> list:
     problems = []
     records = load_records() if records is None else records
@@ -985,6 +1204,7 @@ def check(data, records=None) -> list:
         if measured:  # an unreadable figure is already reported as stale above
             problems += [f"docs/assets/{name}: {problem}"
                          for problem in overflow(actual, int(measured.group(1)))]
+        problems += animation_problems(name, actual)
 
     readme = README.read_text(encoding="utf-8")
     for name, body in render_blocks(data, records).items():
@@ -1012,6 +1232,13 @@ def check(data, records=None) -> list:
     for name in expected:
         if f"docs/assets/{name}" not in readme:
             problems.append(f"README.md does not embed docs/assets/{name}")
+
+    # an asset nobody generates is an asset nobody can regenerate: it would sit in the
+    # README forever, quietly drifting from the graph it no longer reflects.
+    for path in sorted(ASSETS.glob("*.svg")) if ASSETS.is_dir() else []:
+        if path.name not in expected:
+            problems.append(f"docs/assets/{path.name}: no generator owns this figure "
+                            f"— add it to FIGURES or delete it")
 
     problems += stray_statistics(readme)
     # the records the dashboard quotes have to be readable and internally honest

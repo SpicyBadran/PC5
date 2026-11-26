@@ -9,7 +9,7 @@
   <text x="52" y="133" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS0</text>
   <text x="96" y="133" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">Governance: architecture, evidenc…</text>
   <rect x="372" y="120" width="448" height="14" rx="7" fill="#243040"/>
-  <rect x="372" y="120" width="448" height="14" rx="7" fill="#34d399" fill-opacity="1"/>
+  <rect x="372" y="120" width="448" height="14" rx="7.0" fill="#34d399" fill-opacity="1"><animate attributeName="width" from="0" to="448" begin="0.10s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
   <text x="834" y="133" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">1/1</text>
   <text x="52" y="171" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS1</text>
   <text x="96" y="171" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">Hardware discovery and compatibil…</text>
@@ -19,23 +19,23 @@
   <text x="52" y="209" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS2</text>
   <text x="96" y="209" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">CPU architecture and execution en…</text>
   <rect x="372" y="196" width="448" height="14" rx="7" fill="#243040"/>
-  <rect x="372" y="196" width="448" height="14" rx="7" fill="#38bdf8" fill-opacity="0.75"/>
+  <rect x="372" y="196" width="448" height="14" rx="7.0" fill="#38bdf8" fill-opacity="0.75"><animate attributeName="width" from="0" to="448" begin="0.22s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
   <text x="834" y="209" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">0/1</text>
   <text x="52" y="247" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS3</text>
   <text x="96" y="247" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">Firmware and boot compatibility</text>
   <rect x="372" y="234" width="448" height="14" rx="7" fill="#243040"/>
-  <rect x="372" y="234" width="448" height="14" rx="7" fill="#34d399" fill-opacity="1"/>
+  <rect x="372" y="234" width="448" height="14" rx="7.0" fill="#34d399" fill-opacity="1"><animate attributeName="width" from="0" to="448" begin="0.28s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
   <text x="834" y="247" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">3/3</text>
   <rect x="36" y="264" width="928" height="32" rx="6" fill="#0f151d" stroke="none"/>
   <text x="52" y="285" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS4</text>
   <text x="96" y="285" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">Memory management</text>
   <rect x="372" y="272" width="448" height="14" rx="7" fill="#243040"/>
-  <rect x="372" y="272" width="448" height="14" rx="7" fill="#38bdf8" fill-opacity="0.75"/>
+  <rect x="372" y="272" width="448" height="14" rx="7.0" fill="#38bdf8" fill-opacity="0.75"><animate attributeName="width" from="0" to="448" begin="0.34s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
   <text x="834" y="285" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">0/1</text>
   <text x="52" y="323" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS5</text>
   <text x="96" y="323" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">Storage and filesystem</text>
   <rect x="372" y="310" width="448" height="14" rx="7" fill="#243040"/>
-  <rect x="372" y="310" width="448" height="14" rx="7" fill="#34d399" fill-opacity="1"/>
+  <rect x="372" y="310" width="448" height="14" rx="7.0" fill="#34d399" fill-opacity="1"><animate attributeName="width" from="0" to="448" begin="0.40s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
   <text x="834" y="323" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">5/5</text>
   <rect x="36" y="340" width="928" height="32" rx="6" fill="#0f151d" stroke="none"/>
   <text x="52" y="361" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS6</text>
@@ -59,8 +59,8 @@
   <text x="52" y="513" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS10</text>
   <text x="96" y="513" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">PS5 platform compatibility (syste…</text>
   <rect x="372" y="500" width="448" height="14" rx="7" fill="#243040"/>
-  <rect x="372" y="500" width="69" height="14" rx="7" fill="#38bdf8" fill-opacity="0.75"/>
-  <rect x="441" y="500" width="138" height="14" rx="7" fill="#f87171" fill-opacity="0.75"/>
+  <rect x="372" y="500" width="69" height="14" rx="7.0" fill="#38bdf8" fill-opacity="0.75"><animate attributeName="width" from="0" to="69" begin="0.70s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
+  <rect x="441" y="500" width="138" height="14" rx="7.0" fill="#f87171" fill-opacity="0.75"><animate attributeName="width" from="0" to="138" begin="0.70s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
   <text x="834" y="513" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">0/13</text>
   <text x="882" y="513" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f87171" font-weight="normal" text-anchor="start">4 blocked</text>
   <text x="52" y="551" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS11</text>
@@ -71,7 +71,7 @@
   <text x="52" y="589" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS12</text>
   <text x="96" y="589" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">Installation, recovery and system…</text>
   <rect x="372" y="576" width="448" height="14" rx="7" fill="#243040"/>
-  <rect x="372" y="576" width="299" height="14" rx="7" fill="#f87171" fill-opacity="0.75"/>
+  <rect x="372" y="576" width="299" height="14" rx="7.0" fill="#f87171" fill-opacity="0.75"><animate attributeName="width" from="0" to="299" begin="0.82s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
   <text x="834" y="589" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">0/3</text>
   <text x="882" y="589" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f87171" font-weight="normal" text-anchor="start">2 blocked</text>
   <text x="52" y="627" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS13</text>
