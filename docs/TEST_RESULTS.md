@@ -4425,3 +4425,96 @@ executed, no tag has published `pc5.iso`/`pc5.iso.sha256`/`build-info.json`, and
 has been compared with a local rebuild at the same `SOURCE_DATE_EPOCH`. The
 `github-workflows-write` grant (still `admin`-gated) and the `timeout-minutes` question are left
 alone by instruction, not by oversight.
+
+*§42 describes the state at its own commit, where the merge was still awaiting authorization and the*
+***build and verify** run on `main` was in flight and explicitly unmeasured. §43 records both the
+merge and that run's measured outcome. The wording above is left intact rather than rewritten, so
+the sequence of what was known when stays readable.*
+
+
+## 43. PR #49 merged, and the merge measured on `main`: the green survived the move off the branch
+
+**What was authorized and what was done.** After §42's verification the owner approved the merge in
+terms — "Execute `gh pr merge 49 --merge`" with no release, permission, tagging or workflow-timeout
+work. That is the only repository-mutating command run here. `dbd7500..1325661` went into `main` as
+merge commit **`96a07015ff295473be8c7211059f4a6f86ff2151`** at 2026-11-26T13:37:02Z, `mergedBy`
+the repository owner. No squash, no rebase, no admin override, no force-push, no `--auto`.
+
+**Why the merge could not have introduced anything, as distinct from "probably didn't".** Four
+checks, all still reproducible:
+
+| property | measured |
+| --- | --- |
+| merge commit parents | `dbd7500` (previous `main`) + `1325661` (PR head) — exactly two, both expected |
+| merge tree vs PR-head tree | `acc168ea0d311ded6fedcbffc771cbbf61705fdd` on both sides — the same object |
+| `git diff origin/main 1325661` | empty |
+| commits left unmerged | `git rev-list --count origin/main..1325661` = 0 |
+
+A merge commit whose tree *is* the PR head's tree cannot have carried a resolution, a stray edit, or
+an unwanted change; it can only have carried the branch. What `main` gained: 43 commits, 115 files,
++23,487/−817 — the PR's own diff stat. `arena/5e36f38b-pc5` remains on the remote at `1325661`
+(`delete_branch_on_merge=false`), frozen at the merged head; PR #49 reads `MERGED`.
+
+**The outstanding `main` run, which §42 had to leave as unmeasured.** `45830884231` (`push`, head
+`96a0701`) → **`completed/success`**:
+
+| job | window | result |
+| --- | --- | --- |
+| `build and verify` | 13:37:09→14:06:07 (28.9 m) | **success** — steps 1–19 and 22 `success`, and only steps 20–21, the two `if: failure()` diagnostics, `skipped`, which is the designed shape of a green run |
+| `UEFI boot under genuine OVMF` | 13:37:09→13:51:24 (14.2 m) | **success** — the whole job annotation set is the Node 20 deprecation warning from `actions/checkout`/`upload-artifact`; no `::error::`, because the reporting and triage steps run only under `if: failure()` |
+| `publish release assets` | 14:06:08 | `skipped` — a push on a non-tag ref, as designed |
+
+The runner's own `Host tool tests` notice on `main`: **`Ran 1227 tests in 630.009s` → `OK
+(skipped=13)`** — the same 1227 the branch carried, so `FirmwareEvidenceCorpusTests` and the
+firmware-identity contract are now executing as part of `main`'s suite, not as part of a PR's. Two
+observations worth keeping: this build took 28.9 minutes against the `timeout-minutes: 30` ceiling
+discussed in §41 — the margin is thinner than the 23.9-minute run on the branch, and a cancellation
+of that kind would remain a runner-speed event rather than a code verdict; and the 13 hosted skips
+against the 2 measured here stay unnamed, because only the `Ran`/`OK` tail lines reach annotations.
+They are environment statements and are counted as nothing.
+
+**What this section deliberately does not claim.** Merging the branch does not release anything. The
+repository still has **zero tags**, and its one existing GitHub release, `pc5-0.1.0` (created
+2026-11-12, **0 assets**), predates this whole line of work and was not touched. `publish release
+assets` has therefore still never *executed* on any ref carrying this contract,
+and no published hash has been compared with a local rebuild at the same `SOURCE_DATE_EPOCH`.
+**M1b remains `blocked`.** MERGE-READY and RELEASE-READY stay different words.
+
+**A retraction that belongs in this record, because it was reported as a blocker and was not one.** An
+earlier pass in this work attributed M1b's stall to a hard-coded refusal in `tools/release.sh`
+(`ASSET_FAILED=1`, `# TODO(M1b)`) said to need an owner edit. That was wrong on both counts: no
+`tools/release.sh` exists, and `git log -S ASSET_FAILED` over the repository's full 225-commit history
+finds the string nowhere. The publishing path is `tools/publish_release.sh`, which is finished and
+self-gating — it refuses unless all three assets are present and `pc5.iso.sha256` verifies against
+`pc5.iso`, refuses when `build-info.json`'s verdict is not `PASS`, creates or updates the release,
+uploads with `--clobber` so a re-run is safe, and finally asserts each asset is attached. The
+`release` job in the workflow declares `permissions: contents: write` and authenticates with the run's
+own `GITHUB_TOKEN`, so **publishing needs no further permission change and no admin grant** — the
+`github-workflows-write` question was about editing a workflow file through the API, a thing that is no
+longer required now that the workflow is installed and active on `main`. What actually stands between
+here and a release is a **tag** on a verified commit, plus the second acceptance criterion, and `roadmap.json`
+records precisely that and nothing more. The error is worth naming because the shape of it — a specific
+file, line numbers and a constant quoted with confidence — is exactly what a claim looks like when it
+was carried forward instead of re-read, and the only thing that caught it was `grep` against the tree.
+
+**One environmental repair, named because it changed what could be measured locally.** This sandbox,
+like the previous one, arrived with `HEAD` at the branch base and `.git/shallow` present — history
+truncated at `dbd7500`, which is enough to make `test_commit_citations` report dead references and to
+make any local commit-count meaningless. The content was proved against the remote tip before the
+pointer was moved (431 tracked blobs, `missing=0 differs=0`), the pointer was restored with
+`update-ref` plus a mixed `reset` that cannot touch files, and the depth was repaired with `git fetch
+--unshallow origin` (225 commits, `.git/shallow` gone), after which `make citations-check` prints
+`CITATIONS OK: 263 commit reference(s) resolve across 11 documents`. No document was edited to obtain
+that result, and nothing was pushed to `main`.
+
+**Standing state at the time of writing.** Local `1325661` == `origin/arena/5e36f38b-pc5`; `origin/main`
+== `96a0701`; the full `make check` with the harness venv on `PATH` and the release ESP built came back
+`Ran 1227 tests in 516.442s` → `OK (skipped=2)`, exit 0, `make check: suite and all gates passed` — the
+two skips are `OVMF ran on this machine; the ceiling no longer applies` and `pipeline is active`. The
+eight modules that guard these documents (`docs_check`, `presentation`, `architecture`,
+`commit_citations`, `ci_report`, `ci_triage`, and both firmware-harness modules) run **324 tests,
+`OK (skipped=7)`** on a bare tree and **116 tests with no skips** for the two OVMF ones once
+`build/pc5.iso`, `build/efi.img` and `build/efi64-release.img` exist.
+This section itself is a **documentation-only commit on the merged branch's head**, so it is not part
+of `main`'s history: folding it in requires either a new pull request or a direct push, and both are
+the owner's call. It is recorded here rather than silently rebased onto `main`.
