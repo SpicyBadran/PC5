@@ -446,9 +446,27 @@ update, so what you read here describes the last verified state, not the last ho
 
 ## 6. Licence and attribution
 
-PC5 is **GPL-2.0-only** — that identifier is read from the [`LICENSE`](../LICENSE)
-file by the generator rather than typed here. The file states the grant explicitly:
-GPL version 2 *only*, not "or any later version".
+The licence line in §1 is the whole of this page's assertion: the identifier there is
+**derived from [`LICENSE`](../LICENSE) by the generator**, on every run, and this section
+deliberately does not restate the grant in prose. A licence id typed into a paragraph is a
+second copy of a fact that has one source, and it is the copy that goes stale.
+
+What the derivation refuses is part of the design, because each refusal is a way a
+documentation change could otherwise invent a licence:
+
+- **a file that states no grant for this project.** The verbatim FSF licence text tells a
+  reader how to *apply* a licence; it is not a decision by PC5. A `LICENSE` containing only
+  boilerplate is reported as ungranting, against `LICENSE`, and not as four documents
+  disagreeing with a guess.
+- **a GPL grant with no version, or with no statement about later versions.** "Only" and
+  "any later version" are different obligations; silence is not defaulted to either.
+- **a file whose header and grant name different versions.** That is what a half-finished
+  relicensing looks like, and a page must not choose a side between them.
+
+`make docs-check` then compares every licence identifier in the documents that describe
+the project — the README, this page, [`CONTRIBUTING.md`](../CONTRIBUTING.md) and
+[`docs/BRAND.md`](BRAND.md) — against the same derivation, so a change to the grant becomes
+a red gate naming the file rather than a permanent inconsistency across four pages.
 
 - **No third-party code is vendored.** No archive, no subtree, no imported asset.
   The repository began with a third-party source archive at its root; it was removed,

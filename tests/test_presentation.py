@@ -418,21 +418,74 @@ class AboutPageTest(unittest.TestCase):
             block = P.render_blocks(self.data, P.load_records())["about-identity"]
         self.assertIn("**GPL-2.0-only**", block)
 
-    def test_an_unclassifiable_licence_is_refused_rather_than_guessed(self):
+    def test_a_licence_that_states_no_grant_is_refused_not_parsed(self):
+        """The licence *text* is not a grant, and the two must not be confused.
+
+        A repository can hold a verbatim copy of the FSF header — which is what happened on
+        `main` while this page was being written — and the boilerplate inside it names a
+        version that nobody in this project chose.  Deriving an id from that copy would put
+        a guess on an About page a distributor may rely on, and would then blame four
+        documents for disagreeing with it.
+        """
         tmp = Path(tempfile.mkdtemp())
         try:
-            (tmp / "LICENSE").write_text("Copyright PC5 contributors.\n", encoding="utf-8")
+            (tmp / "LICENSE").write_text(
+                "                    GNU GENERAL PUBLIC LICENSE\n"
+                "                       Version 3, 29 June 2007\n\n"
+                " Everyone is permitted to copy and distribute verbatim copies of this\n"
+                " license document, but changing it is not allowed.\n\n"
+                " ... either version 3 of the License, or (at your option) any later version.\n",
+                encoding="utf-8")
             with self.assertRaises(SystemExit) as caught:
                 P.licence_identity(tmp)
-            self.assertIn("GNU General Public", str(caught.exception))
-            (tmp / "LICENSE").write_text("GNU GENERAL PUBLIC LICENSE\nVersion 2, June 1991\n",
+            self.assertIn("without being a", str(caught.exception))
+            # and a file that says nothing about the GPL at all is refused the same way
+            (tmp / "LICENSE").write_text("Copyright PC5 contributors. All rights reserved.\n",
                                          encoding="utf-8")
             with self.assertRaises(SystemExit) as caught:
                 P.licence_identity(tmp)
-            # the wording is not the contract; the refusal is.  A file that grants
-            # "version 2" without saying "only" is genuinely ambiguous, and printing the
-            # likelier id would put a guess on an About page that a distributor may rely on
+            self.assertIn("no sentence", str(caught.exception))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_a_grant_silence_about_later_versions_is_refused(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            (tmp / "LICENSE").write_text("GNU GENERAL PUBLIC LICENSE\nVersion 2, June 1991\n\n"
+                                         "PC5 is distributed under GPL version 2.\n",
+                                         encoding="utf-8")
+            with self.assertRaises(SystemExit) as caught:
+                P.licence_identity(tmp)
+            # the wording is not the contract; the refusal is
             self.assertIn("the id cannot be derived", str(caught.exception))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_a_header_and_grant_that_disagree_are_refused(self):
+        """Half a relicensing is the dangerous case: the file argues with itself."""
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            (tmp / "LICENSE").write_text(
+                "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n\n"
+                "PC5 is distributed under GPL version 2 only.\n", encoding="utf-8")
+            with self.assertRaises(SystemExit) as caught:
+                P.licence_identity(tmp)
+            self.assertIn("one of the two is stale", str(caught.exception))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_a_negated_later_version_grant_still_reads_as_only(self):
+        """"version 2 only (not \"or any later version\")" is one grant, not two."""
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            (tmp / "LICENSE").write_text(
+                "PC5 is distributed under GPL version 2 only (not \"or any later version\").\n",
+                encoding="utf-8")
+            self.assertEqual(P.licence_identity(tmp)["spdx"], "GPL-2.0-only")
+            (tmp / "LICENSE").write_text(
+                "PC5 is licensed under the MIT License, with no further conditions.\n",
+                encoding="utf-8")
+            self.assertEqual(P.licence_identity(tmp)["spdx"], "MIT")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

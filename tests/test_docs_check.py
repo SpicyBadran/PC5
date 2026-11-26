@@ -254,12 +254,50 @@ class AboutFixture(Fixture):
                             for problem in self.about_problems()),
                         "the front page's licence line is the one most readers see")
 
-    def test_an_unreadable_licence_file_is_not_guessed_at(self):
+    def test_an_absent_licence_file_is_not_guessed_at(self):
+        """No file, no comparison — and no second failure for the link that is already broken."""
         self.write_page()
         (self.root / "LICENSE").unlink()
         self.assertIsNone(docs_check.licence_from_file(self.root))
-        self.assertEqual(self.about_problems(), [],
-                         "no licence to compare against must not invent a failure or a grant")
+        problems = self.about_problems()
+        self.assertEqual(problems, [],
+                         "an absent licence is the link rule's problem, not this rule's")
+        (self.root / "README.md").write_text("# PC5\n\n[Licence](LICENSE)\n", encoding="utf-8")
+        self.assertTrue(any("link target missing: LICENSE" in problem
+                            for problem in self.problems()),
+                        "and it is reported, exactly once, where the reader would click")
+
+    def test_an_unreadable_licence_file_is_reported_against_the_file(self):
+        self.write_page()
+        licence = self.root / "LICENSE"
+        licence.unlink()
+        licence.mkdir()  # a directory where the file should be: readable as nothing
+        self.assertTrue(any("LICENSE: is unreadable" in problem
+                            for problem in self.about_problems()))
+
+    def test_a_boilerplate_licence_is_reported_once_against_the_file(self):
+        """A verbatim licence text is not a grant: say so about `LICENSE`, not about four pages."""
+        self.write_page()
+        (self.root / "LICENSE").write_text(
+            "                    GNU GENERAL PUBLIC LICENSE\n"
+            "                       Version 3, 29 June 2007\n\n"
+            " ... either version 3 of the License, or (at your option) any later version.\n",
+            encoding="utf-8")
+        (self.root / "README.md").write_text("# PC5\n\n**Licence**: GPL-2.0-only.\n",
+                                             encoding="utf-8")
+        problems = [p for p in self.about_problems() if "LICENSE" in p or "states" in p]
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("LICENSE", problems[0])
+        self.assertIn("no licence grant", problems[0])
+
+    def test_a_header_and_grant_that_disagree_are_caught(self):
+        self.write_page()
+        (self.root / "LICENSE").write_text(
+            "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n\n"
+            "PC5 is distributed under GPL version 2 only.\n", encoding="utf-8")
+        problems = self.about_problems()
+        self.assertEqual([p for p in problems if "is stale" in p], problems,
+                         "the disagreement is the only reportable fact here")
 
     def test_a_cited_path_that_does_not_exist_is_caught(self):
         self.write_page(paths="\nSee `docs/nowhere.md` for the record.\n")

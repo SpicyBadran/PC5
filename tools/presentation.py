@@ -1031,51 +1031,88 @@ BLOCK_RENDERERS = {
 
 # ---------------------------------------------------------------- the About page
 #: The `LICENSE` file is the canonical statement; these two patterns are how it is read.
+#: A licence file states a grant when a sentence names *this project* and a version.
+#: The distinction is not pedantry: the FSF's verbatim text contains "either version 3 of
+#: the License, or (at your option) any later version", which is boilerplate about how to
+#: apply the licence, not a decision by PC5 — and a repository can hold that file while
+#: having chosen nothing.  Deriving an id from boilerplate would print a guess and then
+#: blame every document that disagreed with it, so a file with no grant sentence of its
+#: own is reported as ungranting rather than parsed.
+LICENCE_GRANT = re.compile(
+    r"\bPC5\b(?P<mid>[^.\n]{0,220}? )\b(?:licensed|distributed|released|offered)\b(?P<tail>[^.\n]*)",
+    re.I)
+LICENCE_NOT_LATER = re.compile(r"not\s+\"?\s*or any later version", re.I)
 LICENCE_VERSION = re.compile(r"version\s+(\d+)", re.I)
-LICENCE_LATER = re.compile(r"or\s+any\s+later\s+version", re.I)
-LICENCE_ONLY = re.compile(r"version\s+\d+\s+only", re.I)
+LICENCE_HEADER = re.compile(r"^(?:\s*)GNU GENERAL PUBLIC LICENSE\s*\n[^\n]*Version\s+(\d+)",
+                            re.I | re.M)
 
 
 def licence_identity(root: Path | None = None) -> dict:
     """What `LICENSE` grants, read from the file rather than repeated from a badge.
 
-    GitHub detects a repository licence by scanning the licence text's opening, and this
-    repository's `LICENSE` is the GPL preamble plus an explicit pointer to the full text —
-    so the platform's reported SPDX id can disagree with the file.  The file is canonical
-    here: the About page prints what this parser reads, `tools/docs_check.py` fails any
-    controlled document that names a different id, and a mismatch is therefore a build
-    failure rather than a permanent discrepancy on the front page.
+    GitHub detects a repository licence by scanning the licence text's opening, so the
+    platform's reported SPDX id can disagree with the file — and can disagree because the
+    file changed underneath it.  The file is canonical here: the About page prints what
+    this parser reads, `tools/docs_check.py` fails any controlled document that names a
+    different id, and a mismatch is therefore a build failure rather than a permanent
+    discrepancy on the front page.
 
-    An unclassifiable file is refused.  "Licence: unknown" is an honest sentence to print;
-    a guessed one is not, and a guessed licence on an About page is the kind of claim that
-    outlives its author.
+    Three refusals, each with a different reason, because "the licence is unclear" should
+    say *how*: the file has no grant sentence naming this project; the grant names a GPL
+    version without saying whether later versions are allowed; or the file's own header and
+    its grant sentence disagree, which is what a half-completed relicensing looks like.  An
+    unclassifiable file is never defaulted.  "Licence: unknown" is an honest sentence to
+    print; a guessed one is the kind of claim that outlives its author.
     """
     path = (root or ROOT) / "LICENSE"
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise SystemExit(f"LICENSE: unreadable ({exc}), so no licence can be stated")
-    header = (text.splitlines() or [""])[0].strip().lower()
-    if "general public license" not in header:
-        raise SystemExit('LICENSE: the first line does not name the GNU General Public '
-                         'License, so an SPDX id cannot be derived from it')
-    version = LICENCE_VERSION.search(text)
-    if not version:
-        raise SystemExit("LICENSE: no version number in the file; refusing to print a guess")
-    major = int(version.group(1))
-    # "only" and "or any later version" are mutually exclusive in a well-formed grant;
-    # a file that says neither is deliberately left unclassified rather than defaulted.
-    if LICENCE_ONLY.search(text):
-        spdx, qualifier = f"GPL-{major}.0-only", "only"
-    elif LICENCE_LATER.search(text):
-        spdx, qualifier = f"GPL-{major}.0-or-later", "or any later version"
+    grant = LICENCE_GRANT.search(text)
+    if not grant:
+        raise SystemExit("LICENSE: no sentence in the file states what PC5 is licensed "
+                         "under — the file may be the licence *text* without being a "
+                         "*grant*, and an id cannot be derived from a copy of somebody "
+                         "else's wording")
+    sentence = grant.group(0)
+    clean = LICENCE_NOT_LATER.sub("", sentence)
+    if re.search(r"general public license|\bGPL\b", clean, re.I):
+        family = "GPL"
+    elif re.search(r"\bMIT\b", clean):
+        family, spdx, qualifier, major = "MIT", "MIT", "", None
+    elif "apache" in clean.lower():
+        family, spdx, qualifier, major = "Apache", "Apache-2.0", "", None
+    elif "bsd" in clean.lower():
+        family, spdx, qualifier, major = "BSD", "BSD", "", None
     else:
-        raise SystemExit(f"LICENSE: GPL version {major} with no 'only' or "
-                         f"'or any later version' grant; the id cannot be derived")
+        raise SystemExit(f"LICENSE: the grant sentence does not name a licence family "
+                         f"this tool can print ({sentence!r})")
+    if family == "GPL":
+        version = LICENCE_VERSION.search(clean)
+        if not version:
+            raise SystemExit("LICENSE: the grant names the GPL with no version number; "
+                             "refusing to print a guess")
+        major = int(version.group(1))
+        # "only" and "or any later version" are mutually exclusive in a well-formed grant;
+        # a sentence that says neither is left unclassified rather than defaulted.
+        if re.search(rf"version\s+{major}\s+only", clean, re.I):
+            spdx, qualifier = f"GPL-{major}.0-only", "only"
+        elif re.search(r"or any later version", clean, re.I):
+            spdx, qualifier = f"GPL-{major}.0-or-later", "or any later version"
+        else:
+            raise SystemExit(f"LICENSE: GPL version {major} with no 'only' or "
+                             f"'or any later version' grant; the id cannot be derived")
+        header = LICENCE_HEADER.search(text)
+        if header and int(header.group(1)) != major:
+            raise SystemExit(f"LICENSE: the file's header is the GPL version "
+                             f"{header.group(1)} text while its grant sentence names "
+                             f"version {major}; one of the two is stale, and a page must "
+                             f"not pick a side")
     vendored = re.search(r"no third-party source archive is\s+\w+", text, re.I)
     return {"spdx": spdx, "major": major, "qualifier": qualifier,
             "no_vendored_third_party": bool(vendored),
-            "source": "LICENSE", "file": "LICENSE"}
+            "source": "LICENSE", "file": "LICENSE", "grant": sentence.strip()}
 
 
 def about_link(target: str) -> str:
