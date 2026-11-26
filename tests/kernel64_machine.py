@@ -76,6 +76,8 @@ def pack_boot_info(**overrides):
         memmap_desc_size=DESC_SIZE, memmap_desc_version=1,
         framebuffer_addr=FB_BASE, framebuffer_width=1024,
         framebuffer_height=768, framebuffer_pitch=4096, framebuffer_format=0,
+        # A layout default, not a claim about any image: `run_kernel` replaces it with the
+        # length of the bytes it actually loaded, because the kernel compares the two.
         acpi_rsdp=RSDP, kernel_base=LINK_BASE, kernel_size=0xA000,
         stack_top=STACK_TOP, stack_size=0x8000,
         pagetable_addr=PML4, pagetable_pages=6, identity_span=4 << 30,
@@ -187,7 +189,8 @@ class Machine:
             if len(rsdp_bytes) < 36:
                 self.uc.mem_write(self.rsdp_address + len(rsdp_bytes),
                                   bytes(36 - len(rsdp_bytes)))
-        self.uc.mem_write(KERNEL_BASE, bytes(kernel))
+        self.kernel = bytes(kernel)
+        self.uc.mem_write(KERNEL_BASE, self.kernel)
         self.serial = ""
         self.stop_markers = ("PC5-64-DONE", "PC5-64BIT-FAIL=")
         self.stopped_on = None
@@ -255,7 +258,27 @@ class Machine:
         return PML4
 
     # --------------------------------------------------------------- run
-    def run(self, boot_info, paging=True, max_instructions=4_000_000, memmap=None):
+    def entry(self):
+        """Where execution begins: the address the *image* declares, not a constant.
+
+        This used to be `KERNEL_BASE`, which was right only because the flat binary began with
+        `cli; mov rbx, rdi` at the load address.  `KERNEL64.BIN` now starts with its own
+        128-byte header (`docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`), so entering at
+        the load address means executing the magic bytes and getting a #UD at 0x100000 -- which
+        is exactly what this harness did when the header landed, and the reason the fix here is
+        to read the declaration rather than to move a constant: the loader under test jumps by
+        the same field, so a harness that assumed the address would drift away from the artifact
+        again at the next format change.  A blob without the magic -- one of the hand-built
+        images several cases here pass in -- keeps entering at the base, which is what "no
+        header, no declared entry" means.
+        """
+        image = self.kernel
+        if image[:8] != b"PC5K64IM":
+            return KERNEL_BASE
+        return KERNEL_BASE + struct.unpack_from("<Q", image, 32)[0]
+
+    def run(self, boot_info, paging=True, max_instructions=4_000_000, memmap=None,
+            patch=None):
         from unicorn import UcError
         from unicorn.x86_const import (
             UC_X86_REG_CR0, UC_X86_REG_CR3, UC_X86_REG_CR4, UC_X86_REG_RDI,
@@ -265,6 +288,14 @@ class Machine:
         uc.mem_write(MEMMAP, pack_memmap(memmap if memmap is not None
                                         else DEFAULT_MEMMAP))
         uc.mem_write(BOOT_INFO, boot_info)
+        if patch:
+            # Written after the image is in place and before the first instruction runs, so
+            # nothing but the kernel itself can notice.  That is the property a caller wants: a
+            # corruption applied to the *loaded* bytes is what a truncated read, a partial write
+            # or firmware that overran its buffer look like from the inside -- and a fixture that
+            # edited the file instead would only prove the stamper's arithmetic.
+            for offset, payload in patch:
+                uc.mem_write(KERNEL_BASE + offset, payload)
         pml4 = self.install_identity_map()
         uc.reg_write(UC_X86_REG_CR4, uc.reg_read(UC_X86_REG_CR4) | 0x20)
         uc.reg_write(UC_X86_REG_CR3, pml4)
@@ -275,22 +306,60 @@ class Machine:
             cr0 &= ~(1 << 31)
         uc.reg_write(UC_X86_REG_CR0, cr0)
         uc.reg_write(UC_X86_REG_RDI, BOOT_INFO)
-        uc.reg_write(UC_X86_REG_RIP, KERNEL_BASE)
+        entry = self.entry()
+        uc.reg_write(UC_X86_REG_RIP, entry)
         error = None
+        fault_rip = None
         try:
-            uc.emu_start(KERNEL_BASE, 0, 0, max_instructions)
+            uc.emu_start(entry, 0, 0, max_instructions)
         except UcError as exc:
-            error = f"{exc} at {uc.reg_read(UC_X86_REG_RIP):#x}"
-        return dict(serial=self.serial, stopped_on=self.stopped_on, error=error)
+            fault_rip = uc.reg_read(UC_X86_REG_RIP)
+            # The address comes back as a number as well as inside the sentence, because a caller
+            # that wants to know *where* the guest stopped should not have to parse wording that
+            # belongs to the harness.  `tests/test_unicorn_soft_int.py` is the reason: it has to
+            # compare this address with one read out of the built image, and a format change here
+            # must not be able to turn that comparison into a pass.
+            error = f"{exc} at {fault_rip:#x}"
+        return dict(serial=self.serial, stopped_on=self.stopped_on, error=error,
+                    fault_rip=fault_rip)
+
+
+def pack_boot_info_for(kernel, **overrides):
+    """`pack_boot_info`, with `kernel_size` set to the image that is actually being booted.
+
+    Two kinds of caller build a handover here: the shared `run_kernel` below, and tests that need
+    a `Machine` of their own first (backing an MMIO page has to happen before the run).
+    `pack_boot_info`'s own default for that field is a *layout* fixture, and the kernel now
+    compares it with the length its header declares -- so a caller that forgets to say otherwise
+    does not get a sloppy fixture, it gets a refused boot.  That is the check working; this
+    helper is the place that knows both sides, so no caller has to remember.
+    """
+    overrides.setdefault("kernel_size", len(kernel))
+    return pack_boot_info(**overrides)
 
 
 def run_kernel(kernel, memmap=None, paging=True, rsdp_signature=RSDP_SIGNATURE,
-               cpuid=None, rsdp_bytes=None, rsdp_address=None, **overrides):
+               cpuid=None, rsdp_bytes=None, rsdp_address=None, stop_markers=None,
+               max_instructions=None, patch=None, **overrides):
+    """Boot the kernel in the harness and report what it printed.
+
+    `stop_markers` replaces the default pair, and passing `()` means "do not stop early": the
+    harness's markers are how an ordinary run ends, so clearing them is the only way to ask what
+    the guest does *after* the boot completes -- which is where the IST delivery probe lives, and
+    where an environment that cannot take a software interrupt shows it.  With no markers the run
+    is bounded by `max_instructions` instead, and a caller that expects the guest to fault must
+    say how far to let it go rather than inherit the boot's budget.
+    """
     machine = Machine(kernel, rsdp_signature=rsdp_signature, cpuid=cpuid,
                       rsdp_bytes=rsdp_bytes, rsdp_address=rsdp_address)
     if memmap is not None:
         overrides.setdefault("memmap_bytes", DESC_SIZE * len(memmap))
-    result = machine.run(pack_boot_info(**overrides), paging=paging,
-                         memmap=memmap)
+    if stop_markers is not None:
+        machine.stop_markers = tuple(stop_markers)
+    run_kwargs = {}
+    if max_instructions is not None:
+        run_kwargs["max_instructions"] = max_instructions
+    result = machine.run(pack_boot_info_for(kernel, **overrides), paging=paging,
+                         memmap=memmap, patch=patch, **run_kwargs)
     result["machine"] = machine
     return result

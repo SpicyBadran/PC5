@@ -291,6 +291,123 @@ class BuildMetaTests(unittest.TestCase):
         self.assertIn("does not match the build record", run.stderr)
 
 
+    def _firmware_report(self, iso_sha=None, passed=True, failures=0, not_tested=1):
+        """A stand-in for `build/ovmf-report.json`, shaped as `tests/ovmf_boot.py` writes it.
+
+        `data.environment.iso_sha256` is the field that binds a boot verdict to the
+        bytes that were booted, so it is the field these tests move around.
+        """
+        checks = [{"name": "the ISO embeds the release ESP the build produced",
+                   "state": "pass", "detail": ""}]
+        checks += [{"name": "the boot profile can be read from the medium",
+                    "state": "pass", "detail": ""}]
+        checks += [{"name": "loader refuses a corrupted header", "state": "skip",
+                    "detail": "no header field to corrupt yet"}] * not_tested
+        checks += [{"name": f"genuine firmware stage {i}", "state": "fail", "detail": "x"}
+                   for i in range(failures)]
+        checks += [{"name": f"genuine firmware stage ok {i}", "state": "pass", "detail": ""}
+                   for i in range(4)]
+        report = {
+            "checks": checks,
+            "passed": passed,
+            "exit_code": 0 if passed else 2,
+            "not_applicable": not_tested,
+            "data": {
+                "status": "passed" if passed else "failed",
+                "environment": {
+                    "iso": "pc5.iso",
+                    "iso_sha256": self.sha if iso_sha is None else iso_sha,
+                    "efi_image_sha256": "e" * 64,
+                    "profile": {"key": "x64", "kernel": "KERNEL64.BIN"},
+                    "qemu_version": "QEMU emulator version 11.0.2",
+                    "ovmf_code": "/tmp/edk2-x86_64-code.fd",
+                    "buildinfo": {"build": "abc1234", "commit": "0" * 40,
+                                  "uefi-path": "64", "esp-loader": "9" * 16},
+                },
+                "cold": {"stopped_on": "PC5-64-DONE", "seconds": 4.5, "returncode": 124},
+                "warm": {"stopped_on": "PC5-64-DONE", "seconds": 4.1, "returncode": 124},
+                "matrix": ([{"state": "verified"}] * 6
+                           + [{"state": "external"}] * 2
+                           + [{"state": "not-tested"}] * not_tested),
+            },
+        }
+        path = os.path.join(self.tmp, "ovmf-report.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(report, fh)
+        return path
+
+    def test_it_records_the_firmware_boot_and_its_untested_paths(self):
+        run = self.run_meta("--ovmf-evidence", self._firmware_report())
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        with open(self.info, encoding="utf-8") as fh:
+            build = json.load(fh)["build"]
+        entry = next(v for v in build["verification"]["checks"]
+                     if v["name"] == "firmware_boot")
+        self.assertEqual(entry["failures"], 0)
+        self.assertEqual(entry["not_tested"], 1)
+        self.assertEqual(entry["not_tested_names"], ["loader refuses a corrupted header"])
+        self.assertEqual(entry["matrix"], {"rows": 9, "verified": 6, "external": 2,
+                                           "not-tested": 1})
+        self.assertEqual(entry["profile"], {"key": "x64", "kernel": "KERNEL64.BIN"})
+        self.assertEqual(entry["boots"]["cold"]["stopped_on"], "PC5-64-DONE")
+        # The identity the release record is supposed to carry: which image, named by
+        # what commit, booting on which firmware.
+        self.assertEqual(entry["artifact"]["iso_sha256"], self.sha)
+        self.assertEqual(entry["artifact"]["buildinfo"]["commit"], "0" * 40)
+        self.assertEqual(entry["environment"]["qemu_version"],
+                         "QEMU emulator version 11.0.2")
+        self.assertEqual(build["verification"]["verdict"], "PASS")
+
+    def test_it_refuses_a_firmware_report_about_a_different_image(self):
+        """A stale gate report is not evidence about this artifact.
+
+        `make ovmf-test` and `make iso` are separate steps, so this is the ordinary
+        way to end up publishing someone else's boot: the report left in `build/`
+        from the previous image.  Refusing is the only honest option.
+        """
+        run = self.run_meta("--ovmf-evidence", self._firmware_report(iso_sha="f" * 64))
+        self.assertEqual(run.returncode, 3, run.stdout + run.stderr)
+        self.assertIn("describes a different artifact", run.stderr)
+        self.assertIn("Re-run `make ovmf-test`", run.stderr)
+
+    def test_a_failing_firmware_gate_fails_the_record(self):
+        run = self.run_meta("--ovmf-evidence",
+                            self._firmware_report(passed=False, failures=2))
+        self.assertEqual(run.returncode, 3, run.stdout + run.stderr)
+        self.assertIn("FAILED firmware_boot", run.stderr)
+
+    def test_the_recorded_architecture_follows_the_uefi_path(self):
+        """A 64-bit release must not publish an i386 record.
+
+        The field used to be hardcoded, so `make PC5_UEFI=64 release-assets`
+        described the other boot path -- and a reader sorting releases by
+        architecture filed them wrongly.
+        """
+        run = self.run_meta("--ovmf-evidence", self._firmware_report(),
+                            "--uefi-path", "64")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        with open(self.info, encoding="utf-8") as fh:
+            build = json.load(fh)["build"]
+        self.assertEqual(build["architecture"]["uefi_path"], "64")
+        self.assertIn("x86_64", build["architecture"]["kernel"])
+        # The architecture field and the boot record have to agree, or the release
+        # says one thing about the image and quotes evidence about another.
+        entry = next(v for v in build["verification"]["checks"]
+                     if v["name"] == "firmware_boot")
+        self.assertEqual(entry["artifact"]["buildinfo"]["uefi-path"],
+                         build["architecture"]["uefi_path"])
+
+    def test_the_default_record_still_describes_the_32bit_path(self):
+        run = self.run_meta()
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        with open(self.info, encoding="utf-8") as fh:
+            build = json.load(fh)["build"]
+        self.assertEqual(build["architecture"]["uefi_path"], "32")
+        self.assertIn("i386", build["architecture"]["kernel"])
+        self.assertNotIn("firmware_boot",
+                        [v["name"] for v in build["verification"]["checks"]])
+
+
 class WorkflowTests(unittest.TestCase):
     """Static checks on the CI pipeline; no network, no PyYAML."""
 

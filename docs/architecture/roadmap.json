@@ -397,7 +397,7 @@
       ],
       "advances": "a reproducible release other people can verify for themselves",
       "deliverables": [
-        "ci/build.yml",
+        ".github/workflows/build.yml",
         "ci/README.md"
       ],
       "acceptance": [
@@ -407,7 +407,7 @@
       "evidence": [
         "ci/README.md"
       ],
-      "blocker": "the GitHub token available to this environment lacks the workflows permission, so ci/build.yml cannot be activated (ci/README.md)",
+      "blocker": "the pipeline is now active (installed as .github/workflows/build.yml on 2026-11-24, workflow 428605735); M1b still owes its two acceptance criteria: a tag that publishes pc5.iso, pc5.iso.sha256 and build-info.json, and a published hash equal to a local rebuild at the same SOURCE_DATE_EPOCH",
       "legacy": [
         "M1b"
       ]
@@ -448,7 +448,12 @@
         "docs/TEST_RESULTS.md",
         "tests/ovmf_boot.py",
         "tests/uefi_stubtest.py",
-        "boot/uefi/README.md"
+        "boot/uefi/README.md",
+        "docs/evidence/2026-11-23-64bit-boot-gate/README.md",
+        "docs/evidence/2026-11-23-64bit-genuine-ovmf-boot/README.md",
+        "docs/evidence/2026-11-24-kernel-image-header/README.md",
+        "docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md",
+        "tests/test_kimage64.py"
       ],
       "legacy": [
         "M1c"
@@ -723,7 +728,9 @@
         "tests/test_apic64.py",
         "tests/test_idt64.py",
         "tests/test_timer64.py",
-        "tests/test_madt64.py"
+        "tests/test_madt64.py",
+        "docs/evidence/2026-11-24-tss-delivery/README.md",
+        "tests/test_kernel64.py"
       ],
       "release_gating": true
     },

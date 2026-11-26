@@ -82,6 +82,30 @@ def loader_image():
     return LOADER_EFI.read_bytes()
 
 
+def image_header():
+    """The built flat image's own 128-byte header, decoded here by hand.
+
+    Deliberately *not* `tools/kimage64.py`'s `verify`, even though that tool exists, is
+    importable and would be shorter: a test that reads the declarations back through the same
+    code that wrote them proves only that the writer is self-consistent.  These assertions are
+    about the artifact, so the layout is re-expressed from the field offsets in
+    `kernel64/include/pc5_kimage64.h`.
+    """
+    build()
+    raw = KERNEL_BIN.read_bytes()
+    magic, version, hsize = struct.unpack_from("<8sII", raw, 0)
+    size, base, entry = struct.unpack_from("<QQQ", raw, 16)
+    ealign, lalign, arch, machine = struct.unpack_from("<IIII", raw, 40)
+    bss, checksum = struct.unpack_from("<QQ", raw, 56)
+    reserved0, reserved1, crc = struct.unpack_from("<IIi", raw, 72)
+    return {"magic": magic, "header_version": version, "header_size": hsize,
+            "image_size": size, "load_base": base, "entry_offset": entry,
+            "entry_align": ealign, "load_align": lalign, "arch": arch,
+            "machine": machine, "bss_size": bss, "checksum": checksum & 0xFFFFFFFFFFFFFFFF,
+            "reserved0": reserved0, "reserved1": reserved1, "header_crc": crc & 0xFFFFFFFF,
+            "bytes": raw}
+
+
 class KernelImageTests(unittest.TestCase):
     def test_kernel_is_elf64_for_x86_64(self):
         build()
@@ -92,7 +116,22 @@ class KernelImageTests(unittest.TestCase):
         self.assertEqual(struct.unpack_from("<H", header, 18)[0], 62, "EM_X86_64")
         self.assertEqual(struct.unpack_from("<H", header, 16)[0], 2, "ET_EXEC")
         entry = struct.unpack_from("<Q", header, 24)[0]
-        self.assertEqual(entry, 0x100000, "entry must be the linked load address")
+        # The entry point used to *be* the load address, because the image began with
+        # `cli; mov rbx, rdi` at 0x100000.  It no longer is: the image begins with its own
+        # header, which `kernel64.ld` puts in a page of its own at the load address so that no
+        # instruction had to move (docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md).  The
+        # property this assertion protected -- that the code the firmware is told to start at
+        # is the code that is really there -- is now a three-way agreement, so it is asserted
+        # as one rather than by a constant that would have to be edited every time the header
+        # page changed size:
+        declared = image_header()
+        self.assertEqual(declared["magic"], b"PC5K64IM")
+        self.assertEqual(declared["load_base"], 0x100000,
+                         "the header must name the address the boot protocol requires")
+        self.assertEqual(entry, declared["load_base"] + declared["entry_offset"],
+                         "the ELF entry and the entry the loader jumps to disagree")
+        self.assertEqual(entry % declared["entry_align"], 0,
+                         "the image declares an entry alignment the entry does not honour")
 
     def test_kernel_has_no_unresolved_symbols(self):
         build()
@@ -107,7 +146,17 @@ class KernelImageTests(unittest.TestCase):
         text = subprocess.run(["objcopy", "-O", "binary", "--only-section=.text",
                                str(KERNEL_ELF), "/dev/stdout"],
                               capture_output=True).stdout
-        self.assertTrue(binary.startswith(text[:4096]))
+        declared = image_header()
+        self.assertEqual(binary[:8], b"PC5K64IM",
+                         "the flat image begins with its header, and that is the whole point")
+        # Stronger than the `startswith(text[:4096])` this replaced, which compared a fixed
+        # 4 KiB at offset 0: the offset now comes from the image's own declaration, and the
+        # whole `.text` section has to be there, not its first page.  A stamper that wrote an
+        # `entry_offset` off by a page -- or a linker script that moved .text without telling
+        # the header -- fails here rather than at boot.
+        start = declared["entry_offset"]
+        self.assertEqual(binary[start:start + len(text)], text,
+                         "the entry the image declares does not point at the kernel's text")
         # Derived from the linker script's own symbols, not hardcoded. It used to
         # say 0xC000, and that number stopped being true the moment the kernel
         # gained a 4 KiB IDT - the test then failed for a correct change, which is a
@@ -131,8 +180,21 @@ class KernelImageTests(unittest.TestCase):
     def test_link_address_is_the_protocol_address(self):
         build()
         nm = subprocess.run(["nm", str(KERNEL_ELF)], capture_output=True, text=True).stdout
-        self.assertIn("0000000000100000 T __kernel_start", nm)
-        self.assertIn("0000000000100000 T _start64", nm)
+        found = {}
+        for line in nm.splitlines():
+            fields = line.split()
+            if len(fields) == 3 and fields[2] in ("__kernel_start", "_start64"):
+                found[fields[2]] = int(fields[0], 16)
+        # Addresses, not whole `nm` lines.  This used to match the literal
+        # "0000000000100000 T __kernel_start", and `__kernel_start` is now typed `R`: the
+        # symbol lives at the start of `.head`, which is read-only data, not text.  The letter
+        # was never the invariant, and pinning it made the test fail for a change that was
+        # correct -- while pinning the *address* still catches the one that is not.
+        self.assertEqual(found.get("__kernel_start"), 0x100000,
+                         "the image's first address must be the protocol's load address")
+        self.assertEqual(found.get("_start64"),
+                         0x100000 + image_header()["entry_offset"],
+                         "the entry symbol and the header's declaration must be the same place")
 
 
 class BootInfoAbiTests(unittest.TestCase):
@@ -375,12 +437,64 @@ class KernelContractTests(unittest.TestCase):
                                             loader_image_size=0x2000),
                             "bootinfo-loader-span")
 
-    def test_kernel_size_that_does_not_match_the_image_is_refused(self):
-        # The kernel knows its own size from the linker script, so it rejects any
-        # other value outright - which is also what makes the span check below it
-        # unreachable in practice (the linked image cannot leave the map).
+    def test_kernel_size_that_is_implausible_is_refused_by_the_range_check(self):
+        # What the boot-info stage can decide on its own: a size of 4 GiB is not a
+        # kernel image, and that needs no second source to say so.  It used to be
+        # named "does not match the image", which was a promise the code did not
+        # keep -- nothing compared the number with the image until the self-check
+        # below existed, and a handover that *understated* the size went through.
         self.assert_refuses(self.run_kernel(kernel_size=4 << 30),
                             "bootinfo-kernel-size")
+
+    # ------------------------------------------------------ the image, re-read ----
+    #
+    # `validate_image_self()` is the kernel asking its own loaded bytes what they are, and
+    # comparing that with what it was told.  Every case below corrupts one of the two
+    # *sources*, because a test that only checks the happy path cannot tell a comparison
+    # apart from a print statement.
+
+    def test_the_kernel_reads_its_own_header_and_reports_both_sizes(self):
+        header = image_header()
+        line = [l for l in self.run_kernel()["serial"].splitlines()
+                if l.startswith("PC5-64-KIMAGE")][-1]
+        self.assertIn("status=ok reason=ok", line, line)
+        # Both numbers, on the line, from two different places: the header is the build's
+        # record and the handover is the loader's.  Printed as hex because a decimal
+        # coincidence in a log is harder to eyeball than a hex one.
+        self.assertIn(" image=0x%x" % header["image_size"], line)
+        self.assertIn(" handover=0x%x" % header["image_size"], line,
+                      "the harness hands over the real image length; if these two ever "
+                      "disagree in a fixture, the fixture is lying and the check is right "
+                      "to refuse it")
+        self.assertIn(" bss=0x%x" % header["bss_size"], line)
+        self.assertIn(" entry=0x%x" % header["entry_offset"], line)
+        self.assertIn(" crc=ok", line,
+                      "the CRC is recomputed over the loaded bytes, so `ok` is a result "
+                      "and not a field echoed back from the header")
+
+    def test_a_handover_that_understates_the_image_is_refused_by_name(self):
+        # The old harness default, and the shape a truncated read takes: the image is
+        # whole, the number is small.  Before the self-check this booted.
+        self.assert_refuses(self.run_kernel(kernel_size=0xA000), "kimage64-image-size")
+
+    def test_a_header_crc_corrupted_after_loading_is_refused_by_name(self):
+        import struct as st
+        bad = st.pack("<I", 0)
+        self.assert_refuses(self.run_kernel(patch=[(80, bad)]), "kimage64-header-crc")
+
+    def test_a_body_edit_below_the_header_is_not_claimed_to_be_caught(self):
+        """The boundary of a runtime header check, written as a test.
+
+        Byte 0x200 is inside `.head`'s padding -- inside the payload checksum, outside the
+        128 bytes the kernel can still verify after the jump, and never executed.  So the
+        boot succeeds, and this asserts that it does: the day someone claims the kernel
+        re-verifies its own image, this line is the counter-example.  The loader catches it
+        (`tests/test_kimage64.py` feeds the same edit to both halves of the validator),
+        which is why the pair of callers is worth having.
+        """
+        result = self.run_kernel(patch=[(0x200, b"\xff")])
+        self.assert_boots(result)
+        self.assertIn("PC5-64-KIMAGE status=ok", result["serial"])
 
     def test_memory_map_size_must_be_a_multiple_of_the_stride(self):
         self.assert_refuses(self.run_kernel(memmap_bytes=100),

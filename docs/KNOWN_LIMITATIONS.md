@@ -12,7 +12,16 @@ work that has secretly been done.
    a protocol stub (`make stubtest`, 58 checks); genuine TianoCore OVMF boots the
    ISO cold and warm and the kernel reaches `PC5-BOOT-OK` (`make ovmf-test`,
    40 checks, 1 NOT APPLICABLE, `docs/TEST_RESULTS.md` §16); and **no physical
-   UEFI machine has done it** — `M1` is not started. On this path the loader also cannot report the
+   UEFI machine has done it** — `M1` is not started.
+   The gate runs both kernel paths, each graded in its own vocabulary: `make
+   ovmf-test` for the 32-bit release and `make PC5_UEFI=64 ovmf-test` for the
+   64-bit one; the counts for a given commit are in `docs/TEST_RESULTS.md` and the
+   serial logs under `docs/evidence/`.  Which path a run grades is read from
+   the medium, not from a flag: both flavors are written to `build/pc5.iso` and both
+   ESPs carry `EFI/BOOT/BOOTX64.EFI`, so only `KERNEL.BIN` against `KERNEL64.BIN`
+   distinguishes them where firmware can see.  A boot that only initialised firmware
+   is never a pass — the 64-bit stages require the loader's own banner, and a stage
+   that reports "no loader failure was reported" must have seen it first. On this path the loader also cannot report the
    ISO volume id, the kernel LBA or the ISO9660 descriptor (the file protocol
    does not expose them), and it hands over no VGA font, so the kernel's
    framebuffer console falls back to text mode.
@@ -102,24 +111,78 @@ work that has secretly been done.
 
 ## UEFI boot path
 
-- **The 64-bit kernel image is accepted unvalidated, because it carries no header to validate.**
-  The 32-bit loader refuses a `\KERNEL.BIN` whose bytes 2..5 are not `PC5K` or whose version byte
-  is not 1, and `tools/verify_iso.py` re-checks those bytes on the release file. `KERNEL64.BIN`
-  begins directly with `cli; mov rbx, rdi` — `kernel64/start.S`, no signature, no version, no
-  length — so the 64-bit loader trusts the file it opens completely: any bytes of a plausible
-  length boot. A control run on 2026-11-23 proved how easy it is to *believe* this is covered:
-  rewriting `PC5K` to `XXXX` inside the 64-bit ISO still reached `PC5-64BIT-LONG-MODE-OK`, because
-  the bytes edited belonged to the *other* kernel the same ISO carries for its legacy El Torito
-  entry, which the 64-bit path never opens; `tools/verify_iso.py`'s signature check for that ISO
-  reads the same wrong file for the same reason, and passes. Closing it means adding a header to
-  the 64-bit image format (`kernel64/start.S`, `kernel64.ld`, `tools/build_release.py`,
-  `tests/test_release_esp.py`'s digests) and then the loader check — a format change for its own
-  slice, not a patch to a boot PR. Boot evidence and the byte dump that settled it:
+- **The 64-bit kernel image carries its own header, and the loader refuses it on sight.**
+  `KERNEL64.BIN` begins with 128 bytes declaring its magic, format version, exact length, load
+  address, entry offset, alignment requirements, architecture (in two encodings), `.bss` size and
+  payload checksum. `boot/uefi64/kimage64.c` validates all of it before it computes an entry
+  address, and every refusal has a name (`kimage64-magic`, `kimage64-image-size`,
+  `kimage64-checksum`, …) that reaches the serial as `PC5-64-LOADER-FAIL=<name>`.
+  `tools/verify_iso.py` re-runs the same validation from the bytes inside the release ISO's own
+  FAT directory, with no build record consulted, so an artifact that contradicts itself is an
+  invalid artifact even when every digest matches. The format, the refusal vocabulary and the
+  compatibility rules are [`docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`](engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md).
+  Four of the fifteen refusals are additionally earned by booting a *deliberately corrupted*
+  image: `magic` (a stale or foreign image), `arch` (the wrong architecture), `image-size` (a
+  truncated file whose FAT record was updated, so only the self-description catches it) and
+  `checksum` (one bit in the code, which no length, signature or digest check can see). Each of
+  those controls fails unless the *named* refusal appears **and** the run never reaches
+  `PC5-64-LOADER-JUMP`: a mutant that dies for the wrong reason, or a boot that is "refused" by
+  firmware starvation, is a failing test rather than a pass.
+  What this still does not do: it is integrity, not authenticity — a deliberate rewrite that
+  recomputes both checksums is indistinguishable, which stays a Secure Boot item in
+  `docs/SECURITY.md`; the 32-bit path is unchanged and still validated by the four
+  `PC5K` bytes its header parser reads; and the header's `load_base` documents what the link
+  assumed rather than requesting an address, because the image is not relocatable.
+  The history behind the format — including the control run that showed a `PC5K` edit in the
+  64-bit ISO changing nothing, because the bytes edited belonged to the *other* kernel the same
+  ISO carries for its legacy El Torito entry — is
   `docs/evidence/2026-11-23-64bit-genuine-ovmf-boot/README.md`.
 
 Verified against genuine TianoCore OVMF on 2026-11-15 (`docs/TEST_RESULTS.md`
 §16). What that does **not** cover:
 
+* **The 64-bit kernel's `CS` is not a descriptor in its own GDT, until the first exception fixes
+  it.** `pc5_tss64_install()` loads a 48-byte GDT whose code segment is selector `0x08`, but loads
+  no new `CS`, so the selector the loader jumped in with (`0x38`, from the loader's table) stays
+  installed while the kernel runs — a value the live table does not describe. In 64-bit mode a CPU
+  ignores CS's base and limits, so nothing faults, and any exception delivery *corrects* it: an
+  interrupt gate loads CS from the gate's own selector, which is `0x08`. Both halves are visible in
+  `docs/evidence/2026-11-24-tss-delivery/ovmf64-serial-cold.log`, where a frame pushed before the
+  first delivery saves `cs=0x38` and the injected NMI's frame, taken after, saves `cs=0x8`. It is a
+  hazard rather than a fault — a task switch, a `RET-to-FAR`, or a CPU that validates the cached
+  selector would object — and fixing it means a far jump through the new table at the end of the
+  install, which is a change to the handover's control flow. Deliberately not attempted as a side
+  effect of the TSS work.
+* **A kernel whose body was damaged after loading can still boot.** `KERNEL64.BIN` carries a
+  128-byte header whose `checksum` covers the whole image, and the loader verifies it before
+  jumping; after the jump the kernel re-derives only `header_crc`, over those 128 bytes. The
+  payload cannot be re-summed by the running kernel, because `.bss` is inside the checked range
+  and `_start64` has already cleared it and taken a stack out of it — see
+  `docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`, "After the jump". The gap is asserted
+  in tests (`tests/test_kimage64.py`, `tests/test_kernel64.py`) rather than left as a comment,
+  and closing it needs a version-2 header with a second digest over a defined prefix.
+* **The image header bounds `.bss` from above only.** `pc5_kimage64_validate_header()` refuses a
+  declared `.bss` *bigger* than the file (`kimage64-bss-size`) and says nothing about it being
+  smaller than the space the file has, so a header can declare that the whole image — entry point
+  included — is zero-fill.  Measured at `c487efd`+`tests`: such an image, with both digests
+  re-stamped, is accepted by `tools/kimage64.py`, accepted by the running kernel, boots to
+  `PC5-64-DONE`, and prints `bss=0x34000`; neither firmware gate compares the `bss=` field, so the
+  declaration is recorded and unread.  It is inert today only because `_start64` zeroes the linker's
+  `.bss` rather than the declared one — see §35 of `docs/TEST_RESULTS.md` and the v2 requirements in
+  `docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`, which is where the extra comparison belongs
+  (it changes the kernel image, so it must be landed with a re-measured gate, not on its own).
+* **The 64-bit IST stacks are 4 KiB deep and have nothing under them.** `pc5_tss64_build()`
+  takes three frames from the pool — TSS, IST1, IST2 — and each interrupt stack is one page with
+  its top at the page boundary, which is what the boot records: `tss=0x1000 ist1=0x3000
+  ist2=0x4000`, so the page below IST1 *is* the TSS page and the page below IST2 *is* IST1's
+  (`docs/evidence/2026-11-24-tss-delivery/verification.sh` asserts that layout rather than
+  paraphrasing it). Consequence: a fault whose saved frame exceeds 4 KiB — a `#DF` raised while a
+  `#DF` is being handled, or a debug-registry-heavy path — walks below the bottom of the window it
+  was given and lands on memory the kernel owns and uses, corrupting the TSS or the other interrupt
+  stack instead of faulting. What the gates assert is **delivery into** the window (`rsp` inside
+  `[top-4096, top)`) and **nothing asserts depth**; nesting is not exercised at all (§31, §32).
+  Closing it is a guard page per IST slot plus a canary the reporter checks before it prints, which
+  costs three more frames and belongs with the allocator work, not here.
 * **Physical hardware.** No PC and no PS5 has booted this ISO through UEFI. OVMF
   is firmware, but it is firmware in an emulator; vendor firmware (AMI, Insyde,
   Phoenix, Apple) is untested and its quirks are unknown.

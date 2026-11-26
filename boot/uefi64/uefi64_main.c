@@ -33,6 +33,7 @@
 #include "../uefi/efi.h"
 #include "pc5_boot64.h"
 #include "pc5_map.h"
+#include "pc5_kimage64.h"
 #include "handover64.h"
 #include "pagetables.h"
 
@@ -48,6 +49,12 @@ static u16 KERNEL_NAME[] = {'\\', 'K', 'E', 'R', 'N', 'E', 'L',
 #define MEMMAP_DESCRIPTOR_VERSION 1u
 #define KERNEL_STACK_PAGES 4ull
 #define EXIT_RETRIES 8
+
+/* Where execution starts, once the image has said where execution starts.  Held here
+ * rather than in `struct pc5_boot64` because it is the loader's decision, not a fact the
+ * kernel has to be told: the handover protocol is versioned and its size is checked on both
+ * sides, and an entry point that only the loader reads does not belong in it. */
+static u64 g_kernel_entry;
 
 /* Published for the image test and the stub harness: the 64-bit loader's own
  * protocol record, not the 32-bit handover descriptor. */
@@ -118,6 +125,30 @@ void serial_put_raw(char c)
             return;
     }
     outb(0x3F8, (unsigned char)c);
+}
+
+/* The firmware's own self-description, read out of the system table.  The 32-bit
+ * path has named its firmware at boot since the gate was written, and the gate
+ * asserts on it, because "OVMF started and then ran our application" is two facts
+ * and a log that only proves the second cannot tell a genuine firmware boot from
+ * some other thing that prints the same banner.  This path printed a banner and
+ * nothing else, so the 64-bit release could be gated only on trust.  The vendor
+ * string is CHAR16 and firmware-supplied, so it is copied character by character
+ * and printable-ASCII-filtered: a serial line must not be able to carry an escape
+ * sequence in from outside. */
+static void serial_write_ascii16(const u16 *text, u32 limit)
+{
+    u32 index = 0;
+    if (!text) {
+        serial_write("absent");
+        return;
+    }
+    for (; index < limit && text[index]; index++) {
+        u16 unit = text[index];
+        serial_put_raw(unit >= 0x20 && unit < 0x7F ? (char)unit : '?');
+    }
+    if (!index)
+        serial_write("empty");
 }
 
 static void serial_hex(u64 value)
@@ -488,6 +519,42 @@ static void load_kernel(efi_handle image, struct pc5_boot64 *boot_info)
     serial_write(" bytes=");
     serial_dec(size);
     serial_write("\n");
+
+    /* The image now has to account for itself before anything jumps into it.
+     *
+     * This is the check the 64-bit path did not have.  A corrupted `KERNEL64.BIN` used to
+     * boot: the loader read the file, jumped to its first byte, and whatever those bytes
+     * happened to decode to ran with the handover structure in RDI.  "It is the file at the
+     * path we opened" was the whole of the validation, which is a statement about the
+     * medium, not about the code.  So a mutant that flipped a byte in the middle of the
+     * kernel -- where there is no signature, no magic, and nothing that knows what it
+     * interrupted -- was a *passing* release.
+     *
+     * `pc5_kimage64_validate` is the same function the host test runs against a battery of
+     * malformed headers, and it returns the name of the property that failed rather than a
+     * boolean: a refusal that can be quoted is a refusal that can be *expected*, which is
+     * what makes the negative controls in `tests/ovmf_boot.py` assert that corrupting the
+     * architecture field is refused as `kimage64-arch` and not merely refused. */
+    {
+        struct pc5_kimage64 kimage;
+        const char *refusal = pc5_kimage64_validate((const u8 *)buffer, size, physical,
+                                                    &kimage);
+
+        if (refusal)
+            die(refusal);
+        g_kernel_entry = kimage.entry_address;
+        serial_write("PC5-64-LOADER kernel-header version=");
+        serial_dec(kimage.header_version);
+        serial_write(" header=");
+        serial_dec(kimage.header_size);
+        serial_write(" image=");
+        serial_dec(kimage.image_size);
+        serial_write(" entry=");
+        serial_hex(kimage.entry_offset);
+        serial_write(" bss=");
+        serial_dec(kimage.bss_size);
+        serial_write(" arch=x86-64 machine=62 checksum=ok\n");
+    }
 }
 
 /* ------------------------------------------------------------ framebuffer */
@@ -751,7 +818,28 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
         die("no-boot-services");
     g_st = system_table;
     g_bs = system_table->boot_services;
-    g_bs->set_watchdog_timer(0, 0, 0, 0);
+
+    serial_write("PC5-64-LOADER firmware=");
+    serial_write_ascii16(g_st->firmware_vendor, 32);
+    serial_write(" revision=");
+    serial_hex(g_st->header.revision >> 16);   /* EFI_2_x major, as EDK II prints it */
+    serial_write(" table-rev=");
+    serial_hex(g_st->firmware_revision);
+    serial_write("\n");
+
+    /* A firmware watchdog that outlives the handover resets the machine mid-kernel
+     * and looks exactly like a hardware fault, so it is disarmed while boot
+     * services are still callable -- and whether firmware *agreed* is reported,
+     * not assumed: a refusal is a fact about this machine worth having in the log. */
+    efi_status watchdog = g_bs->set_watchdog_timer(0, 0, 0, 0);
+    serial_write("PC5-64-LOADER watchdog=");
+    if (watchdog == EFI_SUCCESS)
+        serial_write("disabled\n");
+    else {
+        serial_write("disable-refused=");
+        serial_hex(watchdog);
+        serial_write("\n");
+    }
 
     /* Everything PC5 allocates lives below the identity span, because version 2
      * maps exactly one region and the kernel will validate every pointer against
@@ -863,14 +951,16 @@ efi_status EFIAPI efi_main64(efi_handle image, struct efi_system_table *system_t
     serial_hex(cr4);
     serial_write(" long-mode=1\n");
     serial_write("PC5-64-LOADER-JUMP entry=");
-    serial_hex(boot_info->kernel_base);
+    serial_hex(g_kernel_entry);
     serial_write(" bootinfo=");
     serial_hex(boot_info_physical);
     serial_write(" stack=");
     serial_hex(boot_info->stack_top);
     serial_write("\n");
 
-    if (pc5_enter_kernel64(pt_physical, boot_info->kernel_base, boot_info) != 0)
+    /* The declared entry, never the base of the file: the first page of the image is the
+     * header, and jumping to byte zero would be executing it. */
+    if (pc5_enter_kernel64(pt_physical, g_kernel_entry, boot_info) != 0)
         die("cr3-not-installed");
     die("handoff-returned");
 }

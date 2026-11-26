@@ -17,7 +17,7 @@ python3 -m venv .venv
 export PATH="$PWD/.venv/bin:$PATH"
 ```
 
-That is the same provisioning `ci/build.yml` performs. `pip install` straight into a
+That is the same provisioning `.github/workflows/build.yml` performs. `pip install` straight into a
 distribution Python is refused under PEP 668, so the venv is not a preference here.
 
 The UEFI application in `boot/uefi/` uses the *same* toolchain: it is a PE32+
@@ -60,7 +60,7 @@ Two inputs are embedded in the kernel and therefore in the image hash:
 
 | Input | Default | Override |
 |---|---|---|
-| build id, printed as `PC5_BUILD_ID` and shown on screen | `git rev-parse --short HEAD` | `make BUILD_ID=…` |
+| build id, printed as `PC5_BUILD_ID` and shown on screen | `git rev-parse --short HEAD`, with `-dirty` appended when tracked files differ from it | `make BUILD_ID=…` |
 | build timestamp, printed as `PC5_BUILD_DATE` | current UTC time | `SOURCE_DATE_EPOCH=…` or `make BUILD_DATE=…` |
 
 Byte-identical output therefore needs **the same commit and the same timestamp**:
@@ -78,6 +78,27 @@ MBR, so nothing depends on file-system order or on when you build. This is cover
 `tests/test_tools.py::test_source_date_epoch_makes_builds_byte_identical`. `build/build-info.json` records the volume
 layout, the per-file SHA-256 values and the image SHA-256 that `make verify`
 re-checks.
+
+**Attribution, and why the ISO rebuilds when you commit.** The `BUILDINFO.TXT` inside
+the image carries `build:` (the label above), `commit:` (the full object id),
+`uefi-path:` and `esp-loader:` (the first 16 hex of the SHA-256 of the loader actually
+in the ESP).  `$(BUILD)/iso/BUILDINFO.TXT` is a prerequisite of `$(ISO)` and itself
+depends on `$(BUILD)/pc5.iso.stamp`, one file holding the three things the record
+quotes that the image's name does not: the boot mode, `git rev-parse HEAD`, and the
+SHA-256 of the loader embedded in the ESP.  The stamp's recipe runs on every
+invocation and rewrites the file only when one of those values actually differs, so
+committing, or switching `PC5_UEFI` in a directory that already holds both loaders,
+rebuilds the image rather than leaving one that names the tree before it — an ISO is a
+file, and it otherwise survives a `git commit`.  Timestamps alone cannot serve: in a
+shared `build/` directory a mode switch moves no mtime the record depends on.  The
+working tree's state is not stamped on purpose (that would rebuild on every `touch`);
+it is carried in the `build:` label instead, which is why an uncommitted artifact says
+`-dirty` and cannot be mistaken for a release of a commit.
+Both consumers re-check the claim instead of trusting it: `make ovmf-test` grades the
+record against the medium it booted, and `make metadata`
+(`tools/buildmeta.py --ovmf-evidence`) refuses to publish a boot verdict whose report
+names a different image SHA-256 than the image being described — exit 3, both digests
+quoted.
 
 The snippet above is run by the test suite for both UEFI paths, as two clean
 rebuilds each (`make clean iso`, not an incremental re-build), so the claim is a
@@ -148,6 +169,22 @@ was tested", not "no other byte of the ESP was untouched" — and `tests/boot_te
 has for a while made the equivalent comparison for `KERNEL.BIN` while booting in the
 emulator. Parsing the ESP the way firmware does is still `make ovmf-test`'s job.
 
+The ESP's kernel is checked twice now, by two mechanisms with different weaknesses, because
+the paragraph above describes the state before the kernel image carried a header.
+`tools/verify_iso.py` also reads `KERNEL64.BIN` out of the FAT directory and validates its own
+128-byte image header — declared length against the file, entry offset inside the image, the
+header's CRC, the payload checksum — **with no build record consulted at all**. That is a
+content statement, so it does not have the weakness the paragraph above names: corrupt
+`build/kernel64/KERNEL64.BIN`, re-run `make iso`, and the release is refused even though the
+build faithfully describes its own corruption. `tests/test_release_esp.py` pins that by
+flipping one byte of the payload — a corruption with no signature to notice, no length change
+and no digest mismatch against the file that shipped — and requiring the verifier to fail while
+naming `kimage64-checksum`. The format, its refusal vocabulary and its compatibility rules are
+[`docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`](engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md).
+`make kernel64` stamps the header, and the stamping recipe refuses to write one that would not
+validate; `make stubtest64` executes the release loader's own validation path in an emulated
+CPU over fifteen hand-corrupted images (`tests/test_boot64_stub.py::KernelImageHeaderTests`).
+
 **Packaging is not booting.** `make PC5_UEFI=64 iso verify` shows the image is
 structurally sound and contains the bytes `make stubtest64` executed; it does not show
 that TianoCore loads `BOOTX64.EFI` and reaches the kernel, and `make ovmf-test` reports
@@ -200,18 +237,18 @@ serial logs under `build/ovmf/`, and never commits firmware to the repository.
 
 ## Continuous integration and releases
 
-The pipeline is written and validated, but **not yet active on GitHub**: it lives
-in `ci/build.yml` because the GitHub App that authored it has repository admin
-rights but not the *workflows* permission, so GitHub refuses any push that
-creates `.github/workflows/build.yml`. Activating it is one command:
+The pipeline is **active**: `.github/workflows/build.yml` was installed on 2026-11-24 by a pure rename of
+`ci/build.yml`, after the repository owner granted the GitHub App the *Workflows:
+Read and write* permission. Until that grant, GitHub refused every push that
+created a file under `.github/workflows/`, and the pipeline sat in `ci/` as a
+definition that ran nowhere; `ci/README.md` keeps the five dated attempts and what
+was proven without it.
 
-```sh
-git mv ci/build.yml .github/workflows/build.yml
-git commit -m "ci: activate the build and release pipeline" && git push
-```
-
-`ci/README.md` records why, and what has been proven without it. The description
-below is what the pipeline does once it is in `.github/workflows/`.
+The distinction that matters for reading this page: an *installed* pipeline is not
+a *successful* one, and neither is a milestone closed. `M1b`'s acceptance is a tag
+that publishes `pc5.iso`, `pc5.iso.sha256` and `build-info.json`, with a published
+hash equal to a local rebuild at the same `SOURCE_DATE_EPOCH`. The description
+below is what the pipeline does on every push, pull request, dispatch and tag.
 
 | Trigger | What runs | What is published |
 |---|---|---|

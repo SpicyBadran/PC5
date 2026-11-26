@@ -56,6 +56,29 @@ struct idt_gate {
 static struct idt_gate g_idt[PC5_IDT_ENTRIES];
 static struct pc5_idt_ptr g_idtr;
 
+/* The stub the installer would have put at this vector, and the only thing a redirect may be
+ * restored to.  Written as a table lookup rather than as `pc5_vector_0 + vector * 8` or
+ * arithmetic on the label: the stubs are separate symbols with no ordering guarantee, and a
+ * restore that landed on the middle of a neighbouring stub would be reported as a working
+ * probe. */
+static void (*default_stub(u64 vector))(void)
+{
+    static void (*const stubs[32])(void) = {
+        pc5_vector_0,  pc5_vector_1,  pc5_vector_2,  pc5_vector_3,
+        pc5_vector_4,  pc5_vector_5,  pc5_vector_6,  pc5_vector_7,
+        pc5_vector_8,  pc5_vector_9,  pc5_vector_10, pc5_vector_11,
+        pc5_vector_12, pc5_vector_13, pc5_vector_14, pc5_vector_15,
+        pc5_vector_16, pc5_vector_17, pc5_vector_18, pc5_vector_19,
+        pc5_vector_20, pc5_vector_21, pc5_vector_22, pc5_vector_23,
+        pc5_vector_24, pc5_vector_25, pc5_vector_26, pc5_vector_27,
+        pc5_vector_28, pc5_vector_29, pc5_vector_30, pc5_vector_31,
+    };
+
+    if (vector >= 32u)
+        return 0;
+    return stubs[vector];
+}
+
 static void set_gate(u64 vector, void (*handler)(void))
 {
     u64 address = (u64)(unsigned long)handler;
@@ -71,28 +94,72 @@ static void set_gate(u64 vector, void (*handler)(void))
 
 void idt64_install(void)
 {
-    void (*const handlers[32])(void) = {
-        pc5_vector_0,  pc5_vector_1,  pc5_vector_2,  pc5_vector_3,
-        pc5_vector_4,  pc5_vector_5,  pc5_vector_6,  pc5_vector_7,
-        pc5_vector_8,  pc5_vector_9,  pc5_vector_10, pc5_vector_11,
-        pc5_vector_12, pc5_vector_13, pc5_vector_14, pc5_vector_15,
-        pc5_vector_16, pc5_vector_17, pc5_vector_18, pc5_vector_19,
-        pc5_vector_20, pc5_vector_21, pc5_vector_22, pc5_vector_23,
-        pc5_vector_24, pc5_vector_25, pc5_vector_26, pc5_vector_27,
-        pc5_vector_28, pc5_vector_29, pc5_vector_30, pc5_vector_31,
-    };
     u32 i;
 
     /* Entries 32..255 stay zeroed on purpose: not present, so a hardware interrupt
      * that cannot legitimately arrive yet raises #GP, which this table captures. A
      * present gate pointing at a made-up address would be far worse. */
     for (i = 0; i < 32u; i++)
-        set_gate(i, handlers[i]);
+        set_gate(i, default_stub(i));
 
     g_idtr.limit = (u16)(sizeof g_idt - 1u);
     g_idtr.base = (u64)(unsigned long)&g_idt[0];
 
     __asm__ volatile ("lidt %0" : : "m"(g_idtr));
+}
+
+/* Point one of the 32 installed gates somewhere else, or back at its stub.
+ *
+ * Only the offset moves: the selector, the present bit, the DPL and the IST field stay as
+ * they are, which is the entire reason this exists next to `idt64_set_ist` rather than as a
+ * re-run of `set_gate`.  A caller that rebuilt the gate would clear the IST field on its way
+ * through (that is what `set_gate` does, and rightly so for an install) and would then measure
+ * the switch it had just undone.  Passing 0 as the handler restores the stub for that vector.
+ *
+ * Deliberately unrestricted to vectors 0..31 and to present gates, and deliberately *not*
+ * self-checking that the address is code: this is a knob for the kernel's own measurement, and
+ * a "safe" version that silently accepted a bad address would be worse than one that fails
+ * loudly at the first delivery.
+ */
+int idt64_set_gate_target(u64 vector, u64 handler)
+{
+    u64 address = handler;
+
+    if (vector >= 32u)
+        return 0;
+    if ((g_idt[vector].type_attr & PC5_GATE_PRESENT) == 0)
+        return 0;
+    if (address == 0u)
+        address = (u64)(unsigned long)default_stub(vector);
+    g_idt[vector].offset_low = (u16)(address & 0xFFFFu);
+    g_idt[vector].offset_mid = (u16)((address >> 16) & 0xFFFFu);
+    g_idt[vector].offset_high = (u32)((address >> 32) & 0xFFFFFFFFu);
+    return 1;
+}
+
+/* Whether a gate names the stub the installer would have given it.  The stub symbols are
+ * private to this file, so a caller that wants to prove it put one back asks here instead of
+ * comparing addresses it cannot legitimately name. */
+int idt64_gate_uses_default_stub(u64 vector)
+{
+    void (*stub)(void);
+
+    if (vector >= 32u)
+        return 0;
+    stub = default_stub(vector);
+    return stub != 0 && idt64_gate_target(vector) == (u64)(unsigned long)stub;
+}
+
+/* The offset the gate names, reconstructed the way the CPU would. */
+u64 idt64_gate_target(u64 vector)
+{
+    const struct idt_gate *gate;
+
+    if (vector >= PC5_IDT_ENTRIES)
+        return 0u;
+    gate = &g_idt[vector];
+    return (u64)gate->offset_low | ((u64)gate->offset_mid << 16)
+           | ((u64)gate->offset_high << 32);
 }
 
 int idt64_set_ist(u64 vector, u64 ist)
@@ -128,6 +195,12 @@ static const char *vector_name(u64 vector)
     switch (vector) {
     case 0:  return "divide-error";
     case 1:  return "debug";
+    /* Only vector 2 is added below the SDM's fault names, and it is here because this kernel
+     * now *invites* that one: the firmware gate injects an NMI and reads this field back, so an
+     * `name=unnamed` on the line the gate quotes would read as "the reporter does not know what
+     * it caught".  Vectors 9, 15 and 20..31 are deliberately left unnamed rather than filled in
+     * from memory -- a name is a claim, and nothing here needs those claims. */
+    case 2:  return "non-maskable-interrupt";
     case 3:  return "breakpoint";
     case 4:  return "overflow";
     case 5:  return "bound-range";
@@ -148,7 +221,7 @@ static const char *vector_name(u64 vector)
     }
 }
 
-void idt64_report(u64 vector, u64 error_code, u64 rip, u64 cs, u64 rflags)
+void idt64_report(u64 vector, u64 error_code, u64 rip, u64 cs, u64 rflags, u64 rsp)
 {
     serial64_write("PC5-64-EXCEPTION vector=");
     serial64_dec(vector);
@@ -167,6 +240,15 @@ void idt64_report(u64 vector, u64 error_code, u64 rip, u64 cs, u64 rflags)
     serial64_hex(cs);
     serial64_write(" rflags=");
     serial64_hex(rflags);
+    /* Where the exception landed, and which IST slot the gate named to get it there.  Printed
+     * together because they are only meaningful together: `ist=0` and a stack pointer in the
+     * kernel's own stack are an ordinary delivery, `ist=2` with a stack pointer inside the page
+     * the TSS advertises for that slot is the whole claim of an interrupt stack, and either of
+     * those numbers alone can be printed by a kernel that did nothing.  The gate reads both. */
+    serial64_write(" rsp=");
+    serial64_hex(rsp);
+    serial64_write(" ist=");
+    serial64_dec(idt64_gate_ist(vector));
     serial64_write("\n");
 
     /* A page fault says which access failed in the error code; decoding it saves

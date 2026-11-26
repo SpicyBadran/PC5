@@ -172,7 +172,13 @@ PC5-LOG kernel_entry eip=0x10000                    <- the kernel, running
 PC5-BOOT-OK
 ```
 
-Four things this loader now does because real firmware required it, all found by
+`firmware=` is the one line the loader does not interpret: it prints
+`SystemTable->FirmwareVendor` verbatim, and the gate classifies what it read
+(ADR-026) — the implementation token `EDK II` is required, a distribution clause such as
+`Ubuntu distribution of EDK II` is recorded and never asserted, and anything else,
+including this project's own stub label, is refused with the raw string quoted.
+
+Five things this loader now does because real firmware required it, all found by
 running rather than reading:
 
 * the ESP carries `KERNEL.BIN`: EDK II has no ISO9660 driver, so on an El Torito
@@ -182,6 +188,9 @@ running rather than reading:
 * `GetMemoryMap` + `ExitBootServices` are one retry loop, because firmware moves
   the map when the console is written to, and `EFI_INVALID_PARAMETER` means "read
   it again", not "give up" (ADR-017);
+* the firmware identity line is printed even when it will fail the gate, and is
+  never rewritten to pass it: a refusal that quotes the firmware's own words is
+  evidence, and a loader that normalised them would be grading itself (ADR-026);
 * nothing is written to the console protocol once `ExitBootServices` has
   returned: the post-exit markers go to the 16550 only.
 

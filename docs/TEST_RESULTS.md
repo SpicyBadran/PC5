@@ -2978,3 +2978,1450 @@ NOT TESTED on this machine. The claim this section supports is that the page-tab
 hierarchy the loader installs covers the span it advertises and that the
 allocations it requests are satisfiable under the UEFI contract — nothing about
 real firmware.
+
+## 28. The 64-bit boot became a gate, and the release record became attributable
+
+**Run:** 2026-11-23, workspace at `d014a5b` (clean tree), QEMU 11.0.2 with the EDK II OVMF
+shipped in the same package, TCG only. **`make check` → `suite and all gates passed`, 1075
+tests OK (117 skipped).** The two firmware gates, run separately because they need an
+emulator:
+
+| Command | Result | Checks | Matrix rows |
+| --- | --- | --- | --- |
+| `make PC5_UEFI=64 ovmf-test` | **exit 0**, `PC5-OVMF-BOOT-OK` | 78 PASS, 0 FAIL, 2 NOT TESTED | 43 = 37 verified + 5 external + 1 not-tested |
+| `make ovmf-test` (32-bit) | **exit 0**, `PC5-OVMF-BOOT-OK` | 63 PASS, 0 FAIL, 1 NOT TESTED | 35 = 30 verified + 5 external |
+| `SOURCE_DATE_EPOCH=1700000000 make PC5_UEFI=64 iso verify` | `VALID`, `MANIFEST VALID`, exit 0 | ISO `1bae49a3284e92a8…`, 1806336 B | ESP `build/efi64-release.img` byte-identical to the copy inside the ISO |
+| `SOURCE_DATE_EPOCH=1700000000 make iso verify` | `VALID`, `MANIFEST VALID`, exit 0 | ISO `ed98325d72fdb867…`, 1601536 B | ESP `build/efi.img` byte-identical |
+| `make PC5_UEFI=64 metadata`, `make metadata` | exit 0, `checks=2 verdict=PASS` | `iso_structure` + `firmware_boot` | the firmware verdict is now part of the release record |
+
+**What changed, and what it caught.** `tests/ovmf_boot.py` had been grading every run with
+the 32-bit marker set; the 64-bit path speaks a different one (`PC5-64-LOADER-BANNER`,
+`PC5-64BIT-LONG-MODE-OK`, `PC5-64-DONE`, `PC5-64-LOADER-FAIL=<name>`), and grading a 64-bit
+log with 32-bit eyes means the *absence* of `PC5-BOOT-OK` — the failure condition — reads as
+nothing went wrong. The harness now holds two `Profile`s, each owning its banner, success and
+stop markers, failure pattern, boot-protocol version and log→stage mapping, and which one a
+run is graded with is **read from the medium**: both flavors are written to
+`build/pc5.iso`, both ESPs carry `EFI/BOOT/BOOTX64.EFI`, and the only medium-visible
+difference is `KERNEL.BIN` against `KERNEL64.BIN` inside the El Torito ESP. Three defects
+surfaced the moment the gate could see both paths, all in the artifacts rather than the logs:
+
+- a run booted `build/pc5.iso` while pointed at `build/efi64-release.img`, and the ISO still
+  held the 32-bit ESP — reported as four unrelated size failures. The gate now compares the
+  El Torito boot image against the file it was handed, byte for byte, and the *pairing* is
+  the failure that gets named;
+- the record inside the image (`BUILDINFO.TXT`) had drifted from the image: `uefi-path: 64`
+  over a 32-bit ESP, quoting the other mode's loader digest. `the ISO's build record names
+  the medium it describes` now re-derives that from the volume, and the build writes
+  `$(BUILD)/pc5.iso.stamp` (`mode=`, `commit=`, `loader=`) so a mode switch or a commit
+  regenerates the record instead of leaving a stale one — a timestamp-only dependency cannot
+  notice either, because in a shared `build/` directory no mtime the record depends on moves;
+- the negative controls inherited the same blindness: `missing kernel → E2` is 32-bit
+  vocabulary, so a 64-bit boot that *did* report `kernel-not-found` was graded as a
+  control that failed to fire. Expectations are per-profile now, and the small-memory control
+  stops on the profile's own markers.
+
+**Two NOT TESTED rows on the 64-bit leg, both stated with a reason.** The disk-style ESP
+partition path does not exist in this medium (structural). The corrupted-header control
+cannot be built, because `KERNEL64.BIN` carries no header to corrupt — it begins
+`cli; mov rbx, rdi`, the first instructions of `kernel64/start.S`. That row is reported
+rather than passed, and `the gate's kernel-header claims match the kernel image on the
+medium` fails the run if the claim and the medium ever disagree, so the control becomes
+enforced the moment the image format gains a header, with no flag left to remember. The
+32-bit leg keeps the enforced version (`… as E4`, PASS).
+
+**Attribution, which is what makes the numbers above belong to a commit.** `BUILDINFO.TXT`
+inside the ISO carries `build:` (with `-dirty` when tracked files differ from HEAD, so an
+artifact no commit produced cannot be read as one), `commit:` (full object id),
+`uefi-path:` and `esp-loader:`; `make metadata` embeds the firmware gate's verdict — profile,
+cold/warm stop markers, matrix row counts, ISO and ESP digests, firmware and QEMU versions,
+and the NOT TESTED row names — and refuses with exit 3, both digests quoted, when the report
+on disk describes a different image than the one being described. That refusal was observed on
+the real files while this was being written, not only in a test.
+
+**Evidence level.** Genuine TianoCore OVMF under TCG, the release artifact itself, cold and
+warm, with the negatives run against mutants built from it. Not physical hardware, not Sony
+firmware, not a PS5, and **not CI**: no GitHub Actions run backs any of this, and this
+milestone was not granted Actions activation. `tr=loaded` is not claimed — TR is still not
+loaded, `PC5-64-TSS … tr=not-loaded reason=ltr-unverifiable-here` is what the boots print,
+IST1/IST2 are allocated and validated but no exception has yet been shown to run on them, and
+`make emulator-probe` remains the record of what the emulator can and cannot establish. Full
+serial logs for all four boots, `summary.json`, and a `verification.sh` that re-derives 35
+assertions from them: `docs/evidence/2026-11-23-64bit-boot-gate/`.
+
+*Superseded on 2026-11-24, and left as written above:* §30 loaded TR, and §31 delivered a real
+double fault onto IST1. `tr=not-loaded reason=ltr-unverifiable-here` was what the boots printed at
+that commit; the paragraph describes the run it records, and the correction belongs to the later
+sections rather than to this one. Note the one sentence that has not changed meaning: *no* claim
+about an exception running on the IST stacks was made in §29 even though the fields were all
+present, which is the standard §31 was written to meet.
+
+
+## 29. The 64-bit kernel image became a format, and three gates enforce it
+
+**Run:** 2026-11-24, workspace at `1fdb24e` on `arena/5e36f38b-pc5`, Unicorn 2.1.4 from
+`requirements-harness.txt`, host GCC for the validator probe. §28 left one sentence open — the
+64-bit image "has no header to corrupt yet" — and this is the work that closes it, from the
+limitation entry `docs/KNOWN_LIMITATIONS.md` **UEFI boot path** and
+[`docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md`](engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md).
+
+**What was built.** `KERNEL64.BIN` now begins with a 128-byte header (`PC5K64IM`, format
+version 1) declaring the image's exact length, load address, entry offset, alignment
+requirements, architecture in two encodings, `.bss` size, a payload checksum, a header CRC, and
+zero-filled reserved fields. `kernel64/kimage64_head.c` puts it in a `.head` section that
+`kernel64/kernel64.ld` places first and pads to a page, so no instruction address moved;
+`tools/kimage64.py --stamp` fills in what only exists after the link, reading `__kernel_start`,
+`_start64`, `__bss_start` and `__bss_end` out of the ELF rather than being told any of them;
+`boot/uefi64/kimage64.c` validates all of it and returns a *named* refusal. The image grew
+204800 → 208896 bytes (`0x33000`) and the entry point from `0x100000` to `0x101000` — the
+header page, not a code change — so `0x32000` in §28's tables and in
+`docs/evidence/2026-11-23-64bit-boot-gate/` describes the pre-header artifact.
+
+| Command | Result |
+| --- | --- |
+| `python3 -m unittest tests.test_kimage64` | **OK, 21 tests** |
+| `TMPDIR=/tmp PATH=/tmp/pc5-venv/bin:$PATH make stubtest64` | **`64-BIT STUB FIRMWARE OK: 45/45 checks passed`** (was 41) |
+| `python3 -m unittest tests.test_boot64_stub.KernelImageHeaderTests` | **OK, 4 tests, 15.4 s** |
+| `python3 -m unittest tests.test_ovmf_gate_profiles tests.test_ovmf_harness` | **OK, 87 tests** (2 skipped: no QEMU/OVMF in this unit run) |
+| `python3 -m unittest tests.test_release_esp tests.test_tools tests.test_kimage64` | **OK, 41 tests** |
+| `SOURCE_DATE_EPOCH=1700000000 make PC5_UEFI=64 iso verify` | `VALID` (ISO `ae38b319d293ad52…`), `MANIFEST VALID`, and the new `KERNEL64.BIN in the ISO is a valid PC5 64-bit kernel image` row reports `v1, 208896 bytes, entry 0x1000, .bss 172032 bytes, payload checksum verified` |
+| `python3 tools/docs_check.py` | `DOCS OK: 80 Markdown files, 38 make targets` |
+
+**The unit layer.** `tests/test_kimage64.py` cross-pins `tools/kimage64.py`'s field table and
+the C struct against the header's `#define`s — names, offsets, widths and the total — compiles
+the loader's *real* validator for the host with GCC and drives all fifteen named refusals
+through it, requires the C verdict and the Python verdict to agree over a corpus of hand-built
+images, and walks a truncation ladder: 0, 8, 64, 120 bytes are all `kimage64-truncated`, 128 —
+a header that declares a 208896-byte image which is not there — is `kimage64-image-size`.
+
+**The emulator layer.** `make stubtest64` gained four checks over the loader's own serial
+lines, read as fields rather than substring-matched: `image` equals the image the stub was
+given and the address range the loader reports is exactly `base + image_size`; `entry` equals
+`JUMP entry - load base` (a header saying `0x1000` while the loader jumped at `+0` is the
+failure this exists for, and the first build drew it); `header_crc` is recomputed here with an
+independent FNV implementation; and `arch`/`machine` must agree with the host and with each
+other. `tests/test_boot64_stub.py::KernelImageHeaderTests` then boots the **release**
+`BOOTX64.EFI` — the same bytes, the same link, which is why `artifacts()` builds them rather
+than reusing the objects other cases hand-compile — fourteen times over `tools/kimage64.py`'s
+mutations, plus a truncation: each must abort with exactly the refusal that mutation earns,
+and must never reach `PC5-64-LOADER-JUMP`. `mutate_bytes` self-checks the mutation→refusal
+mapping, so a mutant that stays valid is a tool failure rather than a vacuous pass.
+
+**The firmware layer.** `tests/ovmf_boot.py` reads the kernel header kind from the bytes of the
+ESP it was handed, and its `HEADER_VOCABULARY_CHECK` now compares the *refusal vocabulary* the
+gate claims against what the artifact is: `bios8` ⟺ the 32-bit `PC5K` check, `kimage64` ⟺ the
+named `kimage64-*` set. Its x64 profile gained three good-path stages (header validated,
+declared length == file == FAT record, and the jump target equal to `load_base + entry_offset`
+as declared) and three mutant boots (`arch`, `image-size`, `checksum`) alongside the
+`magic`/bad-signature row, each of which additionally fails if the log contains `JUMP` or
+`BANNER`. `required_rows()` derives one control row per declared refusal, so adding a refusal
+without a control breaks the matrix instead of going unmeasured.
+
+**Two bugs in the tests, found by running them.** Both are the reason this section exists
+alongside the code.
+
+- `tests/test_ovmf_gate_profiles.py` grades the x64 stages against a **hand-written log
+  fixture**, not the artifact. The moment the stages began reading `kernel-header …` out of the
+  loader's serial line, three rows failed — `image_size` reported `None vs 208896` — because
+  the fixture still showed the pre-header log, where the jump went to `0x100000` and no header
+  line existed. The fixture is now a header-era log. The lesson is written into the file: a
+  fixture that describes an older artifact makes a *correct* implementation look broken, and
+  the only defence is that the same commit updates both.
+- `tests/test_release_esp.py::ReleaseAttributionRebuild` builds in a `git clone` of HEAD and
+  then copies **one** named file (`Makefile`) into it — so every case in that class graded the
+  committed tree while reporting the working one, and an uncommitted build change was invisible
+  to exactly the tests meant to catch it. With the header's new sources untracked, seven cases
+  failed in the clone for reasons that had nothing to do with their assertions. `_scratch()` now
+  installs everything `git status` reports, skips build output and the evidence directory, and
+  commits it with `git add -A` (a fixed list plus `commit --all` cannot see a *new* file, and
+  `git clone` hands out HEAD). Asserting "the Makefile arrived" on the copied list was itself
+  briefly a false green: the porcelain line's two status columns mean `stdout.strip()` shifts
+  the first path left by a character — `kefile` — so the parse is now explicit and the Makefile
+  is verified by comparing bytes.
+
+**Both firmware legs re-run at this HEAD, and both are green.**
+
+| Command | Result | Checks | Matrix rows |
+| --- | --- | --- | --- |
+| `make PC5_UEFI=64 ovmf-test` | **exit 0**, `PC5-OVMF-BOOT-OK` | 88 PASS, 0 FAIL, 1 NOT TESTED (89) | **49** = 43 + 6 kernel-header rows |
+| `make ovmf-test` (32-bit) | **exit 0**, `PC5-OVMF-BOOT-OK` | 63 PASS, 0 FAIL, 1 NOT TESTED (64) | 35 — byte-for-byte the previous run's counts |
+
+The 64-bit cold and warm logs each carry
+`PC5-64-LOADER kernel-header version=1 header=128 image=208896 entry=0x1000 bss=172032
+arch=x86-64 machine=62 checksum=ok` followed by `LOADER-JUMP entry=0x101000`, and the report's
+derived markers agree with the serial text in both boots (`kernel_header_image ==
+kernel_bytes_read == handoff_bytes == 208896`, `kernel_jump_entry == kernel_load_base +
+kernel_entry_declared`). Four mutant ISOs booted under the same firmware and were refused by
+name — `kimage64-magic`, `kimage64-arch`, `kimage64-image-size`, `kimage64-checksum` — each with
+`kernel_entry: false` in the report and no `JUMP`/`BANNER` in its log. The release ISO is
+`ae38b319d293ad52…` (`make PC5_UEFI=64 iso verify`'s own line), recorded in the report next to
+`commit: 1fdb24e519d59b49152011ecc52e5da4ad57dadd`; the 32-bit ISO is `c3714d7978010e39…`.
+`docs/evidence/2026-11-24-kernel-image-header/` holds the six new logs, both reports, both
+matrices and a `verification.sh` that re-derives all of it; `docs/evidence/2026-11-23-64bit-boot-gate/`
+(`OK (43 checks)`) stays as the record of the run *before* the header existed, and its
+`0x32000`/204800 numbers describe that artifact, not this one — which is why it is kept rather
+than corrected.
+
+
+## 30. TR is loaded: the selector was wrong for three milestones, and executing LTR found it
+
+**Run:** 2026-11-24, workspace on `arena/5e36f38b-pc5` at `898f708` with this work uncommitted,
+QEMU 11.0.2 + the EDK II OVMF from the same package, TCG only; Unicorn 2.1.4 for the stub.
+**Milestone 8, PR A.** §29 left `tr=not-loaded reason=ltr-unverifiable-here` standing, and this is
+the work that removes it — by loading the register, not by editing the marker.
+
+**What was wrong.** `PC5_TSS64_SELECTOR` was `0x28`. The TSS descriptor is 16 bytes, written as
+`g_gdt[4]` (low half) and `g_gdt[5]` (high half), and a GDT selector is the byte offset of the
+descriptor divided by 8 — which is exactly why the kernel's own code segment at `g_gdt[1]` is
+`0x08` and its data segment at `g_gdt[2]` is `0x10`. Slot 4 begins at byte 32, so the descriptor
+is named by `0x20`; `0x28` names the *high half*, whose low bits are `base[63:32]` and which
+therefore reads as a not-present, type-0 descriptor. The correct selector is `0x20`.
+
+**Why that had never been seen.** Nothing executed `ltr`. `pc5_tss64_build()` encodes the pair and
+decodes the same pair, so the builder agreed with itself; the IDT gates were deliberately *not*
+armed, because arming them requires TR to name the TSS and nothing had loaded it; and the gate
+asserted the unloaded TR that a never-attempted load necessarily produces. `docs/evidence/2026-11-22-tss-and-ist/ltr-measurement.md`
+had recorded the fault under the stub, ruled out six hypotheses about the *emulator*, and named the
+cause as undetermined — an erratum now follows that write-up, because the seventh hypothesis was in
+this repository's own header.
+
+**What was built.** `pc5_tss64_check_loaded()` reads the descriptor *through GDTR* (not out of the
+builder's array), checks present/S/DPL/type/L/G, decodes base and limit against the granted frame
+and `PC5_TSS64_SIZE - 1`, and then reads the TSS through that base: IST1, IST2, the I/O-map base,
+and RSP0..2. `pc5_tss64_arm()` brackets the instruction with it — refusing a descriptor that is
+already busy *before* the load (a real CPU raises #TS for that, and the kernel now says so instead
+of faulting inside the setup of the thing meant to catch faults) — executes `ltr %ax` and `str %ax`,
+requires STR's readback to equal the selector, and re-runs the checks expecting the busy transition
+it performs in memory. `report_tss()` arms `#DF` → IST1 and `NMI` → IST2 **if and only if**
+`tr_armed`, and the pairing rule that used to read "not loaded, so not armed" is now a two-way
+equivalence in both the stub and the firmware gate.
+
+| Command | Result |
+| --- | --- |
+| `make stubtest64` | **`49/49 checks passed`** (was 45; one check replaced by five) |
+| `python3 -m unittest tests.test_tss64` | **OK, 14 tests** — 3 new: the activation battery, the selector/`nm`-free layout assertion, and the `tr_armed`-before-install rule |
+| `tests/test_tss64.py::Tss64ActivationMutationTests` | 4 mutants of the new checks, each caught: GDTR bounds widened, `available` redefined to `busy`, the I/O-map read trusted, and the descriptor read from the builder's array instead of GDTR's |
+| `python3 -m unittest tests.test_ovmf_gate_profiles tests.test_ovmf_harness tests.test_idt64 tests.test_kernel64 tests.test_tss64` | **OK, 187 tests** (67 skipped without QEMU) |
+| `make PC5_UEFI=64 iso` + a hand-run cold boot under TianoCore | `PC5-64-TSS status=ok … ist-df=1 ist-nmi=2 tr=loaded str=0x20 desc=0x1000/103 busy=available-to-busy iomap=104`, no `PC5-64-EXCEPTION`, `PC5-64BIT-LONG-MODE-OK`, `PC5-64-DONE` |
+
+**The distinction this run can make, and the one it cannot.** `busy=available-to-busy` is a write
+into the GDT that only a CPU performing a load makes, so the four fields above together are evidence
+about the machine rather than about the log — and they are read back through GDTR and through the
+descriptor, so a kernel that printed the right words without loading anything fails at least three
+of the five new gate rows (`tests/test_ovmf_gate_profiles.py::test_a_log_that_only_claims_tr_is_loaded_fails_the_row`
+asserts exactly that by deleting the readbacks from a good log). What is **not** yet shown is the
+consequence that matters most: that a `#DF` or an NMI is *delivered* on those stacks. The gates are
+now armed and the TSS is live, which is the precondition; the delivery evidence is PR B and PR C.
+`make check`, both firmware gates, and the Milestone 8 evidence directory are owed a run at the
+commit that lands them, and none of this is claimed until they are green.
+
+
+## 31. A double fault, taken on purpose, lands on the IST stack — and finds the second TSS bug
+
+**Run:** 2026-11-24, workspace on `arena/5e36f38b-pc5`, QEMU 11.0.2 with the EDK II OVMF from the
+same package, TCG only; Unicorn 2.1.4 for the stub.  **Milestone 8, PR B.**  §30 made the TSS live;
+this is the measurement the TSS exists to make, and it did not go as designed.
+
+**What was built.** `report_tss_ist_probe()` in `kernel64/main.c`: it checks the two preconditions
+it can check (the #DF gate's IST field is 1; the IST1 the *loaded TSS* names, read back through
+the descriptor, is the page the pool granted), stores a sentinel 256 bytes below that page top,
+repoints the IDT's #DF gate at a returning handler in `kernel64/idt64.S`, records its own RSP and
+resume address, executes `int $8`, and then reads back what the handler found.  `pc5_tss64_probe_verdict()` in `kernel64/tss64.c` judges the recorded numbers by seven named
+refusals.  The handler records exactly one number — the RSP it was entered with — and the frame is
+dumped afterwards from memory by the C side, because which quadword holds the saved RIP depends on
+whether the CPU pushed an error code and on whether it saved SS and RSP.
+
+**The first boot refused, and the refusal was the point.** `int $8` under TianoCore raised a
+not-present, supervisor, write `#PF` at the address of the `int` itself.  The sentinel store to the
+same page had just succeeded, so the *page* was fine and the *field* was not: the kernel wrote IST1
+at offset 32 and IST2 at 40, while a 64-bit CPU reads IST1 at **36** (SDM vol. 3A figure 7-2 — the
+reserved quadword at 28 is real, because the three RSP slots start at offset 4 under a four-byte
+link field).  What the CPU had been handed was therefore the high half of IST1 welded to the low
+half of IST2 — for those two frames, `0x0000400000000000`, an address no page table maps.  The
+I/O-map base was a related half-error: written and read as a dword at 100 rather than the word at
+102, which agreed with itself and disagreed with the architecture.
+
+**Three files, one shared mistake.** The builder wrote at 32, `pc5_tss64_check_loaded` read back
+through the same offset helper, and `tests/test_tss64.py` carried `IST1_OFFSET = 32` with the
+comment "the AMD64 TSS: IST1 is the first field after RSP0..2 + RSV".  Every check agreed, because
+every check asked the kernel what the kernel thought.  This is the same failure mode as §30's
+selector, one layer down — and the reason the file now states the layout as a field table
+transcribed from the SDM, with each field's width, instead of deriving it from the header.
+
+**The second thing that was wrong is worse.** An earlier revision of the handler copied the frame's
+RIP and RFLAGS out at fixed offsets.  On the soft-interrupt path the word at +16 is not the RIP and
+the word at +24 is the *saved stack pointer*, so the probe installed `0xe1f9c80` as RFLAGS and
+reported `frame-rip=0x38` — a code selector, in exactly the shape that would be believed.  The
+machine survived because the bits happened to be ignorable.  The handler no longer reads the frame
+at all; the flags are corrected in place (`pushfq; andq $~0x400, (%rsp); popfq`) so DF is cleared
+without any claim about layout, and the frame is read back from memory afterwards, where a wrong
+offset cannot corrupt anything.
+
+| Command | Result |
+| --- | --- |
+| cold boot of `make PC5_UEFI=64 iso` under TianoCore | `PC5-64-TSS-DF status=ok reason=ok rsp=0x2fd8 rsp-before=0xe1f9c70 ist1=0x3000 resume=0x10245c gate-ist=1 df=0 frame=0x10245c,0x38,0x2,0xe1f9c70,0x30 stack-intact=1 gate-restored=1` |
+| `make stubtest64` | **`50/50 checks passed`** (was 49; the new check is the emulator-limitation tripwire below) |
+| `python3 -m unittest tests.test_tss64` (venv) | **OK, 20 tests** — +6: the probe verdict battery (7 refusals, each reached by damaging one field), the frame-scan test, the "verdict writes no state" test, the SDM field-table decode, and two mutants |
+| `python3 -m unittest tests.test_unicorn_soft_int` (venv) | **OK, 3 tests** |
+| `python3 -m unittest tests.test_ovmf_gate_profiles` (venv) | **OK, 51 tests** — +2: the five ways the probe line can be printed and still be wrong, and the decline-vs-refusal rule |
+| `make PC5_UEFI=64 ovmf-test`, `make ovmf-test` | recorded in the Milestone 8 evidence directory at the commit that lands them |
+
+**The two refusals worth reading closely.** `probe-stack-unchanged`: if the CPU ignores the gate's
+IST field, the frame lands on the stack that just overflowed and *every other field on the line
+still reads `ok`* — that row is the reason the other rows are allowed to mean anything.
+`probe-frame-rip-missing`: a stack pointer is a number, but a frame containing the address the trap
+was taken at is a thing a CPU did.  That check is what stops this being a log line about a
+measurement instead of a measurement.
+
+**`tests/test_unicorn_soft_int.py`, and why the emulator gets its own test.** The probe cannot run
+in the stub: Unicorn does not deliver a guest software interrupt to a guest IDT at all, so the run
+faults at the `int`.  That is a claim about the *tool*, and §30 is the record of what an untested
+claim about a tool costs, so the file tests it: it boots the shipped image with the harness's stop
+markers cleared, finds the single `cd 08` in the built file (the count is itself asserted), and
+requires the emulator's fault to land on that instruction — so the refusal is demonstrably in the
+interrupt path and not in the TSS, the GDT, or a selector.  When Unicorn learns this, that test
+fails, the stub gains a real IST measurement, and the stub check that says "unreachable here, by
+measurement" has to become an assertion on the probe's fields.
+
+**Not claimed.** An NMI has been delivered on IST2: QMP's `inject-nmi` is PR C, and nothing here
+shows anything about vector 2 except that its gate names slot 2 and the TSS field behind it reads
+back correctly at the architectural offset.  A `#DF` arriving spontaneously because a real fault
+could not be delivered is also not claimed — the probe invited the fault; a real double fault
+pushes an error code first, which is exactly the layout difference this design refuses to depend
+on.  And no claim here is backed by CI: none is granted, and none is asserted.
+
+
+## 32. An NMI from outside the guest, delivered on the stack the TSS names for slot 2
+
+**Run:** 2026-11-24, workspace on `arena/5e36f38b-pc5`, QEMU 11.0.2 with the EDK II OVMF from the
+same package, TCG only.  **Milestone 8, PR C.**  §31 invited a double fault; the claim still open
+was the one nobody can invite on purpose — that a vector arriving from *outside* also lands on its
+interrupt stack.
+
+**What was built.** `run_qemu(..., inject_nmi=True)` starts QEMU with `-qmp
+unix:<serial>.qmp,server=on,wait=off`, and once the boot has settled it completes the QMP handshake
+(`qmp_capabilities` — QMP refuses everything before it), sends `inject-nmi`, and waits for the
+guest to answer.  Only the 64-bit profile asks: the 32-bit kernel has no TSS, and injecting into it
+would just move a halt earlier.  `idt64_report` gained two fields, `rsp=` (the stack pointer the
+handler woke up on, captured by the trampoline *before* it aligns its own stack) and `ist=` (the
+IST field of the live gate that delivered it), and vector 2 gained its name.
+
+| Cold boot, after `PC5-64-DONE` | |
+| --- | --- |
+| `PC5-64-EXCEPTION vector=2 name=non-maskable-interrupt error=none rip=… cs=0x8 rflags=0x10046 rsp=0x3fc8 ist=2` | the NMI the hypervisor raised |
+| `PC5-64-TSS … ist2=0x4000 ist-df=1 ist-nmi=2 tr=loaded str=0x20 … iomap=104` | the TSS the same boot installed |
+| `rsp=0x3fc8` inside `[0x3000, 0x4000)` | `ist=2` naming the slot that page belongs to |
+
+**The row and its refusals.** `the NMI injected from outside arrived on the IST2 stack` (asked of
+both boots, so two of the report's 103 per-boot check rows; one of the 40 per-stage matrix rows,
+which the gate publishes for the cold boot only — §33).  It refuses, in this order: the harness never asked, QEMU
+refused the command, the guest never reported vector 2, the report arrived *before* the boot marker,
+`rsp` outside the IST2 page, and the gate's `ist` not equal to 2.  The ordering is deliberate — a
+kernel must not be blamed for an event that was never raised, which is why `accepted` is read out of
+QEMU's own reply and stored in the report (`report.data.cold.nmi`) rather than inferred from the
+presence of a log line.  `tests/test_ovmf_gate_profiles.py` drives all six.
+
+**Two things that were wrong in the harness, found by looking at its own output.** The first run
+recorded `exception_lines: 0` in a report whose serial log contained two exception lines.  The count
+had been taken over "the drain buffer from the index where the injection finished", and the guest
+answered *during* the QMP exchange, before that index was captured — so the window was empty and the
+run also waited out its full 20 s for lines it already had.  The field is now computed from the log
+the run produced, and the wait is on the reporter's last word (`PC5-64-EXCEPTION halted`) rather
+than on a first-match heuristic, so a truncated report cannot be mistaken for a delivered NMI.  The
+second was that `name=` read `unnamed` for the one vector this gate injects: a name table built from
+the SDM's *fault* list has no entry for an *interrupt*, and "the reporter does not know what it
+caught" is what a reader would take from it.
+
+| Command | Result |
+| --- | --- |
+| `make PC5_UEFI=64 ovmf-test` | **exit 0, 102 PASS / 0 FAIL / 1 NOT TESTED**, matrix **56 rows** (49 before §30; +5 TSS readback rows, the `#DF` delivery row and the NMI delivery row, all published under the cold boot) — both NMI rows pass, cold and warm, in the report's per-boot list |
+| `make stubtest64` | **`50/50 checks passed`** — the probe and the NMI are not reachable in the stub, and both absences are checked statements with named causes (§31) |
+| `python3 -m unittest tests.test_ovmf_gate_profiles tests.test_ovmf_harness tests.test_idt64 tests.test_tss64 tests.test_kernel64 tests.test_unicorn_soft_int` | **OK, 199 tests**, no skips with the harness venv on `PATH` |
+
+**Not claimed.** That an NMI arriving *during* the boot, or on a machine with interrupts enabled, or
+while a different stack is in use, behaves the same way: the injection lands after the boot has
+settled, with IF clear and one CPU, which is the environment this kernel actually runs in — and the
+`rsp`/`ist` agreement is about delivery, not about nesting or about the `IRETQ` that a returning NMI
+handler would need (this one halts, deliberately).  No claim is made about hardware: QEMU's TCG is
+not a CPU, and `in-window` agreement between an injected NMI and an invited `#DF` on two different
+emulators of the same architecture (§31 in Unicorn is *not* reachable, and is measured as such) is
+evidence about the ISA, not about a PS5.
+
+## 33. The evidence page for §30–§32, and the three numbers on it that were wrong
+
+**Run:** 2026-11-24, same tree as §32 (`50ebe7d`) plus documentation.  **Milestone 8, PR D.**  §30,
+§31 and §32 each ended with a claim about a boot; none of them could be re-checked by a reader, which
+is the job of `docs/evidence/2026-11-24-tss-delivery/`.  The citation had existed since §31 — in the
+sentence in `kernel64/tss64.h` that tells a reader where the delivery was measured — pointing at a
+directory that then held one script and no artifacts.
+
+**What the page holds.** The two 64-bit serial logs, both reports, both matrices, the stub gate's
+report, the Unicorn refusal capture and the command record; plus `verification.sh`, which
+re-derives the page's own claims from those files:
+
+```
+$ bash docs/evidence/2026-11-24-tss-delivery/verification.sh
+…
+OK (114 checks re-derived from 16 files in this directory)
+```
+
+The script was then pointed at a scratch copy with one field of the serial logs edited — the NMI's
+`rsp=0x3fc8` rewritten to `0x2fd8`, the `#DF`'s address, which is a number from the same log and so
+the least suspicious value available.  It exited 1 with seven failures, six of them the claim itself
+on both boots, and one of them the gate's parse disagreeing with the text it had just been edited in.
+A page that could not fail would not have been worth writing.
+
+It is not a summary of the logs.  It recomputes the windows — `0x2fd8 ∈ [0x2000, 0x3000)` for the
+invited `#DF` and `0x3fc8 ∈ [0x3000, 0x4000)` for the injected NMI, from `ist1`/`ist2` in the TSS
+line rather than from the gate's parse of them — asserts the two pages are *different*, re-derives
+the descriptor limit and the GDT bound from `sgdt`'s readback, and compares the gate's parsed values
+(`probe_rsp`, `ist2_top`, `nmi_rsp`, `nmi_ist`, `tr_selector`, `tr_busy`) against values computed
+from the raw text, so a gate that parses its own log wrongly fails the page even when it reports
+`PASS`.  The absences are checked the same way: `tr=loaded` present in the stub serial, the probe
+verdict and every `PC5-64-EXCEPTION` absent from it, and the single `cd 08` in the shipped image
+agreeing with the address Unicorn blamed.
+
+**Three numbers I got wrong while writing it, and what each one means.**
+
+| Wrong | How | The actual fact |
+| --- | --- | --- |
+| "the serial logs of the 64-bit boot", copied from `build/ovmf-serial/` | the copy was byte-identical to the 32-bit log; `grep` for `PC5-64-TSS status` returned nothing and the two files were the same length, which is what made it look plausible rather than alarming | the gate writes its serials to `$(BUILD)/ovmf-serial` for whichever profile it is running, so the 32-bit run that followed overwrote the 64-bit evidence.  The rerun went to `BUILD=/tmp/m8iso` and the page now files both profiles, with a check that the 32-bit log contains no `PC5-64-` marker |
+| "14 of the 56 matrix rows are the delivery rows, seven per boot" | counted from the report's `checks` list and then written as if it described the matrix | the matrix is keyed by *requirement*: 40 cold rows, **one** warm row repeating them, ten negative runs, five rows owned by other gates.  Seven of the 40 are the delivery rows; the warm boot's seven live in `checks`.  §32's closing table said the same thing wrongly and is corrected above |
+| "`report.data.cold.nmi.exception_lines` should read 2" | asserted from the fix, not from a run | §32's boot happened *before* the drain-window fix, so that run's report legitimately says `0`.  Only the rerun behind this page has the `2` — which is why `make PC5_UEFI=64 ovmf-test` was run again here rather than the earlier log being quoted |
+
+**One hazard found while naming the `cs=` field.** The kernel runs with a `CS` its own GDT does not
+describe until the first exception delivery replaces it: the frame the `#DF` probe examined saves
+`cs=0x38` (the loader's table, 48 bytes now installed, no slot 7), while the NMI's frame — taken
+*after* that `iretq` — saves `cs=0x8`.  Legal in 64-bit mode, where CS base and limit are ignored,
+and not what an exception handler should be relied on to fix by accident.  Recorded in
+`docs/KNOWN_LIMITATIONS.md` with both halves of the measurement; the fix is a far jump through the
+new table at the end of `pc5_tss64_install()`, which is a change to the handover's control flow and
+is deliberately not smuggled into the TSS work.
+
+**Gates, on the tree this page describes.**
+
+| Command | Result |
+| --- | --- |
+| `make check` | **`make check: suite and all gates passed`** — 1143 unit tests in 581 s, then `psm`, docs, citations, presentation, brand |
+| `make citations-check` | **`CITATIONS OK: 263 commit reference(s) resolve across 11 documents`** — this passed only once the directory §31 cited actually existed with artifacts in it |
+| `python3 tools/docs_check.py` | **DOCS OK: 82 Markdown files**, 38 make targets, links, anchors and commands resolve |
+| `make PC5_UEFI=64 ovmf-test` (rerun, `BUILD=/tmp/m8iso`) | exit 0 · 102 PASS / 0 FAIL / 1 NOT TESTED · both NMI rows pass with `name=non-maskable-interrupt` and `exception_lines=2` |
+| `make ovmf-test` (32-bit) | exit 0 · 63 PASS / 0 FAIL / 1 NOT TESTED, 35 matrix rows — the other path is unchanged, and filed as evidence of that rather than asserted |
+
+**Not claimed.** The page is a re-derivation from artifacts, not an independent measurement: if the
+logs themselves were fabricated, `verification.sh` would happily verify the fabrication — its
+cross-checks are between the gate's parse and the kernel's text, which is two sources rather than
+two *independent* tools.  Nothing about hardware, Secure Boot, NMI nesting, `IRETQ`, or CI is
+claimed here or anywhere in §30–§33.
+
+## 34. The kernel re-reads its own image header, and finds a harness that had been lying about its size
+
+**Run:** 2026-11-24, workspace on `arena/5e36f38b-pc5`, QEMU 11.0.2 with the EDK II OVMF from the
+same package (TCG), Unicorn 2.1.4 for the stub.  **Milestone 8, PR E.**  §25 gave the kernel image a
+header and §29 made three gates enforce it — all three of them *before* the jump.  What nobody had
+was the other half: the running kernel had no idea what its own image declared, and the size it was
+handed in the boot info was compared with the memory map but never with the file it came from.
+
+**What was built.** `boot/uefi64/kimage64.c`'s rules are now two entry points:
+`pc5_kimage64_validate_header()` decides everything about the *description*, and
+`pc5_kimage64_validate()` is that plus the payload sum, last, over a header that has already been
+bounded.  The reason strings and their order are unchanged — a mutant that corrupts field X still
+has to be refused *for X*, which is what the whole corpus in `tests/test_kimage64.py` asserts.  The
+kernel links the same object the loader links (`$(BUILD)/kernel64/kimage64.o` now appears in the
+`pc5-64.elf` link line as well as the `BOOTX64.EFI` one, and
+`test_the_kernel_and_the_loader_link_the_same_validator_object` reads both lines out of the
+Makefile), because a kernel carrying its own copy of the rules would make any agreement between
+them meaningless.  Then `validate_image_self()` in `kernel64/main.c`:
+
+```
+PC5-64-IMAGE base=0x100000 size=0x34000 range=ok
+PC5-64-KIMAGE status=ok reason=ok image=0x34000 handover=0x34000 bss=0x2a000 entry=0x1000 crc=ok
+```
+
+Two numbers on one line, from two places: `image=` is what the header in the kernel's own memory
+says and `handover=` is what the loader said.  The firmware gate compares both with the length of
+the file it built (`ctx["expected_bytes"]`, the artifact, not the log), which is why the row is not
+the kernel grading its own homework.
+
+**What it costs to re-verify a running kernel, and where that stops.** `checksum` covers the whole
+image, `.bss` travels inside the image, and `_start64` clears `.bss` and takes its stack out of it
+before `kmain` runs — so by the time any C executes, part of the checksummed range is in use as a
+stack.  A runtime payload sum would measure the ordering of the boot code, not the integrity of the
+load, and it would fail.  So `validate_header` is the honest half, and the boundary is *tested*
+rather than explained: `tests/test_kimage64.py` feeds a mutated body to both entry points and
+requires the full validator to refuse it and the header half to accept it;
+`tests/test_kernel64.py` boots a kernel with a byte of `.head`'s padding edited in loaded memory and
+requires the boot to **succeed**.  Closing the gap properly is a version-2 header with a second
+digest over a defined prefix — a format change, not a bug fix, and it is recorded that way in
+`docs/KNOWN_LIMITATIONS.md` and in the design document.
+
+The same reasoning bounds the *stacks* the delivery lands on: each IST window is one 4 KiB page with
+its top at the page boundary, the measured layout (`tss=0x1000 ist1=0x3000 ist2=0x4000`) puts the
+TSS's page immediately below IST1's, and neither has a guard page or a canary.  The rows in this
+section assert **which page** the CPU arrived on, which is the claim; they do not and cannot bound
+**how deep a fault that page can absorb**, and that asymmetry is recorded in `KNOWN_LIMITATIONS.md`
+rather than left for the next reader to discover.
+
+**The finding this surfaced first was in the tests.** `tests/kernel64_machine.py` had been building
+every synthetic handover with `kernel_size=0xA000` — against an image of 212,992 bytes — and the
+kernel accepted it, because nothing compared the two.  The first build of the self-check turned up
+**42 failing tests in `tests/test_kernel64.py`**, all of them asserting `PC5-64-DONE` on a boot
+info that contradicted the bytes being booted.  That is the exact number of lies, not a fluke: the
+default is now the length of the image actually loaded, and the tests that mean to understate it
+say so explicitly (`test_a_handover_that_understates_the_image_is_refused_by_name`, refused by name
+as `kimage64-image-size` — from the *kernel*, where before it was unreachable).
+
+**A test name that promised more than the code delivered.** `test_kernel_size_that_does_not_match_the_image_is_refused`
+fed in `4 << 30` and expected `bootinfo-kernel-size` — an implausibility check, not a match with
+the image, which it had never performed.  It is now
+`test_kernel_size_that_is_implausible_is_refused_by_the_range_check`, and the name it used to have is
+what the new case does.  A test whose title describes a comparison that does not exist is worse than
+a missing test, because it stops anyone writing the real one.
+
+**The emulator half.** The stub gate gained two checks, taking it from 50 to 52, and one of them is
+the cross-line comparison the whole change is about — the loader's `kernel at=…bytes=`, the loader's
+`kernel-header image=`, and the kernel's `image=`/`handover=` all reduced to one integer set
+({212992}), which is the same style of row §29 established for the loader's own four lines.
+
+| Command | Result |
+| --- | --- |
+| `make PC5_UEFI=64 ovmf-test` | exit 0 · **104 PASS / 0 FAIL / 1 NOT TESTED**, matrix **57 rows** (was 56: `the kernel re-read its own image header after the jump`, cold and warm both passing) |
+| `make stubtest64` | **`52/52 checks passed`** (was 50; the 32-bit stub level stayed at 22/22, and both legs ran in the same gate) |
+| `python3 -m unittest tests.test_kernel64` | **OK, 75 tests** (71 before; the four new ones are the two-size report, the understated handover, the in-memory CRC corruption, and the boundary case) |
+| `python3 -m unittest tests.test_kimage64` | **OK, 25 tests** — the header half driven over the same mutant corpus as the full validator |
+| `python3 -m unittest tests.test_kernel64 tests.test_kimage64 tests.test_ovmf_gate_profiles tests.test_ovmf_harness tests.test_apic64_kernel` | **OK, 198 tests** — the refusal corpus for both halves of the validator, six new refusals on the gate's own row, and the APIC module brought back through the honest handover |
+| `make check` | **`make check: suite and all gates passed`** — 1152 tests in 630 s, then `unit` (165 C checks), `psm`, docs, citations, presentation, brand |
+
+Every row above was measured against `build/kernel64/KERNEL64.BIN` at
+`sha256 e390f7e394098401…`, which is the digest the gate report records for the boot it booted
+(`data.environment.kernel_file.sha256`) — the habit §33 established, because "the tests pass" and
+"the tests pass against the artifact whose behaviour you are describing" are different claims.  One
+gap in that habit showed up while writing this section: the 104/57 run first measured here came
+from a kernel one edit older, and only the digest comparison in the report caught it.
+
+| `make ovmf-test` (32-bit) | exit 0 · **63 PASS / 0 FAIL / 1 NOT TESTED**, matrix **35 rows** — byte-for-byte the same verdict as before this change, so nothing the other path claims moved |
+
+**Not claimed.** This is integrity, not authenticity: a rewrite that re-stamps both digests is
+still accepted, exactly as §29 said of the loader's half, and `docs/SECURITY.md` keeps the
+cryptographic boundary open.  Nothing here verifies the bytes *between* the header and the end of the
+image after the jump — see the boundary above, which is the honest shape of the claim.  No hardware,
+no Secure Boot, no PS5, and no CI run: the numbers above came from boots in this workspace.
+## 35. Adversarial review of PR #49: two mutants refused, one survived, and a .bss declaration nobody compares
+
+The review of #49 asked for something narrower than another milestone: take each Critical/High
+claim, and try to break it.  The method is the one this repository already uses against itself —
+one surgical *leniency* edit into the shipped C, run through the batteries that are supposed to
+notice, then reverted.  Every probe ran in a detached worktree at `/tmp/pc5-adv`; the reviewed tree
+was not edited to make a measurement pass, and `git diff --stat` was clean when the probing ended.
+
+| Probe | The edit | Verdict |
+| --- | --- | --- |
+| TSS descriptor limit | `limit != PC5_TSS64_SIZE - 1` relaxed to accept any limit of half the size or more | **refused** by the activation battery |
+| I/O-map base field | `tss_word(...) != PC5_TSS64_SIZE` relaxed to `>= 100` | **refused** by the activation battery |
+| Descriptor type after `ltr` | the tolerated-after-load type widened from `== PC5_DESC_TYPE_TSS_AVAIL` to `<= PC5_DESC_TYPE_TSS_AVAIL` | **survived every check in `tests/test_tss64.py`** until the control below was added |
+
+The third row is the one worth the trip.  The checker tolerates `available` after the load for a
+specific, defensible reason: TCG does not mark a TSS descriptor busy, so "the host did not set the
+bit" and "the host refused to load the segment" are different facts and the kernel should not
+conflate them.  Writing that tolerance as `type <= AVAIL` reads like a slip of one character and
+empties the check: a descriptor whose type byte had become 3 — a system segment that is not a TSS
+at all — then satisfies "the TSS is loaded", the kernel prints `PC5-64-TSS status=ok`, and the only
+thing standing between that and a shipped milestone was a gate that reads the printed
+`busy=available-to-busy` string, which needs QEMU or the stub to exist.  Nothing pinned the set.
+
+Closing it changed no code, only tests: `tests/test_tss64.py` gains a control that writes type 3
+into the descriptor after the hand-installed load and requires the refusal
+`check-descriptor-type-after`, and `Tss64ActivationMutationTests` gains `after-load-type-widened`,
+which compiles the widening itself and fails if the battery passes it.  The two together are what
+make the row above read "refused" rather than "untested".  Because no kernel source moved,
+`build/kernel64/KERNEL64.BIN` is still `e390f7e394098401…` and 212992 bytes, so §30–§34 and the
+evidence page are unaffected by construction — re-running `verification.sh` here still returns
+`OK (114 checks re-derived from 16 files in this directory)`, and `tests.test_tss64` is 22 tests
+where it was 20 — 21 for the control and its mutant, 22 for the sweep's counterfactual.
+
+**A `.bss` declaration that is bounded on one side only.** The same review asked whether the header
+rules could be made to certify an impossible image.  One way to try is to fabricate a header whose
+declared `.bss` *is* the file — set `bss_size` to `image_size`, then re-stamp `checksum` and
+`header_crc` so the image is self-consistent (nothing here is a tamper claim; a rewrite that
+re-stamps both digests is accepted by design, as §29 and §34 both say).  Measured at this commit:
+
+- `tools/kimage64.py`'s own `verify()` returns **ok** for it, and the reject table has no row for
+  it — `MUTATIONS["bss-size"]` tests only the overshoot (`len + 4096`), which is refused;
+- the running kernel agrees: `PC5-64-KIMAGE status=ok reason=ok image=0x34000 handover=0x34000
+  bss=0x34000 entry=0x1000 crc=ok`, and the boot reaches `PC5-64-DONE`;
+- `grep bss tests/ovmf_boot.py tests/boot64_stubtest.py` returns **nothing**: both gates parse the
+  line and neither compares the field, so `bss=` is recorded by the kernel and read by no judge.
+
+So the rules say `.bss` may not be *larger* than the file and say nothing about it being *smaller*
+than the space the file actually has: the declaration above puts the entry point at `0x1000` inside
+a region the image calls zero-fill, and three consumers — tool, kernel, gates — all decline to
+notice.  It is harmless *today* for a reason that is itself the finding: `_start64` zeroes the
+linker's `.bss` and adopts its stack from the link layout, not from `bss_size`, so the declared
+number is currently information, and bad information that nobody acts on.  It stops being harmless
+at exactly the moment v2 makes the boot read the header — which is why this belongs in
+`docs/engineering/KERNEL-IMAGE64-HEADER-DESIGN-v1.md` and not in a hot fix.  The tightening is one
+comparison in the shared header validator (`entry_offset < image_size - bss_size`), one row in the
+reject table, and the same rule reached by both halves of the validator; it changes the kernel
+image, so it owes a re-measurement of both firmware gates, which this workspace can no longer
+produce (below).  Recorded, not fixed.
+
+### Did the new control earn its place, or is one value enough?
+
+The review asked for exactly that check: a control that rejects the *one* value a mutant happens to
+permit is a control against a byte pattern, not against a set.  So the counterfactual was run rather
+than argued, in a detached worktree, asking the activation battery itself (`arm_battery(build())`)
+so that a mutated source could not masquerade as a detection through a missing `mutate()` anchor:
+
+| Run | Checker | Control | Battery |
+| --- | --- | --- | --- |
+| A1 | tolerates `available`, `busy` **and type 4** | the old single value (type 3) | `problems=0` — **survived** |
+| A2 | same mutant | the 16-type sweep | `problems=1`: `system type 0x4 after the load is refused as check-descriptor-type-after: returned 1 with 'ok'` |
+| A3 | unmutated | the 16-type sweep | `problems=0` — the sweep is not merely strict |
+| C | unmutated | **control deleted** | the two mutant tests fail (`FAILED (failures=2)`) |
+
+Type 4 rather than 3 for the mutant on purpose: 3 is the value the narrow control happened to test,
+and a counterfactual built around the tested value proves nothing about the sweep.  A1 is the answer
+to "would one value have done?" — no.  C is the answer to "is the control load-bearing?" — remove it
+and the suite's own mutants go green.
+
+### Re-producing the `.bss` measurement
+
+The finding above was reached by this, and it is the procedure a reviewer should run rather than a
+description of one.  It needs `unicorn` for the boot half (`python3 -m venv /tmp/pc5-venv &&
+/tmp/pc5-venv/bin/pip install -r requirements-harness.txt`) and a built kernel
+(`make PC5_UEFI=64 kernel`).  Copy-paste, from the repository root:
+
+```python
+import sys; sys.path.insert(0, ".")
+import tools.kimage64 as K
+from tests.kernel64_machine import run_kernel
+raw = open("build/kernel64/KERNEL64.BIN", "rb").read()
+bss = K.read_fields(raw)["image_size"]            # declare the whole file .bss
+d = bytearray(raw)
+K.set_field(d, "bss_size", bss)
+K.set_field(d, "checksum", K.payload_checksum(bytes(d)))   # self-consistent payload sum
+K.set_field(d, "header_crc", K.header_crc(bytes(d)))        # self-consistent header CRC
+print("loader-side:", K.verify(bytes(d), K.LINK_BASE)[0] or "ACCEPTED")
+r = run_kernel(bytes(d))
+print([l for l in r["serial"].splitlines() if "KIMAGE" in l or "DONE" in l])
+```
+
+Expected, and expected *wrongly*: `loader-side: ACCEPTED`, then a `status=ok` line carrying
+`bss=0x34000` and a `PC5-64-DONE`.  The two re-stamps are why this is not a security claim — it is
+what a self-consistent rewrite looks like — and the reason the boot survives is that
+`kernel64/start.S` clears `.bss` from `__bss_start`/`__bss_end`, the linker's symbols, never from
+`bss_size`.  `grep bss tests/ovmf_boot.py tests/boot64_stubtest.py` returning nothing is the other
+half of the finding: the declaration is printed by the kernel and the loader and read by neither
+judge.
+
+**What the review could not re-measure, and why that is a result too.** The sandbox's `/tmp` was
+wiped between sessions, which took QEMU, the OVMF pair and the harness venv with it.  Two things
+followed, both of them about the checkout rather than the source:
+
+- without `unicorn`, `python3 -m unittest tests.test_kernel64` reports `OK` while **skipping 64 of
+  its own cases** — the machine tests that carry the IST-delivery and header-refusal claims.
+  Re-provisioning is `python3 -m venv /tmp/pc5-venv && /tmp/pc5-venv/bin/pip install -r
+  requirements-harness.txt` (pinned `unicorn==2.1.4`), after which the same modules run 106 tests
+  with no skips.  This is the standing rule made concrete: read the `Ran N tests` line, not the
+  `OK`.
+- the clone was **shallow** (`.git/shallow`, depth 1, no PR refs), which turned `make
+  citations-check` into 263 failures naming commits that exist.  `git fetch --unshallow` plus
+  `make citation-refs` (49 pull-request heads) makes the same 263 resolve.  A citations failure is
+  a statement about the clone before it is a statement about the history.
+
+**The skip count, taken seriously.** The first `make check` in this workspace read `Ran 1153 tests
+... OK (skipped=9)`, and that `OK` was doing work nine one-line reasons should have done.  Listing
+them is the difference between "9 tests did not run" and "these 9 did not run, for this"; every
+reason named a missing artifact (`no build/pc5.iso; run make iso first`, `build/efi.img is not
+built`, `need both build/pc5.iso and build/efi.img`, `no build/pc5.iso and
+build/efi64-release.img to compare`) or the inverted OVMF ceiling, and one of the two is a skip that
+*removes* itself when the firmware evidence exists.  Not one was a statement about the source:
+`build/` had lost its artifacts to the same `/tmp` wipe that took QEMU.  Re-derive any of it with
+`python3 -m unittest discover -s tests -p test_\*.py -v` piped through `grep skipped`.  After `make iso`, which also produces the 64-bit release ESP image the two
+comparison cases want, the identical command reads
+`Ran 1154 tests in 576.701s`, exit 0, `skipped=1`, and the one skip left is
+`'OVMF ran on this machine; the ceiling no longer applies'` — a test that removes itself when the
+firmware evidence exists.  So the total moved 1152 → 1153 → 1154 for exactly two reasons, both of
+them tests this section added (the widened-type mutant, then the sweep's counterfactual), and the skip
+count moved 9 → 1 because somebody built the artifacts, not because the suite changed.
+
+The README's `1152/1152 @ 86b862f` row is deliberately left alone: that is what the recorded
+validation run measured, and re-recording it needs the QEMU this workspace no longer has.  A count in
+a document belongs to the revision it was measured at; the honest move when the two drift is to say
+so, which is what this paragraph is.
+
+
+## 36. Naming note: "Milestone 8" in §29–§35 is a delivery ordinal, not roadmap id `M8`
+
+The live review of #49 caught a collision the documents had created between themselves.  The PR was
+titled "Milestone 8", and §29–§35 label their packages "Milestone 8, PR A" through "PR E"; but in
+`docs/architecture/roadmap.json`, `M8` is *Release-quality PC5: installer, updates, rollback,
+Linux-tier exit*, whose state is `not_started`.  Both statements were true and neither was about the
+other thing: the sections number the **delivery packages this project has shipped**, the roadmap
+numbers **milestones by workstream**, and nothing in the tree said so.  A reader who took "Milestone
+8" as a roadmap id would conclude this PR shipped an installer, which it does not.
+
+The record is corrected where it is machine-readable rather than by rewriting prose.  §29–§35 keep
+their labels and their numbers untouched — they are dated measurements, and "the eighth package" is
+what they said at the time — and `roadmap.json` now names where the evidence for this package
+actually lives: `M1c` (UEFI boot path under real firmware) gains
+`docs/evidence/2026-11-23-64bit-boot-gate/README.md`,
+`docs/evidence/2026-11-23-64bit-genuine-ovmf-boot/README.md`,
+`docs/evidence/2026-11-24-kernel-image-header/README.md`, the header design document and
+`tests/test_kimage64.py`; `M2a` (CPU execution environment) gains
+`docs/evidence/2026-11-24-tss-delivery/README.md` and `tests/test_kernel64.py`.  The TSS/IST
+allocation evidence stays under `M2b`, where the 2026-11-22 page already sat.
+
+**No state moved, and that is the part with teeth.** `M2a` and `M2b` stay `in_progress` because their
+acceptance lists still hold items this package does not provide: a second CPU brought up through the
+same path, a per-process address space with a test that a write to a read-only page faults, and a
+DMA-visible buffer round-tripped through a driver.  `M8` stays `not_started`: there is no installer
+here, no update slot, no rollback.  The PR title was changed to carry both the package ordinal and
+the roadmap ids it advances, so the merge-time record matches the roadmap; the rule going forward is
+that a claim which could be read as a gating statement cites the **roadmap id**, and the delivery
+ordinal is treated as a filing number.
+
+
+## 37. CI activation was attempted, refused, and the pipeline was fixed before it was offered
+
+The merge gate for #49 ended with the owner choosing CI activation *before* the merge.  That choice
+was executed as far as this environment is able to take it, and the boundary is a hard one: the
+GitHub App whose token signs these pushes is not granted the **Workflows** permission, so GitHub
+refuses any commit that creates a file under `.github/workflows/`.  Two pushes of the pure rename
+were refused, twenty seconds apart, both quoting the sentence `ci/README.md` already records from
+three earlier attempts.  No workflow has ever been read by GitHub for this repository —
+`actions/workflows` reports `total_count: 0` — and the setting itself is not readable with this
+token (`actions/permissions` → `403 Resource not accessible by integration`), so the grant cannot be
+observed here, only tested by pushing.  Nothing was attempted that would side-step that check.
+
+**What landed instead is the part that was always in reach.**  Reading `ci/build.yml` against this
+milestone's own findings turned up five defects, and all five were fixed in place — `8c14d39`,
+`84e6325` — because a pipeline that cannot fail is worse than no pipeline, and the first run GitHub
+ever produces should not be a run of a broken one:
+
+| # | Defect | Effect if left |
+| --- | --- | --- |
+| 1 | The *unspecified* default shell on GitHub's Linux runners is `bash -e {0}` — no `pipefail` — while every gate is written `make <gate> \| tee log` | **every gate in the pipeline could fail and the job would report success** |
+| 2 | The harness venv was provisioned *after* the host test suite ran | `unicorn` missing ⇒ `tests/test_kernel64.py` skips 64 of its own cases under an `OK` (§35 measured exactly this) |
+| 3 | four of the six gates `make check` wraps around its suite (`psm`, `docs-check`, `citations-check`, `presentation-check`, `brand-check` — of which only `unit` had a step) had none | CI strictly weaker than the local gate: the platform contract, the brand assets, the documents and a dead citation could all drift with every job green |
+| 4 | The `ovmf` job teed into `build/` before `build/` existed on a fresh checkout, and left checkout credentials behind | a confusing first-step failure, and a token in `.git/config` where the other two jobs keep none |
+| 5 | The firmware job reported nothing about its own verdict | a reviewer could not tell a measured PASS from an absent one without opening the artifact |
+
+Fix 1 is `defaults.run.shell: bash`, which brings `--noprofile --norc -eo pipefail`.  Fix 5 counts
+the harness's own `[PASS]`/`[FAIL]` log markers rather than re-deriving a tally from the report JSON,
+because `report["checks"]` (103 entries in the recorded run) and the requirement matrix (57 rows) are
+different counts — conflating them is how 104 became 105 once already, in §33.  The deliberate
+non-fix is the one that matters most: `tests/ovmf_boot.py` exiting 3 (NOT TESTED) still **fails** the
+`ovmf` job, so a runner without firmware is a red build rather than a green one.
+
+**What this section therefore does not claim.**  There is no CI run to report: no run URL, no
+successful build, no "required checks green".  The evidence for #49 remains the locally measured one —
+`Ran 1154 tests in 564.023s`, exit 0, `skipped=1`, at head `97b7066` — and `mergeable: CLEAN` on
+GitHub continues to mean only *no conflict*, with `statusCheckRollup: []` and `reviews: 0`.  The
+roadmap entry for M1b stays `blocked` with its blocker intact, and the living documents still point
+at `ci/build.yml`, because moving them to `.github/workflows/build.yml` would describe a location the
+repository does not have; that edit is a minute of work on the other side of the permission grant.
+
+
+## 38. CI was activated, ran for real, and the first red it found was in the tests, not the image
+
+§37 ended on a refusal.  It is superseded, and superseded *as recorded*: after the owner granted the
+GitHub App *Workflows: Read and write*, the same operation that had been rejected five times was
+accepted — `ci/build.yml` → `.github/workflows/build.yml`, a pure rename, `R100`, blob `9359c2bf`
+unchanged byte-for-byte, commit `2c3cd5c`, pushed `0aaa881..2c3cd5c`.  GitHub read the workflow within
+eight seconds: `actions/workflows` → `total_count: 1`, `id=428605735`, `state=active`.  The two probes
+that could not see the grant from the inside (`actions/permissions` and `actions/permissions/workflow`,
+both still `403 Resource not accessible by integration`, because those need `actions: read`, which was
+not granted and was not needed) are worth keeping in the record: the only way to verify a *workflows*
+grant in this environment is to attempt the push.
+
+Then five runs, and the pipeline earned its keep by failing.
+
+| Head | Outcome | What the platform said |
+|---|---|---|
+| `2c3cd5c` | `cancelled` ×2 | superseded by the next push, through `concurrency.cancel-in-progress` |
+| `4d0c358` | `failure` (`build`, `ovmf`), `skipped` (`release`) | failed steps named: `Host tool tests`, `Boot it under OVMF…`; no reason retrievable |
+| `0be97f9` | `failure` ×2 | first annotation from the reporter: `FAIL: test_moving_head_rebuilds_the_image_that_names_it`, one line, nothing under it |
+| `169fe94` | `failure` ×2 | `exit 139` in `Host tool tests`; firmware `Traceback` + `make: *** [Makefile:637: ovmf-test] Error 1` |
+| `cc12956` | `failure` (`build`), then `6293d65` in flight | full failure blocks, the per-file tally (`ran 47 of 47 files in 607s; 2 did not return 0`) and the reason |
+
+**The reason is an LFS fetch, and it is not a product fault.**  `ReleaseAttributionRebuild._scratch`
+clones the working tree to build in; `git clone` smudges LFS by default; `.gitattributes` routes
+`PS5UPDATE.PUP` through LFS; and the LFS store has no object for that pointer — the `404` recorded in
+`docs/PS5_SYSTEM_SOFTWARE_TARGET.md` and `docs/BUILDING.md`, three times, as *expected*.  So on a
+runner with a cold cache the clone dies inside the filter (`remote missing object 42ea0e5…`,
+`fatal: PS5UPDATE.PUP: smudge filter lfs failed`, exit 128) and both cases fail before building
+anything, while a developer machine whose cache holds the object passes and learns nothing is wrong.
+This is the §35 class again — a check whose verdict depends on which machine asked — with the polarity
+reversed: there a missing dependency made tests *skip* green, here a missing object made them *fail*
+red, and in both cases the environment, not the code, was the variable.
+
+Fixed by `GIT_LFS_SKIP_SMUDGE=1` on that clone (the build reads no `.pup`; no assertion in the class
+concerns the pointer's contents), plus a regression test written as a source assertion rather than a
+behavioural one, because on this machine both variants pass — a `file://` clone inherits the source's
+`objects/` path, so the failure is not reproducible here at all and only CI can grade it.  Recorded as
+CI's measurement, not a local deduction.
+
+**What the activation did *not* do.**  No gate was loosened along the way: `defaults.run.shell: bash`
+still supplies `pipefail` to all 21 `| tee` steps, the harness venv is still provisioned before the
+host suite, the six `make check` gates still have their own steps, `tests/ovmf_boot.py` exit 3
+(NOT TESTED) still fails the `ovmf` job, `publish release assets` still reports `skipped` on every
+non-tag ref, and no `secrets.*` reference exists anywhere in the file.  Three diagnostic steps were
+*added*, all guarded by `if: failure()`, all exit-0, and `tests/test_ci_report.py` +
+`tests/test_ci_triage.py` (27 tests between them) pin the part that is easy to get wrong: a reporter
+that can fail becomes a second failure (it did, once, via a `grep` under `pipefail`), and a green
+gate's `OK (skipped=3)` must never be quoted as an error.
+
+**Locally, at the same heads:** `Ran 1172 tests in 773.884s` → `OK (skipped=3)`, exit 0, "suite and
+all gates passed" at `cc12956`; `Ran 1154 in 763.261s` → `OK (skipped=10)` at `4d0c358`, the extra
+skips all of the form `no build/pc5.iso; run \`make iso\` first`, i.e. tests deferred by build order,
+not by missing capability.
+
+**M1b stays `blocked`.**  A green run would not have closed it either: its acceptance is a tag that
+publishes `pc5.iso`, `pc5.iso.sha256` and `build-info.json`, and a published hash equal to a local
+rebuild at the same `SOURCE_DATE_EPOCH`.  No tag has been pushed, so the `release` job has never
+executed, and `blocker` now reads as an owed pair of criteria rather than a permission.  Nothing in
+this section is a claim that CI passed: as of this writing it has never been green, and the first
+thing it ever caught was itself.
+
+---
+
+## 39. Two hosted failures, both real, neither in the image — and the instruments that hid them
+
+§38 closed with the LFS fault fixed at the same head whose run had reported it.  This section records
+what came back from that run, because the return was *not* the single remaining failure the previous
+correction had implied: two jobs were still red, and the one line each of them could say turned out to
+be an instrument defect rather than a verdict.
+
+**Phase 1, evidence as it is reachable.**  Head `247c5a3`, run `45338046314` (`push`) and its twin
+`45338053015` (`pull_request`), identical conclusions, so the readout reproduces across two executions
+of the same SHA:
+
+| Job | check-run | conclusion | failed step |
+|---|---|---|---|
+| `build and verify` | `138254819433` | `failure` | `Host tool tests` (step 16 of 21) |
+| `UEFI boot under genuine OVMF` | `138254819799` | `failure` | `Boot it under OVMF…` (step 5 of 7) |
+| `publish release assets` | `138264732741` | `skipped` | — (non-tag ref, as designed) |
+
+The firmware job's steps 3 (`Provision`, `./tools/ovmf_setup.sh`) and 4 (`Build`, `make iso && make uefi`)
+both returned `success`, so QEMU and the OVMF images were *present*: this is not a "the runner had no
+firmware" story, and it is not the exit-3 `NOT TESTED` path, which the assertions still honour.  Raw logs
+and artifacts remain unreachable from here (`gh api actions/jobs/<id>/logs` redirects to the results
+host, which refuses the handshake), so everything above and below comes from
+`check-runs/<job>/annotations`.  Nothing in this section quotes a log line that the API did not return.
+
+**Two instrumentation defects had to be fixed before either cause could be named.**
+
+1. `--only ovmf` did not exist.  `.github/workflows/build.yml` has passed it to `tools/ci_triage.py`
+   since `6293d65`, but `parse()` accepted only `--root/--json-out/--python/--budget`, printed
+   `ci_triage: ignoring unknown argument` to *stderr*, and exited 0.  The firmware job therefore walked
+   all 47 modules without a virtualenv, and its annotation read "6 did not return 0" — six unicorn-import
+   failures that a reader could only take as six defects.  That number is instrumentation noise and is
+   retracted here; §38's claim that the flag had landed was checked against the tree and was wrong.
+   `--only` is now implemented, with `files_found` beside `files_run` in the JSON and a note that says
+   `--only 'ovmf' matched 2 of 47`, so an empty selection can never read as an all-clear.
+2. The reporter could not carry a traceback body.  `extract()` filters on line *prefixes*, so the
+   `Traceback (most recent call last):` header survived and every frame and the exception line beneath
+   it were dropped — which is precisely why the hosted annotation said `Traceback … Error 1` and
+   nothing else.  `tracebacks()` now reads the block, takes the last one, and quotes
+   `exception | raised at <deepest project frame> | make status`.  It will not invent: a log truncated
+   before its exception line is published as `(no exception line: log ends after the traceback)` rather
+   than by promoting `make: … Error 1` into an exception, a `FAIL:` block that already carries its
+   exception is not quoted twice, and a chained traceback reports the last link.  Every one of those is
+   a test, and the step still cannot change a verdict: always exit 0, still `if: failure()`.
+
+   A third claim was corrected rather than implemented: `ci_report.triage_text()` says the triage "runs
+   immediately before this step precisely so its verdict can be quoted here", and the workflow's own
+   comment said the same.  The triage step is the one *after* the reporter, so the glob could never find
+   `triage.json`.  Reordering CI to match the prose would have meant rewriting four pinned wiring tests
+   for no gain — the triage's `::notice` lines were already the annotations that carried it — so the
+   prose now says which order is real and what would make the other path live.
+
+**Cause one, the firmware job.**  With the exception line capturable, the crash reproduces locally on
+demand by substituting firmware *discovery* only (`PC5_QEMU`, `PC5_OVMF_CODE`, `PC5_OVMF_VARS`,
+`PC5_OVMF_SECBOOT_CODE`, `PC5_OVMF_SECBOOT_VARS` pointed at files shaped like the real thing — the
+sandbox has no QEMU, so no boot is simulated and none is claimed):
+
+```
+TypeError: stat: path should be string, bytes, os.PathLike or integer, not Profile
+  raised at tests/ovmf_boot.py, line 2146, in secure_boot_run:
+            shutil.copyfile(vars_template, secure_vars)   [+3 frame(s) below]
+make: *** [Makefile:637: ovmf-test] Error 1
+```
+
+`secure_boot_run(report, args, qemu, data_dir, work, iso_path, code_path, profile, vars_template)` was
+called with its last two arguments the other way round, so the *vars template* slot held the boot
+`Profile` and the first statement of the function died on a `shutil` type check — before QEMU was
+launched, and so before the Secure Boot assertion anyone thought was being graded had ever run.  It is
+CI-only because the branch requires *both* Secure Boot firmware files: `tools/ovmf_setup.sh` installs
+the `ovmf` package, which ships `OVMF_CODE*.secboot.fd` and `OVMF_VARS*.ms.fd`, while a developer
+machine typically has neither and takes the `applicable=False` path instead.  Nothing in Python can see
+a swap between two same-shaped positional arguments; `pyflakes` cannot see it either.
+
+The call site now names `code_path`, `profile` and `vars_template`.  Three tests cover it: the function
+driven with the types its signature asks for (it fails on the old order because `profile.stop` does not
+exist on a path), a static check that binds the call site's arguments against the definition, and a
+sweep over every internal call in the harness that reports a role-shaped name bound to a parameter
+sharing no role token.  The sweep finds exactly one offender in 162 calls — the one above — and was
+run against the pre-fix file to confirm it names line 1970 and nothing else.  Both the behavioural and
+the wiring test were then run against a copy of the tree with the bug re-introduced, and both fail
+there; a guard that cannot fail is not a guard.
+
+**Cause two, the build job.**  `test_the_dirty_label_and_the_loader_digest_stay_honest` failed with
+
+```
+AssertionError: False is not true : the label hides that no commit produced this image:
+'247c5a375f6c9f36b30aa4e9d7f85eb1051ca3c5'
+```
+
+Forty characters.  `BUILD_ID` is built from `git rev-parse --short HEAD`, which prints seven, so the
+value in the record did not come from the repository at all — it came from the workflow's own
+`env: BUILD_ID: ${{ github.sha }}`, and `BUILD_ID ?=` *yields* to an environment variable.  The
+`$(if $(PC5_DIRTY),-dirty)` marker lived inside that default, so on every runner the marker was
+discarded and no local run could see it: export the variable here and the hosted failure reproduces
+byte for byte, message and all.
+
+The Makefile keeps the override (a release *should* stamp the sha it was handed, and
+`docs/BUILDING.md` documents `make BUILD_ID=…`) and moves the marker outside it —
+`override BUILD_ID := $(BUILD_ID)$(if $(PC5_DIRTY),-dirty)` — so the dirty state is appended to
+whichever base won, from the environment or the command line.  A new case pins both halves of that:
+a handed-in id passes through *unmarked* on a clean tree (which is what keeps a published
+`build-info.json` byte-identical to a local rebuild) and gains `-dirty` the moment the tree moves under
+it.  `tests/test_release_esp.py` was then run with `BUILD_ID` exported — the runner's shape, which the
+suite had never been run in — and all 21 cases pass.
+
+**Why no local run had ever seen cause one, even the one that passed.**  The only `make ovmf-test`
+success on record is `docs/evidence/validation/ovmf-test.json` — `result: passed`, `exit_code: 0`,
+`level: real firmware execution`, at `86b862f` — and its `command` field reads `make ovmf-test`, with
+no `--secure-boot`.  That flag is what routes the harness into `secure_boot_run`, and only the workflow
+passes it (`OVMF_ARGS="--secure-boot"`, step 5).  So the branch that died has been executed exactly
+twice in this repository's history: on a runner that installs the Secure Boot firmware pair, and here,
+with discovery substituted.  Both produce the same `TypeError`.  This is also the answer to "why is
+there no failing test for it": there was no test that called `secure_boot_run` with a real-looking
+argument list either — `SecureBootTests` graded `secure_boot_verdict`, a pure function two calls past
+the crash, so the unit test and the integration gate were both true and neither implied the other.
+
+**Locally, at this head:** `make check` → exit 0, `Ran 1207 tests in 526.855s`, `OK (skipped=3)`; the
+suite grew by 35 cases over the `1172` §38 recorded at `247c5a3`.  The three skips, each an environment
+statement and none of them promoted to a pass:
+
+- `test_release_esp`: `no build/pc5.iso and build/efi64-release.img to compare` — deferred by build
+  order, since the gate is `make iso` and the release ESP is built by another target;
+- `test_release.CiLayoutTests.test_readme_explains_activation_when_not_installed`: `pipeline is active`
+  — the README's dormancy note is only owed while the pipeline is dormant, which §36 ended;
+- `test_roadmap_dependencies.FoundationTests.test_no_64bit_milestone_is_complete_while_ovmf_is_untested`:
+  `OVMF ran on this machine; the ceiling no longer applies`, because the evidence record quoted above
+  says `result: passed`.  It says so about a *local* machine and about a run without `--secure-boot`;
+  it is not, and has never been claimed as, evidence that the hosted firmware job passes.
+
+**What is *not* claimed.**  The hosted firmware log has still not been read: its exception line is
+inferred from a locally reproduced crash at the same `Makefile:637`, in the same function, reached only
+when the Secure Boot pair is installed — which the provisioning step does install, and which the
+sandbox here does not have (no `qemu` binary, no `/usr/share/OVMF`), so discovery is what the local
+reproduction substitutes and nothing about a boot is.  The next run's annotation is the confirmation — run 7, below,
+carried no exception at all, because there was no longer a crash to report; the prediction is
+recorded as tested, not as assumed.  A stub QEMU producing 45 failures is the
+*correct* answer for a stub and is not a boot; the firmware gate passed nothing here and nothing in this
+diff makes it able to.  `make ovmf-test` still exits 3 when firmware is absent and that still fails the
+job.
+
+**Run 7, and the prediction it settled.**  Both runs at `d5e4f01` finished, identically — the
+`push` twin `45463229126` and the `pull_request` twin `45463245850`:
+
+| Job | push run | PR run | What changed |
+|---|---|---|---|
+| `build and verify` | **success** | **success** | first green build job on this branch; the `BUILD_ID` fix is why |
+| `UEFI boot under genuine OVMF` | `failure` | `failure` | no longer a crash: the step now returns a verdict |
+| `publish release assets` | `skipped` | `skipped` | non-tag ref, as designed |
+
+The prediction below was that the next annotation would carry the exception line.  It carried no
+traceback at all, because there is no longer one to carry: `make ovmf-test` reached its
+`[FAIL]`/`[PASS]` output and exited with a graded verdict at `Makefile:643` — the target sits six
+lines lower than the `637` every earlier run quoted, because the fix added comment lines above it, and
+the step's name is unchanged.  Both the `TypeError` and the `Error 1`-after-a-traceback shape are gone
+from both runs, which is the confirmation this section asked for.  The `--only` fix reads back the
+same way: `ran 2 of 2 files in 336s … --only 'ovmf' matched 2 of 47`, where run 6 said 47 of 47.
+
+**What the firmware job reports now, and what is deliberately not touched.**  The gate's failure
+annotations, identical across the twins (`300.169s`/`300.211s`, `34.332s`/`35.336s`):
+
+    [FAIL] [cold] the loader identified EDK II as its firmware  (loader_firmware_edk2=False)
+    [FAIL] [warm] the loader identified EDK II as its firmware  (loader_firmware_edk2=False)
+    [FAIL] every required matrix row this run claims to verify is verified
+           (matrix rows failed: the loader names the firmware it is running on)
+
+One required row, in both the cold and the warm run.  Every other required row of the matrix is
+reported as holding on the runner — including the ones no hosted run had ever reached: the firmware
+recognising the boot medium, the loader executing, the kernel image read through the file protocol,
+the handoff, the kernel reaching its initialisation point.  That is a statement about PC5's own UEFI
+boot path on real EDK II firmware and nothing more: it is not evidence about Sony system software, and
+no such claim is made here or anywhere else in this repository.
+
+The failing row compares a *string the firmware chooses to say about itself*.  The 64-bit loader prints
+`PC5-64-LOADER firmware=` followed by `g_st->firmware_vendor` verbatim (`boot/uefi64/uefi64_main.c`,
+the `serial_write_ascii16` call in `efi_main64`), and the harness grades the run by searching the
+serial text for the literal `PC5-64-LOADER firmware=EDK II` (`tests/ovmf_boot.py`, in the 64-bit
+profile's marker table; the 32-bit profile looks for `PC5-UEFI: firmware=EDK II` in the same way).  So
+the row asserts one particular vendor string from one particular build of the firmware, and the
+runner's `ovmf` package evidently reports something else; the local `result: passed` record at
+`86b862f` was produced by a different OVMF build, on a machine where the string happens to match.  What
+the runner printed is in `build/ovmf-serial/` inside the uploaded artifact, and artifacts are
+unreachable from here — so the observed value is not known, and this section does not guess it.
+
+That is the point the brief said to stop at: a genuine firmware-path finding, reported rather than
+patched.  No kernel or loader source was modified.  Two candidate next steps, each needing an owner's
+decision because both change what the gate *means* rather than what it does:
+
+1. make the evidence reachable — quote the observed `FirmwareVendor` bytes in that check's detail, so
+   the annotation names what the runner's firmware actually said instead of `=False`; the assertion
+   and its exit semantics stay exactly as they are; or
+2. decide the row's contract — whether the row should require a specific vendor *string*, or require
+   that the loader printed *the string it was given*.  Quietly narrowing it to the latter would be
+   weakening a test, which is why it is not done in this commit.
+
+The two host modules the triage names in that job (`Ran 43 … errors=1`, `Ran 53 … failures=1,
+skipped=1`) are the same coupling one level down: those modules invoke the harness for real, so on a
+machine that owns QEMU they spend 300s and 35s inside a boot, where here 96 of their tests finish in
+0.336s with 6 skipped.  A test whose duration and outcome depend on whether the machine has firmware is
+a test that should pin its own environment; that is named as the next item and not slipped into this
+commit, because the failure it would remove is not the one this brief was about.
+
+**M1b stays `blocked`.**  Both acceptance criteria are still unpaid — no tag has been pushed, so
+`publish release assets` has still never executed.  What changed is that the pipeline can now describe
+its own failures: after this, a red firmware job will say which exception it raised, and a red build job
+will not be lying about the tree it came from.
+## 40. The firmware gate grades instead of crashing, and the two places a cause could still hide
+
+**Live state, re-read rather than copied.** §39 recorded a fix in flight, so the pipeline was
+queried again at `e1aa9ec` instead of trusting the note: runs `45468263882` (push) and
+`45468276720` (`pull_request`), both `completed/failure`. The *shape* of that failure is what
+changed:
+
+| job | conclusion | failed step |
+| --- | --- | --- |
+| `build and verify` | **success** | — |
+| `UEFI boot under genuine OVMF` | failure | `Boot it under OVMF, including the Secure Boot policy check` |
+| `publish release assets` | `skipped` | never executes off a tag |
+
+The firmware job's annotations, which are the whole of what is reachable (`ci/README.md`,
+"Reading a failed run"):
+
+```
+notice   ran 2 of 2 files in 336s; 2 did not return 0; interpreter python3; --only 'ovmf' matched 2 of 47
+failure  exit 1 | ------ / Ran 43 tests in 300.136s / FAILED (errors=1)
+failure  exit 1 | ------ / Ran 53 tests in 35.332s / FAILED (failures=1, skipped=1)
+failure  [FAIL] [cold] the loader identified EDK II as its firmware  (loader_firmware_edk2=False)
+         [FAIL] [warm] the loader identified EDK II as its firmware  (loader_firmware_edk2=False)
+         [FAIL] every required matrix row this run claims to verify is verified  (matrix rows failed:
+         the loader names the firmware it is running on)  make: *** [Makefile:643: ovmf-test] Error 1
+```
+
+Four things that were broken are now demonstrably not, each by the run rather than by the diff:
+the scratch clone fetches no LFS object, so `smudge filter lfs failed` and exit `128` are gone;
+`--only` narrows the walk (`matched 2 of 47`, where the same job once counted six broken files it
+had no business examining); there is no traceback, because the gate reaches QEMU, boots, and
+reports named assertions (`1e5e41d`); and `build and verify` is green for the first time in the
+branch's history (`23dfa04`).
+
+**A note on process, because it cost a turn.** The sandbox rolled back to the shallow baseline
+`dbd7500` again — HEAD and index at the merge of #48, working tree at `247c5a3` plus new edits, so
+`git status` reported all 27 branch commits as uncommitted changes and `citations-check` could not
+resolve any commit reference. The recorded recovery (read the ref from the API,
+`GIT_LFS_SKIP_SMUDGE=1 git fetch --unshallow --no-tags origin`, `git reset --mixed`) surfaced a
+second fact: the ref had moved five commits past the recorded head, and the diagnosis being
+re-derived in parallel was already committed — and committed better. A `tracebacks()` that quotes
+the deepest *project* frame beat one that quoted the last indented line (which is CPython's `^^^^`
+ruler); an `--only` taking a comma-separated list, reporting "`--only 'ovmf'` matched 2 of 47, so
+nothing ran", and cross-checked against the flags the workflow passes beat a substring filter with
+a warning; and the dirty marker belongs in the Makefile as `override BUILD_ID := $(BUILD_ID)$(if
+$(PC5_DIRTY),-dirty)`, not in one test's environment, because the mislabelling was real for every
+build the runner ever made. All three replacements were dropped rather than committed over the top
+of them. What follows is only what the tree did not have.
+
+**A cause could still hide in a failed mutant build.** `build_mutant_iso` ran the repository's own
+ISO tool with `subprocess.run(command, check=True, capture_output=True)`. The child dies, writes
+its complaint into `CalledProcessError.stdout`/`.stderr`, and nothing on the way out prints those:
+the surviving message is `Command '[…]' returned non-zero exit status 1`, which names no cause —
+the same hole `a6da2bd` widened from the reporter's end, one level down, where there was no
+exception *line* worth carrying. It now writes what the child said and raises the same exception
+via `check_returncode()`. Unlike the `secure_boot_run` transposition this reproduces on a machine
+with no QEMU and no `/usr/share/OVMF`, because the child never reaches a boot:
+
+```
+mkiso.py failed (exit 1); its own output:
+  File "…/tools/mkiso.py", line 559, in main
+    with open(args.boot_image, "rb") as fh:
+FileNotFoundError: [Errno 2] No such file or directory: '…/loader.bin'
+```
+
+Three cases in `tests/test_ovmf_harness.py` (`MutantBuildFailureTests`) hold it: the reason reaches
+the log, the exception's type/status/command are unchanged, and the print is conditional on the
+child having failed — six gate-profile rows call this function per run, and a green build must not
+accompany six error lines.
+
+**The remaining red quotes a verdict, not an observation.** `(loader_firmware_edk2=False)` is true
+and useless: the row is a substring test for `firmware=EDK II`, and three different defects produce
+that annotation — the firmware told the loader a different name, the loader printed the name with
+different text around it, or the line never appeared. The serial log already distinguishes them, so
+`classify` now also carries what it saw (`_said`, `loader_firmware_said`) and the row's proof quotes
+it (`_firmware_named`) while its predicate stays the substring test:
+
+| the loader printed | verdict | detail |
+| --- | --- | --- |
+| `firmware=EDK II` | pass | — |
+| `firmware=EDK II (ACCID=0x6564)` | pass | — |
+
+*The table above records what §40's commit did. ADR-026 (see §41) anchored the grammar
+afterwards, so `EDK II (ACCID=0x6564)` is now refused as an ambiguous tail and the detail also
+carries the classification.*
+| `firmware=EFI Development Kit II` | fail | `loader_firmware_edk2=False; the loader printed firmware='EFI Development Kit II'` |
+| no `firmware=` line | fail | `loader_firmware_edk2=False; the loader printed no \`firmware=\` line at all` |
+
+`test_quoting_can_never_move_the_verdict` asserts the load-bearing half directly: for every shape and
+on *both* profiles — `classify` asks the profile which words to look for, and a 64-bit line read as
+IA32 proves nothing either way — the boolean equals `_seen`'s. What the runner's firmware actually
+said is still not known; that is what the next run is for. §39's other option — whether the row
+should require the literal `EDK II` at all — is a decision about what the gate *means*, and it stays
+open, unweakened and unmade.
+
+**Locally, at `e1aa9ec` plus this change.** `make check` with the harness venv on `PATH`, as CI
+provisions it: `Ran 1215 tests in 514.048s` → `OK (skipped=10)`, exit 0, "make check: suite and all
+gates passed". The ten skips are named, not counted as passes: four `no build/pc5.iso; run
+\`make iso\` first`, and one each of `build/pc5.iso not built`, `no build/pc5.iso and
+build/efi64-release.img to compare`, `need both build/pc5.iso and build/efi.img`,
+`build/efi.img is not built` (all deferred by build order, not by capability), plus
+`pipeline is active` and `OVMF ran on this machine; the ceiling no longer applies`, both of which
+skip because the condition they guard against is absent here. `tests.test_ovmf_harness` run alone:
+`Ran 51 tests in 0.349s` → `OK (skipped=1)` (`test_the_real_esp_is_not_firmware`,
+`build/efi.img is not built`).
+
+**M1b stays `blocked`.** `publish release assets` reported `skipped` on every run of this branch and
+has still never executed, so neither acceptance criterion is met: no tag has published
+`pc5.iso`, `pc5.iso.sha256` and `build-info.json`, and no published hash has been compared with a
+local rebuild at the same `SOURCE_DATE_EPOCH`. And nothing here is a claim that CI is healthy: the
+firmware job is red at the head of this section, for a reason the pipeline can now describe in words.
+**The run after that commit answered the open question, in the annotation itself.** Run
+`45528590239`/`45528583614` at `d86054a`: `build and verify` **success**, `UEFI boot under genuine
+OVMF` failure at `Boot it under OVMF, including the Secure Boot policy check`,
+`publish release assets` `skipped` — and the firmware row now reads
+
+```
+[FAIL] [cold] the loader identified EDK II as its firmware
+       (loader_firmware_edk2=False; the loader printed firmware='Ubuntu distribution of EDK II')
+```
+
+So the remaining red is not a boot failure, not the loader, and not the firmware: the loader read
+the vendor string correctly and echoed it, the runner's EDK II build reports
+`Ubuntu distribution of EDK II`, and the row asks for the literal `firmware=EDK II`. It is §39's
+option 2, stated as a fact rather than a guess — a contract question about what that row requires,
+which belongs to the owner and is not answered by widening a substring test in a commit that wants
+a green badge. What the two harness modules still report alongside it (`Ran 51 … errors=1`,
+`Ran 53 … failures=1, skipped=1`) is unchanged in kind from the run before, and is named here as
+the next item rather than folded into this one.
+
+## 41. The firmware identity contract, ruled and implemented: implementation asserted, distribution recorded
+
+§40 left the row quoting a verdict (`loader_firmware_edk2=False`) where it could have quoted an
+observation, and named the two things it refused to guess about. Both are now settled — the
+observation is recorded, and the contract that reads it is ADR-026.
+
+**The ruling.** Accepted: **D1** the distribution is recorded, never gated; **D2** an
+implausible-but-real-sounding identity (`TianoCore`, `EFI Development Kit II`, `OVMF`) is refused
+as `UNKNOWN` until a captured boot supports it; **D3** the grammar is anchored at both ends, so an
+ambiguous tail is refused; **D4** the three kinds of absence keep three distinct reasons.
+
+**What the gate asserts now.** `classify_firmware_identity` in `tests/ovmf_boot.py` is a pure
+function of the string the loader printed, and it is the only predicate behind
+`loader_firmware_edk2` on both profiles. It accepts `EDK II` — edk2's own upstream
+`PcdFirmwareVendor` value, and what every committed genuine boot that carries the marker
+prints — 17 serial logs under `docs/evidence/`, 16 of them with a `firmware=` line, 22
+occurrences in all — and
+`<clause> of EDK II`, capturing the clause verbatim as `loader_firmware_distribution`. It refuses,
+with the raw string quoted in the refusal: `PC5`-containing labels (the stub sets that field
+itself, so a stub cannot certify a genuine boot, whatever it renames itself to), `absent`/
+`empty`/no-line as three separate facts, a string at the profile's own print limit as *ambiguous*
+rather than wrong, and everything else as `UNKNOWN`. `report.data[<stage>]["firmware_identity"]`
+carries `raw`/`implementation`/`distribution`/`accepted`/`refusal`, so the artifact holds the
+claim and its evidence even when the verdict is a refusal.
+
+**What the anchoring changes, measured against the predicate it replaced.** A repair that
+only widened the head would be a relaxation, so the tail was closed too.  The predicate
+this replaced was `"PC5-UEFI: firmware=EDK II" in text` and its `PC5-64-LOADER` twin:
+case-sensitive, bounded at the front by the line's own prefix, unbounded at the back.
+Replaying both over every shape in the contract (§42) gives **five** shapes that used to
+pass and now refuse, and **two** that used to fail and now pass:
+
+| firmware printed | old | new | why |
+| --- | --- | --- | --- |
+| `EDK II (ACCID=0x6564)` | pass | refuse | D3: an ambiguous tail |
+| `EDK IIx`, `EDK II-like` | pass | refuse | `UNKNOWN` |
+| `EDK II` + 25 `x` (31 chars) | pass | refuse | exactly the 32-bit print limit → *ambiguous*, not wrong |
+| `EDK II?` | pass | refuse | the loader's own `?` for a non-printable unit |
+| `Ubuntu distribution of EDK II` | **fail** | **pass** | the hosted case this change exists for |
+| `Fedora distribution of EDK II` | **fail** | **pass** | the same rule, another distributor |
+
+Eight shapes are refused by both and were never loose: `edk ii`, `TianoCore`,
+`EFI Development Kit II`, `OVMF`, `PC5 stub firmware`, `PC5 of EDK II`, `absent`,
+`empty`. §41 as first written listed `edk ii` as a tightening and counted four strings
+instead of five; the replay above is what it should have said, and the correction is kept
+visible rather than smoothed. The 64-bit ` revision=0x2 table-rev=0x10000` tail is a
+separate matter from either count: the old predicate accepted it correctly, a naive new
+pattern would have refused it, and the lookahead is why it still passes.
+
+That last row is the trap in this change rather than a hypothesis: the 64-bit loader continues the
+same line with ` revision=` and ` table-rev=`, so a pattern that captured to end-of-line would
+read a perfectly good EDK II as an unknown string and turn **every committed genuine boot**
+red while the new acceptance cases still passed in isolation. It is measured, not assumed: the
+cases were replayed over `docs/evidence/*/ovmf*serial*.log` — 17 logs, 16 carrying a
+`firmware=` line, 22 occurrences, all 22 accepted, 0 regressions — and the replay is a gate
+now rather than a memory: `FirmwareEvidenceCorpusTests` in `tests/test_ovmf_harness.py`
+(§42), which mutates to a failure if the capture boundary moves. The pattern-level rule stays
+pinned by `test_the_64bit_marker_does_not_swallow_the_revision_fields`.
+
+**The suite can fail, which is the part worth checking.** Four mutations of the new contract were
+applied one at a time and each was caught, then reverted:
+
+| mutation | result |
+| --- | --- |
+| restore the old `firmware=EDK II in text` predicate | `FAILED (failures=33)` |
+| drop the ` revision=` lookahead | `FAILED (failures=15)` |
+| remove the `PC5` self-issued refusal | `FAILED (failures=10)` |
+| accept any tail (`EDK2_DISTRIBUTION_RE` neutered) | `FAILED (errors=22)` |
+| all reverted | `OK` |
+
+**Deliberately unchanged.** `boot/**` and `kernel64/**` are untouched: the loader prints
+`SystemTable->FirmwareVendor` verbatim and does not normalise, pad, case-fold or truncate it for
+the gate's convenience — a product that formatted its own evidence would leave the row measuring
+ours. The Secure Boot rows, the refusal-based policy verdict (ADR-023 §4), the matrix's
+no-inheritance rule, `make ovmf-test`'s exit codes (0 pass, 2 fail, 3 NOT TESTED failing the job)
+and the substring semantics of every *other* marker are as they were. Nothing in this section
+claims a host booted anything: the classifier has never been run against QEMU here, because this
+sandbox has no `qemu-system-x86_64` and no `/usr/share/OVMF`.
+
+**Locally.** `make check` with the harness venv on `PATH`, as CI provisions it: `Ran 1225
+tests in 783.513s` → `OK (skipped=10)`, exit 0, `make check: suite and all gates passed`. Skips, named rather than
+counted as passes: `OVMF ran on this machine; the ceiling no longer applies` (1); `build/efi.img is not built` (1); `build/pc5.iso not built` (1); `need both build/pc5.iso and build/efi.img` (1); `no build/pc5.iso and build/efi64-release.img to compare` (1); `no build/pc5.iso; run `make iso` first` (4); `pipeline is active` (1). Targeted, the two modules that read these markers: `Ran 114 tests` → `OK (skipped=7)` on a
+tree with no build artifacts, and `Ran 114 tests` → `OK` with **no skips at all** once
+`make iso` has run and the 64-bit release ESP (`build/efi64-release.img`) exists (§42). The harness venv changes
+nothing for these two: the same 114 with and without `unicorn`, because neither imports it.
+
+**Hosted, predicted before measured.** What follows was written from the local run alone, before
+any hosted result existed for `330d471`, so that the run could be checked against a prediction
+rather than admired afterwards; it is kept as written, and the measurement is the addendum below: the `[cold]`/`[warm]` identity rows pass on the runner's own
+string, the `every required matrix row…verified` row clears with them, and `build and verify` stays
+green — while `test_ovmf_harness`'s single error in that job, the gate-profile module's single
+failure, and `publish release assets`'s `skipped` are untouched by this change and remain. M1b
+stays `blocked` until a tag publishes the three artifacts and a published hash matches a local
+rebuild at the same `SOURCE_DATE_EPOCH`; PR #49 stays open and unmerged.
+
+**Hosted, measured.** Run `45543361657` (`pull_request`, `330d471`) → **`completed/success`**:
+
+| job | conclusion | steps |
+| --- | --- | --- |
+| `build and verify` | **success** | 22 of 24 (the two `if: failure()` diagnostic steps are `skipped`, as designed) |
+| `UEFI boot under genuine OVMF` | **success** | 8 of 10 (same two) |
+| `publish release assets` | `skipped` | 0 of 0 — non-tag ref |
+
+The firmware job's annotation list is now a single warning about Node 20 deprecation in
+`actions/checkout`/`upload-artifact` — no `::error::`, because the step that writes them runs only
+under `if: failure()`.
+
+HEAD `42e6034` reproduces the same result on **both** refs — push run `45547056596` and PR run
+`45547062544`, each `completed/success`, so the green is not a single-run accident on a
+docs-only descendant of the implementation commit. **This is the first green `UEFI boot under genuine OVMF` in the branch's
+history**, and it is green with `--secure-boot`, under the runner's own Ubuntu OVMF, on the strength
+of a contract that still refuses five shapes a substring test would have forgiven.
+
+**What the push twin shows, and what actually cancelled it — a correction, because my first
+explanation was wrong.** The matching push run `45543356695` reports `completed/cancelled`, its
+`build and verify` dying mid-step at `Verify, test and stage the release assets`. §41 as first
+written blamed `concurrency.group: build-${{ github.ref }}` with `cancel-in-progress: true` and said
+the PR run had superseded it. That is refuted by two facts: the two runs are **not** in one group
+(`pull_request` runs on `refs/pull/49/merge`, `push` on the branch ref), and the cancellation
+happened at 04:26:42 — 96 s *before* the next push existed at 04:28:18. The measured cause is the
+job's own ceiling: `timeout-minutes: 30`, with the job starting 03:56:23 and ending 04:26:42 =
+**30.3 minutes**. A step killed by a timeout is reported `cancelled`, which is why it looked like
+supersession.
+
+The two mechanisms are separable, and both are now visible in the log of runs around this change:
+
+| run | ref/event | `build and verify` | duration | cause |
+| --- | --- | --- | --- | --- |
+| `45543356695` | push `330d471` | `cancelled` | 30.3 m | exceeded `timeout-minutes: 30` |
+| `45543361657` | PR `330d471` | **success** | 29.1 m | finished, 54 s of margin |
+| `45546994695` / `45547001893` | push + PR `239df3d` | `cancelled` | 0.8 / 0.7 m | superseded by the next push, same ref each — the concurrency case, which is real but was not the one here |
+| `45547056596` | push `42e6034` | **success** | 26.9 m | — |
+| `45547062544` | PR `42e6034` | **success** | 23.9 m | — |
+
+The finding that matters for anyone reading a red `build and verify` on this branch afterwards:
+**the job runs at the edge of its own timeout** — 23.9 to 30.3 minutes across five attempts of the
+same three commits, on identical code — so the same tree can pass at 29.1 m and cancel at 30.3 m
+purely on runner speed. A cancelled `build and verify` here is therefore not evidence about the
+code, and it must not be read as a pass either. Raising `timeout-minutes` would fix the flakiness
+but it is a workflow change unrelated to the firmware contract, so it is **not bundled into this
+commit** and is reported to the owner as a separate decision instead.
+
+The firmware question itself is not in doubt: `UEFI boot under genuine OVMF` completed `success` in
+**both** runs at `330d471` and **both** runs at `42e6034` — four independent job results, two of
+them on the push ref where no cancellation occurred. **A cancelled job is not a passed job**, and
+nothing above reads it as one.
+
+**Prediction against outcome, kept because it is the honest part.** §41 predicted: identity rows
+pass, the `every required matrix row…verified` row clears with them, `build and verify` stays
+green, `publish release assets` stays `skipped`. All four held. It also predicted the two
+host-module items would *remain* — that was wrong in a way worth writing down, and §42 settled
+it. `build and verify`'s `Host tool tests` step runs `python3 -m unittest discover -s tests -p
+'test_*.py'` with the venv first on `PATH`, so **both modules were executed on the runner all
+along**: the job's own `::notice title=Host suite ::` at `84c7b75` reads `Ran 1225 tests in
+479.098s` → `OK (skipped=13)`. What §41 had right is the narrower statement — the *firmware*
+job touches those modules only through the `if: failure()` triage step, so nothing in that
+job's green depends on them, and nothing in their green depends on it. The residual claim that
+a `unicorn` import error hung over them was also wrong: neither module imports `unicorn`, and
+the triage walk over the runner's bare `python3` reports `ran 2 of 2 files … 0 did not return
+0`. A skipped-or-unrun test is still never read as a pass — but here the tests did run. Same discipline for the artifact: `pc5-ovmf-<sha>` holds `ovmf-report.json` (which
+would show `firmware_identity.distribution: Ubuntu distribution`), and uploaded artifacts live on
+the blob host this sandbox cannot reach, so the report is *not* quoted as evidence here — the
+job's own conclusion is.
+
+**M1b stays `blocked`.** `publish release assets` has still never executed on this branch: no tag
+has published `pc5.iso`, `pc5.iso.sha256` and `build-info.json`, and no published hash has been
+compared with a local rebuild at the same `SOURCE_DATE_EPOCH`. A green firmware job is not a
+released artifact. PR #49 remains open and unmerged, and this section is recorded before any
+further authorization.
+## 42. Pre-merge verification of #49: the two modules run directly, the corpus replay becomes a gate, and a citation failure traced to the clone rather than to the documents
+
+**Why this section exists.** The owner's instruction was to establish that #49 is independently
+merge-ready *before* touching M1b permissions or CI infrastructure, and not to merge while doing
+it. Two items in §41 were recorded as unresolved, one number in §41 did not reproduce, and one
+sentence in §41 was flat wrong. This section closes all three, and records a sandbox recovery that
+had to be proved before anything could be believed.
+
+**1. The sandbox had been recreated underneath the branch.** Local HEAD was `dbd7500` — the branch
+base — while the newest file contents sat in the working tree: 68 paths dirty, and every file
+added since the base reported as untracked. Before moving a pointer, the remote tip was compared
+blob-by-blob against the working tree, all 431 tracked files: `missing=0 differs=0`, and no file on
+disk that the tip did not already have. Only then was the branch ref moved to `84c7b75` and the
+index refreshed with a mixed `git reset`, which does not touch files. No commit was created,
+rewritten or pushed by that step, and nothing was pushed to any ref: the remote was never the thing
+that needed fixing. **A recreated sandbox and a lost commit look identical in `git status`, so the
+proof came first.**
+
+**2. The two modules, run directly rather than inferred from a failure-only diagnostic.**
+
+| invocation | result |
+| --- | --- |
+| `python3 -m unittest tests.test_ovmf_gate_profiles`, no build artifacts | `Ran 53` → `OK (skipped=6)` |
+| `python3 -m unittest tests.test_ovmf_harness`, no build artifacts | `Ran 61` → `OK (skipped=1)`; the skip is `build/efi.img is not built` |
+| both, after `make iso` and the 64-bit release ESP (`build/efi64-release.img`) | **`Ran 114` → `OK`, no skips at all** |
+| both, harness venv vs. the runner's bare `python3` | `Ran 114` → `OK (skipped=7)` identically — neither module imports `unicorn` |
+| `tools/ci_triage.py --root tests --python python3 --only ovmf` | `ran 2 of 2 files in 1s; 0 did not return 0; interpreter python3; --only 'ovmf' matched 2 of 47` |
+
+So §40's residual worry is settled in both directions: these two modules do not depend on
+`unicorn`, and with the repository's own artifacts built, every one of their 114 cases executes
+rather than skipping. The artifacts measured: `build/pc5.iso` 1601536 bytes
+`sha256 7dd4d327f89defc8…`, `build/efi.img` `sha256 7c1fd37ec2800a5c…`, `build/efi64-release.img`
+1474560 bytes `sha256 5983798df38913df…`; the build's own PE gate reported 22/22 checks passed on
+`build/uefi/BOOTX64.EFI`. `build/` is ignored, so none of it entered the commit.
+
+**3. The corpus claim became a gate, and the corpus count got corrected.** §41 said "16 genuine
+boots, 0 regressions" from a replay anyone had to remember to run. Measured: `docs/evidence/
+*/ovmf*serial*.log` is **17** files; 16 of them carry a `firmware=` line; those lines number **22**
+(the 32-bit logs print the marker in both phases); all 22 grade `accepted` with `raw == "EDK II"`.
+The log with no line, `2026-11-23-64bit-genuine-ovmf-boot/ovmf64-serial.log`, predates the marker;
+the new test names it rather than filtering it, so "16 of 17" can never be read as a silent skip.
+
+| mutation of `tests/ovmf_boot.py`, applied in a scratch copy of the tree | corpus gate |
+| --- | --- |
+| x64 pattern captures to end-of-line — the historical trap | `FAILED (failures=1)` |
+| refuse the literal `EDK II` — a narrowing | `FAILED (failures=1)` |
+| accept any string | `OK`, by design: over-loosening is the MATRIX's direction, and the class says so |
+| none (control) | `OK` |
+
+**4. Five citation failures, and what they were not.** The first full run of the session ended
+`Ran 1225 tests in 766.206s` → `FAILED (failures=5, skipped=2)`, `make check FAILED in 'suite'`,
+exit 2. Every one was in `test_commit_citations`, phrased as "`141f91f` does not name any Git
+object". `git rev-parse --is-shallow-repository` returned `true` and `.git/shallow` carried the
+timestamp of the sandbox's recreation: the clone was depth-1 at `dbd7500`, so commits cited from
+the PR #26/#27 era were genuinely absent from the object store — the guard was correct that they
+could not be resolved *here*. Repaired by deepening the clone (`git fetch --unshallow origin`, 222
+commits, `.git/shallow` gone), after which `make citations-check` prints `CITATIONS OK: 263 commit
+reference(s) resolve across 11 documents` and the module reports `Ran 28 tests → OK`. **No
+document was edited to obtain that green.** The session has been caught by this failure mode before,
+which is exactly why the complaint was checked against the object store before anything was
+concluded about the prose — and why the converse discipline holds: a citations failure is a
+statement about the clone until the clone is shown to be complete.
+
+**5. The baseline at the pushed HEAD, with the clone repaired.** `make check` with the artifacts
+built and the venv on `PATH`: `Ran 1225 tests in 785.681s` → `OK (skipped=2)`, exit 0, `make
+check: suite and all gates passed`. The two skips, named: `OVMF ran on this machine; the ceiling no
+longer applies`, and `pipeline is active`. §41 recorded `skipped=10` on a tree without build
+products, so this run executed eight more cases than that one; the difference is artifacts, not
+code — which is worth writing down because it is the reason "the same suite, same count" can still
+mean different amounts of testing.
+
+**6. What was corrected, and what was not touched.** §41 and ADR-026 both said four strings that
+used to pass now refuse, and both counted `edk ii` among them. Replaying the replaced predicate
+(`"PC5-UEFI: firmware=EDK II" in text`) over every shape shows the old test was case-sensitive, so
+`edk ii` failed *before* as well; and the tightened set is **five**, not four:
+`EDK II (ACCID=0x6564)`, `EDK IIx`, `EDK II-like`, a 31-character `EDK IIxxxx…` (truncation →
+*ambiguous*, not wrong) and `EDK II?` (the loader's own `?`), against two widenings —
+`Ubuntu distribution of EDK II` and `Fedora distribution of EDK II`, the hosted case this change
+exists for. §41's `Ran 167 tests` line named a command that does not reproduce and is replaced by
+the two measured invocations above. §41's claim that the two host modules were **unmeasured** on
+the runner was wrong: `build and verify`'s `Host tool tests` step runs `unittest discover` over all
+of `tests/` with the venv first on `PATH`, and its own annotation at `84c7b75` reads `Ran 1225
+tests in 479.098s` → `OK (skipped=13)`. Every one of those is a documentation fix; the only code
+change in this section is `FirmwareEvidenceCorpusTests` and the `re` import it needs. `boot/**`,
+`kernel64/**`, `.github/**`, the `Makefile`, every predicate, every exit code and every Secure Boot
+row are untouched.
+
+**7. CI at the verified HEAD `84c7b75`.**
+
+| run | event | `build and verify` | `UEFI boot under genuine OVMF` | `publish release assets` |
+| --- | --- | --- | --- | --- |
+| `45550302243` | `pull_request` | `success` 04:58:04→05:21:58 (23.9 m) | `success` 04:58:04→05:12:12 (14.1 m) | `skipped` — non-tag ref |
+| `45550295187` | `push` | `success` 04:58:00→05:22:10 (24.2 m) | `success` 04:58:00→05:12:00 (14.0 m) | `skipped` |
+
+Four job results across two refs, and this time neither build job went near the 30-minute ceiling
+that cancelled the run in §41. The hosted suite skipped 13 of its 1225 where the local run skipped
+2; the reasons are not retrievable through this API surface — only the `Ran`/`OK` tail lines reach
+the annotations, and the per-reason list goes to the step summary — so they are recorded as an
+environment statement and counted as nothing. The executed count is what makes the green mean
+something: 1212 tests ran on the runner.
+
+The commit carrying §41's corrections and this section, `bfc462e`, was then measured the same way,
+because a correction that is not verified at its own HEAD is a claim again: PR run `45677833204`
+and push run `45677818950`, **both `completed/success`** — `build and verify` 27.2 m and 24.2 m,
+`UEFI boot under genuine OVMF` 14.8 m and 14.6 m, `publish release assets` `skipped` on both, and
+the runner's own host-suite notice reading `Ran 1227 tests in 588.553s` → `OK (skipped=13)`. The
+`1227` against the pushed parent's `1225` is the two corpus cases executing on the runner, so the
+new gate is not merely present in the tree; it ran there and passed there. `mergeStateStatus`
+returned to `CLEAN` with no pending checks.
+
+**6b. This correction broke a gate, and the gate was right.** The first run after §41's edits came
+back `Ran 1227 tests in 771.293s` → `FAILED (failures=2, skipped=2)`, exit 2, and both failures were
+`test_docs_check`, each carrying one complaint: the documents name a goal called *build*, and the
+Makefile has no such target. The cause was my own prose — I had put an ESP file path into the
+backticks following a `make` invocation, and `docs_check.py` reads the first word there as a target
+name, which is how it guards every other command line in these documents. The phrasing was fixed and
+the checker was not; this paragraph is written so that it stays that way. Two things follow for
+anyone reading later: the two new corpus tests *were* collected (`Ran 1227` = 1225 + 2), and a
+documentation gate can fail a verification-only change — which is the reason this pass re-ran the
+gates instead of trusting an edit that looked inert.
+
+**Suite after these corrections.** `Ran 1227 tests in 790.538s` → `OK (skipped=2)`, exit 0,
+`make check: suite and all gates passed`. The 1227 is the 1225 executed at the pushed HEAD with
+artifacts present, plus the two corpus cases this section adds; the two skips are the same pair as
+the baseline (`OVMF ran on this machine; the ceiling no longer applies`, `pipeline is active`). The
+intermediate `FAILED (failures=2)` in §42's 6b was this section's own phrasing and is gone from the
+tree, not glossed over.
+
+**Verdict.** Everything the owner listed as required for merge-readiness is now measured rather
+than assumed: both modules run directly with zero skips against real build products, the corpus
+replay is a gate with a demonstrated failure mode, the CI matrix at the pushed HEAD is green on
+both refs, the four documents match the code, and the one failure the run produced was traced to
+this sandbox's clone depth and repaired there. **PR #49 is NOT merged**, and stays open at the
+commit this section ships in. **M1b remains `blocked`**: `publish release assets` has still never
+executed, no tag has published `pc5.iso`/`pc5.iso.sha256`/`build-info.json`, and no published hash
+has been compared with a local rebuild at the same `SOURCE_DATE_EPOCH`. The
+`github-workflows-write` grant (still `admin`-gated) and the `timeout-minutes` question are left
+alone by instruction, not by oversight.

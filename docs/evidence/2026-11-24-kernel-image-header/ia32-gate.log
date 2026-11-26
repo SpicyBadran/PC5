@@ -1,0 +1,122 @@
+gcc -m64 -c boot/uefi/bootx64.S -o build/obj/bootx64.o
+gcc -m64 -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter -ffreestanding -fno-pic -fno-stack-protector -fno-builtin -mno-red-zone -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-tree-loop-distribute-patterns -Ikernel/include -Iboot/uefi -c boot/uefi/uefi_main.c -o build/obj/uefi_main.o
+ld -m i386pep -nostdlib -T boot/uefi/bootx64.ld --image-base 0x10000000 --subsystem 10 --section-alignment 0x1000 --file-alignment 0x200 --major-subsystem-version 6 --minor-subsystem-version 0 --minor-os-version 0 --no-insert-timestamp --enable-reloc-section -e _start build/obj/bootx64.o build/obj/uefi_main.o -o build/uefi/BOOTX64.EFI
+build/uefi/BOOTX64.EFI:
+  [ok  ] file is at least one DOS header long  (15821 bytes)
+  [ok  ] DOS header 'MZ'  (MZ)
+  [ok  ] e_lfanew points inside the file  (0x80)
+  [ok  ] PE signature  (50450000)
+  [ok  ] machine is x86-64  (0x8664)
+  [ok  ] subsystem is EFI application  (10)
+  [ok  ] image is executable, not a DLL  (0x226)
+  [ok  ] no import table (freestanding image)  (import directory size)
+  [ok  ] at least one section  (5)
+  [ok  ] section/file alignments are powers of two >= 0x200  (0x1000/0x200)
+  [ok  ] image base is page aligned  (0x10000000)
+  [ok  ] every section lies inside the file and clear of the headers  (SizeOfHeaders 0x400)
+  [ok  ] sections do not overlap in memory
+  [ok  ] entry point lies in the first executable section  (.text)
+  [ok  ] entry point is the first byte of the image  (0x1000)
+  [ok  ] base relocation table present and non-empty  (168)
+  [ok  ] every fixup is a type firmware's x64 loader implements
+  [ok  ] .text section exists and is executable
+  [ok  ] .bss carries no file contents (the entry stub zeroes it)  (0)
+  [ok  ] PE timestamp is zero (reproducible build)  (0)
+  [ok  ] image is at most 196608 bytes  (15821)
+  [ok  ] image is smaller than the El Torito 16-bit sector limit  (15821)
+  22/22 checks passed
+python3 tools/mkefiimg.py --size-kb 1440 \
+  --file build/uefi/BOOTX64.EFI=EFI/BOOT/BOOTX64.EFI \
+  --file build/kernel.bin=KERNEL.BIN \
+  --file docs/ISO_README.txt=README.TXT \
+  --output build/efi.img --info build/efi-info.json
+pc5: wrote build/efi.img (FAT12, 1474560 bytes, 167/2847 clusters used)
+pc5: sha256 0bdbf4807f2698a0d1b5a2d87e0f4c55dd928e4ee0ff79f6e5006ee77d84fd0d
+pc5: the ISO's build record now names mode=32 commit=1fdb24e519d59b49152011ecc52e5da4ad57dadd
+python3 tools/mkiso.py \
+  --volume-id PC5 \
+  --boot-image build/loader.bin \
+  --mbr-code build/mbr.bin \
+  --desc-offset 0xE00 \
+  --uefi-image build/efi.img \
+  --file KERNEL.BIN=build/kernel.bin \
+   \
+  --file README.TXT=build/iso/README.TXT \
+  --file BUILDINFO.TXT=build/iso/BUILDINFO.TXT \
+  --output build/pc5.iso \
+  --info build/build-info.json
+pc5: wrote build/pc5.iso (1601536 bytes, 782 sectors)
+pc5: sha256 c3714d7978010e394fdf3bef6e8edf0c1aadb1f192ecda7a5e3eaf782bcd30ea
+python3 tests/ovmf_boot.py --iso build/pc5.iso --efi-image build/efi.img \
+  --kernel build/kernel.bin --json-out build/ovmf-report.json \
+  --matrix-out build/ovmf-matrix.json \
+  --serial-dir build/ovmf-serial 
+[PASS] the boot profile can be read from the medium
+[PASS] the ISO matches the boot profile it was graded with
+[PASS] the ISO's build record names the medium it describes
+[PASS] [cold] genuine firmware produced a boot manager log
+[PASS] [cold] the machine booted UEFI, not SeaBIOS
+[PASS] [cold] firmware started the El Torito UEFI image
+[PASS] [cold] the machine was stopped on evidence, not on the clock
+[PASS] [cold] the PC5 UEFI loader executed under it
+[PASS] [cold] the loader identified EDK II as its firmware
+[PASS] [cold] the kernel was found on the volume we booted from
+[PASS] [cold] the kernel image was read through the file protocol
+[PASS] [cold] the loader read the kernel file at its real size
+[PASS] [cold] a memory map was handed over
+[PASS] [cold] the loader's conventional-memory total is a real count within the memory the machine was given
+[PASS] [cold] the kernel's memory total is a real count within the memory the machine was given
+[PASS] [cold] the load window was checked against that map (E15 guard)
+[PASS] [cold] firmware watchdog was disabled while services were callable
+[PASS] [cold] boot services were exited exactly once
+[PASS] [cold] ExitBootServices reported its retry count
+[PASS] [cold] the kernel copy was read back at the handover address
+[PASS] [cold] the handover carried exactly the kernel file
+[PASS] [cold] the kernel reached its entry point
+[PASS] [cold] the kernel accepted the boot contract
+[PASS] [cold] the kernel reached PC5-BOOT-OK
+[PASS] [cold] no loader failure code was reported
+[PASS] [cold] a fresh variable store was used and written by firmware
+[PASS] [warm] genuine firmware produced a boot manager log
+[PASS] [warm] the machine booted UEFI, not SeaBIOS
+[PASS] [warm] firmware started the El Torito UEFI image
+[PASS] [warm] the machine was stopped on evidence, not on the clock
+[PASS] [warm] the PC5 UEFI loader executed under it
+[PASS] [warm] the loader identified EDK II as its firmware
+[PASS] [warm] the kernel was found on the volume we booted from
+[PASS] [warm] the kernel image was read through the file protocol
+[PASS] [warm] the loader read the kernel file at its real size
+[PASS] [warm] a memory map was handed over
+[PASS] [warm] the loader's conventional-memory total is a real count within the memory the machine was given
+[PASS] [warm] the kernel's memory total is a real count within the memory the machine was given
+[PASS] [warm] the load window was checked against that map (E15 guard)
+[PASS] [warm] firmware watchdog was disabled while services were callable
+[PASS] [warm] boot services were exited exactly once
+[PASS] [warm] ExitBootServices reported its retry count
+[PASS] [warm] the kernel copy was read back at the handover address
+[PASS] [warm] the handover carried exactly the kernel file
+[PASS] [warm] the kernel reached its entry point
+[PASS] [warm] the kernel accepted the boot contract
+[PASS] [warm] the kernel reached PC5-BOOT-OK
+[PASS] [warm] no loader failure code was reported
+[PASS] [warm] the warm boot proved the same stages as the cold boot
+[PASS] the second boot reused the variable store firmware had written
+[N/A ] disk-style UEFI boot (ESP attached as a block device)  (the ISO carries its ESP as an El Torito image inside ISO9660, so there is no ESP partition to attach)
+[PASS] the gate's kernel-header claims match the kernel image on the medium
+[PASS] firmware refuses an ESP without BOOTX64.EFI (firmware fault)
+[PASS] firmware rejects a boot image with a broken PE32+ header (firmware fault)
+[PASS] loader reports the missing KERNEL.BIN as E2 when no volume has it (bootloader fault)
+[PASS] loader refuses a kernel with a corrupted header (bootloader fault) as E4
+[PASS] firmware refuses a truncated ISO (firmware fault)
+[PASS] a boot that outlives its deadline is reported as a timeout, not as a pass
+[PASS] a small machine stops with a diagnostic or boots with its own memory
+[PASS] the ISO does not embed the firmware volume
+[PASS] no firmware image is carried in the repository
+[PASS] the ESP is not a firmware image
+[PASS] the ESP contains no firmware volume signature
+[PASS] the ISO embeds the release ESP the build produced
+
+PC5-OVMF-BOOT-OK: real OVMF firmware booted the PC5 kernel.
+1 path(s) NOT TESTED (see the N/A lines): they are neither passed nor failed.
+report: build/ovmf-report.json
+IA32_EXIT=0

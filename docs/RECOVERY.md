@@ -67,7 +67,9 @@ without disk access would be a menu of buttons that do nothing, so it is not
 scheduled before then.
 
 `M1b` is **not** the recovery milestone. It is *Automated CI and release
-publication*, depends only on `M0`, and is `blocked` for an unrelated reason: the
-GitHub token available to this environment lacks the `workflows` permission, so
-`ci/build.yml` cannot be activated. Earlier revisions of this page conflated the
-two; the roadmap data is authoritative.
+publication*, depends only on `M0`, and was `blocked` for an unrelated reason: the
+GitHub token available to this environment lacked the `workflows` permission, so
+`ci/build.yml` could not be activated. That half is resolved — the pipeline is
+installed at `.github/workflows/build.yml` — and `M1b` stays open on its own acceptance criteria, which need
+a published tag whose hash equals a local rebuild. Earlier revisions of this page
+conflated the milestone with recovery; the roadmap data is authoritative.

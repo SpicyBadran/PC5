@@ -1,29 +1,27 @@
-# CI pipeline (not yet active)
+# CI pipeline (active)
 
-`ci/build.yml` is the PC5 build-and-release pipeline. It is **stored here rather
-than in `.github/workflows/` on purpose**: the GitHub App that authored this
-branch has repository admin rights but not the *workflows* permission, so GitHub
-rejects any push or API call that creates a file under `.github/workflows/`
-(`refusing to allow a GitHub App to create or update workflow ... without
-workflows permission`).
+`build.yml` is the PC5 build-and-release pipeline, installed at
+`.github/workflows/build.yml` on 2026-11-24 in `2c3cd5c` — a pure rename of
+`ci/build.yml` (`R100`, 0 insertions, 0 deletions, one commit, so the acceptance or
+refusal belonged to that one act) — after the repository owner granted the GitHub App
+*Workflows: Read and write*. GitHub then read the workflow as `active`
+(`total_count: 1`, id 428605735) and ran it on the push that installed it.
 
-Nothing about the pipeline is missing — only the location. To activate it:
+Before that grant the file lived here, not because it was unfinished but because GitHub
+rejected every push that created anything under `.github/workflows/`
+(`refusing to allow a GitHub App to create or update workflow ... without workflows
+permission`). Five of those refusals are quoted in *Attempts, dated* below; they stay
+quoted, because the reason the pipeline slept for eleven days is part of what it means to
+trust the pipeline now.
 
-```sh
-# 1. from a checkout of main with this file present
-git mv ci/build.yml .github/workflows/build.yml
-git commit -m "ci: activate the build and release pipeline"
-git push
-
-# 2. (or grant the GitHub App the "Workflows" permission and let an agent do it)
-```
-
-Then cut a release:
+**Installation is not execution and execution is not the milestone.** What remains is
+`M1b`'s own acceptance: publish the assets for a tag, and show the published hash equals
+a local rebuild at the same `SOURCE_DATE_EPOCH`.
 
 ```sh
 git tag -a v0.2.0 -m "PC5 0.2.0"
-git push origin v0.2.0
-gh run watch
+git push origin v0.2.0          # the `release` job is gated on refs/tags/, so this is the trigger
+gh run list --workflow build --limit 5
 gh release view v0.2.0 --json assets
 ```
 
@@ -64,8 +62,13 @@ identity, the destination or the forbidden-claim list drifts from the documents.
 
 * Proven locally: the exact workflow steps run on this machine and produce two
   byte-identical images; the publish script executes correctly against a stub.
-* Not proven: that GitHub Actions runs it and accepts the upload — that needs
-  the file in `.github/workflows/`, which needs the permission above.
+* Proven on the platform since 2026-11-24: that GitHub Actions reads the workflow, starts it
+  from a push, and that the actions it pins resolve on a hosted runner. The run record —
+  job by job, with the artifacts it uploaded — is in the *First runs* section at the end.
+* Still not proven, and therefore not claimed anywhere in this repository: that a tag
+  published `pc5.iso`, `pc5.iso.sha256` and `build-info.json` whose hash equals a local
+  rebuild. No tag has been pushed; the `release` job has never executed. That gap is
+  `M1b`'s `blocker` field, not a footnote.
 
 ## Activation attempts (milestone B3)
 
@@ -132,35 +135,260 @@ repository, then re-run the activation:
 1. GitHub → Settings → Applications → (the App that authored these branches) →
    **Configure** → Repository access → ensure `SpicyBadran/pc5` is selected →
    **Permissions → Repository permissions → Workflows: Read and write** → Save.
-2. Next session, or by hand:
+2. Next session, or by hand.  The move is one command; the repository then has to be told that it
+   moved, which is a second commit, and both are listed here so the activation is a single
+   continuous act rather than a half-done one:
+
    ```sh
+   # a. the pure rename, so the acceptance or refusal is attributable to one commit
+   mkdir -p .github/workflows          # `git mv` does not create the parent
    git mv ci/build.yml .github/workflows/build.yml
    git commit -m "ci: activate the build and release pipeline"
    git push
+
+   # b. the references that say where the pipeline lives
+   #    ci/README.md (its title and framing), docs/BUILDING.md, docs/TESTING_STRATEGY.md,
+   #    docs/PRESENTATION.md, docs/RECOVERY.md, docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md,
+   #    docs/architecture/RISK_REGISTER.md (row B6)
+   #    ... plus roadmap.json M1b: state blocked -> in_progress, deliverables/evidence retargeted,
+   #    blocker removed, then `make presentation` to re-render the generated blocks and
+   #    `python3 tools/roadmap.py sync` if the milestone graph drifts.
+   make docs-check presentation-check roadmap citations-check unit
+   python3 -m unittest tests.test_release          # pins the pipeline file's contents, both paths
    ```
+
+   Step (b) was withheld until (a) was accepted, on the rule that a path in a document is a claim
+   about the repository: writing `.github/workflows/build.yml` into eight living files while the push
+   could still be refused would have made those documents false on purpose.  Both halves landed on
+   2026-11-24, in that order, in two commits.  Dated records (the audit reports at the root,
+   `docs/evidence/**`, the historical `TEST_RESULTS` sections) were *not* retargeted: they reported
+   the location that was true when written, and a record rewritten to match a later state stops
+   being evidence.
+
+   Then read the first run before believing anything about it:
+
+   ```sh
+   gh run list --limit 3
+   gh run watch <id> --exit-status && echo "green" || echo "red: diagnose, do not re-run blindly"
+   ```
+
+   A green first run says the pipeline executes; it does **not** close M1b.  The milestone's
+   acceptance is a tag that publishes `pc5.iso`, `pc5.iso.sha256` and `build-info.json`, and a
+   published hash equal to a local rebuild at the same `SOURCE_DATE_EPOCH` — which needs the
+   `git tag` step below.
 
 No shell command available in this environment can grant that permission; it is
 an installation-level authorization held by the repository owner.
 
+The fourth and fifth attempts (2026-11-24) re-confirmed that from three directions, which is the
+only new information the attempts produced:
+
+| Probe | Result |
+|---|---|
+| `git push` of a commit whose diff is a pure rename (`0 insertions, 0 deletions`) | `remote rejected`, twice, quoting the same sentence |
+| `gh api repos/SpicyBadran/PC5/actions/workflows` | `total_count: 0` — GitHub has read no workflow in this repository, ever |
+| `gh api repos/SpicyBadran/PC5/actions/permissions` | `403 Resource not accessible by integration` — the setting is not readable with this token, so the grant cannot even be *observed* from here, only tested by pushing |
+
+Nothing was attempted that would side-step the check: no Git Data API, no contents API, no scratch
+repository, no alternate credentials, no commit that hides the file under a different path.  The
+local commit was reverted (`git reset --mixed HEAD~1`, `ci/build.yml` restored, `.github/workflows/`
+removed) and the tree verified clean against `84e6325`.
+
+What is different after these attempts is not the location of the pipeline — it is that the pipeline
+is now *worth running*: the five corrections in the section below this one were made first, precisely
+so that the first run GitHub produces is not a run in which every `make <gate> | tee` step could
+report success after its gate failed.
+
+## Reading a failed run
+
+The raw Actions log and every uploaded artifact are served from hosts outside this
+repository (`results-receiver.actions.githubusercontent.com`, then a blob store), and a
+sandboxed environment may be able to reach none of them: `gh run view --log`, `--log-failed`
+and `gh run download` all fail at the TLS layer, and `actions/runs/<id>/logs` only ever hands
+back those same redirects.  What *is* reachable with a plain repository token is:
+
+```sh
+gh api "repos/SpicyBadran/PC5/actions/runs/<run>" --jq '.jobs'      # which step, by name
+gh api "repos/SpicyBadran/PC5/check-runs/<job_id>/annotations" \
+   --jq '.[] | "\(.annotation_level) \(.message)"'                  # and what it said
+```
+
+so each failing job ends with `python3 tools/ci_report.py`, a step guarded by `if:
+failure()` that re-reads the gate logs and repeats their failure blocks as annotations and in
+the job summary.  The script always exits 0 — its first version did not, because a `grep` that
+matched nothing became a second red step while the real verdict stayed unread — and it quotes
+a *failed* verdict only, never a green gate's `OK`, so the report cannot point a reviewer at
+the wrong step.  `tests/test_ci_report.py` pins those properties, and one of them is a
+one-line assertion: a log line that looks like `::error::` must not become a command.
+
+What that first version could *not* carry was the cause of a crash.  `extract()` keeps lines that
+begin with a known prefix — `make:`, `ERROR:`, `Traceback`, `[FAIL]`, `NOT TESTED` — and a Python
+traceback's exception line begins with neither: it is not indented, so it is not a frame, and it is
+not `FAIL:`-prefixed, so no block claims it.  Every hosted firmware run therefore arrived as the
+same two lines, `Traceback (most recent call last):` and `make: *** [Makefile:637: ovmf-test]
+Error 1`, with the actual exception sitting unread in the log between them.  The reporter now also
+scans for tracebacks and publishes `exception | raised at <deepest frame in this repository> | make
+status`, choosing the deepest project frame because the outermost is `sys.exit(main())` and the
+innermost is CPython inside `shutil`.  Two honesty limits are pinned by tests: a traceback whose log
+was truncated before the exception line is reported as *truncated*, never by promoting the `make:`
+line into the exception; and a `FAIL:` block that already quotes its own exception line is not
+quoted twice.  Neither can move a verdict — the step still exits 0, still runs only under
+`if: failure()`, and a firmware job that crashes is still red.
+
+A second case needed a second instrument.  When the interpreter *dies* — the run at
+`169fe94` ended `Process completed with exit code 139` — there is no `FAIL:` block, no
+traceback and no tally, because no test failed: `discover` never got to report anything, and
+its half-written log ends mid-line.  A reporter that quotes logs cannot describe a run that
+wrote none.  So each failing job also runs `tools/ci_triage.py`, which runs the same modules
+`discover` runs, one interpreter per file, and names the first that does not return 0
+(`SIGSEGV`, `SIGKILL (out of memory…)`, `exit N`), with `--only ovmf` in the firmware job so
+it walks the suite that actually ran.  It is a diagnostic and never a gate: `if: failure()`,
+read-only apart from `build/logs/triage.json`, and it swallows its own crashes — a helper
+written to explain a failure became one once already, in bash, under `pipefail`, via a `grep`
+that matched nothing.
+
+### What the first four runs measured
+
+| Run | Head | Result | What it says |
+|---|---|---|---|
+| push | `2c3cd5c` | `cancelled` | superseded by the next push, by `concurrency.cancel-in-progress` — the design working, not a fault |
+| push + PR | `4d0c358` | `failure` ×2 | `Host tool tests` (build) and `Boot it under OVMF` (firmware) failed; the annotations could only say which step |
+| push | `169fe94` | `failure` ×2 | build: `exit 139` in `Host tool tests`; firmware: `make: *** [Makefile:637: ovmf-test] Error 1` after a `Traceback` |
+| push | `cc12956` | `failure` ×2 | the reporter quoted the *blocks* now: the build job's two failures are `git clone` dying in the LFS smudge filter, and the firmware job's is a `Traceback` inside `make ovmf-test` |
+| push | `6293d65` | build job green-or-red below the fold | triage step ran; the readout is the point of that run, not its colour |
+
+**The build job's failure was never about the image.**  `ReleaseAttributionRebuild._scratch` clones
+the working tree to build in, `git clone` fetches and smudges LFS by default, `.gitattributes` routes
+`PS5UPDATE.PUP` through LFS, and the LFS store holds no object for that pointer (`docs/BUILDING.md`
+has recorded a `404` for it since the provenance work).  So on a runner with a cold cache the clone
+dies — `remote missing object 42ea0e5…`, `fatal: PS5UPDATE.PUP: smudge filter lfs failed`, exit 128
+— and both cases in that class fail before building anything, while a developer machine with the
+payload cached passes and learns nothing is wrong.  `169fe94`'s `exit 139` is the same clone with its
+output truncated by a signal (`tee`'s buffer lost); run 5, whose log survived, is the clean form of
+the identical fault.  `169fe94` is the same fault with a truncated log — `exit 139`, `tee`'s buffer lost with the
+   signal, nothing left for the reporter to quote; *why* that run died by signal rather than by
+   `git`'s exit 128 is not recoverable from what survived, so it is recorded as the noisy form of
+   this fault and not explained further.  The fix is `GIT_LFS_SKIP_SMUDGE=1` on that clone — the build reads no `.pup`,
+and no assertion in the class is about the pointer's contents — pinned by a test written as text, so
+it holds on machines where the fetch would succeed.
+
+Neither variant is reproducible from this sandbox, and that is worth recording rather than papering
+over: a `git clone file://…` inherits the source repository's `objects/` path, so git-lfs finds the
+pointer's absence unremarkable and the smudge succeeds with or without the guard.  The failure is
+CI's measurement, not a local deduction — which is the whole argument for having the pipeline.
+
+### What runs six and seven measured
+
+Both heads ran twice (a `push` and its `pull_request` twin, same SHA, same verdicts), which is what
+makes the readout a measurement rather than a flake:
+
+| Run | Head | Build job | Firmware job | Release job |
+|---|---|---|---|---|
+| `45338046314` / `45338053015` | `247c5a3` | `failure` at `Host tool tests` | `failure` at `Boot it under OVMF` | `skipped` |
+| `45463229126` / `45463245850` | `d5e4f01` | **`success`** | `failure` at the same step, now a verdict rather than a crash | `skipped` |
+
+The LFS fault is gone: no `smudge filter lfs failed`, no exit `128`, and `ReleaseAttributionRebuild`
+reached a *different* assertion, which is the evidence that the guard in `2ce12c3` works on a cold
+cache rather than only in the clone it was written in.  Two distinct faults remained, and neither was
+in the image:
+
+1. **`make ovmf-test` crashed inside the harness, not in the boot.**  Its only reachable content was a
+   `Traceback` header and a `make:` status, because the reporter could not carry the exception line
+   (above).  With that line capturable — and with firmware *discovery* substituted locally, since the
+   sandbox has no QEMU and no `/usr/share/OVMF` — the same crash reproduces here on demand:
+   `TypeError: stat: path should be string, bytes, os.PathLike or integer, not Profile`, raised at
+   `shutil.copyfile(vars_template, secure_vars)` in `secure_boot_run`.  The cause is a transposed
+   argument pair: the signature ends `(..., profile, vars_template)` and the call site passed
+   `found["secure_vars"], profile`.  It is CI-only because the branch needs *both* Secure Boot firmware
+   files, which `tools/ovmf_setup.sh` installs and a developer machine usually does not have — so the
+   gate died before QEMU started and the Secure Boot assertion was never graded.
+2. **The dirty label was silently disabled on every runner.**  The build job failed
+   `test_the_dirty_label_and_the_loader_digest_stay_honest` with `build:` equal to a *forty-character*
+   sha, which `git rev-parse --short HEAD` never prints.  That is the whole diagnosis in one detail:
+   the value came from the workflow's own `env: BUILD_ID: ${{ github.sha }}`, and the Makefile's
+   `BUILD_ID ?=` yields to an environment variable — so the `-dirty` marker, written *inside* that
+   default, was discarded.  Exporting `BUILD_ID` locally reproduces the hosted failure byte for byte.
+
+Both are fixed at the source (`tests/ovmf_boot.py` names the three arguments it cannot be trusted to
+order; the Makefile appends the marker to whichever base won, via `override`), each with a test that
+fails against the old code — a static binding check for the call site, and a case that runs `make`
+with the runner's environment.  A sweep over every internal call in the harness reports no other
+role mismatch, and it is kept as a test so the class of bug stays closed rather than this instance.
+
+**Run 7 closed both and opened a third thing.**  At `d5e4f01` the build job is green on both twins, and
+the firmware job no longer crashes: `make ovmf-test` grades the boot and reports exactly one failed
+required row, `the loader names the firmware it is running on`.  That row greps the serial text for the
+literal `firmware=EDK II`, while the loader prints whatever `g_st->firmware_vendor` the firmware hands
+it, so it is the runner's OVMF build that disagrees — and the string it actually reported sits in
+`build/ovmf-serial/` inside an unreachable artifact, so it is not named here.  §39 of
+`docs/TEST_RESULTS.md` records both options and why neither was taken silently, since each changes what
+the gate *means*.
+
+Two properties of the pipeline are confirmed by these runs whatever the tests eventually do:
+a failing gate fails the job (no `tee` hid it, no skip was counted as a pass), and
+`publish release assets` reports `skipped` on every non-tag ref, which is its correct answer
+rather than a hole.  A third is confirmed by the cancelled first run: `cancel-in-progress`
+means a push while a run is in flight supersedes it, so a branch that commits often will
+finish only its last run — read the newest, not the first.
+
 ## Attempts, dated
 
-The instructions above have been carried out and refused three times. Recording the
-refusals here, rather than only in a chat log, is what keeps "the pipeline is dormant
-because of a permission, not because it was forgotten" checkable later.
+The instructions above were carried out and refused four times across five attempts, then
+accepted on the fifth. Recording the refusals here, rather than only in a chat log, is what
+keeps "the pipeline slept because of a permission, not because it was forgotten" checkable
+later — and what makes the fifth row mean something: the same command, the same path, the
+only difference being a permission the owner granted.
 
 | When | Against | Command | Result |
 |---|---|---|---|
 | 2026-11-16 | `main` `237725d` | `git mv ci/build.yml .github/workflows/build.yml && git push` | `remote rejected … without workflows permission` |
 | 2026-11-16 | `main` `a266936` | same | same |
 | 2026-11-22 | `arena/b81a0441-pc5` off `aeca706e` | same, after `mkdir -p .github/workflows` (`git mv` does not create the parent) | `! [remote rejected] HEAD -> arena/b81a0441-pc5 (refusing to allow a GitHub App to create or update workflow `.github/workflows/build.yml` without workflows permission)` |
+| 2026-11-24 | `arena/5e36f38b-pc5` off `84e6325`, PR #49's merge gate | same, after the five corrections above had landed so the first run would not be a run of a pipeline that cannot fail | refused, twice, 20 s apart, quoting the sentence verbatim (see the two 2026-11-13 blocks above for the same text) |
+| 2026-11-24 | `arena/5e36f38b-pc5` off `0aaa881`, **after the owner granted *Workflows: Read and write*** | `mkdir -p .github/workflows && git mv ci/build.yml .github/workflows/build.yml && git commit && git push` | **accepted**: `0aaa881..2c3cd5c`, and GitHub read the workflow as `active` within eight seconds |
 
 The third attempt was reverted (`git reset --mixed HEAD~1`, `ci/build.yml` restored, the
 new directory removed) and the tree was verified clean against `aeca706e` afterwards; the
 commit it created no longer exists locally, which is the point of quoting the rejection
 verbatim above.
 
-Meanwhile `ci/build.yml` itself is freely editable, and it now runs the gates that were
-missing from it: `make stubtest64`, so the long-mode boot is executed, and
+Meanwhile the pipeline file itself was freely editable — `ci/` is not a protected path, only `.github/workflows/` is — and it now runs the gates that were missing from it: `make stubtest64`, so the long-mode boot is executed, and
 `make emulator-probe --json`, so the run carries its own record of what the emulator could
 not prove.  `tests/test_release.py::CiLayoutTests` pins both, because a step that is
 merely intended is a step that will be dropped.
+
+### 2026-11-24, corrections made before the file moved (kept verbatim, including the date-stamped framing)
+
+Five defects were found by reading the pipeline against what the repository has learned since it
+was written.  All five are in the workflow now, committed to `ci/build.yml` at `8c14d39` and carried across by the rename, because a pipeline that
+cannot fail is worse than no pipeline:
+
+1. **`make <gate> | tee build/logs/<gate>.log` could not fail the job.**  GitHub's *unspecified*
+   default shell on Linux runners is `bash -e {0}` — no `pipefail` — so the successful `tee` at the
+   end of every pipe would have reported green after the gate failed.  The workflow now names
+   `shell: bash`, which brings `--noprofile --norc -eo pipefail`.  This is the same failure mode
+   §35 of `docs/TEST_RESULTS.md` measured in a test harness: a wrapper that certifies what it did
+   not execute.
+2. **The harness venv was installed after the host suite ran.**  A missing `unicorn` makes
+   `tests/test_kernel64.py` *skip*, and a skip never fails a step — measured locally, the module
+   printed `OK` after skipping 64 of its own cases.  Provisioning moved above the suite, the suite
+   re-asserts the import, and every skip reason is written to the job summary: visible, never
+   folded into a pass.
+3. **Four of the six gates `make check` runs had no CI step at all.**  `make check` wraps the suite
+   with `unit`, `psm`, `docs-check`, `citations-check`, `presentation-check` and `brand-check`; the
+   pipeline ran `unit` and nothing else, so the platform contract (`psm/contract.py`, `psm/audit.py`,
+   `psm/conformance.py`, `psm/render --check`), the brand assets, the documents and a dead commit
+   citation could all drift while every CI job stayed green.  They run now — and `citation-refs` runs
+   first, so a citation that cannot resolve in CI is reported as the tool reports it: first a
+   statement about the clone, then about the history.
+4. **The firmware job teed into `build/` before `build/` existed**, on a fresh checkout, and left
+   checkout credentials behind where the other two jobs do not.
+5. **The firmware job now states its own verdict in the run**, counting the harness's `[PASS]` and
+   `[FAIL]` log markers and quoting its `NOT TESTED` line.  It counts the *log* rather than
+   re-deriving a tally from the JSON, because `report["checks"]` (103 entries in the recorded run)
+   and the requirement matrix (57 rows) are different counts, and conflating them is how 104 once
+   became 105.
+
+The exit-code contract is unchanged and deliberately *not* fixed: `tests/ovmf_boot.py` exiting 3
+(NOT TESTED) still fails the `ovmf` job, so a runner without firmware is a red build, not a green
+one.  Activation is still the owner-side grant below.

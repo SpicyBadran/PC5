@@ -1,0 +1,291 @@
+[
+  {
+    "requirement": "firmware recognises the PC5 boot medium",
+    "source": "OVMF cold boot",
+    "check": "[cold] genuine firmware produced a boot manager log",
+    "state": "verified"
+  },
+  {
+    "requirement": "the firmware is not a BIOS shim",
+    "source": "OVMF cold boot",
+    "check": "[cold] the machine booted UEFI, not SeaBIOS",
+    "state": "verified"
+  },
+  {
+    "requirement": "the EFI boot entry is discovered",
+    "source": "OVMF cold boot",
+    "check": "[cold] firmware started the El Torito UEFI image",
+    "state": "verified"
+  },
+  {
+    "requirement": "serial output proves the execution path",
+    "source": "OVMF cold boot",
+    "check": "[cold] the machine was stopped on evidence, not on the clock",
+    "state": "verified"
+  },
+  {
+    "requirement": "the 64-bit PC5 loader executes",
+    "source": "OVMF cold boot",
+    "check": "[cold] the PC5 UEFI loader executed under it",
+    "state": "verified"
+  },
+  {
+    "requirement": "the loader names the firmware it is running on",
+    "source": "OVMF cold boot",
+    "check": "[cold] the loader identified EDK II as its firmware",
+    "state": "verified"
+  },
+  {
+    "requirement": "required files are located and loaded",
+    "source": "OVMF cold boot",
+    "check": "[cold] the kernel was found on the volume we booted from",
+    "state": "verified"
+  },
+  {
+    "requirement": "the kernel image is read through the file protocol",
+    "source": "OVMF cold boot",
+    "check": "[cold] the kernel image was read through the file protocol",
+    "state": "verified"
+  },
+  {
+    "requirement": "the loader read the kernel file at its real size",
+    "source": "OVMF cold boot",
+    "check": "[cold] the loader read the kernel file at its real size",
+    "state": "verified"
+  },
+  {
+    "requirement": "the kernel image declared its own length and it matched",
+    "source": "OVMF cold boot",
+    "check": "[cold] the kernel image declared its own length and it matched",
+    "state": "verified"
+  },
+  {
+    "requirement": "the loader validated the kernel image's header before jumping",
+    "source": "OVMF cold boot",
+    "check": "[cold] the loader validated the kernel image's header before jumping",
+    "state": "verified"
+  },
+  {
+    "requirement": "execution began at the entry point the image declared",
+    "source": "OVMF cold boot",
+    "check": "[cold] the jump went to the load address plus the declared entry offset",
+    "state": "verified"
+  },
+  {
+    "requirement": "memory allocation and ownership are correct",
+    "source": "OVMF cold boot",
+    "check": "[cold] a memory map was handed over",
+    "state": "verified"
+  },
+  {
+    "requirement": "the kernel's own map agrees with the loader's count",
+    "source": "OVMF cold boot",
+    "check": "[cold] the kernel's own map agrees with the loader's count",
+    "state": "verified"
+  },
+  {
+    "requirement": "the load window was checked against the memory map (the E15 guard)",
+    "source": "OVMF cold boot",
+    "check": "[cold] the load window was checked against that map (E15 guard)",
+    "state": "verified"
+  },
+  {
+    "requirement": "the firmware watchdog is disarmed before handover",
+    "source": "OVMF cold boot",
+    "check": "[cold] firmware watchdog was disabled while services were callable",
+    "state": "verified"
+  },
+  {
+    "requirement": "ExitBootServices succeeds with a current map key",
+    "source": "OVMF cold boot",
+    "check": "[cold] boot services were exited exactly once",
+    "state": "verified"
+  },
+  {
+    "requirement": "ExitBootServices reports how many attempts it needed",
+    "source": "OVMF cold boot",
+    "check": "[cold] ExitBootServices reported its retry count",
+    "state": "verified"
+  },
+  {
+    "requirement": "the kernel handoff succeeds",
+    "source": "OVMF cold boot",
+    "check": "[cold] the kernel copy was read back at the handover address",
+    "state": "verified"
+  },
+  {
+    "requirement": "the handover carried exactly the kernel file",
+    "source": "OVMF cold boot",
+    "check": "[cold] the handover carried exactly the kernel file",
+    "state": "verified"
+  },
+  {
+    "requirement": "the handover was verified by the kernel that received it",
+    "source": "OVMF cold boot",
+    "check": "[cold] the kernel accepted the boot contract",
+    "state": "verified"
+  },
+  {
+    "requirement": "the kernel reached its entry point",
+    "source": "OVMF cold boot",
+    "check": "[cold] the kernel reached its entry point",
+    "state": "verified"
+  },
+  {
+    "requirement": "the kernel reaches its 64-bit success marker",
+    "source": "OVMF cold boot",
+    "check": "[cold] the kernel reached PC5-64BIT-LONG-MODE-OK and PC5-64-DONE",
+    "state": "verified"
+  },
+  {
+    "requirement": "no loader failure was reported",
+    "source": "OVMF cold boot",
+    "check": "[cold] no loader failure code was reported",
+    "state": "verified"
+  },
+  {
+    "requirement": "the kernel runs on the page tables the loader built",
+    "source": "OVMF cold boot",
+    "check": "[cold] the page-table root the kernel runs on is the one the loader built",
+    "state": "verified"
+  },
+  {
+    "requirement": "the page tables the kernel counts are the ones the loader built",
+    "source": "OVMF cold boot",
+    "check": "[cold] the loader and the kernel agree on the page-table size",
+    "state": "verified"
+  },
+  {
+    "requirement": "paging is enabled in long mode",
+    "source": "OVMF cold boot",
+    "check": "[cold] the kernel reported paging enabled in long mode",
+    "state": "verified"
+  },
+  {
+    "requirement": "the IDT is installed and complete before anything can fault",
+    "source": "OVMF cold boot",
+    "check": "[cold] the IDT was installed before anything could fault",
+    "state": "verified"
+  },
+  {
+    "requirement": "the frame allocator is initialised from the real memory map",
+    "source": "OVMF cold boot",
+    "check": "[cold] the frame allocator was built from the firmware map",
+    "state": "verified"
+  },
+  {
+    "requirement": "the allocator's accounting is consistent with the map",
+    "source": "OVMF cold boot",
+    "check": "[cold] the allocator's free count is its conventional total less what was claimed",
+    "state": "verified"
+  },
+  {
+    "requirement": "the allocator's self-test runs after the handover",
+    "source": "OVMF cold boot",
+    "check": "[cold] the allocator's own self-test passed after handover",
+    "state": "verified"
+  },
+  {
+    "requirement": "the kernel reads real CPU state",
+    "source": "OVMF cold boot",
+    "check": "[cold] the kernel read real CPU state in long mode",
+    "state": "verified"
+  },
+  {
+    "requirement": "the TSS/IST state is reported as measured, never as assumed",
+    "source": "OVMF cold boot",
+    "check": "[cold] the TSS line reports its own state, and does not over-claim TR",
+    "state": "verified"
+  },
+  {
+    "requirement": "rebooting the same machine boots identically",
+    "source": "OVMF warm boot",
+    "check": "[warm] the warm boot proved the same stages as the cold boot",
+    "state": "verified"
+  },
+  {
+    "requirement": "loader reports the missing KERNEL64.BIN as kernel-not-found when no volume has it (bootloader fault)",
+    "source": "OVMF negative run (no-kernel)",
+    "check": "loader reports the missing KERNEL64.BIN as kernel-not-found when no volume has it (bootloader fault)",
+    "state": "verified"
+  },
+  {
+    "requirement": "loader refuses a kernel with a corrupted header (bootloader fault) as kimage64-magic",
+    "source": "OVMF negative run (bad-signature)",
+    "check": "loader refuses a kernel with a corrupted header (bootloader fault) as kimage64-magic",
+    "state": "verified"
+  },
+  {
+    "requirement": "firmware rejects a boot image with a broken PE32+ header (firmware fault)",
+    "source": "OVMF negative run (bad-pe)",
+    "check": "firmware rejects a boot image with a broken PE32+ header (firmware fault)",
+    "state": "verified"
+  },
+  {
+    "requirement": "firmware refuses an ESP without BOOTX64.EFI (firmware fault)",
+    "source": "OVMF negative run (no-boot-app)",
+    "check": "firmware refuses an ESP without BOOTX64.EFI (firmware fault)",
+    "state": "verified"
+  },
+  {
+    "requirement": "firmware refuses a truncated ISO (firmware fault)",
+    "source": "OVMF negative run (truncated-iso)",
+    "check": "firmware refuses a truncated ISO (firmware fault)",
+    "state": "verified"
+  },
+  {
+    "requirement": "a small machine stops with a diagnostic or boots with its own memory",
+    "source": "OVMF negative run (small-memory)",
+    "check": "a small machine stops with a diagnostic or boots with its own memory",
+    "state": "verified"
+  },
+  {
+    "requirement": "a boot that outlives its deadline is reported as a timeout, not as a pass",
+    "source": "OVMF negative run (deadline)",
+    "check": "a boot that outlives its deadline is reported as a timeout, not as a pass",
+    "state": "verified"
+  },
+  {
+    "requirement": "loader refuses a KERNEL64.BIN whose arch is wrong as kimage64-arch (bootloader fault)",
+    "source": "OVMF negative run (kernel-arch)",
+    "check": "loader refuses a KERNEL64.BIN whose arch is wrong as kimage64-arch (bootloader fault)",
+    "state": "verified"
+  },
+  {
+    "requirement": "loader refuses a KERNEL64.BIN whose image-size is wrong as kimage64-image-size (bootloader fault)",
+    "source": "OVMF negative run (kernel-image-size)",
+    "check": "loader refuses a KERNEL64.BIN whose image-size is wrong as kimage64-image-size (bootloader fault)",
+    "state": "verified"
+  },
+  {
+    "requirement": "loader refuses a KERNEL64.BIN whose checksum is wrong as kimage64-checksum (bootloader fault)",
+    "source": "OVMF negative run (kernel-checksum)",
+    "check": "loader refuses a KERNEL64.BIN whose checksum is wrong as kimage64-checksum (bootloader fault)",
+    "state": "verified"
+  },
+  {
+    "requirement": "a stale memory map key is retried, not fatal",
+    "source": "tests/uefi_stubtest.py (executed against the real loader image)",
+    "state": "external"
+  },
+  {
+    "requirement": "a firmware that never accepts the key fails without a false success",
+    "source": "tests/uefi_stubtest.py (executed)",
+    "state": "external"
+  },
+  {
+    "requirement": "invalid boot information is rejected by the kernel",
+    "source": "make unit (host unit test of the same predicate kmain runs)",
+    "state": "external"
+  },
+  {
+    "requirement": "the loader never calls a boot service after ExitBootServices",
+    "source": "tests/uefi_stubtest.py (executed)",
+    "state": "external"
+  },
+  {
+    "requirement": "the BIOS boot path still boots and passes its own test",
+    "source": "make boot-test (v86, BIOS/SeaBIOS)",
+    "state": "external"
+  }
+]

@@ -865,3 +865,98 @@ class DescriptorVersionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@REQUIRE_UNICORN
+class KernelImageHeaderTests(unittest.TestCase):
+    """The 64-bit loader refuses a kernel whose header lies, executed on the loader's bytes.
+
+    `tests/test_kimage64.py` runs the same mutations through the validator compiled on the
+    host, which is where the breadth lives.  This class is where the *reality* lives: the
+    artifact is the `BOOTX64.EFI` the release builds, the volume is a real FAT ESP, and the
+    refusal is the loader's own `PC5-64-LOADER-FAIL=` line printed while running.  A
+    validator that is correct in a harness and unreachable from the boot path would pass the
+    host test and still ship a kernel that jumps into corrupted code, so both halves are
+    needed and neither is a substitute for the other.
+
+    The last test is the one that keeps the first honest: if the boot stopped for a reason
+    unrelated to the header -- an emulator that cannot start, a volume the loader never
+    opens -- every mutation would "refuse" and the class would be green about nothing.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import boot64_stub
+        cls.module = boot64_stub
+        cls.image, cls.kernel = artifacts()
+        if str(ROOT / "tools") not in sys.path:
+            sys.path.insert(0, str(ROOT / "tools"))
+        import kimage64
+        cls.format = kimage64
+
+    def boot_with(self, kernel: bytes):
+        machine = self.module.StubFirmware64(
+            image=self.image,
+            esp_volume={"\\EFI\\BOOT\\BOOTX64.EFI": self.image,
+                        "\\KERNEL64.BIN": kernel},
+            kernel_bytes=kernel)
+        return machine.run()
+
+    def test_the_release_kernel_boots_and_reports_a_valid_header(self):
+        trace = self.boot_with(self.kernel)
+        self.assertIn("PC5-64-LOADER kernel-header version=1", trace.serial,
+                      "the shipped image must be accepted by its own format, or every "
+                      "refusal below is refusing something else")
+        self.assertIn("PC5-64-DONE", trace.serial)
+
+    def test_every_header_mutation_is_refused_by_the_loader_that_boots(self):
+        for kind in sorted(self.format.MUTATIONS):
+            with self.subTest(mutation=kind):
+                broken = self.format.mutate_bytes(self.kernel, kind)
+                trace = self.boot_with(broken)
+                wanted = "PC5-64-LOADER-FAIL=%s" % self.format.EXPECTED_REFUSAL[kind]
+                self.assertIn(wanted, trace.serial,
+                              "expected %s for the %s mutation; the loader said: %s"
+                              % (wanted, kind,
+                                 [line for line in trace.serial.splitlines()
+                                  if "FAIL" in line or "kernel" in line][:4]))
+                self.assertNotIn("PC5-64-LOADER-JUMP", trace.serial,
+                                 "the mutation was refused *after* the jump, which means the "
+                                 "validation did not gate the handoff")
+                self.assertNotIn("PC5-64-BANNER", trace.serial,
+                                 "the kernel ran anyway")
+
+    def test_a_kernel_that_lost_its_tail_is_refused_rather_than_run_short(self):
+        """Truncation is the corruption a copy or a partial write actually produces.
+
+        It is called out separately from the battery because it is the case where a loader
+        that "reads what it can" is plausible: `file->read` returning fewer bytes than asked
+        for is not an error in itself, and the previous 64-bit loader would have jumped into
+        an image whose last 8 KiB -- the `.bss` that carries its own stack -- was simply
+        absent.
+        """
+        truncated = self.kernel[:-8192]
+        self.assertLess(len(truncated), len(self.kernel))
+        trace = self.boot_with(truncated)
+        self.assertIn("PC5-64-LOADER-FAIL=kimage64-image-size", trace.serial)
+        self.assertNotIn("PC5-64-BANNER", trace.serial)
+
+    def test_each_field_has_its_own_refusal_name(self):
+        """Distinct fields, distinct reasons: one catch-all string would hide a wrong check.
+
+        If `kimage64-magic` and `kimage64-arch` both printed `kernel-invalid`, then a loader
+        that noticed the magic but never reached the architecture check would look identical
+        to one that noticed the architecture -- and the control built for the architecture
+        would be measuring the magic.  Exactly two mutations share a name here, and they are
+        supposed to: a truncated file and a lying `image_size` are the same property seen
+        from either side, and the reason says so.
+        """
+        names = [self.format.EXPECTED_REFUSAL[kind] for kind in sorted(self.format.MUTATIONS)]
+        shared = [name for name in set(names) if names.count(name) > 1]
+        self.assertEqual(shared, ["kimage64-image-size"],
+                         "mutations that break different fields share a refusal name: %s"
+                         % sorted(names))
+        self.assertEqual(sorted(k for k in self.format.MUTATIONS
+                                if names.count(self.format.EXPECTED_REFUSAL[k]) > 1),
+                         ["image-size", "truncate"],
+                         "the one shared name belongs to these two mutations and no others")

@@ -1,0 +1,11 @@
+python3 tools/buildmeta.py --iso build/pc5.iso --info build/build-info.json \
+  --version "0.2.0" --tag "" --commit "d014a5b6ddc23dac50333d7b8886ebab8448799e" \
+  --build-id "d014a5b" --source-date-epoch "1795396513" \
+  --build-date "2026-11-23T01:15:13Z" --uefi-path "32" \
+  $([ -f build/ovmf-report.json ] && echo --ovmf-evidence build/ovmf-report.json) \
+  $([ -f build/verify-report.json ] && echo --verify-report build/verify-report.json) \
+  $([ -f build/test/boot-evidence.json ] && echo --boot-evidence build/test/boot-evidence.json) \
+  $([ -f build/logs/unit.log ] && echo --unit-log build/logs/unit.log) \
+  $([ -f build/logs/host.log ] && echo --host-log build/logs/host.log)
+buildmeta: build/build-info.json: version=0.2.0 tag= sha256=ed98325d72fdb867… checks=2 verdict=PASS
+METADATA_EXIT=0

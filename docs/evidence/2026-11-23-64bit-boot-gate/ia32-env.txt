@@ -1,0 +1,8 @@
+# 32-bit release build + genuine OVMF gate, 2026-11-23T01:05:55Z
+HEAD=d014a5b6ddc23dac50333d7b8886ebab8448799e
+tracked modifications: 0
+make invocation: make  iso verify / make  ovmf-test
+QEMU emulator version 11.0.2
+33090cc07675baa5190d9f1e84bf5176b33bcbfa9bacac522961150cdb6dbb2a  /tmp/qpm/m/package/share/qemu/edk2-x86_64-code.fd
+5d2ac383371b408398accee7ec27c8c09ea5b74a0de0ceea6513388b15be5d1e  /tmp/qpm/m/package/share/qemu/edk2-i386-vars.fd
+0539587908d9a9b83ccdce7a48d968b50f827476b9852814e07445e9402df562  /tmp/qpm/m/package/bin/qemu-system-x86_64

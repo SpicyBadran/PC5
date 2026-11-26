@@ -1,9 +1,9 @@
 #!/bin/sh
 # Publish the three PC5 release assets to a GitHub release.
 #
-# Used by the `release` job in ci/build.yml (installed as
-# .github/workflows/build.yml once the workflow permission is granted) and
-# testable on its own with any `gh` on PATH.
+# Used by the `release` job in .github/workflows/build.yml (installed
+# there on 2026-11-24, from ci/build.yml) and testable on its own with any
+# `gh` on PATH.
 #
 #   tools/publish_release.sh --tag v0.2.0 --dist build/release
 #

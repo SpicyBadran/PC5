@@ -1,0 +1,9 @@
+PC5
+version: 0.2.0
+build: d6b97dc
+commit: d6b97dcbb21679b5b7d034df27da03f2b6bf7e4f
+date: 2026-11-23T03:03:59Z
+kernel: 64-bit PC5 long-mode kernel
+uefi-path: 64
+esp-loader: 5a99ad0424898578
+1fa3f66d2ff63a9372a21304e3f19f0a23efe46a9fb0fde9b43cdca047e12e7f  pc5.iso

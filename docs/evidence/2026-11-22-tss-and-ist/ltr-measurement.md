@@ -68,3 +68,35 @@ the kernel installs it, this emulator faults on `ltr`, and the reason was not de
 * What remains genuinely unverified, and stays that way until it is not: that a double fault
   or an NMI runs on its own stack.  That needs firmware or hardware that delivers the
   exception, which this repository has never had access to.
+
+## Erratum, added 2026-11-24: the cause was in the kernel, not in the emulator
+
+The sentence above — "with paging installed the way the kernel installs it, this emulator faults
+on `ltr`, and the reason was not determined" — was the honest limit of what had been measured, and
+it stayed the accepted explanation until `pc5_tss64_arm()` was written.  Reading the descriptor back
+*through GDTR* before executing anything made the fault explicable in one step: the selector the
+kernel passed was `0x28`, which is the **second qword** of the 16-byte TSS descriptor built at
+`g_gdt[4]`, not its first.  Its low bits are `base[63:32]`, so what the CPU was asked to load was a
+not-present, type-0 descriptor: `#TS`, correctly raised.  The correct selector is `0x20`, by the
+same arithmetic the kernel already uses for its code segment (`g_gdt[1]` → `0x08`) and data segment
+(`g_gdt[2]` → `0x10`).
+
+With that changed, **Unicorn 2.1.4 executes `ltr` with no complaint at all**: the 64-bit stub gate
+now reports `tr=loaded str=0x20 desc=0x1000/103 busy=available-to-busy iomap=104`, and so does the
+boot under TianoCore.  None of the six ruled-out hypotheses above was the cause, because the
+question "is the *selector* the one that names the descriptor's first qword" was never in the list
+— and it could not be, while the only observation available was "the emulator faulted".
+
+Two things this file got right and one it did not, stated plainly:
+
+* Right: the harness installs no interrupt hook, so *any* guest exception is fatal to a stub run,
+  and the rig therefore cannot distinguish which exception was raised.  That limited the diagnosis
+  to "a fault happened at this RIP", and the write-up said so instead of guessing.
+* Right: the gate was made to assert the *unloaded* TR, so a wiring-up of `ltr` without a working
+  environment would have gone red rather than quietly claiming success.  It did its job; the day it
+  went red is the day the instruction ran.
+* Wrong, and the lesson: treating "the environment refuses it" as the settled reason converted an
+  unverified claim into an architecture decision — the IDT gates were deliberately left unarmed
+  *because of* that explanation, so the missing instruction stopped looking like a gap and started
+  looking like a design.  A fault attributed to a tool is a hypothesis about the tool that has to be
+  tested against the code, and here the code was wrong in one byte.

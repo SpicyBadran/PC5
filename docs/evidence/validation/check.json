@@ -1,13 +1,13 @@
 {
   "checks": {
-    "passed": 887,
+    "passed": 1152,
     "skipped": 0,
-    "total": 887
+    "total": 1152
   },
-  "code_revision": "9fdba4f406ae70fe5268cb3d799dcfb8be51ed7d",
+  "code_revision": "86b862fc9cf27e3b28749c372c6e8f54583b2bd4",
   "command": "make check",
-  "commit": "9fdba4f406ae70fe5268cb3d799dcfb8be51ed7d",
-  "date": "2026-11-20",
+  "commit": "86b862fc9cf27e3b28749c372c6e8f54583b2bd4",
+  "date": "2026-11-23",
   "dirty": false,
   "exit_code": 0,
   "gate": "check",
@@ -16,6 +16,6 @@
   "result": "passed",
   "schema": "pc5.validation/1",
   "source_date_epoch": 1763251200,
-  "summary": "Ran 887 tests in 61.271s",
+  "summary": "Ran 1152 tests in 630.089s",
   "tool": "tools/validation.py"
 }

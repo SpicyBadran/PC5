@@ -79,6 +79,52 @@ def checks_for(trace, expect_success=True):
     check("PC5 page tables were built and counted",
           "mapped_2mib=2048" in serial, "2048 x 2 MiB = 4 GiB")
 
+    # The kernel image has to account for itself before anything jumps into it, and the four
+    # rows below read the loader's verdict out of the log and recompute it from the *other*
+    # two lines.  Checking the numbers against each other rather than against constants is
+    # the difference between "the header line appeared" and "the thing the header says is the
+    # thing the load did": a kernel that grew by a page, or an entry point that moved, keeps
+    # these rows true only if both sides moved together.
+    header = fields(serial, "PC5-64-LOADER kernel-header", "version")
+    check("the loader validated the kernel image's own header",
+          header == "1", f"kernel-header line reported version={header}")
+    declared = fields(serial, "PC5-64-LOADER kernel-header", "image")
+    measured = fields(serial, "PC5-64-LOADER kernel at=", "bytes")
+    check("the image is exactly as long as its header declares",
+          declared is not None and declared == measured,
+          f"the header declares {declared} bytes, the file read {measured}")
+    entry = fields(serial, "PC5-64-LOADER kernel-header", "entry")
+    jumped = fields(serial, "PC5-64-LOADER-JUMP entry=", "entry")
+    check("execution started at the declared entry, not at byte zero of the file",
+          entry is not None and jumped is not None
+          and int(jumped, 16) == 0x100000 + int(entry, 16),
+          f"header entry={entry}, jump target={jumped}")
+    check("the payload checksum was verified, not merely present",
+          fields(serial, "PC5-64-LOADER kernel-header", "checksum") == "ok",
+          "a header whose checksum field was never compared would still print")
+
+    # The four rows above are all the loader's verdict: what the code that *decides whether to
+    # jump* observed.  They cannot say anything about the bytes as the kernel finds them (the
+    # load could be damaged after that check), nor about the `kernel_size` the kernel is handed,
+    # which is a second claim about the same object that the loader computes for itself.  The
+    # kernel re-runs the header half of the same validator (`validate_image_self`), and these two
+    # rows are its account -- which is why the numbers are compared across lines rather than
+    # against constants: a kernel that grew by a page keeps both rows true only if the header,
+    # the handover and the file all grew together.
+    self_status = fields(serial, "PC5-64-KIMAGE", "status")
+    self_reason = fields(serial, "PC5-64-KIMAGE", "reason")
+    self_size = fields(serial, "PC5-64-KIMAGE", "image")
+    self_handover = fields(serial, "PC5-64-KIMAGE", "handover")
+    check("the running kernel re-read its own image header",
+          self_status == "ok" and self_reason == "ok"
+          and fields(serial, "PC5-64-KIMAGE", "crc") == "ok",
+          "PC5-64-KIMAGE status=%s reason=%s" % (self_status, self_reason))
+    sizes = [declared, measured, self_size, self_handover]
+    check("the loader's read, the header, and the handover name one length",
+          None not in sizes and len({int(v, 10 if not v.startswith("0x") else 16)
+                                     for v in sizes}) == 1,
+          "header=%s file-read=%s kernel-saw=%s handover=%s" % tuple(sizes))
+
     # The loader no longer reads CR3 back itself: after installing the root it
     # never runs loader code again.  The read-back now comes from the kernel, which
     # is executing on the new map - a stronger statement than the loader checking
@@ -221,17 +267,54 @@ def checks_for(trace, expect_success=True):
     check("the IST arming rules hold on the live table",
           fields(serial, tss_line, "arm-rules") == "1",
           f"arm-rules={fields(serial, tss_line, 'arm-rules')}")
-    # The claim that must NOT be made: IST means something only once TR names this TSS,
-    # and this boot path does not load TR (see kernel64/tss64.h).  When the last step is
-    # wired up - on an emulator that runs LTR, or on firmware - this check goes red and
-    # says the report and the routing have to be updated together.
-    check("TR is reported unloaded and the gates say the same",
-          fields(serial, tss_line, "tr") == "not-loaded"
-          and fields(serial, tss_line, "ist-df") == "0"
-          and fields(serial, tss_line, "ist-nmi") == "0",
-          f"tr={fields(serial, tss_line, 'tr')} "
-          f"ist-df={fields(serial, tss_line, 'ist-df')} "
-          f"ist-nmi={fields(serial, tss_line, 'ist-nmi')}")
+    # The rule that keeps a fault honest, in both directions now that LTR is executed on this
+    # path: the IDT may name an interrupt stack if and only if the CPU's own readbacks say TR
+    # names this TSS.  Written as an equivalence rather than two assertions, because the whole
+    # point is that the two halves cannot drift: `tr=loaded` with the gates unarmed is a kernel
+    # that loaded a TSS nobody will ever use, and `tr=not-loaded` with them armed is a fault
+    # that reads an IST slot out of whatever TSS TR does name.  Both fail here; neither can be
+    # fixed by editing the other half, and neither was detectable at all while the left side
+    # was hard-wired to "not-loaded" because nobody executed the instruction.
+    tr = fields(serial, tss_line, "tr")
+    ist_df = fields(serial, tss_line, "ist-df")
+    ist_nmi = fields(serial, tss_line, "ist-nmi")
+    check("the IDT routes to an IST slot if and only if TR names this TSS",
+          (tr == "loaded") == (ist_df == "1" and ist_nmi == "2"),
+          f"tr={tr} ist-df={ist_df} ist-nmi={ist_nmi}")
+    # What this emulator specifically established, so that the sentence above is not the only
+    # thing standing between a regression and a green gate.  STR's readback, the descriptor as
+    # it is found through GDTR, the busy transition that only a loading CPU performs in memory,
+    # and the I/O-map base read back through the descriptor - all four are the kernel quoting
+    # the machine rather than quoting itself, and Unicorn 2.1.4 answers all of them: the fault
+    # this path used to take was the kernel's own wrong selector (0x28, the descriptor's high
+    # half), not an emulator that refuses the instruction.  `docs/evidence/2026-11-22-tss-and-ist/`
+    # recorded the fault and could not name the cause; the cause was in tss64.h.
+    check("LTR executed and STR read back the selector the kernel built",
+          tr == "loaded" and fields(serial, tss_line, "str") == "0x20",
+          f"tr={tr} str={fields(serial, tss_line, 'str')} "
+          f"reason={fields(serial, tss_line, 'reason')}")
+    check("the descriptor the CPU was given names the granted TSS frame with a 103-byte limit",
+          fields(serial, tss_line, "desc") == fields(serial, tss_line, "tss") + "/103",
+          f"desc={fields(serial, tss_line, 'desc')} tss={fields(serial, tss_line, 'tss')}")
+    check("the TSS descriptor went from available to busy in memory",
+          fields(serial, tss_line, "busy") == "available-to-busy",
+          f"busy={fields(serial, tss_line, 'busy')}")
+    check("the TSS's own I/O-map base says there is no I/O permission map",
+          fields(serial, tss_line, "iomap") == "104",
+          f"iomap={fields(serial, tss_line, 'iomap')}")
+    # The delivery probe is deliberately *not* run here, and the reason is a measured property of
+    # the tool rather than a story about the kernel: Unicorn does not deliver a guest software
+    # interrupt to the guest's own IDT at all, which tests/test_unicorn_soft_int.py demonstrates by
+    # faulting the shipped image at the address of its single `int $8` -- read out of the built
+    # file, not written here.  That is the same shape of claim the `ltr` note carried for three
+    # milestones, and the difference is that this one is tested against the emulator: when Unicorn
+    # learns to do it, that test fails and the stub gains a real IST measurement, at which point the
+    # check below turns into an assertion on the probe's fields.
+    check("the delivery probe is unreachable in this emulator, by measurement not by assumption",
+          "PC5-64-TSS-DF" not in serial and "PC5-64-DONE" in serial,
+          "the run stops at the marker, before the probe; if a probe line ever appears here the "
+          "emulator has changed and tests/test_unicorn_soft_int.py must be updated with it")
+
     check("no exception was reported by the kernel across the boot that installed it",
           "PC5-64-EXCEPTION" not in serial,
           "the handler prints this line for any delivered fault, so its absence covers "

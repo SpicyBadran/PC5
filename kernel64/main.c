@@ -24,6 +24,7 @@
 #include "timer64.h"
 #include "madt64.h"
 #include "tss64.h"
+#include "pc5_kimage64.h"
 #include "serial64.h"
 
 #define CR0_PG (1ULL << 31)
@@ -108,6 +109,69 @@ static void validate_header(const struct pc5_boot64 *bi)
         fail("bootinfo-size");
     if (!(bi->flags & PC5_BOOT64_F_MEMMAP))
         fail("bootinfo-no-memmap");
+}
+
+/* The image's own account of itself, read after the jump.
+ *
+ * Every other check on this path is the *loader's* word: `bi->kernel_base` and
+ * `bi->kernel_size` come from the structure the loader filled in, and the range checks above
+ * prove only that the claim is consistent with the memory map.  A handover that described a
+ * different amount of the file than the file describes -- one byte short, or rounded to the
+ * wrong thing -- passes every check that existed before this function, because each one reads
+ * the same number out of the same structure.
+ *
+ * The header at the front of the image is an independent description of the same object: it
+ * is written by the build (`tools/kimage64.py`, from the ELF's own symbols), it travels inside
+ * the bytes that were read, and nothing in the handover can change what it says.  So the two
+ * are compared, by the code that validates the header for the loader as well
+ * (`pc5_kimage64_validate_header`), against the field the format defines rather than against a
+ * re-reading of this file's rules.
+ *
+ * Only the header half is recomputed here, and it is only the header half that *can* be: the
+ * payload checksum covers `.bss`, and `_start64` has already cleared `.bss` and adopted a stack
+ * out of it, so by this point part of the checked range is in use as a stack.  A runtime payload
+ * sum would be measuring the ordering of the boot code, not the integrity of the load.  What is
+ * genuinely re-derived is `header_crc`, over 128 bytes in `.head` that nothing writes.
+ *
+ * The line is printed whatever the verdict, and only then refused, because a boot that died
+ * before printing anything leaves a refusal name with no numbers behind it.  What it prints
+ * differs: on success, `image=` and `handover=` side by side, which is the pair a reader can
+ * check by eye; on refusal, only `handover=`, because the validator zeroes its output on every
+ * failure path, and echoing those zeros back as `image=0x0 crc=ok` would put a success field
+ * on a line that says `fail`.
+ */
+static void validate_image_self(const struct pc5_boot64 *bi)
+{
+    struct pc5_kimage64 head;
+    const u8 *image = (const u8 *)(unsigned long)bi->kernel_base;
+    const char *reason = pc5_kimage64_validate_header(image, bi->kernel_size,
+                                                      bi->kernel_base, &head);
+
+    serial64_write("PC5-64-KIMAGE status=");
+    serial64_write(reason ? "fail" : "ok");
+    serial64_write(" reason=");
+    serial64_write(reason ? reason : "ok");
+    if (reason) {
+        /* Only the claim survives a refusal.  `out` is zeroed by the validator on every
+         * failure path -- that is its contract, so a caller cannot act on a half-read
+         * description -- and echoing those zeros as `image=0x0 crc=ok` would put a success
+         * field on a line that says `fail`.  The handover number is printed because it came
+         * from the boot info rather than from the header, and it is the half a reader needs
+         * in order to see what the header disagreed with. */
+        serial64_write(" handover=");
+        serial64_hex(bi->kernel_size);
+        serial64_write("\n");
+        fail(reason);
+    }
+    serial64_write(" image=");
+    serial64_hex(head.image_size);
+    serial64_write(" handover=");
+    serial64_hex(bi->kernel_size);
+    serial64_write(" bss=");
+    serial64_hex(head.bss_size);
+    serial64_write(" entry=");
+    serial64_hex(head.entry_offset);
+    serial64_write(" crc=ok\n");
 }
 
 /* Stage 2: the map's address is checked arithmetically, then it is read and every
@@ -522,6 +586,8 @@ static struct pc5_tss64 g_tss64;
 
 static void report_tss(void)
 {
+    int tr_ok = 0;
+
     serial64_write("PC5-64-TSS status=");
 
     if (!pc5_tss64_build(&g_mem64, &g_tss64)) {
@@ -560,11 +626,36 @@ static void report_tss(void)
         }
         serial64_write("ok arm-rules=1");
     }
-    /* And the state the boot path leaves behind: not armed, because TR does not name this
-     * TSS.  A gate claiming an interrupt stack the CPU cannot resolve turns a reportable
-     * fault into a lost one, which is worse than having no IST at all. */
-    if (idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT) != 0
-        || idt64_gate_ist(PC5_VECTOR_NMI) != 0) {
+    /* TR.  The instruction is executed here, on the boot path, by the kernel that owns the
+     * TSS -- not by a harness on its behalf.  `pc5_tss64_arm` is what decides whether the
+     * gates below may be armed, and it decides from three readbacks (STR, the descriptor
+     * through GDTR, the TSS through that descriptor) rather than from the fact that the
+     * instruction assembled. */
+    tr_ok = pc5_tss64_arm(&g_tss64);
+
+    /* Arming the interrupt stack routing, and the rule that makes it safe: a gate with a
+     * non-zero IST field makes fault delivery read `ISTn` out of *whatever TSS TR points at*,
+     * so the gates may name an IST slot if and only if TR names this TSS.  That is the same
+     * rule this file had before LTR was executed -- when it could only ever leave TR
+     * unloaded, which is why `ist-df` and `ist-nmi` read 0 -- stated as a two-way agreement
+     * now that both halves of it can be true.  A one-way rule would let a future edit arm the
+     * gates while the readbacks were failing and still print a clean line. */
+    if (tr_ok) {
+        if (!idt64_set_ist(PC5_VECTOR_DOUBLE_FAULT, PC5_TSS64_IST_DOUBLE_FAULT)
+            || !idt64_set_ist(PC5_VECTOR_NMI, PC5_TSS64_IST_NMI)) {
+            serial64_write("failed reason=ist-arm-refused frames=0\n");
+            return;
+        }
+        if (idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT) != PC5_TSS64_IST_DOUBLE_FAULT
+            || idt64_gate_ist(PC5_VECTOR_NMI) != PC5_TSS64_IST_NMI) {
+            idt64_clear_ist(PC5_VECTOR_DOUBLE_FAULT);
+            idt64_clear_ist(PC5_VECTOR_NMI);
+            pc5_tss64_release(&g_mem64, &g_tss64);
+            serial64_write("failed reason=ist-readback-mismatch frames=0\n");
+            return;
+        }
+    } else if (idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT) != 0
+               || idt64_gate_ist(PC5_VECTOR_NMI) != 0) {
         idt64_clear_ist(PC5_VECTOR_DOUBLE_FAULT);
         idt64_clear_ist(PC5_VECTOR_NMI);
         pc5_tss64_release(&g_mem64, &g_tss64);
@@ -593,7 +684,186 @@ static void report_tss(void)
     serial64_dec(g_tss64.frames_taken);
     serial64_write(" free-after=");
     serial64_dec(pc5_mem64_stats(&g_mem64)->free);
-    serial64_write(" tr=not-loaded reason=ltr-unverifiable-here\n");
+    /* The fields that make the claim checkable from outside.  `str=` is what the CPU
+     * reports as its own task register, `busy=` is the descriptor type transition the load
+     * performs in memory, `desc=` is the base and limit decoded out of the table GDTR names,
+     * and `iomap=` is the TSS's own last field read back through that base.  A gate that can
+     * read all four can tell "TR holds 0x20 because the CPU loaded it" from "TR holds 0x20
+     * because something wrote the same number into a log". */
+    serial64_write(" tr=");
+    serial64_write(g_tss64.tr_armed ? "loaded" : "not-loaded");
+    serial64_write(" str=");
+    serial64_hex(g_tss64.tr_selector);
+    serial64_write(" desc=");
+    serial64_hex(g_tss64.desc_base);
+    serial64_write("/");
+    serial64_dec(g_tss64.desc_limit);
+    serial64_write(" busy=");
+    serial64_write(pc5_tss64_busy_transition(&g_tss64));
+    serial64_write(" iomap=");
+    serial64_dec(pc5_tss64_iomap_base(&g_tss64));
+    if (!g_tss64.tr_armed) {
+        serial64_write(" reason=");
+        serial64_write(pc5_tss64_reason(&g_tss64));
+    }
+    serial64_write("\n");
+}
+
+/* Raise a double fault on purpose, and ask what the CPU did with the stack.
+ *
+ * Everything `report_tss` prints is a *precondition*: an armed gate, a loaded TR, a TSS whose
+ * IST1 field names a granted page.  What it cannot show is the consequence those exist for --
+ * that a fault arriving on a broken stack is delivered somewhere safe.  This raises vector 8
+ * (a `#DF`, from `int $8`, which the CPU delivers through the gate exactly as it would a real
+ * one), and reads back where the handler found itself.  Two outcomes are proof and one is a
+ * measurement: the frame lands inside the IST1 page, which the ordinary stack is not, and the
+ * kernel is still running afterwards with DF clear.
+ *
+ * The mechanism is in idt64.S and it is scaffolding, not recovery: the IDT's #DF gate is
+ * pointed at a handler that records three words, restores RFLAGS (the CPU sets DF while
+ * delivering, and leaving it set would turn the next fault into a real double fault -- a probe
+ * that made the machine worse to measure it would be a bad trade), and jumps back to an address
+ * this function recorded itself.  A real #DF is not returnable, and nothing here pretends
+ * otherwise: this returns because the fault was invited and its stack was known good, which is
+ * precisely the situation a handler must never assume on its own.
+ *
+ * It restores RSP and RFLAGS and pointedly not CS: an interrupt gate has already loaded CS from
+ * the gate's selector (`0x08`, the kernel's own code segment), and the value it replaced -- `0x38`,
+ * left by the loader's GDT and not described by the 48-byte table now installed -- is the one thing
+ * here that is *better* after the trap than before it.  Restoring the caller's CS would be the
+ * faithful thing for a general handler and the wrong thing for this one, so the choice is written
+ * down rather than inherited.  See the `CS` entry in `docs/KNOWN_LIMITATIONS.md`.
+ *
+ * It runs only when TR was loaded, because an IST field on a gate is read out of *whatever TSS
+ * TR names*: with TR pointing elsewhere, this would either deliver onto a stranger's stack or
+ * fault while handling a fault, and both of those look like a passing test in the log. */
+/* idt64.S: the probe's entry point and the one-word mailbox it reads.  The pointer is a plain
+ * global rather than a function argument because the handler is entered through the IDT, with no
+ * caller to hand it anything, and it is declared here rather than in a header because the only
+ * legitimate user is the function below -- `struct pc5_tss64_probe`'s layout is asserted against
+ * the assembly in tss64.c, and the offsets the mailbox is written at are the same ones.  They are
+ * not in a header on purpose: the only legitimate caller is the function below, and a declaration
+ * in `tss64.h` would advertise a way to arm the mailbox without arming the gate that reads it. */
+extern void pc5_ist_probe_entry(void);
+extern u64 pc5_ist_probe_ctx;
+
+static void report_tss_ist_probe(void)
+{
+    struct pc5_tss64_probe probe;
+    const char *which = "unreported";
+    volatile u64 canary = 0xC0FFEE1234567890ull;
+    u64 i;
+    int delivered = 0;
+
+    serial64_write("PC5-64-TSS-DF ");
+    if (!g_tss64.tr_armed) {
+        serial64_write("status=skipped reason=tr-not-loaded\n");
+        return;
+    }
+    /* Arm the gate, then the gate's target.  Both are read back afterwards rather than
+     * assumed, and the IST field is checked *before* the redirect because the redirect is what
+     * could plausibly lose it: `idt64_set_gate_target` moves only the offset, and if it moved
+     * more than that the number printed below would say so. */
+    if (idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT) != PC5_TSS64_IST_DOUBLE_FAULT) {
+        serial64_write("status=refused reason=gate-not-armed\n");
+        return;
+    }
+    probe.rsp_before = 0;
+    probe.resume = 0;
+    probe.gate_ist = idt64_gate_ist(PC5_VECTOR_DOUBLE_FAULT);
+    probe.rsp_delivery = 0;
+    /* The bound the frame has to land inside is the IST1 the *loaded TSS* names, read back
+     * through the descriptor -- not `ist_top[]`, which is only the kernel's memory of writing
+     * it.  Quoting the builder here would let a TSS whose field was overwritten after the build
+     * pass the window check against a page nobody is using. */
+    probe.ist_top = pc5_tss64_ist_live(&g_tss64, PC5_TSS64_IST_DOUBLE_FAULT);
+    if (probe.ist_top == 0ull || probe.ist_top != g_tss64.ist_top[PC5_TSS64_IST_DOUBLE_FAULT]) {
+        serial64_write("status=refused reason=ist-live-readback\n");
+        return;
+    }
+    /* Touch the page before asking the CPU to.  A faulting store here reports a #PF at a rip the
+     * reader can identify, which localises the problem to the mapping; a #PF whose rip is the
+     * `int` itself can only mean the delivery, and the two have very different fixes -- one is
+     * the pool handing out a page the platform will not let anyone write, the other is the TSS
+     * field or the descriptor.  Without this line, the pair is indistinguishable in the log. */
+    {
+        volatile u64 *sentinel = (volatile u64 *)(unsigned long)(probe.ist_top - 256ull);
+        *sentinel = 0xA5A5A5A500000000ull | probe.ist_top;
+        if (*sentinel != (0xA5A5A5A500000000ull | probe.ist_top)) {
+            serial64_write("status=refused reason=ist-page-not-writable\n");
+            return;
+        }
+    }
+    probe.flags_after = 0;
+    if (!idt64_set_gate_target(PC5_VECTOR_DOUBLE_FAULT, (u64)(unsigned long)&pc5_ist_probe_entry)) {
+        serial64_write("status=refused reason=gate-redirect-refused\n");
+        return;
+    }
+    pc5_ist_probe_ctx = (u64)(unsigned long)&probe;
+    /* One-shot on purpose: the handler clears the pointer as it returns, so a second delivery
+     * -- a #DF raised by the probe itself going wrong -- halts on the ordinary path rather than
+     * bouncing off the same recorded RSP twice, which would corrupt the stack silently and keep
+     * running. */
+    __asm__ volatile(
+        "leaq 1f(%%rip), %%rax\n\t"
+        "movq %%rax, 8(%[p])\n\t"
+        "movq %%rsp, 0(%[p])\n\t"
+        "int $8\n\t"
+        "1:\n\t"
+        "pushfq\n\t"
+        "popq 40(%[p])\n\t"
+        :
+        : [p] "r"((u64)(unsigned long)&probe)
+        : "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "memory", "cc");
+    /* The frame, read back off the stack the CPU switched to.  Nothing has used that page since
+     * the handler left it, and the handler itself deliberately read nothing from it -- so this is
+     * the CPU's own writing, seen from outside the layout argument. */
+    if (probe.rsp_delivery != 0ull) {
+        const volatile u64 *frame = (const volatile u64 *)(unsigned long)probe.rsp_delivery;
+        u64 i;
+
+        for (i = 0; i < PC5_TSS64_PROBE_WORDS - 6ull; i++)
+            probe.frame[i] = frame[i];
+    }
+    delivered = pc5_tss64_probe_verdict(&g_tss64, &probe, &which);
+    idt64_set_gate_target(PC5_VECTOR_DOUBLE_FAULT, 0u);
+    serial64_write("status=");
+    serial64_write(delivered ? "ok" : "failed");
+    serial64_write(" reason=");
+    serial64_write(which);
+    serial64_write(" rsp=");
+    serial64_hex(probe.rsp_delivery);
+    serial64_write(" rsp-before=");
+    serial64_hex(probe.rsp_before);
+    serial64_write(" ist1=");
+    serial64_hex(probe.ist_top);
+    serial64_write(" resume=");
+    serial64_hex(probe.resume);
+    serial64_write(" gate-ist=");
+    serial64_dec(probe.gate_ist);
+    serial64_write(" df=");
+    serial64_dec((probe.flags_after & 0x400ull) != 0ull);
+    serial64_write(" frame=");
+    for (i = 0; i < PC5_TSS64_PROBE_WORDS - 6ull; i++) {
+        serial64_write(i == 0ull ? "" : ",");
+        serial64_hex(probe.frame[i]);
+    }
+    /* The canary is the negative control for the claim that matters most.  A delivery that
+     * silently used the ordinary stack would still show a plausible RSP if the IST were wired
+     * to it; it would also, for a frame of 40 bytes, be unlikely to touch this word -- so the
+     * proof of "the interrupt stack is a different stack" is that the fault did *not* arrive on
+     * the one we were using.  Kept volatile so the compiler cannot fold the comparison away or
+     * keep the value in a register the handler never touched. */
+    serial64_write(" stack-intact=");
+    serial64_write(canary == 0xC0FFEE1234567890ull ? "1" : "0");
+    /* The frame the CPU left behind, dumped as it sits in memory.  The handler above records
+     * three of these words through fixed offsets, and the offsets are exactly the kind of thing
+     * two files can each get self-consistently wrong about -- so the raw quads go in the log too,
+     * with `resume=` as the needle: whichever word equals the address after the `int` is the RIP,
+     * and a report of the frame's layout that disagrees with the dump is a bug in the dump. */
+    serial64_write(" gate-restored=");
+    serial64_write(idt64_gate_uses_default_stub(PC5_VECTOR_DOUBLE_FAULT) ? "1" : "0");
+    serial64_write("\n");
 }
 
 static void report_memory(const struct pc5_boot64 *bi)
@@ -815,6 +1085,7 @@ void kmain(struct pc5_boot64 *bi)
     validate_header(bi);
     g_map = validate_memmap(bi);
     validate_mandatory_ranges(bi, &g_map);
+    validate_image_self(bi);
 
     /* The loader's stack is now known to be inside the map, page-aligned and
      * inside a range the map calls loader-owned.  Adopting it is the first moment it
@@ -945,5 +1216,15 @@ static void continue_on_handed_stack(void *argument)
     /* Every mandatory check passed; only now is the marker emitted. */
     serial64_write("PC5-64BIT-LONG-MODE-OK\n");
     serial64_write("PC5-64-DONE\n");
+
+    /* Last, and after the marker on purpose.  The probe below halts the CPU if it cannot
+     * complete, and an environment that cannot deliver a software interrupt at all -- which is
+     * what the emulator in `make stubtest64` turns out to be, proven by
+     * tests/test_unicorn_soft_int.py rather than asserted -- would otherwise take every check
+     * that follows down with it and report a broken boot.  Emitting DONE first says which of the
+     * two happened: a boot that reached the marker and then printed a failed probe line is a
+     * machine whose IST delivery was measured and did not match, and a run that stops at the
+     * marker with no probe line is a harness that never got that far. */
+    report_tss_ist_probe();
     halt_forever();
 }

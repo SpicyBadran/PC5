@@ -30,11 +30,11 @@
   <text x="816" y="274" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">blocked</text>
   <line x1="48" y1="318" x2="1152" y2="318" stroke="#243040"/>
   <text x="48" y="342" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start" letter-spacing="1.5">ISO VERIFICATION</text>
-  <text x="48" y="362" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#34d399" font-weight="bold" text-anchor="start">passed @ 9fdba4f</text>
+  <text x="48" y="362" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#34d399" font-weight="bold" text-anchor="start">passed @ 86b862f</text>
   <text x="328" y="342" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start" letter-spacing="1.5">TEST RUN</text>
-  <text x="328" y="362" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#34d399" font-weight="bold" text-anchor="start">passed 887/887 @ 9fdba4f</text>
+  <text x="328" y="362" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#34d399" font-weight="bold" text-anchor="start">passed 1152/1152 @ 86b862f</text>
   <text x="608" y="342" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start" letter-spacing="1.5">REAL OVMF</text>
-  <text x="608" y="362" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#fbbf24" font-weight="bold" text-anchor="start">not-tested @ a9b383d</text>
+  <text x="608" y="362" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#34d399" font-weight="bold" text-anchor="start">passed @ 86b862f</text>
   <text x="888" y="342" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="10" fill="#8b98a8" font-weight="normal" text-anchor="start" letter-spacing="1.5">PHYSICAL BOOT</text>
   <text x="888" y="362" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#fbbf24" font-weight="bold" text-anchor="start">not tested</text>
 </svg>

@@ -1,0 +1,22 @@
+Unicorn 2.1.4, Linux 6.1.158+ x86_64
+image: build/kernel64/KERNEL64.BIN (208896 bytes, sha256 3829c1af35322c30f6a3e19c80c5ea1eae533e4e498cb86f3188323ba21d262c)
+`int $8` sites in the image: 0x10245a (file offset 9306)
+harness stop markers: cleared, so the run walks past PC5-64-DONE into the probe
+run result: stopped_on=None error='Unhandled CPU exception (UC_ERR_EXCEPTION) at 0x10245c'
+fault_rip: 0x10245c
+site == fault_rip or fault_rip - 2: True
+serial ends with: 'DT reachable from the RSDP"\nPC5-64BIT-LONG-MODE-OK\nPC5-64-DONE\nPC5-64-TSS-DF '
+
+and the suite, run verbosely:
+
+test_the_boot_itself_is_unaffected_by_the_probe_being_unreachable (tests.test_unicorn_soft_int.UnicornSoftInterruptTests.test_the_boot_itself_is_unaffected_by_the_probe_being_unreachable)
+Everything up to `PC5-64-DONE` still happens, so the stub's 49 checks are honest. ... ok
+test_the_emulator_refuses_to_deliver_it_and_says_so_at_the_instruction (tests.test_unicorn_soft_int.UnicornSoftInterruptTests.test_the_emulator_refuses_to_deliver_it_and_says_so_at_the_instruction)
+The measured fact: a guest `int $8` is not delivered, and the fault is *at* the int. ... ok
+test_the_kernel_contains_exactly_one_software_interrupt (tests.test_unicorn_soft_int.UnicornSoftInterruptTests.test_the_kernel_contains_exactly_one_software_interrupt) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 2.443s
+
+OK
+exit: 0
