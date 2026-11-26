@@ -125,16 +125,28 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(earned, float(by_complete))
 
     def test_a_declared_criterion_is_credited_exactly(self):
+        """A declared `criteria_met` of n earns exactly n, and nothing else moves.
+
+        The milestone is chosen from the data rather than named, so this test is about
+        the rule and not about which milestone happens to be open today.
+        """
+        candidates = [m["id"] for m in self.data["milestones"] if m["state"] == "in_progress"]
+        if not candidates:
+            self.skipTest("no in-progress milestone to declare a fraction on")
+        target = candidates[0]
         data = copy.deepcopy(self.data)
         for milestone in data["milestones"]:
-            if milestone["id"] == "M2a":
+            if milestone["id"] == target:
                 milestone["criteria_met"] = 2
-                milestone["state"] = "in_progress"
+                self.assertEqual(milestone["state"], "in_progress")
         model = C.compute(data)
-        weight = len(next(m for m in data["milestones"] if m["id"] == "M2a")["acceptance"])
+        # contribution = (criteria_met / weight) * weight, so the earned weight grows by
+        # exactly the declared count -- one criterion recorded, one criterion counted
         self.assertAlmostEqual(model["weighting"]["earned_weight"]
-                               - self.model["weighting"]["earned_weight"], 2.0 / weight * weight)
-        self.assertEqual(model["milestones"]["partial_credit"], ["M2a"])
+                               - self.model["weighting"]["earned_weight"], 2.0)
+        self.assertEqual(model["milestones"]["partial_credit"], [target])
+        self.assertEqual(model["counts"], self.model["counts"],
+                         "declaring a fraction must not change a single state count")
 
     def test_two_models_agree_so_weighting_is_not_the_story(self):
         """The figure is not an artefact of the weight choice: say so with a number."""
@@ -391,8 +403,9 @@ class CheckTest(unittest.TestCase):
         text = path.read_text(encoding="utf-8")
         block = re.search(r"<!-- pc5:completion:begin -->.*?<!-- pc5:completion:end -->",
                           text, re.S).group(0)
-        inflated = block.replace("| **Overall completion** | **26.7%**",
-                                 "| **Overall completion** | **99.9%**")
+        percent = re.search(r"\| \*\*Overall completion\*\* \| \*\*([\d.]+)%\*\*", block)
+        self.assertIsNotNone(percent, "the block no longer prints the headline percentage")
+        inflated = block.replace(percent.group(0), "| **Overall completion** | **99.9%**")
         self.assertNotEqual(inflated, block, "the fixture did not find a percentage to inflate")
         path.write_text(text.replace(block, inflated), encoding="utf-8")
         problems = self.check()
@@ -425,15 +438,19 @@ class CheckTest(unittest.TestCase):
                         problems)
 
     def test_a_milestone_flip_reaches_the_figure_without_touching_an_svg(self):
+        """The change-in-graph-changes-the-figure proof, on whichever milestone is open."""
         before = P.completion_chart(self.data)
         moved = copy.deepcopy(self.data)
-        for milestone in moved["milestones"]:
-            if milestone["id"] == "M2a":
-                milestone["state"] = "complete"
-                milestone.setdefault("evidence", ["docs/TEST_RESULTS.md"])
+        flip = next((m for m in moved["milestones"] if m["state"] != "complete"), None)
+        if flip is None:
+            self.skipTest("every milestone is complete; nothing left to earn")
+        flip["state"] = "complete"
+        flip["evidence"] = flip.get("evidence") or ["docs/TEST_RESULTS.md"]
         after = P.completion_chart(moved)
-        self.assertNotEqual(before, after)
+        self.assertNotEqual(before, after, f"{flip['id']} completing changed nothing")
         self.assertGreater(C.compute(moved)["percent"], C.compute(self.data)["percent"])
+        # and the figure says the new number, not merely a different number
+        self.assertIn(f"{C.compute(moved)['percent']}%", after)
 
     def test_a_released_milestone_moves_the_release_row_only(self):
         """Publication is not implied by readiness, in either direction."""
