@@ -138,12 +138,17 @@ class AboutFixture(Fixture):
 
     def setUp(self):
         super().setUp()
-        (self.root / "LICENSE").write_text(
-            "                    GNU GENERAL PUBLIC LICENSE\n"
-            "                       Version 2, June 1991\n\n"
-            "PC5 is distributed under GPL version 2 only (not \"or any later version\").\n"
-            "No third-party source archive is vendored in this repository.\n")
-        (self.root / "README.md").write_text("# PC5\n\nGPL-2.0-only.\n")
+        # The licence arrives as a *pair*: the official text verbatim, and a notice that grants
+        # it. The fixture copies the repository's own `LICENSE` rather than writing a
+        # GPL-shaped stub, because the check it exercises is a digest comparison — a stub would
+        # fail for the wrong reason and the test would pass for the wrong reason.
+        shutil.copyfile(REPO / "LICENSE", self.root / "LICENSE")
+        (self.root / "LICENSING.md").write_text(
+            "# PC5's licence\n\n"
+            "PC5 is licensed under the GNU General Public License version 3 only "
+            "(`GPL-3.0-only`).\n"
+            "PC5 vendors no third-party source archive.\n")
+        (self.root / "README.md").write_text("# PC5\n\nGPL-3.0-only.\n")
         (self.root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (self.root / "docs/architecture/roadmap.json").write_text(json.dumps({
             "document_version": "test", "updated": "2026-01-01",
@@ -241,7 +246,7 @@ class AboutFixture(Fixture):
         self.write_page(licence="\nPC5 is MIT licensed.\n")
         problems = self.about_problems()
         self.assertTrue(any("docs/ABOUT.md" in problem and "'MIT'" in problem
-                            and "GPL-2.0-only" in problem for problem in problems), problems)
+                            and "GPL-3.0-only" in problem for problem in problems), problems)
 
     def test_a_bare_family_name_is_not_a_contradiction(self):
         self.write_page(licence="\nPC5 is GPL-2.0 software, and the text is the GPL.\n")
@@ -254,13 +259,23 @@ class AboutFixture(Fixture):
                             for problem in self.about_problems()),
                         "the front page's licence line is the one most readers see")
 
-    def test_an_absent_licence_file_is_not_guessed_at(self):
-        """No file, no comparison — and no second failure for the link that is already broken."""
+    def test_a_notice_without_the_official_text_is_refused(self):
+        """The grant needs the document it grants: a notice alone is an unverifiable claim."""
         self.write_page()
         (self.root / "LICENSE").unlink()
         self.assertIsNone(docs_check.licence_from_file(self.root))
-        problems = self.about_problems()
-        self.assertEqual(problems, [],
+        problems = [p for p in self.about_problems() if p.startswith("LICENSE: ")]
+        self.assertEqual(len(problems), 1, self.about_problems())
+        self.assertIn("cannot be verified", problems[0])
+
+    def test_neither_file_is_not_guessed_at(self):
+        """No notice and no text: nothing to compare, and no second failure for a broken link."""
+        self.write_page()
+        (self.root / "LICENSE").unlink()
+        (self.root / "LICENSING.md").unlink()
+        self.assertIsNone(docs_check.licence_from_file(self.root))
+        self.assertEqual([p for p in self.about_problems()
+                          if "LICENSE" in p or "LICENSING" in p], [],
                          "an absent licence is the link rule's problem, not this rule's")
         (self.root / "README.md").write_text("# PC5\n\n[Licence](LICENSE)\n", encoding="utf-8")
         self.assertTrue(any("link target missing: LICENSE" in problem
@@ -275,29 +290,43 @@ class AboutFixture(Fixture):
         self.assertTrue(any("LICENSE: is unreadable" in problem
                             for problem in self.about_problems()))
 
-    def test_a_boilerplate_licence_is_reported_once_against_the_file(self):
-        """A verbatim licence text is not a grant: say so about `LICENSE`, not about four pages."""
+    def test_an_edited_official_text_is_reported_once_against_the_file(self):
+        """A grant pasted into the GPL makes the file not-the-GPL: one problem, against `LICENSE`."""
         self.write_page()
+        body = (self.root / "LICENSE").read_text(encoding="utf-8")
         (self.root / "LICENSE").write_text(
-            "                    GNU GENERAL PUBLIC LICENSE\n"
-            "                       Version 3, 29 June 2007\n\n"
-            " ... either version 3 of the License, or (at your option) any later version.\n",
-            encoding="utf-8")
+            body + "\nPC5 is distributed under GPL version 2 only.\n", encoding="utf-8")
         (self.root / "README.md").write_text("# PC5\n\n**Licence**: GPL-2.0-only.\n",
                                              encoding="utf-8")
         problems = [p for p in self.about_problems() if "LICENSE" in p or "states" in p]
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("LICENSE", problems[0])
-        self.assertIn("no licence grant", problems[0])
+        self.assertIn("has been edited", problems[0])
+        self.assertIn("LICENSING.md", problems[0],
+                      "and it names the file the wording actually belongs in")
 
-    def test_a_header_and_grant_that_disagree_are_caught(self):
+    def test_a_notice_that_grants_nothing_is_reported_once_against_the_notice(self):
+        """The other half of the same rule: a perfect text with no grant is not a licence claim."""
+        self.write_page()
+        (self.root / "LICENSING.md").write_text(
+            "# PC5's licence\n\nThe GNU General Public License is a copyleft licence.\n",
+            encoding="utf-8")
+        problems = [p for p in self.about_problems()
+                    if p.startswith("LICENSING.md: ") or "states" in p]
+        self.assertEqual(len(problems), 1, self.about_problems())
+        self.assertIn("states no licence grant for PC5", problems[0])
+
+    def test_a_body_of_the_other_version_and_the_notice_are_a_contradiction(self):
         self.write_page()
         (self.root / "LICENSE").write_text(
-            "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n\n"
-            "PC5 is distributed under GPL version 2 only.\n", encoding="utf-8")
+            "                    GNU GENERAL PUBLIC LICENSE\n"
+            "                       Version 2, June 1991\n\n"
+            "   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION\n",
+            encoding="utf-8")
         problems = self.about_problems()
-        self.assertEqual([p for p in problems if "is stale" in p], problems,
+        self.assertEqual([p for p in problems if "contradict each other" in p], problems,
                          "the disagreement is the only reportable fact here")
+        self.assertTrue(problems[0].startswith("LICENSE: "), problems[0])
 
     def test_a_cited_path_that_does_not_exist_is_caught(self):
         self.write_page(paths="\nSee `docs/nowhere.md` for the record.\n")

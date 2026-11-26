@@ -20,7 +20,7 @@ repository contains or has executed Sony's system software.
 | **Destination** | Genuine Sony PS5 system software executing on qualified x86-64 PC hardware (`M19`, level 5) |
 | **Stage** | Boot substrate working under emulation and stub firmware; no physical machine yet |
 | **Platform** | PC5 kernel and bootloader, freestanding, no Linux in the image |
-| **Licence** | GPL-2.0-only, no vendored third-party code ([ADR-025](docs/TECHNICAL_DECISIONS.md)) |
+| **Licence** | GPL-3.0-only, granted in [`LICENSING.md`](LICENSING.md) over the verbatim [`LICENSE`](LICENSE) text; no vendored third-party code ([ADR-025](docs/TECHNICAL_DECISIONS.md), [ADR-027](docs/TECHNICAL_DECISIONS.md#adr-027--pc5s-licence-is-gpl-30-only-and-the-grant-is-stated-outside-the-licence-body)) |
 
 **Navigate** · [About](#about-pc5) · [Completion](#overall-project-completion) · [Dashboard](#dashboard) · [Status](#status-at-a-glance) ·
 [Architecture](#architecture) · [Evidence](#what-has-actually-been-demonstrated) ·
@@ -135,7 +135,7 @@ this README keeps the numbers and points at it.
 | Where the work is going, milestone by milestone | [`docs/ROADMAP.md`](docs/ROADMAP.md), data in [`docs/architecture/roadmap.json`](docs/architecture/roadmap.json) |
 | How to build, verify and boot it | [`docs/BUILDING.md`](docs/BUILDING.md), [`docs/INSTALLATION.md`](docs/INSTALLATION.md) |
 | What each gate proves, and what it does not | [`docs/TESTING_STRATEGY.md`](docs/TESTING_STRATEGY.md), [`docs/GATES.md`](docs/GATES.md) |
-| The licence, and the no-vendoring rule | [`LICENSE`](LICENSE) (GPL-2.0-only), [ADR-025](docs/TECHNICAL_DECISIONS.md) |
+| The licence, and the no-vendoring rule | [`LICENSING.md`](LICENSING.md) (the grant) and [`LICENSE`](LICENSE) (the text), [ADR-025](docs/TECHNICAL_DECISIONS.md), [ADR-027](docs/TECHNICAL_DECISIONS.md#adr-027--pc5s-licence-is-gpl-30-only-and-the-grant-is-stated-outside-the-licence-body) |
 | How to contribute, and the rules a change has to keep | [`CONTRIBUTING.md`](CONTRIBUTING.md), [issue templates](.github/ISSUE_TEMPLATE) |
 
 **Status, stated once.** The completion figure above is generated from the milestone

@@ -1038,3 +1038,67 @@ that every claim about how far it has got is machine-checked.**
   three absences, truncation-versus-mismatch, and the 64-bit `revision=` boundary),
   `boot/uefi/README.md` (the marker chain), `docs/TEST_RESULTS.md` §40–§41 (the hosted
   annotation that started this), and edk2's `MdeModulePkg.dec` for the default PCD value.
+
+## ADR-027 — PC5's licence is GPL-3.0-only, and the grant is stated outside the licence body
+
+* **Context**: the tree carried two incompatible answers to one question. `main` received a
+  `LICENSE` that is the verbatim GNU General Public License version 3 text — 674 lines, 35,149
+  bytes, no sentence anywhere in it granting anything to PC5 — added at `9e3fda61e420` with the
+  message "Add LICENSE file". The working branch held a fifteen-line file instead: a GPL
+  preamble, a pointer to the FSF text, and a grant of the *second* version. Four surfaces then
+  disagreed by construction — the repository's licence file, GitHub's badge (which is *detected*
+  by scanning the opening of the text, so it read the 674-line file and reported version 3), the
+  README summary table, and `tests/test_project_independence.py`, which asserted a sentence from
+  the branch's file and therefore failed on any merge that took `main`'s. Nothing caught the
+  divergence while it formed, because the documentation check derived the identifier from
+  whichever file it was handed and a verbatim copy of somebody else's text parses as a licence
+  document while stating no decision.
+* **Decision**:
+  1. **The licence is `GPL-3.0-only`.** The project owner chose it; the choice is recorded by
+     this ADR, and no tool here infers, widens or narrows it. The *only* half is not a stylistic
+     preference: an "any later version" clause is a promise about terms nobody has reviewed, so
+     widening the grant has to be an act in `LICENSING.md`, not a default in a parser.
+  2. **`LICENSE` is the verbatim official text, unchanged.** It is the standard document, byte for
+     byte — no spliced paragraph, no local amendment, no project-specific sentence. A licence the
+     distribution cannot reproduce from the FSF's own text is not the GPL, and the file is the
+     thing a recipient hashes.
+  3. **The grant lives in `LICENSING.md`.** A project's decision is stated in the project's own
+     person, in a file that is not the quoted document, so the two can be validated against each
+     other. `tools/licensing.py::read` is the one reader: it derives the identifier from the
+     notice's grant sentence, verifies the official body against the SHA-256 it pins, and refuses
+     to derive anything from the boilerplate's *How to Apply* instructions.
+  4. **A refusal is a value, not an exception.** A file that states no grant, a grant with no
+     version or no *only* clause, a notice contradicting its own asserted identifier, and a
+     notice contradicting the official text each return their own sentence. `make docs-check`
+     fails the build once, against the file at fault; the About page prints the refusal instead of
+     inventing a number, because a page that cannot be rendered cannot say anything.
+  5. **No copyright line is invented.** No holder, no year range, and no per-file
+     `SPDX-License-Identifier` on a file whose author this project cannot confirm. A header
+     comment is a copyright statement, and asserting one over somebody else's work is a factual
+     error dressed as hygiene.
+* **Alternatives considered**: keep the branch's short file and let it win the merge (rejected —
+  a pointer to a licence, rather than the licence, is what a recipient of a distributed image has
+  to be handed); paste the grant sentence into `LICENSE` so one file answers everything (rejected
+  — it edits the official text, which breaks the one property that makes the file reusable as
+  evidence and makes `License: GPL-3.0` detection and hash comparison unreliable); adopt
+  `GPL-3.0-or-later` because a badge said version 3 (rejected — that is a different grant, chosen
+  by nobody); dual-license the kernel against the Linux kernel's own terms (rejected — PC5 ships
+  no Linux code, so the reasoning in
+  [`docs/architecture/LINUX_VS_FREESTANDING.md`](architecture/LINUX_VS_FREESTANDING.md) applies to
+  a licence PC5 does not need); print the identifier in prose in addition to the derived row
+  (rejected — a second copy of a one-source fact is the copy that goes stale, and it is what made
+  the discrepancy survivable in the first place).
+* **Consequences**: the README row, `docs/ABOUT.md` §1 and §6, `docs/PRESENTATION.md`'s contract
+  row, the risk register and the freestanding comparison all become derived or checked against one
+  reading, so the discrepancy cannot silently return; `make docs-check` fails on an edited
+  `LICENSE` even when the notice is perfect, which is the new behaviour and the reason this record
+  exists; the About row must be regenerated whenever either file changes (`make presentation`, then
+  `make presentation-check`), and a merge that takes a different `LICENSE` therefore has to
+  regenerate the page rather than resolve text by hand; third-party licences stay out of scope —
+  the vendoring ban of ADR-025 is what keeps the GPL's reach bounded, and `pupil.png`'s provenance
+  stays UNVERIFIED rather than being swept into "GPL-3.0-only" by a blanket statement.
+* **Evidence**: `LICENSING.md`, `LICENSE` (whose sha256 `python3 tools/licensing.py` prints),
+  `tools/licensing.py`, `tools/docs_check.py::licence_grant`, `tools/presentation.py::licence_row`,
+  `tests/test_licensing.py` (the eight refusals, including the two contradictions and the
+  modified-text case, which is built by editing a copy of the real file), and
+  `tests/test_project_independence.py`.

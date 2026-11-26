@@ -8,7 +8,7 @@ detect mechanically:
   * a documented command (`make something`) for a target that does not exist;
   * and, for `docs/ABOUT.md`, the four things that make it safe to trust: the sections it
     promises, the generated blocks the numbers live in, the repository paths it cites, and
-    the licence grant `LICENSE` actually makes (`tools/roadmap.py`, `tools/completion.py`
+    the licence grant in `LICENSING.md` and the official text in `LICENSE` (`tools/roadmap.py`, `tools/completion.py`
     and `tools/presentation.py` own the milestone states, the progress figure and the
     generated blocks themselves — this tool does not recompute any of them, it checks the
     prose around them, which is the part no generator writes).
@@ -34,6 +34,10 @@ import re
 import sys
 import urllib.parse
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import licensing  # noqa: E402 -- same-directory sibling; one reader for one fact
 
 ROOT = Path(__file__).resolve().parent.parent
 SKIP_DIRS = {".git", "node_modules", "__pycache__", "build", ".venv"}
@@ -64,7 +68,7 @@ ABOUT_SECTIONS = (
 #: live only inside these, which is what keeps the page consistent with the README.
 ABOUT_BLOCKS = ("about-identity", "about-capabilities", "about-progress")
 
-#: Documents whose licence statement has to agree with `LICENSE`.  Dated records under
+#: Documents whose licence statement has to agree with the notice's grant.  Dated records under
 #: `docs/` are deliberately excluded: they quote a past state, and rewriting history to
 #: satisfy a checker is the worse error.
 LICENCE_DOCUMENTS = ("README.md", "docs/ABOUT.md", "CONTRIBUTING.md", "docs/BRAND.md")
@@ -133,68 +137,32 @@ def strip_generated_blocks(text: str) -> str:
     return re.sub(r"<!-- pc5:[\w-]+:begin -->[\s\S]*?<!-- pc5:[\w-]+:end -->", "\n", text)
 
 
-#: A grant has to be this project's own sentence. `tools/presentation.py` explains the
-#: reasoning and prints the id from the same reading, so the two tools cannot disagree
-#: about what `LICENSE` says; only the reporting differs (this one returns a note instead
-#: of refusing, because a documentation check has to list every problem it found).
-GRANT_SENTENCE = re.compile(
-    r"\bPC5\b[^.\n]{0,220}?\b(?:licensed|distributed|released|offered)\b[^.\n]*", re.I)
-NOT_LATER = re.compile(r"not\s+\"?\s*or any later version", re.I)
-GPL_HEADER = re.compile(r"^\s*GNU GENERAL PUBLIC LICENSE\s*\n[^\n]*Version\s+(\d+)",
-                        re.I | re.M)
+#: The licence rules live in `tools/licensing.py`, which the About renderer also calls, so
+#: the gate and the page cannot disagree about what the repository grants — that
+#: disagreement was the defect, and two parsers over two files is how it was produced.
+#: What stays here is only the reporting: a documentation check lists every problem it
+#: found instead of refusing, and it attributes a refusal to the file a reader can act on.
+#: Two absences are tolerated as one: a tree with neither `LICENSE` nor `LICENSING.md` has
+#: no licence claim to check, and the link rule already reports the missing text; either
+#: half present without the other is a refusal, because then the tree does make a statement,
+#: and it is an unverifiable one.
 
 
 def licence_grant(root: Path = ROOT) -> tuple:
-    """`(spdx_id, note)` for what `LICENSE` states, with either half possibly empty.
+    """`(spdx_id, note, file)` for what this repository's licence is.
 
-    A verbatim copy of the FSF text is *not* a grant: its own sentence about "either
-    version 3 … or (at your option) any later version" tells a reader how to apply the
-    licence, not what this project chose.  So a file with no PC5-grant sentence returns
-    `(None, reason)` and the reason is reported against `LICENSE` — one accurate problem
-    rather than four documents accused of disagreeing with a guess.
+    Either half of the first pair can be empty, and `file` names the ambiguous one when it
+    is not: `LICENSING.md` when the project has not said what it grants, `LICENSE` when the
+    official text has been edited, replaced, or does not match the notice.
     """
-    path = root / "LICENSE"
-    if not path.exists():
-        # An absent `LICENSE` is a broken link in every document that points at it, which
-        # the link rule already says; repeating it here would be two failures for one fact.
-        return None, ""
-    try:
-        text = path.read_text(encoding="utf-8", errors="ignore")
-    except OSError as exc:
-        return None, f"is unreadable ({exc}), so no licence can be verified"
-    grant = GRANT_SENTENCE.search(text)
-    if not grant:
-        return None, ("states no licence grant for PC5 (the file may be the licence text "
-                      "without being a grant), so the documents cannot be checked against it")
-    sentence = grant.group(0)
-    clean = NOT_LATER.sub("", sentence)
-    version = re.search(r"version\s+(\d+)", clean, re.I)
-    if re.search(r"general public license|\bGPL\b", clean, re.I):
-        if not version:
-            return None, "names the GPL with no version in its grant sentence"
-        major = int(version.group(1))
-        if re.search(rf"version\s+{major}\s+only", clean, re.I):
-            spdx = f"GPL-{major}.0-only"
-        elif re.search(r"or any later version", clean, re.I):
-            spdx = f"GPL-{major}.0-or-later"
-        else:
-            return None, f"grants GPL version {major} without saying 'only' or 'any later version'"
-        header = GPL_HEADER.search(text)
-        if header and int(header.group(1)) != major:
-            return None, (f"puts a GPL version {header.group(1)} header around a grant of "
-                          f"version {major}; one of the two is stale")
-        return spdx, ""
-    if re.search(r"\bMIT\b", clean):
-        return "MIT", ""
-    if "apache" in clean.lower():
-        return "Apache-2.0", ""
-    if "bsd" in clean.lower():
-        return "BSD", ""
-    return None, f"names no licence family this check understands: {sentence!r}"
+    result = licensing.read(root)
+    if result["spdx"]:
+        return result["spdx"], "", ""
+    return None, result["problem"], result["file"]
 
 
 def licence_from_file(root: Path = ROOT):
-    """The SPDX id `LICENSE` grants, or ``None`` when the file does not state one."""
+    """The SPDX id PC5 grants, or ``None`` when the tree does not state one verifiably."""
     return licence_grant(root)[0]
 
 
@@ -290,11 +258,11 @@ def about_problems(about: Path, root: Path = ROOT) -> list:
                 continue
             problems.append(f"{document}: cited path does not exist: `{cited}`")
 
-    granted, note = licence_grant(root)
+    granted, note, culprit = licence_grant(root)
     if note:
-        # reported against the file, once: the ambiguity is the file's, and pointing at
-        # four documents would send a reader to fix the wrong thing
-        problems.append(f"LICENSE: {note}")
+        # reported against one file, once: the ambiguity belongs to a specific document, and
+        # pointing at four would send a reader to fix the wrong thing
+        problems.append(f"{culprit}: {note}")
     if granted:
         for document in LICENCE_DOCUMENTS:
             path = root / document
@@ -306,7 +274,7 @@ def about_problems(about: Path, root: Path = ROOT) -> list:
                     # a bare family name is not a contradiction; nor is naming the version
                     # of the licence text a reader is about to open
                     continue
-                problems.append(f"{document}: states {stated!r}, but `LICENSE` grants "
+                problems.append(f"{document}: states {stated!r}, but `LICENSING.md` grants "
                                 f"{granted!r}")
 
     if states:

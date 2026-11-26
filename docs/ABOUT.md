@@ -38,7 +38,7 @@ PC5 is not a Sony product and contains no Sony software. The identity names the 
 | **Destination statement** | Genuine Sony PlayStation 5 system software executing on compatible PC hardware, through PC5's own platform. |
 | **Evidence class at the destination** | execution evidence produced by the software itself (levels[4]) |
 | **Hardware-enablement substrate** | Linux tier (optional host) — role `hardware-enablement`, `required_for_product: false`, exits at `M8` (ADR-020) |
-| **Licence** | **GPL-2.0-only**, read from the repository's `LICENSE` file; no third-party source archive is vendored ([ADR-025](TECHNICAL_DECISIONS.md)) |
+| **Licence** | **GPL-3.0-only** — the grant in [`LICENSING.md`](../LICENSING.md), the official body in [`LICENSE`](../LICENSE) verified verbatim; no third-party source archive is vendored ([ADR-025](TECHNICAL_DECISIONS.md)) |
 | **Roadmap authority** | [PC5_ARCHITECTURE_SPEC_v2.md](architecture/PC5_ARCHITECTURE_SPEC_v2.md), document version `0.4.0-dev`, updated 2026-11-22 |
 
 **What the destination cannot be satisfied by** — stated in the roadmap so that no page, figure or release note can quietly substitute one of these for the real thing:
@@ -66,7 +66,7 @@ PC5 is not a Sony product and contains no Sony software. The identity names the 
 - **Level 5 — Genuine system-software compatibility.**  *Evidence class:* execution evidence produced by the software itself. Never: a PC5 kernel booting, a simulated environment, a PlayStation-style interface, or a screenshot of a menu PC5 drew
 - **Level 6 — Platform experience.**  *Evidence class:* per-title records with frame-time measurements, and a runtime log of the genuine system where the level-5 path is the one in use
 
-Every row and bullet above is rendered from `docs/architecture/roadmap.json` and `LICENSE` by `tools/presentation.py`.  Nothing in this section is a paraphrase, and nothing in it can be edited without the gate in `tests/test_product_identity.py` noticing.
+Every row and bullet above is rendered from `docs/architecture/roadmap.json` and from the licence pair — the grant in `LICENSING.md` over the verbatim `LICENSE` text, read by `tools/licensing.py` — by `tools/presentation.py`.  Nothing in this section is a paraphrase, and nothing in it can be edited without the gate in `tests/test_product_identity.py` noticing.
 <!-- pc5:about-identity:end -->
 
 ### Why the project exists
@@ -446,78 +446,100 @@ update, so what you read here describes the last verified state, not the last ho
 
 ## 6. Licence and attribution
 
-The licence line in §1 is the whole of this page's assertion: the identifier there is
-**derived from [`LICENSE`](../LICENSE) by the generator**, on every run, and this section
-deliberately does not restate the grant in prose. A licence id typed into a paragraph is a
-second copy of a fact that has one source, and it is the copy that goes stale.
+PC5's licence is stated by two files, and the difference between them is the point:
 
-What the derivation refuses is part of the design, because each refusal is a way a
-documentation change could otherwise invent a licence:
+* [`LICENSING.md`](../LICENSING.md) is **this project speaking in its own person** — the
+  notice that grants a licence, records why that version, and lists what is not PC5's to
+  grant. It is short on purpose; it is not a copy of anything.
+* [`LICENSE`](../LICENSE) is **the official text, verbatim** — the 674-line standard document
+  with no project-specific wording anywhere in it. Its size is not quoted here on purpose: a
+  figure typed into prose is a figure that goes stale, so what the check does is re-hash the
+  bytes against the digest pinned in [`tools/licensing.py`](../tools/licensing.py) and name
+  both digests when they differ.
 
-- **a file that states no grant for this project.** The verbatim FSF licence text tells a
-  reader how to *apply* a licence; it is not a decision by PC5. A `LICENSE` containing only
-  boilerplate is reported as ungranting, against `LICENSE`, and not as four documents
-  disagreeing with a guess.
-- **a GPL grant with no version, or with no statement about later versions.** "Only" and
-  "any later version" are different obligations; silence is not defaulted to either.
-- **a file whose header and grant name different versions.** That is what a half-finished
-  relicensing looks like, and a page must not choose a side between them.
+The licence row in §1 is generated on every run: [`tools/licensing.py`](../tools/licensing.py)
+reads the grant sentence out of the notice and then verifies the official body against the
+SHA-256 it pins, printing `python3 tools/licensing.py` as a one-line answer. This section
+deliberately does not restate the identifier in prose. A licence id typed into a paragraph is
+a second copy of a fact that has one source, and the second copy is the one that goes stale.
 
-A refusal is printed, not thrown. When `LICENSE` states no grant for PC5, the row above
-says so in those words, and `make docs-check` reports the gap once, against `LICENSE` — the
-file that needs the answer. Aborting instead would have taken every figure and every other
-block down with the one unclear file: four false failures wrapped around one true statement,
-and the true one is a decision for the project owner rather than a rendering detail. The
-maintenance workflow then fixes the row by regenerating it, which is what `make presentation`
-does here, and `make presentation-check` keeps any hand-restored identifier from surviving.
+What the reader refuses is part of the design, because each refusal is a way a documentation
+change could otherwise invent a licence:
 
-`make docs-check` then compares every licence identifier in the documents that describe
-the project — the README, this page, [`CONTRIBUTING.md`](../CONTRIBUTING.md) and
-[`docs/BRAND.md`](BRAND.md) — against the same derivation, so a change to the grant becomes
-a red gate naming the file rather than a permanent inconsistency across four pages.
+- **a notice that states no grant.** A file may *describe* a licence without granting one. The
+  verbatim FSF text is the extreme case: its *How to Apply These Terms to Your New Programs*
+  section hands every project the same sentence — "either version 3 of the License, or (at your
+  option) any later version" — as a template for applying the licence, and the document never
+  mentions PC5 at all. Deriving an id from either would print a guess in somebody else's
+  wording, and then blame every document that disagreed with the guess.
+- **a GPL grant with no version, or with no statement about later versions.** "Only" and "any
+  later version" are different obligations; silence is not defaulted to either, and this tool
+  will not widen a grant on a project's behalf.
+- **a notice that contradicts itself.** An asserted identifier beside a grant sentence that
+  implies another one means no controlled document can be checked against either reading, so
+  the contradiction is reported instead of resolved by preference.
+- **an edited official text.** An inserted paragraph, a reworded clause or a stray space makes
+  the file not-the-GPL even when it still opens like it. The refusal says "it has been edited",
+  names the two digests, and points at the notice as where project-specific wording belongs.
+- **an official text that is a different licence's document.** When the file is the version-2
+  body and the notice grants version 3, that is a contradiction between the standard document
+  and this project's decision; no page picks a side, and the gate fails until one of the two
+  moves.
 
-- **No third-party code is vendored.** No archive, no subtree, no imported asset.
-  The repository began with a third-party source archive at its root; it was removed,
-  and its former presence is recorded in
+A refusal is printed, not thrown. Aborting would take every figure and every other generated
+block down with the one ambiguous file — several false failures wrapped around one true
+statement, and the page would lose the chance to say that statement at all. Instead the row in
+§1 says that no identifier can be printed and names the file at fault, and `make docs-check`
+reports the same problem once, against that file. `make docs-check` also compares every licence
+identifier in the documents that describe the project — the README, this page,
+[`CONTRIBUTING.md`](../CONTRIBUTING.md) and [`docs/BRAND.md`](BRAND.md) — against the same
+reading, so a change to the grant becomes a red gate naming a file rather than a permanent
+inconsistency across four pages. Because the row is derived from the tree it is written into,
+changing either licence file means regenerating the page (`make presentation`, then
+`make presentation-check`); a merge that resolves `LICENSE` by hand and does not regenerate is
+caught rather than shipped.
+
+The reasoning behind the choice is [ADR-027](TECHNICAL_DECISIONS.md), which records the
+alternative that was on the table — a short `LICENSE` holding a preamble, a pointer and a
+grant of the second version, against a `main` whose 674-line text grants nothing to PC5 in its
+own words — and why neither file was kept as it stood. GitHub's licence field is *detected* by
+scanning the opening of the text, so a badge can disagree with a grant; nothing here consults
+the badge, and this repository has no package manifest of its own to carry a `License:` field — the
+metadata *is* the two files above plus the README's summary table, all of them checked against
+one reading.
+
+- **No third-party code is vendored.** No archive, no subtree, no imported asset. The
+  repository began with a third-party source archive at its root; it was removed, and its
+  former presence is recorded in
   [`docs/TECHNICAL_DECISIONS.md`](TECHNICAL_DECISIONS.md) as ADR-025 and measured in
-  [`docs/PROJECT_AUDIT.md`](PROJECT_AUDIT.md). PC5 is not a fork, companion or
-  affiliate of any other project, and the project's name does not appear in PC5's
-  documents — [`tests/test_project_independence.py`](../tests/test_project_independence.py)
-  enforces that.
-- **Third-party material is prior art, not a dependency.** Where a document cites a
-  published specification or another project's work, it cites it for reference, with
-  its own attribution, and copies nothing into the tree.
-- **Toolchain and firmware used, not shipped.** `gcc`, GNU `binutils`, QEMU and
-  TianoCore OVMF are used to build and to test — including inside the CI harness,
-  which provisions them at run time. They are not relicensed by PC5 and not
-  redistributed in the image; the image contains PC5's own code plus the manifest the
-  build embeds.
-- **GPL compliance is designed in, not asserted.** A distributed image embeds the
-  manifest its own build produced, and the build recipe, kernel configuration and
-  patches that constitute the corresponding source are the tree itself. See
-  [`docs/architecture/LINUX_VS_FREESTANDING.md`](architecture/LINUX_VS_FREESTANDING.md)
-  for the licensing reasoning behind the freestanding decision.
-- **Attribution and identity.** Contributions keep the licence and must not borrow
-  another project's identity; a contribution that imports code needs the provenance
-  recorded in the PR, and ADR-025 is what a reviewer reads before accepting one.
-
-One discrepancy is stated rather than tidied: GitHub's licence field for this
-repository is *detected* from the `LICENSE` text, and because that file is the GPL
-preamble plus a pointer to the full text, the platform's reported SPDX identifier can
-differ from what the file grants. The file is canonical. `make docs-check` checks the
-documents against `LICENSE`, not against the badge, so a drift here would be a build
-failure.
-
-One live discrepancy is named rather than tidied, because this page is the place a newcomer
-looks. As of 2026-11-26, `main` carries a `LICENSE` that is the verbatim GPL-3.0 text with no
-sentence granting anything to PC5 (added in `9e3fda6`, "Add LICENSE file"), while the front
-page's summary line and the branch this page was written on describe GPL-2.0-only, which is
-what this branch's `LICENSE` states. The tooling takes neither side: the row in §1 prints the
-id derived from the file in front of it, and on a file that states no grant it prints that
-fact instead of adopting the boilerplate's version. Settling it is a decision for the
-repository owner — the licence file, GitHub's detected badge, the controlled documents and
-[`tests/test_project_independence.py`](../tests/test_project_independence.py) then agree by
-construction, because they read the same sentence.
+  [`docs/PROJECT_AUDIT.md`](PROJECT_AUDIT.md). PC5 is not a fork, companion or affiliate of any
+  other project, and the project's name does not appear in PC5's documents —
+  [`tests/test_project_independence.py`](../tests/test_project_independence.py) enforces that.
+  A scan of the tracked sources for a header declaring a third-party origin finds none, which is
+  *why* there are no third-party notices to preserve here rather than a claim that there never
+  could be.
+- **The rule is a build rule, so it does not depend on the notice.** `gcc`, GNU binutils, QEMU
+  and TianoCore OVMF are consumed to build and to test — the CI harness provisions the firmware
+  at run time — and none of them is incorporated into `build/pc5.iso`, so none of their terms
+  reach the image. Results produced against OVMF are described as emulator results
+  ([`docs/TEST_RESULTS.md`](TEST_RESULTS.md),
+  [`docs/HARDWARE_COMPATIBILITY.md`](HARDWARE_COMPATIBILITY.md)) and never as physical-hardware
+  validation.
+- **GPL compliance is designed in, not asserted.** A distributed image embeds the manifest its
+  own build produced, and the build recipe, the kernel sources and the loader are the
+  corresponding source: they are the tree. See
+  [`docs/architecture/LINUX_VS_FREESTANDING.md`](architecture/LINUX_VS_FREESTANDING.md) for the
+  reasoning that made a freestanding kernel the compatible choice.
+- **One question is left open, on purpose.** No file in the tree carries a copyright line, and
+  the repository has no contributor agreement, so the set of licensors whose permission a
+  future relicensing would need is not recorded anywhere. Naming a holder or adding per-file
+  `SPDX-License-Identifier` comments would make that unknown look resolved, and a header comment
+  is a copyright assertion about somebody's work. [`LICENSING.md`](../LICENSING.md) lists what
+  would have to be true first — including re-baselining every reproducibility digest that hashes
+  a source file, since a header changes bytes and therefore changes hashes.
+- **Attribution and identity.** Contributions keep the licence, and a change that imports code
+  has to record its provenance in the pull request; ADR-025 is what a reviewer reads before
+  accepting one.
 
 ---
 

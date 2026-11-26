@@ -417,13 +417,12 @@ class AboutPageTest(unittest.TestCase):
         for forbidden in self.data["product"]["destination"]["must_not_be_satisfied_by"]:
             self.assertIn(forbidden, block)
 
-    def test_the_licence_row_is_read_from_the_licence_file(self):
-        """Not from memory, not from a badge: from `LICENSE`, whatever it happens to say.
+    def test_the_licence_row_is_derived_and_the_derivation_is_the_row(self):
+        """Not from memory, not from a badge: from the notice and the text, whatever they say.
 
         Asserted as an equality with the derivation rather than with a literal identifier, so
-        the test pins the mechanism and cannot go red on a tree whose `LICENSE` states no
-        grant (which is what `main` looked like while this was written).  The literal ids are
-        pinned in the fixture-level tests above, where the file under test is the test's own.
+        the test pins the mechanism. The literal ids are pinned in the fixture-level tests
+        below and in `tests/test_licensing.py`, where the files under test are the test's own.
         """
         licence = P.licence_identity()
         with redirected(self.tmp):
@@ -431,31 +430,42 @@ class AboutPageTest(unittest.TestCase):
         self.assertIn(P.licence_row(licence), block)
         self.assertIn(licence["spdx"] or "no identifier is printed", block)
 
-    def test_a_licence_that_states_no_grant_is_reported_not_parsed(self):
+    def test_a_notice_that_grants_nothing_is_reported_rather_than_parsed(self):
         """The licence *text* is not a grant, and the two must not be confused.
 
-        A repository can hold a verbatim copy of the FSF header — which is what `main` held
-        while this page was being written — and the boilerplate inside it names a version
-        nobody in this project chose.  Deriving an id from that copy would put a guess on a
-        page a distributor may rely on; and raising over it would have taken the whole
-        presentation layer down for a file the presentation layer cannot decide.
+        A repository can hold a verbatim copy of the FSF document — which is what `main` held
+        while this page was being written — and the boilerplate inside it names a version nobody
+        in this project chose. Deriving an id from that copy would put a guess on a page a
+        distributor may rely on; raising over it would have taken the whole presentation layer
+        down for a decision the presentation layer cannot make. So the refusal is a value, and
+        every case below checks the *reason*, not just the absence of an id.
         """
         tmp = Path(tempfile.mkdtemp())
         try:
-            (tmp / "LICENSE").write_text(
-                "                    GNU GENERAL PUBLIC LICENSE\n"
-                "                       Version 3, 29 June 2007\n\n"
-                " Everyone is permitted to copy and distribute verbatim copies of this\n"
-                " license document, but changing it is not allowed.\n\n"
-                " ... either version 3 of the License, or (at your option) any later version.\n",
+            shutil.copyfile(REPO / "LICENSE", tmp / "LICENSE")
+            (tmp / "LICENSING.md").write_text(
+                "# PC5's licence\n\nThe GNU General Public License is a copyleft licence.\n",
                 encoding="utf-8")
             licence = P.licence_identity(tmp)
             self.assertIsNone(licence["spdx"])
-            self.assertIn("without being a", licence["problem"])
+            self.assertIn("states no licence grant for PC5", licence["problem"])
+            self.assertEqual(licence["file"], "LICENSING.md")
+            # a notice can also be absent while the official text is present: same category
+            (tmp / "LICENSING.md").unlink()
+            problem = P.licence_identity(tmp)["problem"]
+            self.assertIn("is missing", problem)
+            self.assertIn("LICENSE", problem, "and it names the file that is there")
+            (tmp / "LICENSING.md").write_text(
+                "PC5 is licensed under the GNU General Public License version 3 only.\n",
+                encoding="utf-8")
             (tmp / "LICENSE").write_text("Copyright PC5 contributors. All rights reserved.\n",
                                          encoding="utf-8")
-            self.assertIn("no sentence", P.licence_identity(tmp)["problem"])
+            result = P.licence_identity(tmp)
+            self.assertIsNone(result["spdx"])
+            self.assertEqual(result["file"], "LICENSE")
+            self.assertIn("does not open with the GNU General Public License", result["problem"])
             (tmp / "LICENSE").unlink()
+            (tmp / "LICENSE").mkdir()
             self.assertIn("unreadable", P.licence_identity(tmp)["problem"])
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
@@ -464,8 +474,8 @@ class AboutPageTest(unittest.TestCase):
         """The property main's `LICENSE` broke: one unclear file, one reported gap.
 
         Asserted against a fixture tree rather than the repository, because whether *this*
-        branch's `LICENSE` states a grant is a fact about the branch, and it must not decide
-        whether the figures and the other eight blocks can be rendered at all.
+        tree's notice states a grant is a fact about the branch, and it must not decide whether
+        the figures and the other eight blocks can be rendered at all.
         """
         tmp = Path(tempfile.mkdtemp())
         try:
@@ -477,9 +487,10 @@ class AboutPageTest(unittest.TestCase):
             (tmp / "docs/assets").mkdir()
             for name, body in P.rendered(roadmap()).items():
                 (tmp / "docs/assets" / name).write_text(body, encoding="utf-8")
-            (tmp / "LICENSE").write_text("GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007"
-                                         "\n\nverbatim text, no grant sentence.\n",
-                                         encoding="utf-8")
+            shutil.copyfile(REPO / "LICENSE", tmp / "LICENSE")
+            (tmp / "LICENSING.md").write_text("# PC5's licence\n\n"
+                                               "The FSF's text is long and standard.\n",
+                                               encoding="utf-8")
             for name in ("README.md", "CONTRIBUTING.md", "requirements-harness.txt", "ci"):
                 source = REPO / name
                 (tmp / name).symlink_to(source, target_is_directory=source.is_dir())
@@ -488,48 +499,65 @@ class AboutPageTest(unittest.TestCase):
             with redirected(tmp, patch_root=True):
                 blocks = P.render_blocks(roadmap(), P.load_records())
             self.assertIn("no identifier is printed", blocks["about-identity"])
-            self.assertNotIn("GPL-3.0", blocks["about-identity"],
+            self.assertNotIn("**GPL-3.0-only**", blocks["about-identity"],
                              "the boilerplate's version must not become the page's id")
+            self.assertIn("The no-vendoring rule is recorded in", blocks["about-identity"],
+                          "the row still attributes the one fact that does not depend on the "
+                          "ambiguous file, and says where it comes from")
+            self.assertIn("LICENSING.md", blocks["about-identity"],
+                          "and names the file that has to carry the grant")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_the_other_licence_refusals_each_name_their_own_reason(self):
+        """Four ambiguities, four sentences: "the licence is unclear" has to say *how*."""
         tmp = Path(tempfile.mkdtemp())
         try:
-            (tmp / "LICENSE").write_text("GNU GENERAL PUBLIC LICENSE\nVersion 2, June 1991\n\n"
-                                         "PC5 is distributed under GPL version 2.\n",
-                                         encoding="utf-8")
-            self.assertIn("the id cannot be derived", P.licence_identity(tmp)["problem"])
-            (tmp / "LICENSE").write_text("GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007"
-                                         "\n\nPC5 is distributed under GPL version 2 only.\n",
-                                         encoding="utf-8")
-            self.assertIn("one of the two is stale", P.licence_identity(tmp)["problem"])
-            # a file that argues with itself is refused; a file that says "only" while
-            # quoting the later-version phrase is not
-            (tmp / "LICENSE").write_text(
-                "PC5 is distributed under GPL version 2 only (not \"or any later version\").\n",
-                encoding="utf-8")
-            self.assertEqual(P.licence_identity(tmp)["spdx"], "GPL-2.0-only")
-            (tmp / "LICENSE").write_text("PC5 is released under the MIT License.\n",
-                                         encoding="utf-8")
-            self.assertEqual(P.licence_identity(tmp)["spdx"], "MIT")
+            shutil.copyfile(REPO / "LICENSE", tmp / "LICENSE")
+            cases = {
+                "no version in the grant":
+                    ("PC5 is distributed under the GNU General Public License.\n",
+                     "no version number"),
+                "no only-or-later clause":
+                    ("PC5 is released under the GNU General Public License version 3.\n",
+                     "without saying 'only' or 'any later version'"),
+                "a self-contradictory notice":
+                    ("PC5 is licensed under the GNU General Public License version 3 only "
+                     "(**GPL-3.0-or-later**).\n", "the notice contradicts itself"),
+                "a later-version claim":
+                    ("PC5 is distributed under the GNU General Public License version 3, or any "
+                     "later version.\n", "will not do it on its behalf"),
+            }
+            for label, (notice, expected) in cases.items():
+                with self.subTest(label):
+                    (tmp / "LICENSING.md").write_text(notice, encoding="utf-8")
+                    result = P.licence_identity(tmp)
+                    self.assertIsNone(result["spdx"], result)
+                    self.assertIn(expected, result["problem"])
+                    self.assertEqual(result["file"], "LICENSING.md")
+                    self.assertIn(expected, P.licence_row(result),
+                                  "the page prints the reason, not a placeholder")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_the_licence_row_cites_each_clause_to_its_own_source(self):
-        """`LICENSE` may grant the licence without restating the vendoring rule."""
+        """The notice may grant the licence without restating the vendoring rule."""
         tmp = Path(tempfile.mkdtemp())
         try:
-            (tmp / "LICENSE").write_text("PC5 is distributed under GPL version 2 only.\n",
-                                         encoding="utf-8")
+            shutil.copyfile(REPO / "LICENSE", tmp / "LICENSE")
+            (tmp / "LICENSING.md").write_text(
+                "PC5 is licensed under the GNU General Public License version 3 only.\n",
+                encoding="utf-8")
             row = P.licence_row(P.licence_identity(tmp))
-            self.assertIn("**GPL-2.0-only**", row)
-            self.assertIn("not restated by `LICENSE`", row)
-            (tmp / "LICENSE").write_text("PC5 is distributed under GPL version 2 only.\n"
-                                         "No third-party source archive is vendored here.\n",
-                                         encoding="utf-8")
+            self.assertIn("**GPL-3.0-only**", row)
+            self.assertIn("not restated by `LICENSING.md`", row)
+            self.assertIn("ADR-025", row, "the rule is attributed to the decision that records it")
+            (tmp / "LICENSING.md").write_text(
+                "PC5 is licensed under the GNU General Public License version 3 only.\n"
+                "PC5 vendors no third-party source archive.\n", encoding="utf-8")
             row = P.licence_row(P.licence_identity(tmp))
             self.assertIn("no third-party source archive is vendored", row)
+            self.assertNotIn("not restated", row)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

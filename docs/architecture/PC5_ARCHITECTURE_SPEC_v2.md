@@ -5,7 +5,8 @@
 | Status | **Accepted. Replaces `PC5_ARCHITECTURE_SPEC_v1.md` as the architecture authority.** |
 | Date | 2026-11-15 |
 | Supersedes | `PC5_ARCHITECTURE_SPEC_v1.md` (two tracks, Linux-as-product); ADR-009, ADR-010 |
-| Decision records | ADR-019 (this architecture), ADR-020 (Linux role), ADR-021 (release isolation), ADR-022 (PS5 package handling), ADR-023 (loader validation), ADR-024 (contract registry), ADR-025 (no vendored archive), ADR-026 (firmware identity is the implementation token); ADR-001 … ADR-018 remain in force except ADR-009 and ADR-010, which ADR-019/ADR-020/ADR-021 supersede |
+| Decision records | ADR-019 (this architecture), ADR-020 (Linux role), ADR-021 (release isolation), ADR-022 (PS5 package handling), ADR-023 (loader validation), ADR-024 (contract registry), ADR-025 (no vendored archive), ADR-026 (firmware identity is the implementation token),
+  ADR-027 (licence: `GPL-3.0-only`, granted in `LICENSING.md` outside the verbatim `LICENSE` text); ADR-001 … ADR-018 remain in force except ADR-009 and ADR-010, which ADR-019/ADR-020/ADR-021 supersede |
 | Machine-checked parts | `docs/architecture/roadmap.json`, `tools/roadmap.py`, `tests/test_architecture.py`, `tests/test_product_identity.py` |
 | Investigation this replaces | `ARCHITECTURE_DISCREPANCY_REPORT.md` |
 
