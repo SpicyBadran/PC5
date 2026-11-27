@@ -368,7 +368,18 @@ evidence about the workflow's logic.
 token into the *git* credential store, which authorises the push and nothing else. The evidence
 step therefore sets `GH_TOKEN: ${{ github.token }}` beside `GH_REPO`, against the `actions: read`
 permission above it — without it, the one path a `workflow_dispatch` rehearsal never exercises
-(an automated refresh after a real verification) would fail on authentication.
+(an automated refresh after a real verification) would fail on authentication. That turned out to
+be the *easy* half: the first real `workflow_run` (2026-11-27, after #52 merged) got past the
+target refusal, the guard and the model, and died in `record` with exit 2 because the jobs read
+built the endpoint `"/actions/runs/<id>/jobs --paginate --jq '.jobs'"`. `subprocess.run` is called
+without a shell — deliberately, since that is what makes the payload unreadable as command text —
+so those "options" are one path containing spaces, and the API answers 404. Endpoints now go
+through `progress_record.api_endpoint`, which refuses whitespace rather than requesting it, and the
+jobs page is read with `?per_page=100` and checked against `total_count`: a record describing *some*
+of a run's jobs would understate it, so a short page is an error and not a smaller file. The reason
+this survived every gate is instructive — `RecordToolTests` drives `record` through `--jobs-json`,
+so the CI-only branch was never executed by anything. It now is, with `_run` stubbed, and the two
+new cases fail if a flag is glued back into an endpoint while all 84 other tests stay green.
 
 **Loop control, and where the real limits are.** A push made with the run's own
 `GITHUB_TOKEN` does not start `push`-triggered workflows, so a dashboard commit does not
@@ -396,6 +407,7 @@ re-trigger workflows.
 | action `noop` on an ordinary merge | only prose changed | expected; ignore |
 | action `refuse` | the triggering run did not conclude `success` | fix the build; the dashboard stays at the last verified state meanwhile |
 | a push was rejected (non-fast-forward) | `main` moved while the run was working | re-run; the workflow never force-pushes, and never rewrites history |
+| run is red at `File the verified run as evidence`, exit 2 | a live `gh api` read was refused — a malformed endpoint, a missing `GH_TOKEN`, or a jobs page shorter than `total_count` | read the `progress:` line in the step; the tool names the argv it ran. The refresh stops rather than publishing figures without their record |
 | a stale percentage visible in the README after a merge | the refresh run has not finished, or was refused | check the Actions log; `make presentation-check` locally proves which side is stale |
 | the run is red with **no jobs listed** and no log | the workflow file does not parse at all — a duplicated mapping key is the usual cause, and PyYAML does not flag those | read the `WorkflowStructureTests` finding from `python3 -m unittest -v tests.test_completion`; the hosted run stays jobless until the file parses |
 

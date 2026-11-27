@@ -20,7 +20,10 @@ Subcommands
 
 Offline use and testing both go through `--jobs-json` / `--paths-file`, which is how the
 demonstration in `tests/test_completion.py` can drive a whole merge cycle without
-touching GitHub: the fixtures are synthetic, the code path is the real one.
+touching GitHub: the fixtures are synthetic, the code path is the real one.  The live
+`--run-id` path is covered too, by tests that assert the `gh api` argv it builds -- an
+endpoint is one argument and never a path with options glued into it -- because a read
+that only exists in CI is exactly the kind of code a fixture-driven test cannot see.
 """
 from __future__ import annotations
 
@@ -57,6 +60,54 @@ def _run(argv: list[str], cwd: Path | None = None) -> str:
         raise ActionError(f"{' '.join(argv)}: exit {completed.returncode}: "
                           f"{(completed.stderr or completed.stdout).strip()[:300]}")
     return completed.stdout
+
+
+#: Every live read goes through `gh api` with the repository template that GitHub expands
+#: (`{owner}`/`{repo}`, filled from `GH_REPO` in CI and from the git remote locally).
+API = "repos/{owner}/{repo}"
+
+
+def api_endpoint(path: str) -> str:
+    """One endpoint for `gh api`, validated.  An option never belongs inside a path.
+
+    `subprocess.run` is called without a shell, which is the whole point -- there is no
+    word-splitting and no globbing, so nothing here can be injected.  The cost of that is
+    that `"…/jobs --paginate --jq '.jobs'"` is not a command line with two options: it is a
+    single *path* containing spaces, which the API answers with 404.  That is exactly how the
+    first real `workflow_run` of `progress.yml` failed on 2026-11-27 -- the run object came
+    back, the jobs read did not, and the step exited 2 -- and it is invisible to a test that
+    drives `record` with `--jobs-json`, because the offline path never builds an endpoint.
+    """
+    if " " in path or "\t" in path:
+        raise ActionError(
+            f"endpoint {path!r} carries whitespace: `gh api` runs without a shell, so a flag "
+            "glued to the path is requested *as* the path")
+    return f"{API}{path}"
+
+
+def gh_api(path: str) -> str:
+    """`gh api` for one endpoint, arguments as separate argv entries."""
+    return _run(["gh", "api", api_endpoint(path)])
+
+
+#: A run's jobs in one page.  100 is the API's maximum; this repository's runs have 2-3.
+JOBS_PAGE = 100
+
+
+def jobs_from_payload(payload: dict, run_id: object) -> list[dict]:
+    """The jobs array of a run, refusing a truncated page.
+
+    `total_count` is in the response, so "some of the jobs" is detectable rather than
+    invisible.  A record built from part of a run would understate it -- the one failure this
+    file exists to prevent -- so a short page is an error, not a smaller file.
+    """
+    jobs = payload.get("jobs") or []
+    total = payload.get("total_count")
+    if isinstance(total, int) and total > len(jobs):
+        raise ActionError(
+            f"run {run_id}: the jobs read returned {len(jobs)} of {total} jobs; refusing to "
+            "file evidence that describes part of a run")
+    return jobs
 
 
 # ---------------------------------------------------------------- target
@@ -210,7 +261,7 @@ def build_record(run: dict, jobs: list[dict]) -> dict:
         "recorded_at": datetime.now(timezone.utc).date().isoformat(),
         "recorded_by": "tools/progress_record.py",
         "source": (f"gh api repos/{{owner}}/{{repo}}/actions/runs/{run.get('id')}"
-                   "/jobs with annotations"),
+                   f"/jobs?per_page={JOBS_PAGE}, then /check-runs/<job id>/annotations"),
     }
     if host_tests:
         record["host_tests"] = host_tests
@@ -318,16 +369,14 @@ def main(argv: list[str] | None = None) -> int:
             # test tally actually survives, because the raw log is not reachable from
             # a reader's shell.  `record_line` below records what came back; nothing here
             # synthesises a conclusion the API did not report.
-            run = json.loads(_run(["gh", "api", f"repos/{{owner}}/{{repo}}"
-                                          f"/actions/runs/{args.run_id}"]))
-            jobs = json.loads(_run(["gh", "api",
-                                    f"repos/{{owner}}/{{repo}}/actions/runs/{args.run_id}/jobs"
-                                    " --paginate --jq '.jobs'"]))
+            run = json.loads(gh_api(f"/actions/runs/{args.run_id}"))
+            jobs = jobs_from_payload(
+                json.loads(gh_api(f"/actions/runs/{args.run_id}/jobs?per_page={JOBS_PAGE}")),
+                args.run_id)
             for job in jobs:
                 try:
-                    job["annotations"] = json.loads(_run(
-                        ["gh", "api", f"repos/{{owner}}/{{repo}}/check-runs/{job['id']}"
-                                      "/annotations"]))
+                    job["annotations"] = json.loads(
+                        gh_api(f"/check-runs/{job['id']}/annotations"))
                 except ActionError:
                     job["annotations"] = []
         elif args.run_json:
