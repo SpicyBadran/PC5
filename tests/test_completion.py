@@ -943,6 +943,80 @@ class RecordToolTests(unittest.TestCase):
 
     def test_the_guard_refuses_a_progress_commit(self):
         self.assertFalse(R.guard("docs: refresh the progress dashboard at 0123456", "")["proceed"])
+
+    # --- the live `--run-id` path -------------------------------------------------------
+    # Everything above drives `record` through fixtures, which is why the bug these tests
+    # exist for survived every gate: the CI-only branch that calls `gh api` was never
+    # executed, and on the first real `workflow_run` (2026-11-27) it built the endpoint
+    # `"…/jobs --paginate --jq '.jobs'"` -- one argv element, spaces and all -- which the
+    # API answers with 404 because `subprocess.run` gets no shell to split it.  These cases
+    # run that branch with `_run` replaced, so the assertion is on the arguments `gh` would
+    # be handed, with no network and no credential.
+
+    def drive_record(self, payloads: dict | None = None):
+        """Run `record --run-id 900` with `_run` stubbed; return (argvs, exception-or-None).
+
+        Responses are keyed by the *tail* of the endpoint (`run`, `jobs`, `annotations`),
+        matched after the query string is dropped: `/actions/runs/900` is a substring of
+        `/actions/runs/900/jobs`, so a substring search would answer the wrong question and
+        the fixture would prove nothing.
+        """
+        argvs: list[list[str]] = []
+        original = R._run
+        table = {"run": dict(self.run, id=900),
+                 "jobs": {"total_count": len(self.jobs), "jobs": self.jobs},
+                 "annotations": []}
+        table.update(payloads or {})
+
+        def fake(argv, cwd=None):
+            argvs.append(list(argv))
+            tail = argv[-1].split("repos/{owner}/{repo}", 1)[-1].split("?", 1)[0]
+            for kind in ("jobs", "annotations", "run"):
+                if tail.endswith(f"/{kind}") or (kind == "run" and tail.endswith("/runs/900")):
+                    return json.dumps(table[kind])
+            raise AssertionError(f"unexpected endpoint: {argv[-1]!r}")
+
+        R._run = fake
+        try:
+            error = None
+            try:
+                R.main(["record", "--run-id", "900", "--root", str(self.tmp)])
+            except R.ActionError as exc:            # type: ignore[attr-defined]
+                error = exc
+        finally:
+            R._run = original
+        return argvs, error
+
+    def test_every_live_read_hands_gh_exactly_one_endpoint(self):
+        argvs, error = self.drive_record({
+            "jobs": {"total_count": 1, "jobs": [{"id": 1, "name": "build and verify",
+                                                 "conclusion": "success"}]},
+        })
+        self.assertIsNone(error, f"record refused: {error}")
+        self.assertTrue(argvs, "the live path read nothing")
+        for argv in argvs:
+            self.assertEqual(3, len(argv), f"flags must not ride inside the endpoint: {argv!r}")
+            self.assertEqual(["gh", "api"], argv[:2])
+            endpoint = argv[2]
+            self.assertNotIn(" ", endpoint, f"{endpoint!r} would be requested as one path")
+            self.assertTrue(endpoint.startswith("repos/{owner}/{repo}/"),
+                            f"{endpoint!r} is not template-qualified, so `gh` cannot resolve it")
+
+    def test_an_option_glued_into_an_endpoint_is_refused_at_build_time(self):
+        with self.assertRaises(R.ActionError):      # type: ignore[attr-defined]
+            R.api_endpoint("/actions/runs/900/jobs --paginate --jq '.jobs'")
+
+    def test_a_truncated_jobs_page_is_a_refusal_not_a_smaller_record(self):
+        with self.assertRaises(R.ActionError):      # type: ignore[attr-defined]
+            R.jobs_from_payload({"total_count": 9, "jobs": [{"id": 1}]}, 900)
+        self.assertEqual(2, len(R.jobs_from_payload(
+            {"total_count": 2, "jobs": [{"id": 1}, {"id": 2}]}, 900)))
+        # and the refusal has to survive the whole live path, not just the helper
+        _, error = self.drive_record({
+            "jobs": {"total_count": 4, "jobs": [{"id": 1, "conclusion": "success"}]},
+        })
+        self.assertIsNotNone(error, "a partial run was accepted as evidence")
+        self.assertIn("1 of 4", str(error))
         self.assertTrue(R.guard("feat(kernel64): enable SMEP", "Adham Badran")["proceed"])
         self.assertFalse(R.guard("anything", "github-actions[bot]")["proceed"])
 
