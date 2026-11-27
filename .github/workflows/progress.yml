@@ -225,8 +225,20 @@ jobs:
         run: |
           set -euo pipefail
           short=$(git rev-parse --short HEAD)
+          # The identity is passed explicitly because there is none to inherit: `actions/checkout`
+          # writes a credential, not `git config user.*`, and a runner has no global identity, so
+          # `git commit` here died with `Author identity unknown` (exit 128 -> the tool's exit 2) on
+          # the first run ever to reach this step -- main 70803cb, run 46060393638.  The bot is the
+          # honest name, since its token performs the write, and `progress_record.py guard()` already
+          # treats that name as the automation's own commit, which is the second loop lock.  The
+          # email is GitHub's noreply form for that account: `gh api users/github-actions%5Bbot%5D`
+          # answers `{"login": "github-actions[bot]", "id": 41898282, "type": "Bot"}`, checked while
+          # this line was written rather than remembered.
           python3 tools/progress_record.py commit --apply --json \
-            --branch main --message "docs: refresh the progress dashboard at ${short}"
+            --branch main \
+            --author-name "github-actions[bot]" \
+            --author-email "41898282+github-actions[bot]@users.noreply.github.com" \
+            --message "docs: refresh the progress dashboard at ${short}"
 
       - name: Report what the dashboard now says
         if: always() && steps.guard.outputs.skip != 'true'
