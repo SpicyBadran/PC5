@@ -749,6 +749,137 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("workflow_dispatch: {}", self.body)
 
 
+class WorkflowStructureTests(unittest.TestCase):
+    """A workflow that does not parse is a red run with no jobs, no log, and no clue.
+
+    GitHub's Actions parser rejects a mapping key repeated inside one mapping.  That is the
+    whole story of a run that is created, fails in seconds, and lists no jobs: there is no step
+    to point at, so the failure looks like infrastructure.  It is also invisible to the obvious
+    local check -- `yaml.safe_load` accepts the duplicate and keeps the last value -- so the
+    assertion has to be made by something that knows the parser's rule.  PyYAML is therefore
+    not imported here at all, and nothing in this class can skip: the hosted host-test venv
+    installs only `unicorn`, and a gate that skips there would gate nothing.
+
+    The duplicate this class exists for was real: two `env:` keys on the evidence step, which
+    made every attempt at this workflow jobless until the file reached `main` and the run
+    stayed red there too.  The second half of the class pins the requirement that duplicate was
+    hiding -- `record` shells out to `gh api`, and `gh` needs a token in the environment that
+    `actions/checkout`'s credential store does not provide.
+    """
+
+    @staticmethod
+    def duplicate_keys(text: str) -> list[tuple[int, str, int]]:
+        """`(line, key, first-seen line)` for each mapping key repeated in its own mapping.
+
+        Three rules carry it, and each is exercised by a case below:
+
+        * block scalars (`run: |`, `if: >-`) are skipped by indentation, so a shell line that
+          reads like a key -- `echo "skip=true" >> "$GITHUB_OUTPUT"` -- is not mistaken for one;
+        * comments and blank lines are ignored, because prose quotes keys here;
+        * a sequence item is measured at the indent of its `- ` marker, which is always
+          shallower than the keys it introduces.  Popping the stack at that marker starts every
+          step with a clean set, which is why `name:`/`run:`/`env:` repeating across *steps* --
+          the normal shape of a workflow -- is not a duplicate, while two `env:` inside one step
+          is.
+        """
+        findings: list[tuple[int, str, int]] = []
+        stack: list[tuple[int, dict]] = []
+        scalar_at: int | None = None
+        for number, raw in enumerate(text.splitlines(), 1):
+            if not raw.strip() or raw.lstrip().startswith("#"):
+                continue
+            indent = len(raw) - len(raw.lstrip(" "))
+            if scalar_at is not None:
+                if indent > scalar_at:
+                    continue
+                scalar_at = None
+            while stack and stack[-1][0] > indent:
+                stack.pop()
+            line = raw.strip()
+            if line.startswith("- "):
+                indent += 2
+                line = line[2:].strip()
+            match = re.match(r"^([A-Za-z0-9_.\"'-]+):(?:\s+(.*))?$", line)
+            if match is None:
+                continue
+            key, value = match.group(1), (match.group(2) or "").strip()
+            if not stack or stack[-1][0] != indent:
+                stack.append((indent, {}))
+            seen = stack[-1][1]
+            if key in seen:
+                findings.append((number, key, seen[key]))
+            else:
+                seen[key] = number
+            if re.match(r"^[|>][-+]?\d*$", value):
+                scalar_at = indent
+        return findings
+
+    def workflows(self) -> list[Path]:
+        found = sorted((REPO / ".github/workflows").glob("*.yml"))
+        self.assertTrue(found, "no workflow files in the tree: this gate has stopped guarding")
+        return found
+
+    def test_no_workflow_repeats_a_key_inside_one_mapping(self):
+        for path in self.workflows():
+            with self.subTest(workflow=path.name):
+                self.assertEqual(
+                    [], self.duplicate_keys(path.read_text(encoding="utf-8")),
+                    f"{path.relative_to(REPO)} will not parse on GitHub: a mapping key is "
+                    "repeated inside one mapping, which makes every run of it jobless",
+                )
+
+    def test_the_detector_fires_on_the_mistake_it_guards(self):
+        broken = "\n".join([
+            "jobs:",
+            "  x:",
+            "    steps:",
+            "      - name: A",
+            "        env:",
+            "          GH_REPO: one",
+            "        env:",
+            "          PC5_RUN_ID: two",
+            "        run: echo hi",
+        ])
+        self.assertEqual([(7, "env", 5)], self.duplicate_keys(broken))
+
+    def test_the_detector_ignores_repetition_across_steps_and_shell_bodies(self):
+        # a false positive here would push someone into renaming harmless YAML, so the shape
+        # that recurs in every real workflow has to come back empty.
+        fine = "\n".join([
+            "jobs:",
+            "  x:",
+            "    steps:",
+            "      - name: A",
+            "        env:",
+            "          TOKEN: one",
+            "        run: |",
+            "          echo \"name: not a key\" >> \"$GITHUB_OUTPUT\"",
+            "          # env: not a key either",
+            "          echo {}",
+            "      - name: B",
+            "        env:",
+            "          TOKEN: two",
+            "        run: |",
+            "          echo \"name: not a key\"",
+        ])
+        self.assertEqual([], self.duplicate_keys(fine))
+
+    def test_the_evidence_step_authenticates_the_gh_calls_it_makes(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+        tool = (REPO / "tools/progress_record.py").read_text(encoding="utf-8")
+        self.assertIn('"gh", "api"', tool,
+                      "progress_record.py no longer calls `gh api`; the assertion below is "
+                      "guarding a dependency that has gone, so delete it rather than keep it")
+        step = re.search(r"      - name: File the verified run as evidence\n(.*?)(?=\n      - name: |\Z)",
+                         text, re.S)
+        self.assertIsNotNone(step, "the evidence step is gone from the workflow")
+        body = step.group(1)
+        self.assertEqual(1, len(re.findall(r"^        env:$", body, re.M)),
+                         "exactly one `env:` block per step, or the file stops parsing")
+        for needed in ("GH_REPO:", "GH_TOKEN:", "PC5_RUN_ID:"):
+            self.assertIn(needed, body, f"{needed} belongs to the one step that calls `gh`")
+
+
 class RecordToolTests(unittest.TestCase):
     """Part 11, as a runnable cycle: the fixtures are synthetic, the code path is real."""
 

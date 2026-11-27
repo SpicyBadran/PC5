@@ -47,12 +47,17 @@ jobs:
     name: refresh the progress dashboard
     # Only a successful verification of main may move the published figures.  A manual
     # dispatch is allowed so a maintainer can rehearse the whole path without a merge.
-    # Cheap pre-filter, deliberately shallow: `github.event.workflow_run` does not exist for
-    # every event this file can be evaluated under, and GitHub's expression language answers a
-    # *second-level* property access on an absent object by throwing, which fails the run
-    # before any job is created — so the repository match and the rest are checked by
-    # `tools/progress_record.py target` below, where a refusal is a tested exit code instead of
-    # an expression error.  `conclusion`/`head_branch`/`event` are one level deep and safe.
+    # Cheap pre-filter, deliberately shallow.  `github.event.workflow_run` does not exist for
+    # every event this file can be evaluated under, and a condition that has to *reach inside*
+    # an absent object depends on evaluator behaviour this repository does not control and
+    # cannot test from the tree -- so the repository match and the rest are checked by
+    # `tools/progress_record.py target` below, where a refusal is a tested exit code.  A
+    # throw is not a plausible outcome to design around: the jobless red runs this file produced
+    # before it reached `main` were *not* an expression error, they were a duplicate mapping key
+    # (`env:` twice in one step, now fixed and gated by `WorkflowStructureTests`), which is what
+    # a parse failure looks like from the outside -- a run with no jobs and no log.  Do not
+    # read a jobless run as evidence about the workflow's logic until the structure is proven.
+    # `conclusion`/`head_branch`/`event` are one level deep and safe.
     if: >-
       github.event_name == 'workflow_dispatch'
       || (github.event.workflow_run.conclusion == 'success'
@@ -145,9 +150,24 @@ jobs:
 
       - name: File the verified run as evidence
         if: steps.guard.outputs.skip != 'true' && steps.target.outputs.run_id != ''
+        # One `env:` block, not two.  A mapping key repeated at the same level is not an
+        # override and not last-one-wins: the Actions parser rejects the file outright, and
+        # the failure looks nothing like a bug in the code -- a run appears, lists no jobs,
+        # has no log, and is closed `failure` in the same second it was created (run
+        # 45946466435 is exactly that).  `WorkflowStructureTests` in
+        # `tests/test_completion.py` is the gate that keeps a second occurrence out of
+        # either workflow file.
+        #
+        # `GH_TOKEN` is here because `record` calls `gh api`.  `actions/checkout` with
+        # `persist-credentials: true` writes the token into the git credentials file, which is
+        # what makes the push below possible, but `gh` reads `GH_TOKEN`/`GITHUB_TOKEN` from the
+        # *environment* and nothing puts it there -- so without this line the same step that
+        # files the evidence would fail with "gh: command requires authentication", on the one
+        # path (an automated refresh after a real verification) that a manual dispatch never
+        # exercises.  `actions: read` above is the permission that lets it work.
         env:
           GH_REPO: ${{ github.repository }}
-        env:
+          GH_TOKEN: ${{ github.token }}
           PC5_RUN_ID: ${{ steps.target.outputs.run_id }}
         run: |
           set -euo pipefail

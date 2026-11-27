@@ -338,9 +338,11 @@ figures behind the data.
 request from a fork whose head branch is *called* `main` completes with
 `head_branch: 'main'` and `conclusion: 'success'`, and would otherwise hand this job — which
 holds `contents: write` — an unmerged tree to regenerate the published page from. The job's `if:` keeps
-`event == 'push'` as a cheap pre-filter, and the `target` step re-checks that plus three more
-properties in Python — the repository match, the sha's shape, and: the shape of the sha, and the only property that is a fact about the tree
-rather than about an event, `git merge-base --is-ancestor <sha> refs/remotes/origin/main`.
+`event == 'push'` as a cheap pre-filter, and the `target` step re-checks in Python every
+property the trigger leaves unproven — that the sha is 40 hex digits, that the run concluded
+`success`, that it was a push rather than a `pull_request` or a schedule, that it ran in *this*
+repository, and, last, the only property that is a fact about the tree rather than about an
+event: `git merge-base --is-ancestor <sha> refs/remotes/origin/main`.
 That last one is why the step un-shallows `main` first: on the `fetch-depth: 2` checkout,
 ancestry cannot be judged, and a comparison that could not run has to be a refusal, never a
 pass. The same reasoning is why no `${{ github.event… }}` appears inside a `run:` line
@@ -348,6 +350,25 @@ anywhere in the file — an expression is substituted before bash sees it, so ev
 field is passed through `env:` as data. `tests/test_completion.py::TargetBindingTests` drives a
 real throwaway repository, so the ancestry refusal is tested against Git rather than a mock,
 and `WorkflowContractTests` pins the YAML's shape.
+
+**The file has to parse, and that is a gate too.** A duplicated mapping key is neither an
+override nor last-one-wins: the Actions parser refuses the whole file, and the failure appears
+as a run with *no jobs at all* — created, marked `failure` in the same second it appeared, with
+no log to read and nothing on the step list to point at. `tests/test_completion.py::WorkflowStructureTests` scans
+both workflow files for a key repeated inside its own mapping, and it is written without PyYAML
+on purpose: `yaml.safe_load` accepts duplicates and keeps the last one, so a round-trip through
+it proves exactly nothing about this failure mode, and the hosted host-test venv does not install
+it. The first version of this workflow carried precisely such a duplicate — two `env:` keys on the
+evidence step — which is why the loop was jobless on every attempt before it reached `main`, and
+why a jobless run must be read as "this file does not parse" until proven otherwise, not as
+evidence about the workflow's logic.
+
+**`gh` inside the job needs its own credential.** `record` calls `gh api`, and `gh` reads
+`GH_TOKEN` from the environment; `actions/checkout` with `persist-credentials: true` writes the
+token into the *git* credential store, which authorises the push and nothing else. The evidence
+step therefore sets `GH_TOKEN: ${{ github.token }}` beside `GH_REPO`, against the `actions: read`
+permission above it — without it, the one path a `workflow_dispatch` rehearsal never exercises
+(an automated refresh after a real verification) would fail on authentication.
 
 **Loop control, and where the real limits are.** A push made with the run's own
 `GITHUB_TOKEN` does not start `push`-triggered workflows, so a dashboard commit does not
@@ -376,6 +397,7 @@ re-trigger workflows.
 | action `refuse` | the triggering run did not conclude `success` | fix the build; the dashboard stays at the last verified state meanwhile |
 | a push was rejected (non-fast-forward) | `main` moved while the run was working | re-run; the workflow never force-pushes, and never rewrites history |
 | a stale percentage visible in the README after a merge | the refresh run has not finished, or was refused | check the Actions log; `make presentation-check` locally proves which side is stale |
+| the run is red with **no jobs listed** and no log | the workflow file does not parse at all — a duplicated mapping key is the usual cause, and PyYAML does not flag those | read the `WorkflowStructureTests` finding from `python3 -m unittest -v tests.test_completion`; the hosted run stays jobless until the file parses |
 
 ## 5. What this presentation does not do
 
@@ -383,7 +405,10 @@ re-trigger workflows.
   and an illustration of one would be a fabricated result.
 * It publishes no compatibility percentage: the only counting it does is milestones by
   state, and it says so under the figure.
-* It does not claim continuous integration. The pipeline definition exists; the
-  workflow is not active.
+* It claims no standing CI status. `build.yml` is active and runs on every push and pull
+  request, and `progress.yml` reacts to a `build` that completed on `main`; what the pages
+  report is the *conclusion of a specific run*, read from the API while it is read. A badge
+  says "passing" forever after one green commit, so there is none, and a refresh never
+  publishes from a run that has not finished.
 * It does not make the destination look closer than it is: `M19` is drawn blocked, in
   red, in three of the four figures.
