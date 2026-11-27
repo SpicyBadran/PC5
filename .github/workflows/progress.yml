@@ -1,0 +1,225 @@
+name: progress
+
+# PC5's presentation maintenance: the workflow that keeps the README honest.
+#
+#   a completed `build` run on main  ->  recompute the model, regenerate the figures,
+#                                        file the run as evidence, commit if anything moved
+#   manual dispatch                  ->  the same, without the CI record
+#
+# Why `workflow_run` and not `push`.  A push trigger would see every merge before the
+# build had run on it, and the dashboard's job is to report *verified* state: a README
+# that updates itself from an unverified commit is a faster way to publish a wrong
+# number.  Reacting to the completion of `build.yml` means the figures are rebuilt from
+# a tree whose gates have already passed, and the run's own conclusion is the input that
+# decides whether an update is owed at all (`tools/completion.py` refuses anything that is
+# not `success`: a running, cancelled, failed or skipped verification cannot publish).
+#
+# Why the loop stops by itself.  A push made with the run's own `GITHUB_TOKEN` does not
+# start `push`-triggered workflows, so `build.yml` does not fire for a dashboard commit,
+# and therefore this workflow is not re-triggered either.  `progress_record.py guard` is
+# the second lock -- it refuses when HEAD is itself a progress commit -- because the
+# first lock is GitHub's behaviour, not this repository's, and a human running the same
+# commands by hand needs the same protection.  There is no `schedule:` on purpose: a
+# timer would re-stamp the dashboard with nothing new to say, and a stale-looking
+# timestamp that is *correct* is worth more than a fresh one that is decoration.
+#
+# Permissions: `contents: write` is the whole ask, for one commit to main.  No tag is
+# created and no release is touched -- `tools/publish_release.sh` and the `release` job
+# in build.yml own that path, and nothing here calls them.  The `release` job's own
+# `permissions: contents: write` is unchanged.
+
+on:
+  workflow_run:
+    workflows: ["build"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: progress-dashboard
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: refresh the progress dashboard
+    # Only a successful verification of main may move the published figures.  A manual
+    # dispatch is allowed so a maintainer can rehearse the whole path without a merge.
+    # Cheap pre-filter, deliberately shallow: `github.event.workflow_run` does not exist for
+    # every event this file can be evaluated under, and GitHub's expression language answers a
+    # *second-level* property access on an absent object by throwing, which fails the run
+    # before any job is created — so the repository match and the rest are checked by
+    # `tools/progress_record.py target` below, where a refusal is a tested exit code instead of
+    # an expression error.  `conclusion`/`head_branch`/`event` are one level deep and safe.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.conclusion == 'success'
+          && github.event.workflow_run.head_branch == 'main'
+          && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Identify the verified commit
+        # Every field that comes out of the event reaches the shell through `env:`, never as a
+        # `${{ }}` inside `run:`: an expression is substituted before bash sees the line, so a
+        # payload field would become command text.  `env:` hands the same string over as data,
+        # and the step after this one decides what it may be used for.
+        id: target
+        env:
+          PC5_EVENT: ${{ github.event_name }}
+          PC5_SHA: ${{ github.event.workflow_run.head_sha }}
+          PC5_RUN_ID: ${{ github.event.workflow_run.id }}
+          PC5_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          PC5_RUN_EVENT: ${{ github.event.workflow_run.event }}
+          PC5_RUN_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+        run: |
+          set -euo pipefail
+          if [ "$PC5_EVENT" = "workflow_run" ]; then
+            echo "sha=$PC5_SHA" >> "$GITHUB_OUTPUT"
+            echo "run_id=$PC5_RUN_ID" >> "$GITHUB_OUTPUT"
+            echo "conclusion=$PC5_CONCLUSION" >> "$GITHUB_OUTPUT"
+            echo "run_event=$PC5_RUN_EVENT" >> "$GITHUB_OUTPUT"
+            echo "run_repo=$PC5_RUN_REPO" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            echo "run_id=" >> "$GITHUB_OUTPUT"
+            echo "conclusion=success" >> "$GITHUB_OUTPUT"
+            echo "run_event=dispatch" >> "$GITHUB_OUTPUT"
+            echo "run_repo=$GITHUB_REPOSITORY" >> "$GITHUB_OUTPUT"
+          fi
+
+      # `fetch-depth: 2` is what lets the next step ask what the merge *changed*: the
+      # first parent is the state main had before it.  A full history is not needed and
+      # is not fetched.
+      - name: Check out the verified commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ steps.target.outputs.sha }}
+          fetch-depth: 2
+          persist-credentials: true
+
+      - name: Refuse a target that is not verified main
+        # The one write this workflow makes is a push to `main`, so what it accepts as input is
+        # the security boundary.  `tools/progress_record.py target` refuses a sha that is not a
+        # commit, a run that was not a push, a repository that is not this one, and a commit
+        # that is not an ancestor of `main` — the last of those is the only check that is a fact
+        # about the tree rather than about an event.  The checkout above is shallow
+        # (`fetch-depth: 2`), and ancestry cannot be judged on a truncated history, so this step
+        # un-shallows main first: a comparison that could not run has to be a refusal, never a
+        # pass.  Exit 4 is a refusal, and a refusal stops the job.
+        env:
+          PC5_SHA: ${{ steps.target.outputs.sha }}
+          PC5_CONCLUSION: ${{ steps.target.outputs.conclusion }}
+          PC5_RUN_EVENT: ${{ steps.target.outputs.run_event }}
+          PC5_RUN_REPO: ${{ steps.target.outputs.run_repo }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            git fetch --no-tags --unshallow origin "$GITHUB_REF_NAME" 2>/dev/null \
+              || git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          fi
+          python3 tools/progress_record.py target --json \
+            --event "$GITHUB_EVENT_NAME" --sha "$PC5_SHA" --ref-name "$GITHUB_REF_NAME" \
+            --run-event "$PC5_RUN_EVENT" --run-repo "$PC5_RUN_REPO" \
+            --repository "$GITHUB_REPOSITORY" --conclusion "$PC5_CONCLUSION" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Refuse to refresh from a refresh
+        id: guard
+        run: |
+          set -euo pipefail
+          if python3 tools/progress_record.py guard \
+               --subject "$(git log -1 --format=%s)" \
+               --author "$(git log -1 --format=%an)"; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "nothing to do: the loop guard fired" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Recompute the completion model
+        if: steps.guard.outputs.skip != 'true'
+        run: python3 tools/completion.py check
+
+      - name: File the verified run as evidence
+        if: steps.guard.outputs.skip != 'true' && steps.target.outputs.run_id != ''
+        env:
+          GH_REPO: ${{ github.repository }}
+        env:
+          PC5_RUN_ID: ${{ steps.target.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          python3 tools/progress_record.py record --run-id "$PC5_RUN_ID"
+          ls -1 docs/evidence/ci/
+
+      - name: Regenerate the figures and the generated blocks
+        if: steps.guard.outputs.skip != 'true'
+        run: python3 tools/presentation.py sync
+
+      - name: Verify the generated state
+        # Nothing is published from here that has not passed every gate that reads it.
+        # These are the same commands `make check` runs inside build.yml; re-running them
+        # here costs seconds and is what makes "unverified progress" impossible rather
+        # than merely unintended.
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          python3 tools/presentation.py check
+          python3 tools/completion.py check
+          python3 tools/docs_check.py
+          python3 -m unittest discover -s tests -p 'test_completion.py' -v
+          python3 -m unittest discover -s tests -p 'test_presentation.py' -v
+
+      - name: Decide whether an update is owed
+        if: steps.guard.outputs.skip != 'true'
+        id: decide
+        env:
+          PC5_CONCLUSION: ${{ steps.target.outputs.conclusion }}
+        run: |
+          set -euo pipefail
+          # `git diff --quiet` is the whole idempotence test: identical output means
+          # there is no commit to make, and the run ends green having changed nothing.
+          if git diff --quiet; then changed=""; else changed="--changed"; fi
+          {
+            git diff --name-only HEAD^ HEAD || true
+            git diff --name-only || true
+            git ls-files --others --exclude-standard -- docs/evidence/ci || true
+          } | sort -u > /tmp/pc5-paths.txt
+          # `|| true` on purpose: `refuse` is a verdict, not a crash.  The `if:` above
+          # already excludes it, so a non-zero here would only ever mean the policy
+          # refused -- and a refusal has to be *reported* while the run stays green,
+          # because the model's answer for the last verified state is still correct.
+          python3 tools/progress_record.py decide --json \
+            --conclusion "$PC5_CONCLUSION" \
+            --paths-file /tmp/pc5-paths.txt $changed | tee /tmp/pc5-decision.json || true
+          action=$(python3 -c "import json;print(json.load(open('/tmp/pc5-decision.json'))['action'])")
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+          if [ "$action" = "refuse" ]; then
+            echo "::notice title=Progress refresh refused::an unverified progress update is never published"
+          fi
+
+      - name: Commit and push the refresh
+        if: steps.guard.outputs.skip != 'true' && steps.decide.outputs.action == 'commit'
+        run: |
+          set -euo pipefail
+          short=$(git rev-parse --short HEAD)
+          python3 tools/progress_record.py commit --apply --json \
+            --branch main --message "docs: refresh the progress dashboard at ${short}"
+
+      - name: Report what the dashboard now says
+        if: always() && steps.guard.outputs.skip != 'true'
+        env:
+          PC5_ACTION: ${{ steps.decide.outputs.action || 'none' }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Progress dashboard"
+            echo
+            echo '```'
+            python3 tools/completion.py summary
+            echo '```'
+            echo
+            echo "action: \`$PC5_ACTION\`"
+          } >> "$GITHUB_STEP_SUMMARY"

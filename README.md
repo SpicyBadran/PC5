@@ -20,11 +20,68 @@ repository contains or has executed Sony's system software.
 | **Destination** | Genuine Sony PS5 system software executing on qualified x86-64 PC hardware (`M19`, level 5) |
 | **Stage** | Boot substrate working under emulation and stub firmware; no physical machine yet |
 | **Platform** | PC5 kernel and bootloader, freestanding, no Linux in the image |
-| **Licence** | GPL-2.0-only, no vendored third-party code ([ADR-025](docs/TECHNICAL_DECISIONS.md)) |
+| **Licence** | GPL-3.0-only, granted in [`LICENSING.md`](LICENSING.md) over the verbatim [`LICENSE`](LICENSE) text; no vendored third-party code ([ADR-025](docs/TECHNICAL_DECISIONS.md), [ADR-027](docs/TECHNICAL_DECISIONS.md#adr-027--pc5s-licence-is-gpl-30-only-and-the-grant-is-stated-outside-the-licence-body)) |
 
-**Navigate** · [Dashboard](#dashboard) · [Status](#status-at-a-glance) ·
+**Navigate** · [About](#about-pc5) · [Completion](#overall-project-completion) · [Dashboard](#dashboard) · [Status](#status-at-a-glance) ·
 [Architecture](#architecture) · [Evidence](#what-has-actually-been-demonstrated) ·
 [Blockers](#what-is-blocked) · [Build](#quick-start) · [Docs](#documentation)
+
+## Overall project completion
+
+![PC5 overall project completion: a ring drawn at the criteria-weighted percentage, the milestone graph as one stacked bar by state, the same progress level by level through the success hierarchy, and chips naming the destination, the release milestone, the latest filed hosted run and the last verified commit](docs/assets/pc5-completion.svg)
+
+<!-- pc5:completion:begin -->
+**26.7% of PC5's declared scope is complete and evidenced.** 9 of 35 milestones are `complete` (25.7% counted by milestone), 31 of 116 acceptance criteria are met, and the destination `M19` is **BLOCKED**.
+
+| Measure | Value |
+|---|---|
+| **Overall completion** | **26.7%** — criteria-weighted |
+| **Same figure by milestone count** | 25.7% (the two models agree within 1.0 points) |
+| **Earned weight / total weight** | 31 / 116 |
+| **Milestones complete** | 9 of 35 in 14 workstreams |
+| **Current milestone** | `M2a`, `M2b`, `M9`, `M10` |
+| **Remaining** | 16 not started, 6 blocked, 4 in progress |
+| **By level of the hierarchy** | `L1` 74.1% · `L2` 50.0% · `L3` 0.0% · `L4` 0.0% · `L5` 0.0% · `L6` 0.0% — the low levels are the ones with evidence, the top levels have none yet |
+| **Release-gating milestones** | 9 of 18 complete; outstanding: `M1`, `M2`, `M2a`, `M2b`, `M2c`, `M2d`, `M3`, `M7`, `M8` |
+| **Partial credit** | excluded — no milestone declares `criteria_met`, so in-progress work counts 0 |
+| **Hosted CI** | run `45879276706` **SUCCESS** at `a60c34f`, 1227 host tests OK (13 skipped) · the 13 skips are the hosted environment's own: artifact-gated tests whose build/ tree differs from a full local build |
+| **Release readiness** | `M1b` **BLOCKED** — 2 acceptance criteria outstanding; nothing published (no tag exists on this history and the release job has never executed) |
+| **Last verified** | 2026-11-23 — `verify` recorded **passed** at `86b862f` (10/11 committed gate records passed) |
+
+One number, one formula, one source: `python3 tools/completion.py model` reprints this calculation from `docs/architecture/roadmap.json` and the records under `docs/evidence/validation/`, and `python3 tools/completion.py check` fails if a milestone id is duplicated, a weight is undefined, an in-progress fraction is invented, or a percentage is typed into prose instead of generated here.
+<!-- pc5:completion:end -->
+
+**How the number is made, and why it can be argued with.** The ring is
+criteria-weighted, not commit-weighted: a milestone's weight is the count of acceptance
+criteria the roadmap itself declares for it, and a milestone earns its weight only when
+its state is `complete`, which in `docs/architecture/roadmap.json` means the criteria are
+met and evidence is filed in the repository. There is no separate weight table to
+maintain and no weight a reviewer can quietly renumber, because the weights are read
+from the milestones. Counting milestones instead of criteria gives a different formula
+for the same claim, and the two figures are printed side by side so a reader can see that
+the number is not an artefact of the weighting choice.
+
+Three refusals are the point of the design:
+
+- **No partial credit without a record.** An `in_progress` milestone scores zero here,
+  because nothing in the repository states which of its criteria are satisfied. The
+  model will credit a fraction the day a milestone declares `criteria_met`, and it will
+  not guess one tonight.
+- **No promotion from adjacent facts.** A merge is not a verification, a green pipeline
+  is not a completed milestone, and a *ready* release is not a *published* one. The
+  dashboard keeps the build, the hosted run, the milestone graph and the release state on
+  separate rows for exactly that reason.
+- **No hand-typed statistics.** Every figure and percentage on this page is generated by
+  `tools/presentation.py` from `tools/completion.py`; a number typed into the prose fails
+  `make presentation-check`, which `make check` runs, so a stale claim is a red build
+  rather than a permanent one.
+
+The level-by-level bars are there because one percentage hides the shape of the project.
+The measured completion is uneven by a wide margin: the two lowest levels of the hierarchy
+are the only ones with credit, and levels three to six have none at all.  The honest
+reading of the figure is that the foundation is being built outward from the hardware, not
+upward from a demo — which is also why a headline number this low is the correct thing to
+publish, and why the figure sits at the top of this page instead of in a badge.
 
 ## Read this first
 
@@ -59,6 +116,33 @@ PC5-authored payloads, device models and conformance fixtures are engineering
 test scaffolding. A PC5 kernel boot is evidence about PC5, never evidence that
 Sony's software executed. [`docs/BRAND.md`](docs/BRAND.md) governs the PC5 marks
 and forbids placing them on anything that depicts Sony's software.
+
+## About PC5
+
+PC5 builds the PC-side substrate a foreign operating system needs before it can run on
+hardware that was not made for it: firmware handoff, exception delivery, memory
+ownership, interrupt routing, device control, and the platform contract that ties them
+together. It is aimed at one destination, stated in [`docs/ABOUT.md`](docs/ABOUT.md) in
+the project's own words, and every step of it is backed by a record in this repository
+rather than by an adjective. That page is the long form — identity, architecture, what
+actually works, the standards a claim has to meet, the licence, and how to take part;
+this README keeps the numbers and points at it.
+
+| Read this next | Where |
+|---|---|
+| The full orientation, with the evidence behind each claim | [`docs/ABOUT.md`](docs/ABOUT.md) |
+| How the system is put together | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), specification in [`PC5_ARCHITECTURE_SPEC_v2.md`](docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md) |
+| Where the work is going, milestone by milestone | [`docs/ROADMAP.md`](docs/ROADMAP.md), data in [`docs/architecture/roadmap.json`](docs/architecture/roadmap.json) |
+| How to build, verify and boot it | [`docs/BUILDING.md`](docs/BUILDING.md), [`docs/INSTALLATION.md`](docs/INSTALLATION.md) |
+| What each gate proves, and what it does not | [`docs/TESTING_STRATEGY.md`](docs/TESTING_STRATEGY.md), [`docs/GATES.md`](docs/GATES.md) |
+| The licence, and the no-vendoring rule | [`LICENSING.md`](LICENSING.md) (the grant) and [`LICENSE`](LICENSE) (the text), [ADR-025](docs/TECHNICAL_DECISIONS.md), [ADR-027](docs/TECHNICAL_DECISIONS.md#adr-027--pc5s-licence-is-gpl-30-only-and-the-grant-is-stated-outside-the-licence-body) |
+| How to contribute, and the rules a change has to keep | [`CONTRIBUTING.md`](CONTRIBUTING.md), [issue templates](.github/ISSUE_TEMPLATE) |
+
+**Status, stated once.** The completion figure above is generated from the milestone
+graph and the committed verification records by [`tools/completion.py`](tools/completion.py).
+[`docs/ABOUT.md`](docs/ABOUT.md) prints the same model rather than a copy of it, so the
+two pages cannot disagree, and `make presentation-check` fails if either one drifts from
+the data.
 
 ## Dashboard
 

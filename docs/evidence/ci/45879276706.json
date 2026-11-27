@@ -1,0 +1,22 @@
+{
+  "schema": "pc5.ci/1",
+  "run_id": 45879276706,
+  "workflow": "build.yml",
+  "event": "push",
+  "branch": "main",
+  "head_sha": "a60c34f3f6fa618bd6b78a5559c49f101defb7ef",
+  "conclusion": "success",
+  "attempt": 1,
+  "started_at": "2026-11-26T18:51:58Z",
+  "completed_at": "2026-11-26T19:15:45Z",
+  "jobs": [
+    {"name": "build and verify", "conclusion": "success", "started_at": "2026-11-26T18:52:01Z", "completed_at": "2026-11-26T19:15:45Z", "steps_success": 20, "steps_skipped": 2, "steps_failed": 0},
+    {"name": "UEFI boot under genuine OVMF", "conclusion": "success", "started_at": "2026-11-26T18:52:02Z", "completed_at": "2026-11-26T19:05:58Z"},
+    {"name": "publish release assets", "conclusion": "skipped", "steps_executed": 0, "reason": "not a tag push"}
+  ],
+  "host_tests": {"ran": 1227, "result": "OK", "skipped": 13, "seconds": 485.35},
+  "notes": "the 13 skips are the hosted environment's own: artifact-gated tests whose build/ tree differs from a full local build",
+  "recorded_at": "2026-11-26",
+  "recorded_by": "Arena agent, from the Actions API",
+  "source": "gh api repos/SpicyBadran/pc5/actions/runs/45879276706/jobs"
+}

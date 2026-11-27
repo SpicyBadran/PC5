@@ -67,7 +67,7 @@ does not put beliefs in its README.
 | L2 | Circumvention of protection measures | Out of scope and refused. PC5 does not decrypt, patch signature checks or spoof console identity. |
 | L3 | Interoperability legality of re-implementing system APIs | Research question for M6's legal assessment; precedent exists for independent re-implementation, but the assessment is a deliverable, not an assumption. |
 | L4 | Trademark use in the project name and shell | "PC5" is the project's own name; PlayStation/PS5 marks are referenced descriptively. Shell assets must be original (A14). |
-| L5 | GPL compliance for a distributed kernel-based image | Kernel config, patches and build recipe published with any binary image; the licence stays GPL-2.0-only. |
+| L5 | GPL compliance for a distributed kernel-based image | Kernel config, patches and build recipe published with any binary image; the licence is GPL-3.0-only, granted in `LICENSING.md` over the verbatim `LICENSE` text (ADR-027). |
 | L6 | Patent exposure in emulation/translation work | Not assessed; flag to counsel before any public B1 binary distribution. |
 
 ---

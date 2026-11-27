@@ -238,7 +238,7 @@ serial logs under `build/ovmf/`, and never commits firmware to the repository.
 ## Continuous integration and releases
 
 The pipeline is **active**: `.github/workflows/build.yml` was installed on 2026-11-24 by a pure rename of
-`ci/build.yml`, after the repository owner granted the GitHub App the *Workflows:
+the historical path `ci/build.yml`, after the repository owner granted the GitHub App the *Workflows:
 Read and write* permission. Until that grant, GitHub refused every push that
 created a file under `.github/workflows/`, and the pipeline sat in `ci/` as a
 definition that ran nowhere; `ci/README.md` keeps the five dated attempts and what

@@ -17,11 +17,16 @@ would reintroduce exactly the string this file exists to forbid.
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "tools"))
+
+import licensing  # noqa: E402 -- the one reader the gates and the pages share
 
 #: The upstream project's name, assembled so this file does not contain it.
 FORBIDDEN_TOKEN = "any" + "ps5"
@@ -114,14 +119,43 @@ class Pc5OwnsItsIdentityTest(unittest.TestCase):
     def setUp(self):
         self.readme = (REPO / "README.md").read_text()
         self.licence = (REPO / "LICENSE").read_text()
+        self.notice = (REPO / "LICENSING.md").read_text()
         self.decisions = (REPO / "docs/TECHNICAL_DECISIONS.md").read_text()
 
     def test_the_licence_is_pc5_s_own(self):
+        """PC5 speaks for itself in `LICENSING.md`; `LICENSE` stays the standard document.
+
+        Three separate properties, because one file cannot carry all three: the notice grants
+        in PC5's own person, the official body is verbatim and therefore mentions no project at
+        all, and the reader both gates share resolves exactly one identifier out of the pair.
+        Asserting a sentence *inside* the licence text — which an earlier version of this test
+        did — would have required PC5's wording to be pasted into the GPL to make it pass, which
+        is the thing ADR-027 refuses to do.
+        """
+        result = licensing.read(REPO)
+        self.assertEqual(result["spdx"], "GPL-3.0-only", result["problem"])
+        granted = licensing.plain(self.notice)
+        self.assertIn("PC5 is licensed under the GNU General Public License version 3 only",
+                      granted, "the notice grants in PC5's own person, in one sentence")
+        self.assertIn("PC5 vendors no third-party source archive", granted,
+                      "and restates the build rule the GPL's reach depends on")
         self.assertIn("GNU GENERAL PUBLIC LICENSE", self.licence)
-        self.assertIn("No third-party source archive is", self.licence)
+        self.assertIn("Version 3, 29 June 2007", self.licence)
+        self.assertNotIn("PC5", self.licence,
+                         "the official text carries no project-specific wording")
+        self.assertNotIn("No third-party source archive is", self.licence,
+                         "the vendoring rule belongs to ADR-025 and the notice, not to the GPL")
+        self.assertEqual(hashlib.sha256(self.licence.encode("utf-8")).hexdigest(),
+                         licensing.GPL3_ONLY_SHA256,
+                         "`LICENSE` is the adopted document, byte for byte")
 
     def test_the_readme_states_the_destination_in_pc5_s_own_words(self):
         self.assertIn("genuine Sony PlayStation 5 system software", self.readme)
+
+    def test_the_licence_decision_is_recorded_beside_the_no_vendoring_one(self):
+        self.assertIn("## ADR-027", self.decisions)
+        self.assertIn("GPL-3.0-only", self.decisions)
+        self.assertIn("`LICENSING.md`", self.decisions)
 
     def test_the_no_vendoring_decision_is_recorded(self):
         self.assertIn("## ADR-025", self.decisions)

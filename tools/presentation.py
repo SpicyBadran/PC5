@@ -1,17 +1,23 @@
 """Generate and check PC5's presentation layer from the project's own data.
 
-Everything the README shows about status comes from `docs/architecture/roadmap.json`
-and from the evidence records under `docs/evidence/`. This tool renders those facts
-into four original SVG figures, writes the README status table in place between
-markers, and refuses to accept a repository whose figures or status block no longer
-match the data.
+Everything the README and `docs/ABOUT.md` show about status comes from
+`docs/architecture/roadmap.json`, from the evidence records under `docs/evidence/`, and
+from the licence grant in `LICENSING.md` and the official text in `LICENSE`. This
+tool renders those facts into seven original SVG
+figures and nine generated blocks — six in the README, three in the About page — writes
+them in place between markers, and refuses to accept a repository whose figures or blocks
+no longer match the data.
 
-    python3 tools/presentation.py sync     # regenerate assets + README block
+    python3 tools/presentation.py sync     # regenerate the figures and both pages
     python3 tools/presentation.py check    # fail if anything is stale or dishonest
 
 `check` is the point: a repository can always be made to *look* finished. The
-figures are derived, the labels are a function of milestone state, and any hand edit
-that overstates progress fails the check instead of shipping.
+figures are derived, the labels are a function of milestone state, no page is created by
+`sync` (an owned page that is absent is reported, not invented), and any hand edit that
+overstates progress fails the check instead of shipping. The prose rules — no statistic
+outside a generated block, no claim this repository cannot make, no dropped honesty token —
+are applied per page, so a second page cannot satisfy them by borrowing the first's
+sentences.
 
 No network access, no third-party assets, no fonts beyond the reader's own: the SVGs
 are plain geometry and `font-family="... monospace"` text, so they render on GitHub
@@ -22,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import urllib.parse
 import sys
@@ -33,9 +40,12 @@ TOOLS = Path(__file__).resolve().parent
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 import brand  # noqa: E402 -- same-directory sibling, shared logo geometry
+import completion  # noqa: E402 -- same-directory sibling, the progress arithmetic
+import licensing  # noqa: E402 -- same-directory sibling, the one licence reader
 
 ROADMAP = ROOT / "docs/architecture/roadmap.json"
 README = ROOT / "README.md"
+ABOUT = ROOT / "docs/ABOUT.md"
 ASSETS = ROOT / "docs/assets"
 
 BEGIN = "<!-- pc5:status:begin -->"
@@ -234,6 +244,59 @@ def arrow(x, y1, y2, colour=LINE):
     )
 
 
+# ---------------------------------------------------------------- animation
+#: Every animation in PC5's figures is a one-shot entrance that freezes on its true
+#: value.  That is a correctness rule, not a taste rule: an SVG used as an image runs
+#: in the browser's "secure animated mode", where declarative animation plays but
+#: scripts do not, and where a renderer that ignores animation shows the *static*
+#: attribute.  Drawing the base attribute at the final value therefore means the
+#: figure tells the truth whether or not the reader's client animates it, and a
+#: looping animation would be motion that carries no information, which the figures
+#: here have never done.  `tests/test_completion.py` pins the rule.
+ANIM_DUR = "1.15s"
+EASE = ' keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"'
+
+
+def animate(attr: str, final: str, start: str, delay: str = "0s",
+            dur: str = ANIM_DUR) -> str:
+    """A child element that draws ``attr`` in from ``start`` and freezes at ``final``."""
+    return (f'<animate attributeName="{attr}" from="{start}" to="{final}" '
+            f'begin="{delay}" dur="{dur}" fill="freeze"{EASE}/>')
+
+
+def fade(body: str, delay: str = "0s", dur: str = "0.5s") -> str:
+    """Wrap generated markup in a one-shot fade.  ``opacity`` stays at 1 either way."""
+    return (f'  <g opacity="1">{body}{animate("opacity", "1", "0", delay, dur)}</g>\n')
+
+
+def arc(cx: float, cy: float, radius: float, fraction: float, colour: str,
+         thickness: float = 26.0) -> str:
+    """A ring drawn clockwise from twelve o'clock, animated by ``stroke-dashoffset``.
+
+    ``stroke-dashoffset`` is written at its final value first: the animation only
+    tweens toward it.  A fraction of 0 renders as an empty track, never as a full one.
+    """
+    circumference = 2.0 * math.pi * radius
+    offset = circumference * (1.0 - fraction)
+    ring = (f'  <circle cx="{cx}" cy="{cy}" r="{radius}" fill="none" stroke="{LINE}"'
+            f' stroke-width="{thickness}" stroke-opacity="0.5"/>\n')
+    ring += (f'  <circle cx="{cx}" cy="{cy}" r="{radius}" fill="none" stroke="{colour}"'
+             f' stroke-width="{thickness}" stroke-linecap="butt"'
+             f' stroke-dasharray="{circumference:.2f}" stroke-dashoffset="{offset:.2f}"'
+             f' transform="rotate(-90 {cx} {cy})">\n'
+             + f'    {animate("stroke-dashoffset", f"{offset:.2f}", f"{circumference:.2f}")}\n'
+             + '  </circle>\n')
+    return ring
+
+
+def grow_bar(x: float, y: float, width: float, height: float, colour: str,
+             opacity: str = "1", delay: str = "0s", rx: float = 6.0) -> str:
+    """A bar whose final width is the static attribute; it grows into place."""
+    return (f'  <rect x="{x}" y="{y}" width="{width}" height="{height}" rx="{rx}"'
+            f' fill="{colour}" fill-opacity="{opacity}">'
+            + animate("width", f"{width}", "0", delay) + '</rect>\n')
+
+
 # ---------------------------------------------------------------- figures
 def banner(data) -> str:
     by_id = milestones(data)
@@ -243,7 +306,11 @@ def banner(data) -> str:
     dest_label, dest_colour = STATE_STYLE[by_id["M19"]["state"]]
 
     body = ""
-    # the project's own monogram, from the same geometry as brand/pc5-mark.svg
+    # The mark and the wordmark arrive first, and the rule under the chips draws itself
+    # left to right.  Each of these is a one-shot entrance that freezes: `stroke-dashoffset`
+    # and `opacity` are written at their resting values, so a client that ignores SMIL
+    # shows the finished banner rather than a half-drawn one, and `animation_problems`
+    # below is what enforces that.
     body += f"  {brand.mark_paths(CYAN, brand.SYM_STROKE, 'translate(60,35) scale(0.234375)')}\n"
     body += text(200, 118, "PC5", size=64, weight="bold", spacing="4")
     body += text(206, 152,
@@ -256,9 +323,11 @@ def banner(data) -> str:
         (f"DESTINATION M19 {dest_label}", dest_colour),
     )
     x = 206
+    delay = 0.0
     for label, colour in chips:
         width = len(label) * 7 + 22
-        body += badge(x, 176, label, colour, w=width, size=11)
+        body += fade(badge(x, 176, label, colour, w=width, size=11), f"{delay:.2f}s")
+        delay += 0.12
         x += width + 12
 
     # the honest line, in the figure, not only in prose
@@ -266,7 +335,10 @@ def banner(data) -> str:
                  size=13, fill=INK)
     body += text(206, 264, "and none is executed. Physical PC boot: NOT TESTED.",
                  size=13, fill=AMBER)
-    body += (f'  <line x1="60" y1="292" x2="1140" y2="292" stroke="{LINE}"/>\n')
+    body += (f'  <line x1="60" y1="292" x2="1140" y2="292" stroke="{LINE}"\n'
+             + '    stroke-dasharray="1080" stroke-dashoffset="0">\n'
+             + f'    {animate("stroke-dashoffset", "0", "1080", "0.45s", "0.9s")}\n'
+             + '  </line>\n')
     body += text(60, 312, "docs/architecture/roadmap.json", size=11, fill=MUTED)
     body += text(1140, 312, "generated by tools/presentation.py", size=11,
                  fill=MUTED, anchor="end")
@@ -382,14 +454,18 @@ def progress(data) -> str:
         body += (f'  <rect x="{bar_x}" y="{y + 8}" width="{bar_w}" height="14" '
                  f'rx="7" fill="{LINE}"/>\n')
         offset = bar_x
+        # The state segments grow into place, one graph row behind the next, and each
+        # `rect` carries its real width as a static attribute.  A reader whose client
+        # does not animate SMIL therefore sees the finished bars, and a reader who
+        # watches them land sees the same numbers: one truth, two renderings.
+        bar_delay = f"{0.1 + index * 0.06:.2f}s"
         for state, colour in (("complete", GREEN), ("in_progress", CYAN),
                               ("blocked", RED)):
             if not counts[state]:
                 continue
             width = max(4, round(bar_w * counts[state] / count))
-            body += (f'  <rect x="{offset}" y="{y + 8}" width="{width}" height="14" '
-                     f'rx="7" fill="{colour}" fill-opacity="'
-                     f'{"1" if state == "complete" else "0.75"}"/>\n')
+            body += grow_bar(offset, y + 8, width, 14, colour,
+                             "1" if state == "complete" else "0.75", bar_delay, 7.0)
             offset += width
         body += text(bar_x + bar_w + 14, y + 21, f"{counts['complete']}/{count}", size=12,
                      fill=MUTED)
@@ -492,25 +568,54 @@ def workflow(data) -> str:
 
 # ---------------------------------------------------------------- validation records
 VALIDATION = ROOT / "docs/evidence/validation"
-BLOCKS = ("stats", "status", "evidence", "blockers", "pup")
+BLOCKS = ("completion", "stats", "status", "evidence", "blockers", "pup")
+# The About page gets its own blocks, and they read the same model as the README's.
+# That is the point of putting them in a generator rather than in a paragraph: an About
+# page that *quotes* the front page goes stale the first week, and a stale About page is
+# worse than none, because it is the page a newcomer trusts.
+ABOUT_BLOCKS = ("about-identity", "about-capabilities", "about-progress")
+ALL_BLOCKS = BLOCKS + ABOUT_BLOCKS
+
+
+def pages() -> dict:
+    """Every document the generator owns, and the blocks it owns inside it.
+
+    A function rather than a dict literal, so a test can redirect `README` / `ABOUT`
+    at a fixture tree and have this follow.
+    """
+    return {README: BLOCKS, ABOUT: ABOUT_BLOCKS}
+
+
+def page_label(path: Path) -> str:
+    """How a problem message names an owned page.
+
+    Inside this repository that is the repository-relative path.  Under a redirected
+    fixture (`tests/test_presentation.py` points `README` / `ABOUT` at a temporary tree)
+    there is no such prefix to strip, and printing `/tmp/tmpab12/ABOUT.md` would bury the
+    one fact a reader needs — which of the two pages to open.  So the fallback is the file
+    name, which distinguishes the pages in both directions and never collides here.
+    """
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return path.name
 
 STATE_LABEL = {"complete": "complete", "in_progress": "in progress",
                "not_started": "not started", "blocked": "blocked"}
 
 
 def load_records(directory: Path | None = None) -> dict:
-    """Every committed validation record, keyed by gate. Unreadable records are absent."""
-    found = {}
-    for path in sorted((directory or VALIDATION).glob("*.json")):
-        try:
-            record = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if record.get("schema") != "pc5.validation/1":
-            continue
-        record["file"] = f"docs/evidence/validation/{path.name}"
-        found[record.get("gate", path.stem)] = record
-    return found
+    """The committed gate records, read by the one reader this repository has.
+
+    Deliberately a delegation, not a sibling: `tools/completion.py` owns the record
+    shape, the schema filter and the rule that the newest date wins when a gate has
+    more than one file.  Two loaders over one directory drift by construction -- this
+    one used to key by gate and keep whichever filename sorted last, so the stamp the
+    completion block printed and the stamp the stat cards printed could disagree about
+    the same evidence -- and a dashboard whose rows come from different reads of the
+    same directory is not a dashboard.
+    """
+    return completion.load_records(directory)
 
 
 def distribution(data) -> dict:
@@ -528,8 +633,13 @@ def record_line(records: dict, gate: str) -> tuple:
     result = record.get("result", "error")
     colour = {"passed": GREEN, "not-tested": AMBER, "skipped": AMBER,
               "failed": RED, "error": RED}.get(result, MUTED)
-    checks = record.get("checks") or {}
-    detail = f" {checks['passed']}/{checks['total']}" if checks else ""
+    # `tools/validation.py` writes `checks` as {"passed": n, "total": m}; anything else
+    # (an int, a string, a hand-edited record) is not a tally, so it is dropped rather
+    # than indexed -- a malformed record must not be able to raise inside the generator
+    # and leave the README half-written.
+    checks = record.get("checks")
+    checks = checks if isinstance(checks, dict) else {}
+    detail = f" {checks['passed']}/{checks['total']}" if "passed" in checks and "total" in checks else ""
     return (f"{result}{detail} @ {record.get('commit', '')[:7]}", colour)
 
 
@@ -691,6 +801,111 @@ def pup_markdown() -> str:
     return "\n".join(lines)
 
 
+
+
+def completion_chart(data, records=None) -> str:
+    """The signature figure: one honest number, drawn from the canonical graph.
+
+    The ring is the weighted completion, the stacked bar is the milestone graph, and
+    the six rows beneath it are the success hierarchy level by level, because a single
+    percentage flattens the thing PC5 actually cares about: level 1 (does it boot a
+    machine) and level 5 (does the system software run) are not the same distance from
+    done.  Everything here is arithmetic on `roadmap.json`; the only judgement is the
+    weight, and the weight is stated inside the figure so a reader can disagree with it.
+    """
+    model = completion.compute(data)
+    stamp = completion.verified_at(records if records is not None else load_records())
+    hosted = completion.hosted_summary()
+    counts, levels = model["counts"], model["levels"]
+    percent = model["percent"]
+
+    body = text(48, 46, "OVERALL PROJECT COMPLETION", size=20, weight="bold")
+    body += text(48, 70, "earned acceptance-criteria weight / total declared weight, from "
+                         "docs/architecture/roadmap.json", size=12, fill=MUTED)
+    body += text(48, 88, "in-progress milestones score 0 until their criteria are recorded; "
+                         "a percentage typed into prose fails presentation-check",
+                 size=11, fill=AMBER)
+
+    # ---- the ring, and the number it draws
+    body += fade(panel(48, 108, 320, 244), "0s")
+    body += arc(208, 222, 92.0, percent / 100.0, GREEN, 24.0)
+    body += text(208, 214, f"{percent}%", size=42, weight="bold", anchor="middle")
+    body += text(208, 240, "OF DECLARED SCOPE", size=10, fill=MUTED, anchor="middle",
+                 spacing="1.5")
+    body += text(208, 272, f"{counts['complete']}/{counts['total']} milestones", size=13,
+                 fill=INK, anchor="middle")
+    body += text(208, 292, f"{model['criteria']['complete']}/{model['criteria']['total']} criteria",
+                 size=11, fill=MUTED, anchor="middle")
+    body += text(208, 336, f"by milestone count {model['percent_by_count']}%", size=11,
+                 fill=CYAN, anchor="middle")
+
+    # ---- the graph itself, as one stacked bar
+    x0, span = 400, 752
+    body += text(x0, 132, "MILESTONE GRAPH BY STATE", size=12, fill=INK, weight="bold",
+                 spacing="1")
+    segments = (("complete", counts["complete"], GREEN, "1"),
+                ("in progress", counts["in_progress"], CYAN, "0.8"),
+                ("blocked", counts["blocked"], RED, "0.8"),
+                ("not started", counts["not_started"], MUTED, "0.45"))
+    offset, delay = x0, "0.15s"
+    body += f'  <rect x="{x0}" y="144" width="{span}" height="18" rx="9" fill="{LINE}" '
+    body += 'stroke="none"/>\n'
+    for label, count, colour, opacity in segments:
+        if not count:
+            continue
+        width = round(span * count / counts["total"], 1)
+        body += grow_bar(offset, 144, width, 18, colour, opacity, delay, 9.0)
+        offset += width
+        delay = f"{float(delay[:-1]) + 0.12:.2f}s"
+    legend = " · ".join(f"{count} {label}" for label, count, _c, _o in segments)
+    body += text(x0, 182, legend, size=11, fill=MUTED)
+
+    # ---- the success hierarchy, level by level
+    body += text(x0, 212, "THE SAME PROGRESS, BY LEVEL OF THE SUCCESS HIERARCHY", size=11,
+                 fill=INK, weight="bold", spacing="1")
+    row_y, row_delay = 222, "0.5s"
+    for index, level in enumerate(sorted(levels)):
+        bucket = levels[level]
+        y = row_y + index * 21
+        body += text(x0, y + 11, f"{level[1:]}  ", size=11, fill=CYAN, weight="bold")
+        body += f'  <rect x="{x0 + 34}" y="{y}" width="520" height="12" rx="6" '
+        body += f'fill="{LINE}" stroke="none"/>\n'
+        width = round(520 * bucket["percent"] / 100.0, 1)
+        if width:
+            body += grow_bar(x0 + 34, y, max(width, 6), 12,
+                             GREEN if bucket["percent"] >= 60 else CYAN, "0.9", row_delay, 6.0)
+        body += text(x0 + 566, y + 10, f"{bucket['percent']}%", size=11, fill=INK)
+        body += text(x0 + 620, y + 10, f"{bucket['complete']}/{bucket['total']} milestones",
+                     size=11, fill=MUTED)
+        row_delay = f"{float(row_delay[:-1]) + 0.1:.2f}s"
+
+    # ---- the four states that must not be confused
+    release = completion.release_state(data)
+    dest_state = model["destination"]["state"]
+    chips = ((f"DESTINATION {model['destination']['id']} "
+               f"{STATE_STYLE.get(dest_state, ('UNKNOWN', MUTED))[0]}",
+               STATE_STYLE.get(dest_state, (None, MUTED))[1]),
+             (f"RELEASE {release['milestone']} {release['state'].upper()}", RED),
+             (f"CI {hosted['conclusion'].upper()}" if hosted["available"] else "CI NO RECORD",
+              GREEN if hosted.get("light") == "green" else AMBER),
+             (f"VERIFIED {stamp['date']} @{stamp.get('short', 'none')}", CYAN))
+    x = x0
+    for label, colour in chips:
+        width = len(label) * 7 + 22
+        body += badge(x, 356, label, colour, w=width, size=11)
+        x += width + 12
+
+    body += text(48, 372, "tools/completion.py · weight = acceptance criteria per milestone · "
+                          "partial credit refused without a recorded criterion",
+                 size=10, fill=MUTED)
+    body += text(1152, 372, "generated, do not hand-edit", size=10, fill=MUTED, anchor="end")
+    return svg(1200, 386, body, "PC5 overall project completion",
+               f"{percent} percent of PC5's declared scope is complete: {counts['complete']} of "
+               f"{counts['total']} milestones, {model['criteria']['complete']} of "
+               f"{model['criteria']['total']} acceptance criteria. In-progress milestones score "
+               f"zero. Destination {model['destination']['id']} is "
+               f"{model['destination']['state']}, and nothing has been released.")
+
 def dashboard(data, records) -> str:
     counts = distribution(data)
     total = len(data["milestones"])
@@ -807,22 +1022,273 @@ def record_hint(records: dict, gate: str) -> str:
 
 # ---------------------------------------------------------------- block plumbing
 BLOCK_RENDERERS = {
+    "completion": lambda data, records: completion.markdown(
+        completion.compute(data), completion.verified_at(records),
+        completion.release_state(data), completion.hosted_summary()),
     "stats": lambda data, records: stats_markdown(data, records),
     "status": lambda data, records: status_markdown(data),
     "evidence": lambda data, records: evidence_markdown(records),
     "blockers": lambda data, records: blockers_markdown(data),
     "pup": lambda data, records: pup_markdown(),
+    "about-identity": lambda data, records: about_identity_markdown(data),
+    "about-capabilities": lambda data, records: about_capabilities_markdown(data),
+    "about-progress": lambda data, records: about_progress_markdown(data, records),
 }
+
+
+# ---------------------------------------------------------------- the About page
+#: The licence facts are read by `tools/licensing.py`, which the documentation gate calls too:
+#: the page and the gate must not be able to disagree, and the reasoning (why a verbatim copy
+#: of the FSF text is not a grant, why an edited body is a refusal rather than a tolerance) is
+#: recorded there.  What lives here is only the phrasing of the About page's row.
+
+
+def licence_identity(root: Path | None = None) -> dict:
+    """What this repository grants, as one dict: `spdx`, `problem`, `file`, `official`.
+
+    A thin delegation, and deliberately so.  The About page prints this, `make docs-check`
+    fails on it, and the README table is derived from it; three surfaces, one reading.  The
+    reader returns a refusal as a value rather than raising, which is what lets the page still
+    be generated — and still say something true — while the licence is ambiguous.
+    """
+    # `or ROOT`, not `root`: the reader resolves its own default, and a test harness that
+    # redirects this module's root has to redirect the licence lookup with it — otherwise the
+    # fixture tree would be handed the real repository's `LICENSING.md` and the row generated
+    # from it, which is how a fixture ends up asserting nothing about itself.
+    return licensing.read(root or ROOT)
+
+
+def licence_row(licence: dict) -> str:
+    """The About page's licence line, phrased to whatever the tree actually supports.
+
+    Two shapes, because there are two honest sentences to say: print the identifier the notice
+    grants and the official text confirms, or print that no identifier can be printed and name
+    the file at fault.  What it will not do is supply an identifier the notice does not state
+    — a licence claim on an About page is exactly the claim a distributor relies on, and
+    silence is recoverable in a way a confident wrong answer is not.  The no-vendoring clause is
+    attributed to its own source for the same reason: it is true of the repository because
+    ADR-025 records it, and whether the notice happens to restate it is a separate fact.
+    """
+    adr = "[ADR-025](" + about_link("docs/TECHNICAL_DECISIONS.md") + ")"
+    if licence.get("spdx"):
+        vendored = (f"no third-party source archive is vendored ({adr})"
+                    if licence.get("no_vendored_third_party")
+                    else f"the no-vendoring rule is recorded in {adr}, not restated by "
+                         f"`{licensing.NOTICE}`")
+        return (f"| **Licence** | **{licence['spdx']}** — the grant in "
+                f"[`{licensing.NOTICE}`]({about_link(licensing.NOTICE)}), the official body in "
+                f"[`{licensing.OFFICIAL}`]({about_link(licensing.OFFICIAL)}) verified verbatim; "
+                f"{vendored} |")
+    at_fault = licence.get("file") or "LICENSING.md"
+    return (f"| **Licence** | **no identifier is printed** — `{at_fault}` "
+            f"{licence['problem']} (see §6 for what this tool refuses to derive). The "
+            f"no-vendoring rule is recorded in {adr} regardless. |")
+
+
+def about_link(target: str) -> str:
+    """Rewrite a repository-relative path so it resolves from `docs/ABOUT.md`.
+
+    A generated block is written into a specific file, and a link is relative to that
+    file — not to the repository root.  The roadmap stores its evidence and authority
+    paths root-relatively, so the block has to translate them, or every link in the
+    About page would be a dead link that only a checker can see.
+    """
+    cleaned = str(target).strip().lstrip("./")
+    if cleaned.startswith(("http://", "https://", "mailto:", "#", "/")):
+        return cleaned
+    if cleaned.startswith("docs/"):
+        return cleaned[len("docs/"):]
+    return f"../{cleaned}"
+
+
+def _bullet_list(items, limit: int = 0) -> list:
+    body = list(items)
+    if limit:
+        body = body[:limit]
+    return [f"- {item}" for item in body]
+
+
+def about_identity_markdown(data) -> str:
+    """Who PC5 is, in the roadmap's own words — because the data is the authority.
+
+    The identity, mission, destination, foundation, non-goals and levels are rendered from
+    `docs/architecture/roadmap.json`.  `tests/test_product_identity.py` already requires
+    every identity document to state `product.identity` and to link the architecture
+    authority, so writing this block by hand would mean maintaining a paraphrase that a
+    gate is guaranteed to break.
+    """
+    product = data["product"]
+    destination = product["destination"]
+    foundation = product["foundation"]
+    by_id = milestones(data)
+    licence = licence_identity()
+    dest_milestone = by_id.get(destination["milestone"], {})
+    lines = [f"<!-- pc5:about-identity:begin -->",
+             "",
+             f"> **{product['identity']}**",
+             "",
+             product["identity_note"],
+             "",
+             "| | |",
+             "|---|---|",
+             f"| **Mission** | {product['mission']} |",
+             f"| **Destination** | `{destination['milestone']}` — "
+             f"{dest_milestone.get('title', 'untitled')} (level {destination['level']}) |",
+             f"| **Destination statement** | {destination['statement']} |",
+             f"| **Evidence class at the destination** | {destination['evidence_class']} |",
+             f"| **Hardware-enablement substrate** | {foundation['name']} — role "
+             f"`{foundation['role']}`, `required_for_product: false`, exits at "
+             f"`{foundation['exit_milestone']}` ({foundation['adr']}) |",
+             licence_row(licence),
+             f"| **Roadmap authority** | [{data['authority'].split('/')[-1]}]"
+             f"({about_link(data['authority'])}), document version `{data['document_version']}`, "
+             f"updated {data['updated']} |",
+             "",
+             "**What the destination cannot be satisfied by** — stated in the roadmap so "
+             "that no page, figure or release note can quietly substitute one of these for "
+             "the real thing:",
+             ""]
+    lines += _bullet_list(destination["must_not_be_satisfied_by"])
+    lines += ["", "**Non-goals** — the same list the identity test reads:", ""]
+    lines += _bullet_list(product["non_goals"])
+    lines += ["", "**The success hierarchy, in order** — a level is claimed only with the "
+              "evidence class named beside it:", ""]
+    for level in product["levels"]:
+        lines.append(f"- **Level {level['level']} — {level['statement']}.**  "
+                     f"*Evidence class:* {level['evidence_class']}")
+    lines += ["", "Every row and bullet above is rendered from `docs/architecture/roadmap.json` "
+              "and from the licence pair — the grant in `LICENSING.md` over the verbatim "
+              "`LICENSE` text, read by `tools/licensing.py` — by `tools/presentation.py`.  "
+              "Nothing in this section is a paraphrase, and nothing in it can be edited without "
+              "the gate in `tests/test_product_identity.py` noticing.",
+              "<!-- pc5:about-identity:end -->"]
+    return "\n".join(lines)
+
+
+def about_capabilities_markdown(data) -> str:
+    """What works, at what standing, with the source beside each claim.
+
+    Five buckets, and every one of them is a field in `roadmap.json` rather than a
+    judgement made here: `complete` and `in_progress` and `not_started` and `blocked` are
+    the milestone states the roadmap gate enforces, and the middle bucket — implemented but
+    not fully validated — is the `foundations[]` list, whose `state`, `delivers` and
+    `does_not_complete` strings are the project's own words for how far each experimental
+    path has actually gone.
+    """
+    counts = distribution(data)
+    foundations = data.get("foundations") or []
+    complete = [m for m in data["milestones"] if m["state"] == "complete"]
+    in_progress = [m for m in data["milestones"] if m["state"] == "in_progress"]
+    lines = [f"<!-- pc5:about-capabilities:begin -->",
+             "| Standing | Count | How this bucket is decided |",
+             "|---|---:|---|",
+             f"| **Implemented and verified** | {len(complete)} | the milestone's state is "
+             f"`complete`, which in this roadmap means its acceptance criteria are met and "
+             f"evidence is filed in the repository |",
+             f"| **Implemented, not fully validated** | {len(foundations)} | an entry in "
+             f"`roadmap.json`'s `foundations[]`, whose recorded `state` says what has been "
+             f"tested and what has not |",
+             f"| **Experimental or in progress** | {counts['in_progress']} | state "
+             f"`in_progress`; these earn nothing in the completion figure |",
+             f"| **Planned** | {counts['not_started']} | state `not_started` |",
+             f"| **Blocked** | {counts['blocked']} | state `blocked`, with the blocker named "
+             f"in the roadmap |",
+             "",
+             "**Implemented and verified** — with the file that holds the evidence, so the "
+             "claim can be checked rather than trusted:",
+             ""]
+    for milestone in complete:
+        evidence = ", ".join(f"[`{e}`]({about_link(e)})"
+                             for e in (milestone.get("evidence") or []))
+        lines.append(f"- `{milestone['id']}` — {milestone['title']} "
+                     f"({len(milestone.get('acceptance') or [])} acceptance "
+                     f"criteria{' · evidence: ' + evidence if evidence else ''})")
+    lines += ["", "**Implemented, not fully validated** — quoted from `foundations[]`, "
+              "because the distinction *is* the sentence:", ""]
+    for item in foundations:
+        # One line per claim, verbatim. These sentences are long on purpose — they are the
+        # boundary between "built" and "believed" — so they are stacked rather than joined
+        # into a paragraph, which is how a reader ends up skimming the part that matters.
+        lines.append(f"- **`{item['id']}`** — {item['title']}  \n"
+                     f"  *Standing:* {item['state']}  \n"
+                     f"  *Reaches milestone* `{item['milestone']}`, and does not complete it.")
+        for delivers in item.get("delivers") or []:
+            lines.append(f"  - Delivers: {delivers}")
+        for missing in item.get("does_not_complete") or []:
+            lines.append(f"  - Not completed: {missing}")
+    lines += ["", "**Experimental or in progress** — where work is open right now:", ""]
+    for milestone in in_progress:
+        advances = milestone.get("advances") or ""
+        lines.append(f"- `{milestone['id']}` — {milestone['title']}"
+                     + (f"  \n  *Advances:* {advances}" if advances else ""))
+    lines += ["", f"**Planned** — {counts['not_started']} milestones carry "
+              f"`not_started`; the list is in "
+              f"[docs/ROADMAP.md]({about_link('docs/ROADMAP.md')}) and in "
+              f"`docs/architecture/roadmap.json`, and none of them is described as done "
+              f"anywhere in this repository.",
+              "",
+              f"**Blocked** — {counts['blocked']} milestones, each with its blocker quoted: "
+              f"see the generated table in [README → What is blocked]"
+              f"({about_link('README.md')}#what-is-blocked).  This page does not repeat it, because two "
+              f"copies of a blocker list are two things that can go stale.",
+              "",
+              "Generated by `tools/presentation.py` from `docs/architecture/roadmap.json`; "
+              "the counts are the same `distribution()` the README prints, so the two pages "
+              "cannot disagree about how much of PC5 exists.",
+              "<!-- pc5:about-capabilities:end -->"]
+    return "\n".join(lines)
+
+
+def about_progress_markdown(data, records) -> str:
+    """The progress row of the About page: the README's number, from the same function."""
+    model = completion.compute(data)
+    stamp = completion.verified_at(records)
+    release = completion.release_state(data)
+    hosted = completion.hosted_summary()
+    counts = model["counts"]
+    lines = [f"<!-- pc5:about-progress:begin -->",
+             "| | |",
+             "|---|---|",
+             f"| **Overall completion** | **{model['percent']}%** — earned acceptance-criteria "
+             f"weight ÷ declared weight |",
+             f"| **Milestones** | {counts['complete']} complete · {counts['in_progress']} in "
+             f"progress · {counts['blocked']} blocked · {counts['not_started']} not started, "
+             f"in {counts['workstreams']} workstreams |",
+             f"| **Current milestone** | "
+             f"{', '.join(f'`{m}`' for m in model['milestones']['in_progress']) or 'none'} |",
+             f"| **Last verified** | {stamp['date']} — `{stamp['gate']}` recorded "
+             f"**{stamp['result']}** at `{stamp['short']}` "
+             f"({stamp['passed']}/{stamp['gates']} committed gate records passed) |",
+             f"| **Hosted CI** | {hosted['text']} |",
+             f"| **Release** | `{release['milestone']}` "
+             f"**{release['state'].upper().replace('_', ' ')}** — "
+             f"{'nothing published' if not release['published'] else 'published'} |",
+             f"| **Canonical roadmap** | [docs/ROADMAP.md]"
+             f"({about_link('docs/ROADMAP.md')}) · [`roadmap.json`]"
+             f"({about_link('docs/architecture/roadmap.json')}) |",
+             "",
+             f"The figure is criteria-weighted, not commit-weighted: {model['criteria']['complete']} "
+             f"of {model['criteria']['total']} declared acceptance criteria are met.  Counting "
+             f"milestones instead gives {model['percent_by_count']}%, and the two agree within "
+             f"{model['agreement_points']} points — so the headline is not an artefact of the "
+             f"weighting.  Progress is **never** computed from commits, files, lines or test "
+             f"counts, and an `in_progress` milestone scores zero until it declares which of its "
+             f"criteria it has met.  `python3 tools/completion.py model` reprints this "
+             f"calculation; `python3 tools/completion.py check` refuses inconsistent roadmap data.",
+             "<!-- pc5:about-progress:end -->"]
+    return "\n".join(lines)
 
 
 def block_markers(name: str) -> tuple:
     return f"<!-- pc5:{name}:begin -->", f"<!-- pc5:{name}:end -->"
 
 
-def apply_block(text: str, name: str, body: str) -> str:
+def apply_block(text: str, name: str, body: str, label: str = "README.md") -> str:
     begin, end = block_markers(name)
     if begin not in text or end not in text:
-        raise SystemExit(f"README.md is missing the {begin} … {end} markers")
+        # Named by the caller, because the same failure on `docs/ABOUT.md` must not tell
+        # somebody to go and edit the front page.
+        raise SystemExit(f"{label} is missing the {begin} … {end} markers")
     head, rest = text.split(begin, 1)
     _, tail = rest.split(end, 1)
     return head + body + tail
@@ -842,13 +1308,17 @@ STRAY = (
     re.compile(r"\b\d+\s+workstreams\b", re.I),
     re.compile(r"\b\d+\s*[- ]byte", re.I),
     re.compile(r"\b\d\.\d+\s*GB\b", re.I),
+    # the completion figure is the one number a reader is most likely to hand-edit,
+    # and the likeliest to be stale by a whole milestone: it may only ever come from
+    # tools/completion.py inside a generated block.
+    re.compile(r"\b\d{1,3}(?:\.\d+)?\s*%(?!\w)"),  # `\b` after `%` never matches
 )
 
 
-def stray_statistics(readme: str) -> list:
+def stray_statistics(document: str, label: str = "README.md") -> list:
     """Statistics outside a generated block are the ones that go stale."""
-    stripped = readme
-    for name in BLOCKS:
+    stripped = document
+    for name in ALL_BLOCKS:
         begin, end = block_markers(name)
         while begin in stripped and end in stripped:
             head, rest = stripped.split(begin, 1)
@@ -857,7 +1327,7 @@ def stray_statistics(readme: str) -> list:
     found = []
     for pattern in STRAY:
         for match in pattern.finditer(stripped):
-            found.append(f"README.md: {match.group(0)!r} is a statistic outside a generated "
+            found.append(f"{label}: {match.group(0)!r} is a statistic outside a generated "
                          f"block — put it in one so it cannot go stale")
     return found
 
@@ -897,6 +1367,7 @@ FIGURES = {
     "pc5-progress.svg": lambda data, records: progress(data),
     "pc5-boot-workflow.svg": lambda data, records: workflow(data),
     "pc5-evidence.svg": evidence_ladder,
+    "pc5-completion.svg": completion_chart,
 }
 
 
@@ -954,6 +1425,20 @@ def link_problems(path: Path, text: str) -> list:
     return problems
 
 
+#: Words each owned page has to contain, and why it is that page's job to say them.
+#: The README is the front page, so it carries the full set; the About page is the long
+#: form, so it is required to name the two distinctions a newcomer is most likely to get
+#: wrong — what the ISO boots, and that the Sony package is a pointer with no payload.
+#: Keyed by file name rather than by `README` / `ABOUT`, and that is deliberate: the
+#: constants are rebound at import time by the test fixtures, and a dict built from the
+#: paths would silently hold the wrong keys for the rest of the run — a missing-token rule
+#: that quietly checks nothing is the worst kind of gate, because it looks like a pass.
+HONESTY_TOKENS = {
+    README.name: ("genuine Sony PlayStation 5 system software", "NOT TESTED",
+                  "BLOCKED", "Git LFS pointer"),
+    ABOUT.name: ("NOT TESTED", "Git LFS pointer", "nothing published"),
+}
+
 #: Claims the presentation layer must never make. Each entry is (pattern, why).
 FORBIDDEN = (
     ("runs ps5 games", "game compatibility is not claimed; the destination is the system software"),
@@ -964,6 +1449,44 @@ FORBIDDEN = (
     ("production ready", "no physical boot has happened"),
     ("fully compatible", "no compatibility matrix has been executed on hardware"),
 )
+
+
+def animation_problems(name: str, body: str) -> list:
+    """Every animation must freeze on a value the static markup already carries.
+
+    This is the rule that makes the animated figures safe to publish.  A client that
+    ignores SMIL, a proxy that flattens the image, a reader with motion disabled, and
+    a screenshot of the run page all see the *static* attribute; if that attribute
+    disagreed with the animation's end state, the same figure would tell two stories.
+    So each ``<animate>`` has to freeze, and its parent has to already hold the value
+    it animates toward.  A looping animation would fail here on purpose: motion that
+    never settles is decoration, and these figures are not decoration.
+    """
+    import xml.etree.ElementTree as ET
+    problems = []
+    for token in ("<script", "<style", "onload", "onclick", "javascript:", "https://"):
+        if token in body:
+            problems.append(f"docs/assets/{name}: {token!r} is not allowed in a figure")
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError as exc:
+        return [f"docs/assets/{name}: is not well-formed XML ({exc})"]
+    for parent in root.iter():
+        for child in list(parent):
+            if not child.tag.endswith("animate") and not child.tag.endswith("animateTransform"):
+                continue
+            if child.get("fill") != "freeze":
+                problems.append(f"docs/assets/{name}: an animation on "
+                                f"{child.get('attributeName')} does not freeze on a value")
+                continue
+            attribute = child.get("attributeName")
+            target = child.get("to")
+            if attribute and target is not None and parent.get(attribute) != target:
+                problems.append(
+                    f"docs/assets/{name}: {attribute} rests at {parent.get(attribute)!r} but "
+                    f"animates to {target!r}; a reader without animation would see a "
+                    f"different figure")
+    return problems
 
 
 def check(data, records=None) -> list:
@@ -985,35 +1508,50 @@ def check(data, records=None) -> list:
         if measured:  # an unreadable figure is already reported as stale above
             problems += [f"docs/assets/{name}: {problem}"
                          for problem in overflow(actual, int(measured.group(1)))]
+        problems += animation_problems(name, actual)
 
-    readme = README.read_text(encoding="utf-8")
-    for name, body in render_blocks(data, records).items():
-        begin, end = block_markers(name)
-        if begin not in readme or end not in readme:
-            problems.append(f"README.md: the {name} block has lost its markers")
+    blocks = render_blocks(data, records)
+    for document, names in pages().items():
+        label = page_label(document)
+        if not document.exists():
+            problems.append(f"{label}: missing — this page is generated into, not from")
             continue
-        if apply_block(readme, name, body) != readme:
-            problems.append(f"README.md: the generated {name} block does not match the "
-                            f"data — run `make presentation`")
+        text = document.read_text(encoding="utf-8")
+        for name in names:
+            begin, end = block_markers(name)
+            if begin not in text or end not in text:
+                problems.append(f"{label}: the {name} block has lost its markers")
+                continue
+            if apply_block(text, name, blocks[name], label) != text:
+                problems.append(f"{label}: the generated {name} block does not match the "
+                                f"data — run `make presentation`")
+        # Every owned page is held to the same two prose rules the README is held to:
+        # no statistic outside a block, and no claim this repository cannot make.
+        problems += link_problems(document, text)
+        problems += stray_statistics(text, label)
+        lowered = " ".join(text.lower().split())
+        for pattern, why in FORBIDDEN:
+            if pattern in lowered:
+                problems.append(f"{label}: claim {pattern!r} is not true ({why})")
+        for token in HONESTY_TOKENS.get(document.name, ()):
+            if token.lower() not in lowered:
+                problems.append(f"{label}: the honesty token {token!r} is missing")
 
-    for document in (README, ROOT / "docs/PRESENTATION.md"):
-        if document.exists():
-            problems += link_problems(document, document.read_text(encoding="utf-8"))
-
-    lowered = " ".join(readme.lower().split())
-    for pattern, why in FORBIDDEN:
-        if pattern in lowered:
-            problems.append(f"README.md: claim {pattern!r} is not true ({why})")
-    for token in ("genuine Sony PlayStation 5 system software", "NOT TESTED",
-                  "BLOCKED", "Git LFS pointer"):
-        if token.lower() not in lowered:
-            problems.append(f"README.md: the honesty token {token!r} is missing")
-
+    # Every figure has to be reachable from the front page.  A figure only the About page
+    # embeds is still generated and still checked, but it is nobody's first sight of
+    # anything — which is how a diagram becomes a footnote, then a lie nobody notices.
+    front = README.read_text(encoding="utf-8") if README.exists() else ""
     for name in expected:
-        if f"docs/assets/{name}" not in readme:
+        if f"docs/assets/{name}" not in front:
             problems.append(f"README.md does not embed docs/assets/{name}")
 
-    problems += stray_statistics(readme)
+    # an asset nobody generates is an asset nobody can regenerate: it would sit in the
+    # README forever, quietly drifting from the graph it no longer reflects.
+    for path in sorted(ASSETS.glob("*.svg")) if ASSETS.is_dir() else []:
+        if path.name not in expected:
+            problems.append(f"docs/assets/{path.name}: no generator owns this figure "
+                            f"— add it to FIGURES or delete it")
+
     # the records the dashboard quotes have to be readable and internally honest
     sys.path.insert(0, str(ROOT / "tools"))
     import validation  # noqa: WPS433 -- same-directory sibling, imported on demand
@@ -1031,13 +1569,20 @@ def write(data, records=None) -> list:
         if not path.exists() or path.read_text(encoding="utf-8") != body:
             path.write_text(body, encoding="utf-8")
             written.append(_label(path))
-    readme = README.read_text(encoding="utf-8")
-    updated = readme
-    for name, body in render_blocks(data, records).items():
-        updated = apply_block(updated, name, body)
-    if updated != readme:
-        README.write_text(updated, encoding="utf-8")
-        written.append("README.md")
+    blocks = render_blocks(data, records)
+    for document, names in pages().items():
+        if not document.exists():
+            # A page the generator owns but which is absent is not this function's job to
+            # invent: `check` reports it, because silently creating a tracked document from
+            # `sync` would let a deleted page come back on somebody else's run.
+            continue
+        text = document.read_text(encoding="utf-8")
+        updated = text
+        for name in names:
+            updated = apply_block(updated, name, blocks[name], page_label(document))
+        if updated != text:
+            document.write_text(updated, encoding="utf-8")
+            written.append(page_label(document))
     return written
 
 
@@ -1050,7 +1595,10 @@ def main(argv=None) -> int:
     if args.command == "sync":
         for path in write(data, records):
             print(f"updated {path}")
-        print(f"presentation: {len(FIGURES)} figures and {len(BLOCKS)} README blocks are current")
+            blocks = sum(len(names) for names in pages().values())
+        blocks = sum(len(names) for names in pages().values())
+        print(f"presentation: {len(FIGURES)} figures and {blocks} generated blocks "
+              f"across {len(pages())} pages are current")
         return 0
     problems = check(data, records)
     for problem in problems:
@@ -1059,7 +1607,8 @@ def main(argv=None) -> int:
         print(f"{len(problems)} presentation problem(s)")
         return 1
     rows = status_rows(data)
-    print(f"PRESENTATION OK: {len(FIGURES)} figures and {len(BLOCKS)} blocks current, "
+    print(f"PRESENTATION OK: {len(FIGURES)} figures and "
+          f"{sum(len(names) for names in pages().values())} blocks current, "
           f"{len(rows)} status rows match roadmap.json, "
           f"{len(records)} validation record(s) read, links and alt text resolve")
     return 0

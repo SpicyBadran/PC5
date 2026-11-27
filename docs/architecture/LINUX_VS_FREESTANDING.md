@@ -35,7 +35,7 @@ with a weight can recompute the table rather than argue about a verdict.
 | Maintainability over years | 15 | drivers and security fixes arrive continuously; the project cannot outrun that alone |
 | Control over the user experience | 10 | the PlayStation experience needs ownership of the shell, not of the GPU driver |
 | Suitability for PS5 compatibility work | 10 | user-space runtime, GPU translation, storage and audio APIs |
-| Legal and licensing clarity | 5 | GPL-2.0-only project distributing a kernel-based image |
+| Legal and licensing clarity | 5 | GPL-3.0-only project distributing a kernel-based image |
 | Feasibility in the current build environment | 5 | affects what can be proven now, not what is correct |
 
 Scoring 1 (bad) to 5 (good), weighted score = Σ weight × score, maximum 500.
@@ -120,7 +120,8 @@ Rules that make the hybrid safe:
 5. **The PS5 compatibility runtime is user space.** It consumes `PC5-PLAT`
    interfaces; it is never a kernel patch. This is what makes it possible to
    iterate on it without endangering boot.
-6. **GPL compliance is explicit.** The project is GPL-2.0-only; kernel config,
+6. **GPL compliance is explicit.** The project is GPL-3.0-only, granted in
+`LICENSING.md` over the verbatim `LICENSE` body (ADR-027); kernel config,
    patches and the reproducible build recipe ship with any binary image.
 
 ## 7. What Linux does not solve
