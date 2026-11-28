@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Behaviour tests for PC5.Core. These run on any .NET 8 host, which is why they are the
+       cross-platform half of the validation story: they prove the lifecycle, configuration,
+       logging and firmware-reading logic, and they prove nothing about WinUI, packaging or
+       execution on Windows. The pinned versions below are what a first restore must resolve;
+       if a restore fails, the version is corrected here from the API's own listing rather
+       than guessed a second time. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+    <PackageReference Include="xunit" Version="2.6.6" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PC5.Core\PC5.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -182,8 +182,8 @@ Every decision below was taken at baseline `9b20228` and cites either
   the 141-document research record; (c) the split verdict — chosen.
 * **Evidence**: [`EXECUTION_FEASIBILITY.md`](EXECUTION_FEASIBILITY.md) §1–§4 and its §6
   standing conclusions; the 2026 field data there (RPCS3's "a PS5 emulator does not yet
-  exist"; SharpEmu's 0.6 FPS demo; 46 reports and 3 playable titles out of 9,011; AnyPS5's
-  one verified game; RPCSX booting VSH) shows the ceiling for the whole field, and the legal
+  exist"; SharpEmu's 0.6 FPS demo; 46 reports and 3 playable titles out of 9,011; the third-party
+  relinker's one verified game; RPCSX booting VSH) shows the ceiling for the whole field, and the legal
   row (§4: *Connectix* protects reverse engineering, *Tropic Haze* punished **decryption**)
   shows the boundary that does not move.
 * **Decision**: Path A stays a research target with its blockers in the graph, named, and
@@ -223,3 +223,67 @@ Every decision below was taken at baseline `9b20228` and cites either
   (exclusive fullscreen/kiosk behaviour, direct GPU or device access), the shell moves to
   Win32 + Direct3D behind the same `PC5.Core` — the core's testability is the reason that
   swap is cheap, which is also the reason it is not done pre-emptively.
+
+## ADR-036 — The transformation's milestones are numbered into the existing graph as `M22`–`M29`
+
+* **Problem**: ADR-032 decided that the directive's `M0`–`M7` enter `roadmap.json` rather than
+  a parallel file, but the graph already owns `M0`–`M21` (43 milestones now, 35 at the
+  baseline), and `tools/roadmap.py` rejects a gap or a collision. The directive's labels also
+  collide semantically: graph `M1` is *physical boot on qualified PC hardware*, not "the first
+  runnable window", so reusing the names would make one id mean two things in one file.
+* **Alternatives**: (a) renumber the whole graph — rejected: ids are cited in
+  `docs/evidence/`, in `README.md`'s generated blocks, in commit messages and in merged PRs,
+  and re-labelling history to fit a new plan is the reverse of an audit trail; (b) a second
+  `app/roadmap.json` — rejected by ADR-032, and `tools/completion.py` would publish two
+  percentages for one project; (c) continue the sequence — chosen.
+* **Evidence**: `python3 tools/roadmap.py check` requires ids matching `^M[0-9]+[a-z]?$`, a
+  workstream per milestone, no cycles, and `evidence[]` paths that exist on disk; `make
+  completion-check` recomputes both published figures from the same file. Adding eight
+  milestones with unmet acceptance moved the published number **down** (26.7 % → 23.4 % by
+  criteria), which is exactly the property a scope ledger must have: declaring work you have
+  not done costs you, it does not flatter you.
+* **Decision**: `M22` baseline · `M23` first runnable `PC5.exe` (directive `M1`) · `M24`
+  subsystems behind contracts (directive `M2`) · `M25` genuine-execution interface research
+  (directive `M3`) · `M26` input and media (directive `M4`) · `M27` update/installer semantics
+  against PC5's own packages (directive `M5`) · `M28` four CI dimensions and the app evidence
+  loop (directive `M6`) · `M29` Windows release readiness (directive `M7`). A new workstream
+  `WS14` owns the application, because `WS0` (governance) and `WS13` (PS5 product experience)
+  would each mis-describe it. Every document that wants to say "M1" means the graph id and
+  quotes `M23`; the directive's numbering survives only in this table.
+* **Reversal**: none of the ids. If the mapping proves wrong, the *titles and dependencies* are
+  amended in a new ADR; an id is never re-pointed at different work, because evidence already
+  filed against it would silently change meaning.
+
+## ADR-037 — Host execution backend: probe Windows Hypervisor Platform, vendor no emulator, write no hypervisor
+
+* **Problem**: `M24`'s engine seam needs a first real backend, and the choice decides what PC5
+  can even measure on a Windows host. It is also where a project under time pressure quietly
+  takes a shortcut — bundling an emulator, or declaring "virtualisation works" because a
+  documented API exists.
+* **Alternatives**: (a) **vendor an upstream emulator** (QEMU-style) — rejected now: it is a
+  licensing and identity decision under ADR-025, and the guest machine model would be
+  somebody else's; (b) **Hyper-V through its management stack** — rejected: too little control
+  over the device model PC5 has to own; (c) **PC5's own type-1 layer** — rejected as a product:
+  it requires owning the host's boot, which is not a Windows application; (d) **WHP as the
+  probe and lifecycle target, with nothing assumed about what it can do** — chosen.
+* **Evidence**: [`../research/VIRTUALIZATION_BACKENDS.md`](../research/VIRTUALIZATION_BACKENDS.md)
+  compares the candidates against what a PS5 guest would demand; Microsoft's own
+  [`WHvAdviseGpaRange`](https://learn.microsoft.com/en-us/virtualization/api/hypervisor-platform/funcs/whvadvisegparange)
+  requirement table fixes the API's floor (x64 and Arm64, Windows 10 20H2 / Windows 11 24H2 on
+  Arm64); secondary reporting (tier D, used only for statements the primary page supports) says
+  enabling `HypervisorPlatform` is an administrator operation needing VT-x/AMD-V with SLAT, and
+  the sources **contradict each other on edition availability** — which PC5 records instead of
+  resolving by preference. In-tree, `WindowsHostProbe` reports only that `WinHvPlatform.dll`
+  loaded, with `NotProven` on the capability line, and `docs/TRANSFORMATION_BASELINE.md`
+  records `virtualization-backend` as `unknown`.
+* **Decision**: experiment `VBP-1` decides, not this document. `PC5.App/Platform` may probe and
+  report; a backend that creates a partition must declare `MaximumEvidenceLevel = GenericGuest`
+  like `Pc5TestBackend` does, so even a complete success is E2 and is printed as
+  "not PS5 execution". No emulator is vendored without its own ADR; no custom hypervisor is
+  written; PC5 does not enable Windows features for the user and does not treat "the DLL
+  loaded" as "virtualisation is available".
+* **Reversal**: VBP-1 producing a working partition with an E2 guest promotes the backend to
+  the graph with its record; a documented API that turns out unusable on the target moves the
+  candidate list, not the ceiling. Neither outcome touches the E5 claim, which no backend can
+  produce on its own.
+

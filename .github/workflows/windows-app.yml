@@ -1,0 +1,165 @@
+name: windows app
+
+# The `app` dimension of PC5's evidence model (ADR-029). It exists beside `build.yml`, not
+# inside it, for one reason: the colour of this workflow may never be read as a statement
+# about the boot image, and the colour of that one may never be read as a statement about
+# the Windows application. Two jobs, deliberately separated by what they can prove:
+#
+#   core-portable  .NET 8 on Linux: PC5.Core restores, builds and unit-tests cross-platform
+#   app-windows    .NET 8 on Windows: the WinUI application builds and packages as PC5.exe
+#
+# Neither job can certify genuine PS5 execution, and neither is asked to. The evidence record
+# this workflow files is produced by tools/app_evidence.py from the test result file, so a
+# "passed" status is derived from a TRX that has to exist; the app job never writes a status
+# by hand, and nothing here pushes to any branch.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "app/**"
+      - "tools/app_evidence.py"
+      - ".github/workflows/windows-app.yml"
+      - "docs/engineering/WINDOWS_VALIDATION.md"
+  pull_request:
+    paths:
+      - "app/**"
+      - "tools/app_evidence.py"
+      - ".github/workflows/windows-app.yml"
+      - "docs/engineering/WINDOWS_VALIDATION.md"
+  workflow_dispatch:
+
+# Read-only: this workflow reports, it does not write to the repository. The evidence
+# commit path belongs to progress.yml, whose author refusal rules already apply there.
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-app-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  core-portable:
+    name: PC5.Core builds and tests cross-platform
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the commit under test
+        uses: actions/checkout@v4
+
+      - name: Install the .NET SDK pinned by app/global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: app/global.json
+
+      - name: Report the toolchain actually installed
+        run: dotnet --version && dotnet --list-sdks
+
+      - name: Restore
+        run: dotnet restore app/src/PC5.Core/PC5.Core.csproj
+
+      - name: Build
+        run: dotnet build app/src/PC5.Core/PC5.Core.csproj -c Release --no-restore
+
+      - name: Unit tests
+        run: dotnet test app/tests/PC5.Core.Tests/PC5.Core.Tests.csproj -c Release --no-build
+             --logger "trx;LogFileName=core.trx" --results-directory build/app-trx
+
+      - name: Application structure gates (the checks that need no .NET at all)
+        run: python3 -m unittest tests.test_pc5_app_structure tests.test_app_evidence
+
+      - name: File the evidence record from the result file
+        if: always()
+        run: python3 tools/app_evidence.py --trx build/app-trx/core.trx --out -
+             --subsystem app --milestone M23 | tee build/app-evidence.json
+
+      - name: Upload the diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc5-app-core-diagnostics
+          path: |
+            build/app-trx/core.trx
+            build/app-evidence.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  app-windows:
+    name: PC5.exe builds and packages on Windows
+    runs-on: windows-latest
+    timeout-minutes: 35
+    needs: core-portable
+    steps:
+      - name: Check out the commit under test
+        uses: actions/checkout@v4
+
+      - name: Install the .NET SDK pinned by app/global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: app/global.json
+
+      - name: Report the Windows host this ran on
+        shell: pwsh
+        run: |
+          "OS      : $([System.Environment]::OSVersion.VersionString)"
+          "Computer: $(Get-ComputerInfo -Property CsName -ErrorAction SilentlyContinue)"
+          "Hyper-V require: virtualization-based security state is NOT queried here"
+          dotnet --version
+
+      - name: Restore the application
+        run: dotnet restore app/src/PC5.App/PC5.App.csproj
+
+      - name: Build PC5.exe
+        run: dotnet build app/src/PC5.App/PC5.App.csproj -c Release --no-restore -p:Platform=x64
+
+      - name: Test the core on Windows, where it is also expected to pass
+        run: dotnet test app/tests/PC5.Core.Tests/PC5.Core.Tests.csproj -c Release --no-build
+             --logger "trx;LogFileName=core-windows.trx" --results-directory build/app-trx
+
+      - name: Package the MSIX
+        run: dotnet publish app/src/PC5.App/PC5.App.csproj -c Release -p:PublishProfile=Default
+             -p:RuntimeIdentifierOverride=win-x64 -o build/app-publish
+
+      - name: Confirm the deliverable is named PC5.exe and hash what was produced
+        shell: pwsh
+        run: |
+          $exe = Join-Path build/app-publish PC5.exe
+          if (-not (Test-Path $exe)) { "FAIL: the build did not produce $exe" ; exit 1 }
+          "PC5.exe  : $((Get-Item $exe).Length) bytes"
+          Get-ChildItem -Recurse build/app-publish -Include *.exe,*.msix,*.appx,*.pri |
+            ForEach-Object { "{0,-12} {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.Substring(0,12), $_.Name } |
+            Tee-Object -FilePath build/app-publish/artifact-hashes.txt
+
+      - name: File the Windows evidence record from the result file
+        if: always()
+        shell: pwsh
+        run: python tools/app_evidence.py --trx build/app-trx/core-windows.trx --out build/app-windows-evidence.json --subsystem app-windows --milestone M23
+
+      - name: Upload the application artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc5-app-windows
+          path: |
+            build/app-publish
+            build/app-trx/core-windows.trx
+            build/app-windows-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Say what this job did not prove
+        if: always()
+        shell: pwsh
+        run: |
+          @"
+          This workflow validated: restore, build, unit tests of PC5.Core on Windows, and MSIX packaging.
+          This workflow did NOT validate:
+            - that PC5.exe was launched on a physical Windows 11 desktop (see docs/engineering/WINDOWS_VALIDATION.md)
+            - that any guest operating system booted under any backend
+            - that any PlayStation 5 system software executed, at any evidence level
+          A green run here is evidence level E1 (the application builds). It is not E2 or above.
+          "@ | Tee-Object -FilePath build/limitations.txt

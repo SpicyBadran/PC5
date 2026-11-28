@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The host-independent heart of PC5: lifecycle, configuration, diagnostics,
+       logging, execution contracts, firmware-artifact integrity reading.
+       It deliberately targets plain net8.0 and references NO Windows-only package,
+       so it can be restored, built and unit-tested on any .NET 8 host, including CI
+       on Linux.  Anything that needs WinRT, the Windows App SDK or a Windows registry
+       key belongs in PC5.App/Platform, never here. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Pc5.Core</RootNamespace>
+    <AssemblyName>PC5.Core</AssemblyName>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

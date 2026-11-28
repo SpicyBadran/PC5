@@ -1,0 +1,20 @@
+<Project>
+
+  <!-- Applied to every project under app/: one place for the language and analysis rules,
+       so the Core library and the Windows application cannot drift apart. No package
+       versions are pinned here, because no restore has yet been run from this repository to
+       prove which versions resolve -- see docs/PROGRESS.md, Windows application status. -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <Deterministic>true</Deterministic>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <Company>PC5</Company>
+    <Product>PC5</Product>
+    <Copyright>PC5 project. Licensed under GPL-3.0-only; see LICENSING.md.</Copyright>
+  </PropertyGroup>
+
+</Project>

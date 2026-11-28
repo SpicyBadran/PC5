@@ -1,8 +1,8 @@
 {
   "schema": "pc5.roadmap/2",
-  "document_version": "0.4.0-dev",
+  "document_version": "4",
   "product_version_source": "Makefile VERSION",
-  "updated": "2026-11-22",
+  "updated": "2026-11-28",
   "authority": "docs/architecture/PC5_ARCHITECTURE_SPEC_v2.md",
   "product": {
     "name": "PC5",
@@ -250,6 +250,12 @@
       "name": "Product experience: shell, library, settings",
       "serves_level": "6",
       "purpose": "Build PC5's own console experience on top of the platform: shell, library, accounts, settings. The surface, never the destination."
+    },
+    {
+      "id": "WS14",
+      "name": "Windows host application",
+      "purpose": "Build and operate PC5.exe: the window and its navigation, the contracts behind them, the execution-engine seam, and the Windows build/test/packaging surface that proves each claim. The product's only user-visible surface, and never a substitute for the destination levels it reports on.",
+      "serves_level": "1,6"
     }
   ],
   "roles": [
@@ -259,7 +265,8 @@
     "graphics-engineer",
     "compatibility-engineer",
     "qa-engineer",
-    "release-engineer"
+    "release-engineer",
+    "application-engineer"
   ],
   "foundations": [
     {
@@ -314,7 +321,6 @@
       ]
     }
   ],
-
   "milestones": [
     {
       "id": "M0",
@@ -1339,6 +1345,257 @@
       "evidence": [],
       "blocker": "blocked on M17 and M18; the installation process has not been observed on PC5 and is not claimed",
       "experimental": true
+    },
+    {
+      "id": "M22",
+      "workstream": "WS0",
+      "kind": "governance",
+      "level": 1,
+      "title": "Transformation baseline: what exists, what it proves, and what is owed",
+      "state": "complete",
+      "owner_role": "lead-architect",
+      "depends_on": [
+        "M0"
+      ],
+      "advances": "replaces assumption with measurement, so that every later claim has a starting point to be compared against",
+      "deliverables": [
+        "docs/TRANSFORMATION_BASELINE.md",
+        "docs/research/PS5_FIRMWARE_AND_PUP.md",
+        "docs/architecture/EXECUTION_FEASIBILITY.md",
+        "docs/architecture/ARCHITECTURE_DECISION_RECORD.md",
+        "docs/PRODUCT_VISION.md",
+        "AGENTS.md"
+      ],
+      "acceptance": [
+        "the baseline names the commit it measured and states the commands that reproduce each figure",
+        "the firmware input is verified as an object, not as an assumption: pointer identity, declared size and the absence of the payload are all recorded",
+        "every execution path carries a verdict with its blockers named, and no verdict is softened into a schedule",
+        "the debt register D-1..D-10 is written down with the file and line that carry each item",
+        "the licence statement in every document matches the grant in LICENSING.md, and the sentence that was wrong is corrected",
+        "no existing engineering is deleted, renamed away, or reclassified because the direction changed"
+      ],
+      "evidence": [
+        "docs/TRANSFORMATION_BASELINE.md",
+        "docs/research/PS5_FIRMWARE_AND_PUP.md",
+        "docs/architecture/EXECUTION_FEASIBILITY.md",
+        "docs/architecture/ARCHITECTURE_DECISION_RECORD.md"
+      ],
+      "release_gating": true,
+      "notes": "Covers the owner's directive milestone M0. The four evidence documents were committed at 2e5d39f and are carried by PR #55; the graph state is complete because the acceptance criteria are about producing records, and the records exist and resolve. Nothing here claims a Windows build or guest execution."
+    },
+    {
+      "id": "M23",
+      "workstream": "WS14",
+      "kind": "native-platform",
+      "level": 6,
+      "title": "The first runnable PC5.exe: window, navigation, services, settings, log, tests",
+      "state": "in_progress",
+      "owner_role": "application-engineer",
+      "depends_on": [
+        "M22"
+      ],
+      "advances": "the product surface: a real Windows application that owns state, persists settings and can be started, inspected and stopped",
+      "deliverables": [
+        "app/src/PC5.App/MainWindow.xaml",
+        "app/src/PC5.App/App.xaml.cs",
+        "app/src/PC5.App/ViewModels/LifecycleViewModel.cs",
+        "app/src/PC5.Core/Lifecycle/ExecutionStateMachine.cs",
+        "app/src/PC5.Core/Configuration/SettingsStore.cs",
+        "app/src/PC5.Core/Logging/Log.cs",
+        "app/src/PC5.Core/Services/ServiceRegistry.cs",
+        "app/tests/PC5.Core.Tests/ExecutionStateMachineTests.cs",
+        "docs/engineering/WINDOWS_VALIDATION.md"
+      ],
+      "acceptance": [
+        "PC5.exe starts to a navigable window with no dialog and no crash, and shuts down leaving no process",
+        "every screen's interactions and state transitions work; a screen that only displays is not a delivered feature",
+        "settings survive a restart through an atomic write, and a corrupt file is quarantined rather than silently replaced",
+        "every lifecycle transition is recorded with a reason, and an undeclared transition throws instead of being accepted",
+        "host capabilities report unknown where they have not been measured, and unknown is never rendered as supported",
+        "the unit tests run green on a Windows runner, and the SDK and package versions are pinned from that run rather than guessed",
+        "no string in the application tree asserts that PlayStation software ran, boots, or is supported"
+      ],
+      "evidence": [],
+      "release_gating": true,
+      "notes": "Covers directive M1. As of 2026-11-28 the tree exists (30 files) and its boundary and claim gates pass on this host, but no compiler has seen the C#: this sandbox has no .NET SDK. State moves from in_progress only on a Windows record; evidence stays empty until the record is filed, because evidence paths must exist in the repository."
+    },
+    {
+      "id": "M24",
+      "workstream": "WS14",
+      "kind": "infrastructure",
+      "level": 3,
+      "title": "Subsystems behind contracts: execution, diagnostics, firmware integrity, storage state",
+      "state": "in_progress",
+      "owner_role": "platform-engineer",
+      "depends_on": [
+        "M23"
+      ],
+      "advances": "the boundary that keeps a future guest engine, a host probe and a package reader from becoming three dialects of one lie",
+      "deliverables": [
+        "app/src/PC5.Core/Execution/Contracts.cs",
+        "app/src/PC5.Core/Execution/Pc5TestBackend.cs",
+        "app/src/PC5.Core/Diagnostics/HostCapabilityReport.cs",
+        "app/src/PC5.Core/Firmware/FirmwareArtifact.cs",
+        "app/src/PC5.App/Platform/WindowsHostProbe.cs"
+      ],
+      "acceptance": [
+        "a backend declares its maximum evidence level before it can be selected, and the shipped test backend declares generic-guest",
+        "the status a backend reports carries the only claim sentence that status may support",
+        "every capability answers yes, no or unknown with an evidence line and a does-not line",
+        "a firmware artifact is described by what was measured: absent, pointer-only, present-and-matched, present-and-different, present-uncompared; never silently matched",
+        "a service contract registered twice throws at composition time instead of winning by order",
+        "the core library stays net8.0 with zero package references, so its tests run on any host, and that boundary is enforced by a test"
+      ],
+      "evidence": [
+        "tests/test_pc5_app_structure.py"
+      ],
+      "release_gating": true,
+      "notes": "Covers directive M2. Contracts and the test backend are written; the Windows-only halves (hypervisor, GPU, device model) are not. Evidence holds the gate that enforces the boundary, which is the part this host can actually verify."
+    },
+    {
+      "id": "M25",
+      "workstream": "WS10",
+      "kind": "research",
+      "level": 4,
+      "title": "Genuine-execution interface research: lawful inputs, observable contracts, no decryption",
+      "state": "in_progress",
+      "owner_role": "compatibility-engineer",
+      "depends_on": [
+        "M22"
+      ],
+      "advances": "keeps the destination reachable as a research programme while the product is built, without pretending the blockers are smaller than they are",
+      "deliverables": [
+        "docs/architecture/EXECUTION_FEASIBILITY.md",
+        "docs/research/PS5_FIRMWARE_AND_PUP.md",
+        "docs/research/VIRTUALIZATION_BACKENDS.md"
+      ],
+      "acceptance": [
+        "every source is graded by reliability and a contradiction is recorded instead of resolved by preference",
+        "the intake path verifies a package the owner lawfully holds; nothing in PC5 decrypts, extracts proprietary code, or handles key material",
+        "a backend comparison names what an API is documented to allow and what PC5 has measured, and does not confuse them",
+        "each open experiment states the environment it needs, so a blocked experiment is a fact and not a silence"
+      ],
+      "evidence": [
+        "docs/research/VIRTUALIZATION_BACKENDS.md"
+      ],
+      "experimental": true,
+      "notes": "Covers directive M3. Deliberately not release-gating: research cannot gate a release, and marking it so would let an unexecuted document block a ship."
+    },
+    {
+      "id": "M26",
+      "workstream": "WS8",
+      "kind": "product-experience",
+      "level": 3,
+      "title": "Controller, input and media behaviour visible from the application",
+      "state": "not_started",
+      "owner_role": "platform-engineer",
+      "depends_on": [
+        "M23"
+      ],
+      "advances": "the difference between a window that shows a guest and a machine you can actually operate",
+      "deliverables": [
+        "docs/engineering/WINDOWS_VALIDATION.md"
+      ],
+      "acceptance": [
+        "host input reaches the guest through PC5's own device model, and the mapping is recorded per device class",
+        "a DualSense connected over USB or Bluetooth is identified as the device it is, not emulated into a different one",
+        "audio and video paths are exercised against a generic test workload before any PlayStation claim is made about them",
+        "every device claim names the host record that supports it, and no device claim is made from an OVMF run"
+      ],
+      "evidence": [],
+      "release_gating": false,
+      "notes": "Covers directive M4. Not started: there is no guest yet to feed, and PC5 will not ship an input layer that pretends a console peripheral exists."
+    },
+    {
+      "id": "M27",
+      "workstream": "WS12",
+      "kind": "ps5-compatibility",
+      "level": 3,
+      "title": "Update and installation semantics against PC5's own package format",
+      "state": "in_progress",
+      "owner_role": "compatibility-engineer",
+      "depends_on": [
+        "M22"
+      ],
+      "advances": "the package, verification and rollback behaviour a real system needs, implemented where PC5 owns the format",
+      "deliverables": [
+        "psm/",
+        "app/src/PC5.Core/Firmware/FirmwareArtifact.cs",
+        "docs/PS5_UPDATE_SEMANTICS.md"
+      ],
+      "acceptance": [
+        "an update package is verified by identity and hash before it is accepted, and a mismatch is refused with the diff recorded",
+        "rollback restores the previous state without user surgery",
+        "the format work borrows the registry's discipline (identity recorded, never asserted) and adds no claim about Sony's container",
+        "no step in the package path requires, references or embeds proprietary firmware"
+      ],
+      "evidence": [
+        "psm/"
+      ],
+      "blocker": "blocked on a lawful input for the genuine side: PC5's own package semantics can be built and tested, and any statement about Sony's update format stays research until the bytes exist in the store",
+      "release_gating": false,
+      "notes": "Covers directive M5. The psm registry is complete for its own conformance suite; what is missing is the genuine-package half, which M22 records as blocked on input."
+    },
+    {
+      "id": "M28",
+      "workstream": "WS0",
+      "kind": "infrastructure",
+      "level": 1,
+      "title": "Four evidence dimensions in CI, with the application dimension on Windows",
+      "state": "in_progress",
+      "owner_role": "platform-engineer",
+      "depends_on": [
+        "M23"
+      ],
+      "advances": "the reporting shape the owner asked for: application, legacy image, research and release readiness each carry their own colour, so a green ISO cannot imply a working app",
+      "deliverables": [
+        ".github/workflows/windows-app.yml",
+        "tools/app_evidence.py",
+        "tests/test_app_evidence.py",
+        "docs/engineering/WINDOWS_VALIDATION.md"
+      ],
+      "acceptance": [
+        "each dimension is reported separately, with its own record, and no aggregate averages them",
+        "the application dimension runs on a Windows runner and uploads the built package with its hashes",
+        "a derived record reads its status from a result file and refuses a pass over zero executed tests",
+        "an absent result surfaces as not_run, never as passed and never as a silent omission",
+        "no record can state guest execution: the ceiling sentence is fixed by the tool, and a test asserts the emitted file cannot contain an E5 or E6 claim",
+        "the dimension's workflow cannot write to the repository, so it reports without mutating it"
+      ],
+      "evidence": [
+        "tests/test_app_evidence.py"
+      ],
+      "release_gating": true,
+      "notes": "Covers directive M6. The workflow and the recorder exist and the recorder's eight tests pass here; the workflow has never run on a Windows runner, and the committed-record path for this dimension is still to be wired to the pattern progress.yml proved."
+    },
+    {
+      "id": "M29",
+      "workstream": "WS0",
+      "kind": "governance",
+      "level": 1,
+      "title": "Windows release readiness: package, signature, install, and a release state that is derived",
+      "state": "not_started",
+      "owner_role": "release-engineer",
+      "depends_on": [
+        "M23",
+        "M28"
+      ],
+      "advances": "the point where the application is distributable rather than merely buildable, and where the release figure stops being hardcoded",
+      "deliverables": [
+        "docs/engineering/WINDOWS_VALIDATION.md",
+        "docs/RELEASING.md"
+      ],
+      "acceptance": [
+        "release state is computed from release metadata and distinguishes a tag, a draft, a published release, zero assets and verified assets",
+        "the note that currently contradicts the tag is replaced by a dated record of what was measured",
+        "the package installs on a clean Windows 11 machine, launches, and is uninstallable without residue",
+        "the licence gate reads the prose it currently skips, so a wrong licence sentence cannot reach main again",
+        "no signing identity, certificate or key material is stored in the repository, and the signing procedure is documented as an owner action"
+      ],
+      "evidence": [],
+      "blocker": "depends on M23 producing a Windows build, and on the owner's decision about a signing identity; PC5 will not invent a certificate or a publish event",
+      "release_gating": true,
+      "notes": "Covers directive M7 plus debt D-4 and D-6. Release readiness stays not_started while the release figure is asserted rather than derived: a number nobody computed is not a release state."
     }
   ]
 }

@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- PC5.exe: the Windows 11 host application. Deliberately thin. It owns the window,
+       the input surface and the presentation of state that PC5.Core computes, and it owns
+       the Windows-only capability probes. No execution decision and no lifecycle rule lives
+       here, so none of them can depend on WinUI being available.
+
+       WindowsPackageType=MSIX produces the packaged application install; the output name is
+       PC5.exe because the product is named for that executable.
+
+       Microsoft.WindowsAppSDK is pinned here to a version this repository has NOT yet
+       restored: CI's first restore is the evidence that settles it, and if it does not
+       resolve the version is corrected from the NuGet listing, not guessed twice. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <RootNamespace>Pc5.App</RootNamespace>
+    <AssemblyName>PC5</AssemblyName>
+    <UseWinUI>true</UseWinUI>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <ApplicationIcon />
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AssemblyVersion>0.3.0.0</AssemblyVersion>
+    <FileVersion>0.3.0.0</FileVersion>
+    <InformationalVersion>0.3.0-dev-pc5-app-foundation</InformationalVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.2" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.3233" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PC5.Core\PC5.Core.csproj" />
+  </ItemGroup>
+
+</Project>
