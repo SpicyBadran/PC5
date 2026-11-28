@@ -49,8 +49,29 @@ FORBIDDEN_CLAIMS = (
 )
 
 
+#: What `dotnet build` writes inside the tree. A gate over *source* has to skip these, and the
+#: first hosted run is what proved the point: `app/src/PC5.Core/obj/Debug/net8.0/AssemblyInfo.cs`
+#: carries no `namespace` declaration, so the namespace rule failed on generated code while the
+#: hand-written files were fine.
+GENERATED = ("bin", "obj", "TestResults", "build", ".vs")
+
+
+def generated(path: Path) -> bool:
+    return any(part in GENERATED for part in path.relative_to(APP).parts)
+
+
+def walk(root: Path, *patterns: str) -> list:
+    """Every non-generated file under `root` matching any pattern (or any file if none)."""
+    found = []
+    for pattern in patterns or ("*",):
+        for path in root.rglob(pattern):
+            if path.is_file() and not generated(path):
+                found.append(path)
+    return sorted(found)
+
+
 def sources(root: Path):
-    return sorted(list(root.rglob("*.cs")) + list(root.rglob("*.xaml")) + list(root.rglob("*.csproj")))
+    return walk(root, "*.cs", "*.xaml", "*.csproj")
 
 
 def brace_depth(text: str) -> int:
@@ -113,24 +134,24 @@ class TreeTests(unittest.TestCase):
             self.assertTrue((APP / relative).is_file(), f"{relative} is named by the solution but missing")
 
     def test_no_empty_directories_were_created_for_appearance(self):
-        for directory in sorted(APP.rglob("*")):
-            if directory.is_dir():
-                self.assertTrue(any(directory.iterdir()), f"{directory.relative_to(REPO)} is an empty folder")
+        for directory in sorted(d for d in APP.rglob("*") if d.is_dir() and not generated(d)):
+            self.assertTrue(any(entry for entry in directory.iterdir() if not generated(entry)),
+                            f"{directory.relative_to(REPO)} is an empty folder")
 
     def test_every_file_in_the_tree_is_text_and_small(self):
-        for path in sorted(p for p in APP.rglob("*") if p.is_file()):
+        for path in walk(APP):
             body = path.read_bytes()
             self.assertNotIn(b"\x00", body, f"{path.relative_to(REPO)} looks binary; the app tree holds source only")
             self.assertLess(len(body), 64 * 1024, f"{path.relative_to(REPO)} is unexpectedly large")
 
     def test_braces_balance_in_every_csharp_file(self):
-        for path in sorted(CORE.rglob("*.cs")) + sorted(SHELL.rglob("*.cs")) + sorted(TESTS.rglob("*.cs")):
+        for path in walk(CORE, "*.cs") + walk(SHELL, "*.cs") + walk(TESTS, "*.cs"):
             depth = brace_depth(path.read_text(encoding="utf-8"))
             self.assertEqual(0, depth, f"unbalanced braces in {path.relative_to(REPO)} (depth {depth:+d})")
 
     def test_namespaces_follow_the_project_they_live_in(self):
         for root, expected in ((CORE, "Pc5.Core"), (SHELL, "Pc5.App"), (TESTS, "Pc5.Core.Tests")):
-            for path in sorted(root.rglob("*.cs")):
+            for path in walk(root, "*.cs"):
                 text = path.read_text(encoding="utf-8")
                 match = re.search(r"^\s*namespace\s+([\w.]+)\s*;", text, re.M)
                 self.assertIsNotNone(match, f"{path.relative_to(REPO)} declares no namespace")
@@ -150,8 +171,7 @@ class MarkupTests(unittest.TestCase):
     """
 
     def test_every_xml_file_parses(self):
-        for path in sorted(APP.rglob("*.props")) + sorted(APP.rglob("*.csproj")) \
-                + sorted(APP.rglob("*.xaml")):
+        for path in walk(APP, "*.props", "*.csproj", "*.xaml"):
             text = path.read_text(encoding="utf-8")
             try:
                 ET.fromstring(text)
@@ -159,8 +179,7 @@ class MarkupTests(unittest.TestCase):
                 self.fail(f"{path.relative_to(REPO)} is not well-formed XML: {failure}")
 
     def test_no_xml_comment_carries_a_double_hyphen(self):
-        for path in sorted(APP.rglob("*.props")) + sorted(APP.rglob("*.csproj")) \
-                + sorted(APP.rglob("*.xaml")):
+        for path in walk(APP, "*.props", "*.csproj", "*.xaml"):
             text = path.read_text(encoding="utf-8")
             for comment in re.findall(r"<!--(.*?)-->", text, flags=re.S):
                 self.assertNotIn("--", comment,
@@ -174,7 +193,7 @@ class MarkupTests(unittest.TestCase):
         for name, expected in (("PC5.Core.csproj", "net8.0"),
                               ("PC5.App.csproj", "net8.0-windows10.0.19041.0"),
                               ("PC5.Core.Tests.csproj", "net8.0")):
-            path = next(APP.rglob(name))
+            path = next(iter(walk(APP, name)))
             root = ET.fromstring(path.read_text(encoding="utf-8"))
             tfms = [node.text.strip() for node in root.iter()
                     if node.tag.endswith("TargetFramework") or node.tag.endswith("TargetFrameworks")]
@@ -198,7 +217,7 @@ class BoundaryTests(unittest.TestCase):
         self.assertNotIn("<PackageReference", project, "PC5.Core has no third-party dependencies; keep it that way")
 
     def test_the_core_references_no_windows_api_at_all(self):
-        for path in sorted(CORE.rglob("*.cs")):
+        for path in walk(CORE, "*.cs"):
             text = path.read_text(encoding="utf-8")
             for forbidden in FORBIDDEN_IN_CORE:
                 self.assertNotIn(forbidden, text,

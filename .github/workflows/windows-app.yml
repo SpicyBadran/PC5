@@ -105,8 +105,13 @@ jobs:
           dotnet --list-sdks
 
       - name: Restore
+        # Both projects: `dotnet test` needs the test project's own packages (xunit, the test
+        # SDK), and restoring only the library is how a run gets as far as "build succeeded"
+        # and then dies on a project nobody restored.
         shell: bash
-        run: dotnet restore app/src/PC5.Core/PC5.Core.csproj
+        run: |
+          dotnet restore app/src/PC5.Core/PC5.Core.csproj
+          dotnet restore app/tests/PC5.Core.Tests/PC5.Core.Tests.csproj
 
       # Every dotnet step is quoted into a log and then annotated, because a hosted
       # runner's log body is served from a blob host many reviewers cannot reach
@@ -127,7 +132,11 @@ jobs:
         shell: bash
         run: |
           status=0
-          dotnet test app/tests/PC5.Core.Tests/PC5.Core.Tests.csproj -c Release --no-build \
+          # No `--no-build` here, deliberately: only `PC5.Core` was built above, and a test run
+          # that skips the build of the *test* project fails for a reason that has nothing to do
+          # with any assertion (run 46109851242, step 7). `dotnet test` builds what it needs and
+          # restores nothing new, because the step above already restored it.
+          dotnet test app/tests/PC5.Core.Tests/PC5.Core.Tests.csproj -c Release --no-restore \
             --logger "trx;LogFileName=core.trx" --results-directory build/app-trx \
             > build/logs/dotnet-core-test.log 2>&1 || status=$?
           cat build/logs/dotnet-core-test.log
@@ -192,7 +201,9 @@ jobs:
 
       - name: Restore the application
         shell: pwsh
-        run: dotnet restore app/src/PC5.App/PC5.App.csproj
+        run: |
+          dotnet restore app/src/PC5.App/PC5.App.csproj
+          dotnet restore app/tests/PC5.Core.Tests/PC5.Core.Tests.csproj
 
       - name: Build PC5.exe
         shell: pwsh
@@ -207,16 +218,22 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          dotnet test app/tests/PC5.Core.Tests/PC5.Core.Tests.csproj -c Release --no-build `
+          dotnet test app/tests/PC5.Core.Tests/PC5.Core.Tests.csproj -c Release --no-restore `
             --logger "trx;LogFileName=core-windows.trx" --results-directory build/app-trx *>&1 |
             Tee-Object -FilePath build/logs/dotnet-app-test.log
           exit $LASTEXITCODE
 
-      - name: Package the MSIX
+      # Packaging, honestly scoped. `-p:PublishProfile=Default` and
+      # `-p:RuntimeIdentifierOverride=` were both written here as plausible-looking guesses, and
+      # no run had ever shown either to exist; ADR-033 forbids shipping a flag nobody verified,
+      # so this publishes the app folder with a documented RID and says plainly that an signed
+      # .msix is not produced by this workflow. That is M29's work, with a certificate owner that
+      # lives outside this repository.
+      - name: Publish the application folder
         shell: pwsh
         run: |
-          dotnet publish app/src/PC5.App/PC5.App.csproj -c Release -p:PublishProfile=Default `
-            -p:RuntimeIdentifier=win-x64 -o build/app-publish *>&1 |
+          dotnet publish app/src/PC5.App/PC5.App.csproj -c Release --no-restore -p:Platform=x64 `
+            -p:RuntimeIdentifier=win-x64 --self-contained false -o build/app-publish *>&1 |
             Tee-Object -FilePath build/logs/dotnet-app-publish.log
           python tools/ci_annotations.py --in build/logs/dotnet-app-publish.log --limit 25
           exit $LASTEXITCODE
@@ -270,4 +287,6 @@ jobs:
           "  - run a virtualisation backend: PC5.Core ships the test backend only"
           "  - touch a PS5 package, key, or signature"
           "Evidence ceiling for this dimension: E1 (the application builds)."
+          "MSIX packaging/signing is NOT attempted here: that is M29, and it needs an owner"
+          "  signing identity that deliberately does not live in this repository."
           "=========================================================================="

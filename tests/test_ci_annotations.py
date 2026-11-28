@@ -71,6 +71,31 @@ class AnnotateTests(unittest.TestCase):
         self.assertEqual(1, len(ci_annotations.annotate(BUILD_LOG)))
         self.assertEqual(2, len(ci_annotations.annotate(BUILD_LOG, with_warnings=True)))
 
+    def test_a_failing_test_is_annotated_by_name(self):
+        """A red assertion says something about behaviour; `exit code 1` says nothing.
+
+        The second hosted run's Unit-tests step failed on the harness, and the only thing the
+        API would have carried is a per-test name if the reporter understood the test runner's
+        own output as well as the compiler's.
+        """
+        log = ("  Failed Pc5.Core.Tests.SettingsAndLogTests.a_corrupt_file_is_quarantined [12 ms]\n"
+               "  Failed Pc5.Core.Tests.ExecutionStateMachineTests.an_undeclared_edge_throws [3 ms]\n")
+        lines = ci_annotations.annotate(log)
+        self.assertEqual(2, len(lines), lines)
+        self.assertTrue(all(line.startswith("::error::") for line in lines), lines)
+        self.assertIn("a_corrupt_file_is_quarantined", lines[0])
+        self.assertIn("[12 ms]", lines[0], "the runner's own detail is quoted, not summarised")
+
+    def test_the_tally_leads_and_a_green_tally_is_not_an_annotation(self):
+        failed = ci_annotations.annotate(
+            "Failed!  - Failed: 2, Passed: 39, Skipped: 0, Total: 41 [12 s]\n"
+            "  Failed Pc5.Core.Tests.A.B [1 ms]\n")
+        self.assertEqual(2, len(failed))
+        self.assertIn("Failed: 2", failed[0], "the size of the failure comes first")
+        self.assertEqual([], ci_annotations.annotate(
+            "Passed! - Failed: 0, Passed: 41, Skipped: 0, Total: 41 [1 m 3 s]\n"),
+            "a passing tally must not be turned into anything, let alone an error")
+
     def test_a_clean_log_produces_nothing_rather_than_a_claim_of_health(self):
         self.assertEqual([], ci_annotations.annotate("Build succeeded.\n    0 Error(s)\n"))
 

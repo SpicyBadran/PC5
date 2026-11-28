@@ -28,6 +28,13 @@ COMPILE_DIAGNOSTIC = re.compile(
     r"^(?P<file>[^\s:(][^(]*?)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s+(?P<id>[A-Z]+\d+)\s*:\s*(?P<message>.*?)\s*(?:\[|$)")
 
+#: A test runner's own failure lines, in the shapes `dotnet test` prints: the per-test line and
+#: the summary tally. A red *test* has to be as legible as a red *build*, and the two are
+#: different diagnoses -- an assertion failure says something specific about behaviour, which a
+#: "Process completed with exit code 1" annotation does not.
+TEST_FAILED = re.compile(r"^\s*(?:Failed|X)\s+(?P<name>[\w.]+)(?:\s+\[(?P<detail>[^\]]*)\])?\s*$")
+TEST_TALLY = re.compile(r"^(?P<verdict>Failed!|Passed!)\s+-\s+(?P<tally>.*)$")
+
 #: The few non-compiler failures a build step can end with, which are otherwise invisible.
 TOOL_FAILURE = re.compile(
     r"^\s*(?:(?:MSB|NU|MSB\d+)\d+\s*:\s*)?"
@@ -60,6 +67,21 @@ def annotate(text: str, limit: int = 20, with_warnings: bool = False) -> list:
     errors, warnings = [], []
     for raw in text.splitlines():
         line = raw.rstrip("\r")
+        tally = TEST_TALLY.match(line.strip())
+        if tally:
+            if tally.group("verdict") == "Passed!":
+                # not an error, and not worth an annotation either: this tool reports
+                # failures, and a green tally line it "helpfully" echoed would read as
+                # something the step asserted beyond what the record says
+                continue
+            errors.insert(0, ("", "", f"{tally.group('verdict')} {tally.group('tally')}", "error"))
+            continue
+        test = TEST_FAILED.match(line)
+        if test:
+            detail = test.group("detail")
+            errors.append(("", "", f"failing test {test.group('name')}"
+                            + (f" [{detail}]" if detail else ""), "error"))
+            continue
         match = COMPILE_DIAGNOSTIC.match(line.strip())
         if match:
             entry = (match.group("file").strip(), match.group("line"),

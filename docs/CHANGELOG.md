@@ -83,6 +83,22 @@ neighbours). Every item below is a delivered change on that commit; nothing here
   a reviewer who cannot reach the runner's log body. It always exits 0: a reporter must never
   become the verdict it is reporting.
 
+- `tests/test_pc5_app_structure.py` — the tree-walking gates now skip generated output
+  (`bin/`, `obj/`, `TestResults/`, `build/`, `.vs/`) through one `walk()` helper, and `.gitignore`
+  declares those paths for `app/`. The first hosted run of the structure gates failed on
+  `app/src/PC5.Core/obj/Debug/net8.0/AssemblyInfo.cs` — a file no human wrote, carrying no
+  `namespace`, judged by a rule about human-written source. Proven by planting that exact path
+  and watching the 24 gates pass.
+- `.github/workflows/windows-app.yml` — `dotnet test` ran with `--no-build` on a test project
+  that nothing had built (only `PC5.Core` was restored and built), so the *unit test* step of
+  the first legible run died on the harness rather than on an assertion. Both jobs now restore
+  and build the test project's needs (`--no-restore`, no `--no-build`). The invented packaging
+  switches `-p:PublishProfile=Default` and `-p:RuntimeIdentifierOverride=win-x64` are gone: they
+  were plausible guesses that no run had ever verified, and the Windows job now publishes the
+  application folder with a documented `-p:RuntimeIdentifier=win-x64 --self-contained false`
+  and states that **no signed `.msix` is produced here** — that is `M29`, and it needs a signing
+  identity that deliberately does not live in this repository.
+
 ### Fixed
 - `.github/workflows/windows-app.yml` — its first hosted run (`46109038081`) failed twice over:
   the *File the evidence record* step piped into `tee build/app-evidence.json` in a directory
