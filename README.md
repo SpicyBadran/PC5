@@ -44,7 +44,7 @@ repository contains or has executed Sony's system software.
 | **By level of the hierarchy** | `L1` 74.1% · `L2` 50.0% · `L3` 0.0% · `L4` 0.0% · `L5` 0.0% · `L6` 0.0% — the low levels are the ones with evidence, the top levels have none yet |
 | **Release-gating milestones** | 9 of 18 complete; outstanding: `M1`, `M2`, `M2a`, `M2b`, `M2c`, `M2d`, `M3`, `M7`, `M8` |
 | **Partial credit** | excluded — no milestone declares `criteria_met`, so in-progress work counts 0 |
-| **Hosted CI** | run `45879276706` **SUCCESS** at `a60c34f`, 1227 host tests OK (13 skipped) · the 13 skips are the hosted environment's own: artifact-gated tests whose build/ tree differs from a full local build |
+| **Hosted CI** | run `46102447128` **SUCCESS** at `a79df48`, 1382 host tests OK (13 skipped) |
 | **Release readiness** | `M1b` **BLOCKED** — 2 acceptance criteria outstanding; nothing published (no tag exists on this history and the release job has never executed) |
 | **Last verified** | 2026-11-23 — `verify` recorded **passed** at `86b862f` (10/11 committed gate records passed) |
 

@@ -1,0 +1,46 @@
+{
+  "attempt": 1,
+  "branch": "main",
+  "completed_at": "2026-11-28T03:45:21Z",
+  "conclusion": "success",
+  "event": "push",
+  "head_sha": "a79df489edc54ad22dbd38b521999682a4de6e9e",
+  "host_tests": {
+    "ran": 1382,
+    "result": "OK",
+    "skipped": 13
+  },
+  "jobs": [
+    {
+      "completed_at": "2026-11-28T03:35:03Z",
+      "conclusion": "success",
+      "name": "UEFI boot under genuine OVMF",
+      "started_at": "2026-11-28T03:21:19Z",
+      "steps_failed": 0,
+      "steps_skipped": 2,
+      "steps_success": 8
+    },
+    {
+      "completed_at": "2026-11-28T03:45:20Z",
+      "conclusion": "success",
+      "name": "build and verify",
+      "started_at": "2026-11-28T03:21:19Z",
+      "steps_failed": 0,
+      "steps_skipped": 2,
+      "steps_success": 22
+    },
+    {
+      "completed_at": "2026-11-28T03:45:21Z",
+      "conclusion": "skipped",
+      "name": "publish release assets",
+      "started_at": "2026-11-28T03:45:21Z"
+    }
+  ],
+  "recorded_at": "2026-11-28",
+  "recorded_by": "tools/progress_record.py",
+  "run_id": 46102447128,
+  "schema": "pc5.ci/1",
+  "source": "gh api repos/{owner}/{repo}/actions/runs/46102447128/jobs?per_page=100, then /check-runs/<job id>/annotations",
+  "started_at": "2026-11-28T03:21:17Z",
+  "workflow": "build.yml"
+}

@@ -398,7 +398,7 @@ never weakened to keep a gate green.
 | **Milestones** | 9 complete · 4 in progress · 6 blocked · 16 not started, in 14 workstreams |
 | **Current milestone** | `M2a`, `M2b`, `M9`, `M10` |
 | **Last verified** | 2026-11-23 — `verify` recorded **passed** at `86b862f` (10/11 committed gate records passed) |
-| **Hosted CI** | run `45879276706` **SUCCESS** at `a60c34f`, 1227 host tests OK (13 skipped) |
+| **Hosted CI** | run `46102447128` **SUCCESS** at `a79df48`, 1382 host tests OK (13 skipped) |
 | **Release** | `M1b` **BLOCKED** — nothing published |
 | **Canonical roadmap** | [docs/ROADMAP.md](ROADMAP.md) · [`roadmap.json`](architecture/roadmap.json) |
 
