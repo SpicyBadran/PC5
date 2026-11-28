@@ -289,8 +289,41 @@ def decide(conclusion: str, paths: list[str], changed: bool) -> dict:
 
 
 # ---------------------------------------------------------------- commit
+def commit_identity(work: Path, name: str = "", email: str = "") -> tuple[str, str]:
+    """The author this commit will carry, or a refusal.  Never an invention.
+
+    `actions/checkout` configures a credential and nothing else -- it does not set
+    `user.name`/`user.email` -- and a runner begins with no global git identity, so a
+    `git commit` from a workflow step dies with exit 128, `Author identity unknown`.  That is
+    how the first run ever to reach this step failed (`main` 70803cb, run 46060393638, one
+    annotation: `Process completed with exit code 2.`), three steps after the parse error and
+    the endpoint error ahead of it had been fixed.
+
+    The caller supplies the identity rather than the tool inventing one: in CI that is the
+    Actions bot, because its token is what performs the write, and the name is also what
+    `guard()` recognises as the automation's own commit.  A human running the same command
+    keeps their configured identity, which is the only truthful default.
+    """
+    if bool(name) != bool(email):
+        raise ActionError("--author-name and --author-email are a pair: one was given alone")
+    if name:
+        return name.strip(), email.strip()
+    found = {}
+    for field in ("user.name", "user.email"):
+        code, out = _git(["config", "--get", field], root=work)
+        found[field] = out.strip() if code == 0 else ""
+    missing = [field for field, value in found.items() if not value]
+    if missing:
+        raise ActionError(
+            f"{', '.join(missing)} unset in {work}: there is no identity to commit as.  Pass "
+            "--author-name and --author-email, or configure git -- a tool that invented an "
+            "author would be attributing this commit to somebody who did not make it")
+    return found["user.name"], found["user.email"]
+
+
 def commit_update(message: str, dry_run: bool = True, push: bool = True,
-                  branch: str = "main", root: Path | None = None) -> dict:
+                  branch: str = "main", root: Path | None = None,
+                  author_name: str = "", author_email: str = "") -> dict:
     """Stage, commit, push -- only if there is a diff.  No force, no tag, no release."""
     work = root or ROOT
     status = subprocess.run(["git", "status", "--porcelain"], cwd=work,
@@ -299,16 +332,25 @@ def commit_update(message: str, dry_run: bool = True, push: bool = True,
                if line[1:3] != "??" or line[3:].startswith(CI_DIR)]
     if not touched:
         return {"committed": False, "reason": "nothing changed", "paths": []}
+    # Settled before anything is staged: a refusal has to leave the tree as it was found,
+    # not half-staged, and a run that stops here has published nothing -- which is why this
+    # failure is annoying and not dangerous.
+    name, email = commit_identity(work, author_name, author_email)
     if dry_run:
-        return {"committed": False, "reason": "dry run", "paths": sorted(touched)}
+        return {"committed": False, "reason": "dry run", "paths": sorted(touched),
+                "author": f"{name} <{email}>"}
     _run(["git", "add", "--"] + sorted(touched), cwd=work)
-    _run(["git", "commit", "-m", message], cwd=work)
+    # The identity is passed with `-c`, not left to the environment, so the commit this step
+    # makes is the same commit whoever runs it and wherever the config lives.
+    _run(["git", "-c", f"user.name={name}", "-c", f"user.email={email}",
+          "commit", "-m", message], cwd=work)
     sha = _run(["git", "rev-parse", "HEAD"], cwd=work).strip()
     pushed = False
     if push:
         _run(["git", "push", "origin", f"HEAD:refs/heads/{branch}"], cwd=work)
         pushed = True
     return {"committed": True, "sha": sha, "pushed": pushed, "paths": sorted(touched),
+            "author": f"{name} <{email}>",
             "reason": "presentation regenerated from verified state"}
 
 
@@ -343,6 +385,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--changed", action="store_true", help="for decide: regeneration differed")
     parser.add_argument("--message", default=f"{PREFIX} at HEAD", help="for commit")
     parser.add_argument("--branch", default="main", help="for commit")
+    parser.add_argument("--author-name", default="",
+                        help="for commit: the author name to commit as, when git has none")
+    parser.add_argument("--author-email", default="", help="for commit: the author email")
     parser.add_argument("--apply", action="store_true", help="for commit: actually write and push")
     parser.add_argument("--no-push", action="store_true", help="for commit: commit locally only")
     parser.add_argument("--json", action="store_true")
@@ -401,10 +446,12 @@ def main(argv: list[str] | None = None) -> int:
 
     # commit
     if not args.apply:
-        outcome = commit_update(args.message, dry_run=True, root=root)
+        outcome = commit_update(args.message, dry_run=True, root=root,
+                                author_name=args.author_name, author_email=args.author_email)
     else:
         outcome = commit_update(args.message, dry_run=False, push=not args.no_push,
-                                branch=args.branch, root=root)
+                                branch=args.branch, root=root,
+                                author_name=args.author_name, author_email=args.author_email)
     print(json.dumps(outcome, indent=2, sort_keys=True) if args.json
           else f"{'committed' if outcome['committed'] else 'no commit'}: {outcome['reason']}")
     return 0

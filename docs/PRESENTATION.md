@@ -315,7 +315,7 @@ locally; the YAML only sequences them.
 | regeneration byte-identical | no commit; `git diff --exit-code` is the whole test |
 | conclusion `failure`, `cancelled`, `skipped`, `action_required`, or still `in_progress` | **refuse**: the model keeps describing the last verified state, and the log says so |
 | the target is not a commit on *this* repository's `main` | **refuse, before anything is read**: `target` exits 4 and the job stops |
-| HEAD is itself a progress commit, or authored by `github-actions` | the guard skips; this is the second loop lock |
+| HEAD is itself a progress commit, or authored by `github-actions[bot]`/`github-actions` (the identity the commit step now supplies) | the guard skips; this is the second loop lock |
 | `workflow_dispatch` | the same path with no CI record filed, for rehearsal |
 
 **Significant paths** are `docs/architecture/roadmap.json` (the model),
@@ -380,6 +380,25 @@ of a run's jobs would understate it, so a short page is an error and not a small
 this survived every gate is instructive — `RecordToolTests` drives `record` through `--jobs-json`,
 so the CI-only branch was never executed by anything. It now is, with `_run` stubbed, and the two
 new cases fail if a flag is glued back into an endpoint while all 84 other tests stay green.
+new cases fail if a flag is glued back into an endpoint while all 84 other tests stay green.
+
+**Who the refresh commits as.** `actions/checkout` installs a credential and does not set
+`git config user.name`/`user.email`, and a runner has no global identity, so the commit step
+itself cannot commit: `git commit` answers `Author identity unknown`, exit 128, which the tool
+reports as its exit 2. That is where the first run to survive both earlier defects stopped
+(`main` `70803cb`, run 46060393638 — nine steps green, the tenth red). The step now passes
+`--author-name "github-actions[bot]"` and that account's noreply email, and `commit_update`
+hands them to Git with `-c` rather than trusting the environment, so the commit is identical
+whoever runs it and wherever the config lives. Two properties are worth keeping: the tool
+**refuses** when there is no identity to use and does it *before* staging, so a failed refresh
+leaves the tree untouched instead of half-staged; and the identity is supplied by the caller
+rather than invented by the tool, because an author is an assertion about who made a change.
+The name is not cosmetic — `guard()` reads `git log -1 --format=%an` and treats
+`github-actions[bot]`/`github-actions` as the automation's own commit, which is the second loop
+lock; `CommitIdentityTests` asserts that the commit this step produces is in fact one the next
+run refuses to act on. The email's numeric prefix is GitHub's own id for that account
+(`gh api users/github-actions%5Bbot%5D` → `{"login": "github-actions[bot]", "id": 41898282}`),
+checked rather than remembered.
 
 **Loop control, and where the real limits are.** A push made with the run's own
 `GITHUB_TOKEN` does not start `push`-triggered workflows, so a dashboard commit does not
@@ -406,6 +425,7 @@ re-trigger workflows.
 | `nothing to do: the loop guard fired` | HEAD was a progress commit | expected; ignore |
 | action `noop` on an ordinary merge | only prose changed | expected; ignore |
 | action `refuse` | the triggering run did not conclude `success` | fix the build; the dashboard stays at the last verified state meanwhile |
+| run is red at `Commit and push the refresh`, exit 2 | no git identity for the commit to carry: `actions/checkout` sets a credential and not `user.*`, and `--author-name`/`--author-email` were not passed | pass both, or set `git config` in the step; nothing was staged and nothing was published, so a re-run is safe |
 | a push was rejected (non-fast-forward) | `main` moved while the run was working | re-run; the workflow never force-pushes, and never rewrites history |
 | run is red at `File the verified run as evidence`, exit 2 | a live `gh api` read was refused — a malformed endpoint, a missing `GH_TOKEN`, or a jobs page shorter than `total_count` | read the `progress:` line in the step; the tool names the argv it ran. The refresh stops rather than publishing figures without their record |
 | a stale percentage visible in the README after a merge | the refresh run has not finished, or was refused | check the Actions log; `make presentation-check` locally proves which side is stale |

@@ -20,6 +20,7 @@ from __future__ import annotations
 import copy
 import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -27,6 +28,7 @@ import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
+from unittest import mock
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 
@@ -878,6 +880,125 @@ class WorkflowStructureTests(unittest.TestCase):
                          "exactly one `env:` block per step, or the file stops parsing")
         for needed in ("GH_REPO:", "GH_TOKEN:", "PC5_RUN_ID:"):
             self.assertIn(needed, body, f"{needed} belongs to the one step that calls `gh`")
+
+
+class CommitIdentityTests(unittest.TestCase):
+    """The refresh's write step: an identity to commit as, and never an invented one.
+
+    `actions/checkout` writes a credential and does not set `git config user.*`, and a runner
+    has no global identity, so the first run ever to reach the commit step died with
+    `Author identity unknown` -- exit 128 from git, exit 2 from the tool, on `main` `70803cb`
+    (run 46060393638).  These run against a real throwaway repository because the assertion
+    that matters is what Git does with the arguments, and they neutralise the ambient config
+    with `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` so "nothing is configured" is a fact of the
+    test rather than a property of whoever runs it.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        (self.tmp / "docs" / "evidence" / "ci").mkdir(parents=True)
+        self.record = self.tmp / "docs" / "evidence" / "ci" / "900.json"
+        self.no_config = mock.patch.dict(
+            os.environ, {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull})
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def git(self, *argv):
+        return subprocess.run(["git", *argv], cwd=self.tmp, capture_output=True,
+                              text=True, check=False)
+
+    def bootstrap(self):
+        """One commit, made by a human with a name, so the repo itself is normal."""
+        self.git("init", "-q", "-b", "main", ".")
+        self.record.write_text(json.dumps({"schema": "pc5.ci/1", "state": "first"}) + "\n",
+                               encoding="utf-8")
+        self.git("add", "-A")
+        self.git("-c", "user.name=Human", "-c", "user.email=human@example.invalid",
+                 "commit", "-q", "-m", "base")
+        # the automation's change: a filed record, still untracked-but-modified
+        self.record.write_text(json.dumps({"schema": "pc5.ci/1", "state": "second"}) + "\n",
+                               encoding="utf-8")
+
+    def test_an_unattributable_commit_is_refused_before_anything_is_staged(self):
+        self.bootstrap()
+        with self.no_config:
+            with self.assertRaises(R.ActionError) as caught:  # type: ignore[attr-defined]
+                R.commit_update("docs: refresh the progress dashboard at deadbe", root=self.tmp,
+                                dry_run=False, push=False)
+        self.assertIn("user.name", str(caught.exception))
+        # the refusal leaves the tree as it was found: nothing half-staged for the next step
+        self.assertEqual("", self.git("diff", "--cached", "--name-only").stdout.strip())
+        status = self.git("status", "--porcelain").stdout.splitlines()
+        self.assertEqual(["M docs/evidence/ci/900.json"], [line.strip() for line in status])
+        # the X column -- the *index* -- has to be blank: a modification only, nothing staged
+        self.assertTrue(all(line[0] == " " for line in status),
+                        f"the refusal left something staged: {status}")
+        self.assertEqual("base", self.git("log", "-1", "--format=%s").stdout.strip())
+
+    def test_the_supplied_identity_is_the_author_that_lands(self):
+        self.bootstrap()
+        name = "github-actions[bot]"
+        email = "41898282+github-actions[bot]@users.noreply.github.com"
+        with self.no_config:
+            outcome = R.commit_update("docs: refresh the progress dashboard at deadbe",
+                                      root=self.tmp, dry_run=False, push=False,
+                                      author_name=name, author_email=email)
+        self.assertTrue(outcome["committed"])
+        self.assertEqual(f"{name} <{email}>", outcome["author"])
+        self.assertEqual([name, email],
+                         self.git("log", "-1", "--format=%an%n%ae").stdout.split())
+        # and the record the run filed is *in* the commit: this is the step that has to put
+        # docs/evidence/ci/<run-id>.json on main, or the dashboard has no proof behind it
+        self.assertEqual(["docs/evidence/ci/900.json"], outcome["paths"])
+        self.assertIn("docs/evidence/ci/900.json",
+                      self.git("show", "--name-only", "--format=", "HEAD").stdout)
+
+    def test_the_automation_author_trips_the_loop_guard_it_writes_for(self):
+        """The commit this step makes is the commit the next run must refuse to act on."""
+        self.bootstrap()
+        with self.no_config:
+            outcome = R.commit_update("docs: refresh the progress dashboard at deadbe",
+                                      root=self.tmp, dry_run=False, push=False,
+                                      author_name="github-actions[bot]",
+                                      author_email="bot@example.invalid")
+        subject = self.git("log", "-1", "--format=%s").stdout.strip()
+        author = self.git("log", "-1", "--format=%an").stdout.strip()
+        self.assertFalse(R.guard(subject, author)["proceed"],
+                         "a progress commit authored by the bot must not trigger a refresh")
+        # the subject alone also refuses, so either signal is enough
+        self.assertFalse(R.guard(subject, "somebody-else")["proceed"])
+        self.assertTrue(outcome["committed"])
+
+    def test_half_an_identity_is_a_refusal(self):
+        self.bootstrap()
+        with self.no_config:
+            with self.assertRaises(R.ActionError):  # type: ignore[attr-defined]
+                R.commit_update("docs: refresh the progress dashboard at deadbe", root=self.tmp,
+                                dry_run=False, push=False, author_name="github-actions[bot]")
+
+    def test_a_dry_run_reports_the_author_and_writes_nothing(self):
+        self.bootstrap()
+        with self.no_config:
+            outcome = R.commit_update("docs: refresh the progress dashboard at deadbe",
+                                      root=self.tmp, dry_run=True, author_name="N",
+                                      author_email="n@example.invalid")
+        self.assertFalse(outcome["committed"])
+        self.assertEqual("dry run", outcome["reason"])
+        self.assertEqual("N <n@example.invalid>", outcome["author"])
+        self.assertEqual(["docs/evidence/ci/900.json"], outcome["paths"])
+        self.assertEqual("base", self.git("log", "-1", "--format=%s").stdout.strip())
+
+    def test_the_workflow_names_the_identity_it_commits_as(self):
+        """A pin on the YAML, because the fix is worthless if the step stops passing it."""
+        text = WORKFLOW.read_text(encoding="utf-8")
+        step = re.search(r"      - name: Commit and push the refresh\n(.*?)(?=\n      - name: |\Z)",
+                         text, re.S)
+        self.assertIsNotNone(step, "the commit step is gone from the workflow")
+        self.assertIn("--author-name", step.group(1))
+        self.assertIn("--author-email", step.group(1))
+        self.assertIn("github-actions[bot]", step.group(1),
+                      "the author must be the actor whose token performs the write")
 
 
 class RecordToolTests(unittest.TestCase):
