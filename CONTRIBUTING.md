@@ -83,6 +83,32 @@ If you have physical hardware, the most valuable contribution is
 a filled record validated by `tools/hw_record.py`, with the serial log committed
 verbatim. A screenshot is not a substitute.
 
+## Working on the Windows application (`app/`)
+
+The application tree is the product's only user-visible surface, and it is the part this
+repository can least afford to have described loosely.
+
+```
+cd app
+dotnet build src/PC5.Core/PC5.Core.csproj -c Release          # portable: runs on any OS
+dotnet test  tests/PC5.Core.Tests/PC5.Core.Tests.csproj -c Release \
+             --logger "trx;LogFileName=core.trx" --results-directory build/trx
+dotnet build src/PC5.App/PC5.App.csproj -c Release -p:Platform=x64   # Windows only
+```
+
+* `PC5.Core` is `net8.0` with **no package references and no Windows API**; that is enforced by
+  `tests/test_pc5_app_structure.py`, not by convention. Anything needing WinRT, WinUI, the
+  registry or a hypervisor goes in `PC5.App/Platform`, behind a contract the core declares.
+* The window computes nothing. If a screen needs a decision, the decision belongs to a
+  view model over a core service, so the same rule can be tested without a desktop.
+* A new execution backend declares its `MaximumEvidenceLevel` before it can be selected, and a
+  generic guest is E2 forever — it is not PlayStation execution and may not be printed as if it
+  were (`ExecutionStatus.AllowableClaim()` is the only sentence a status may produce).
+* Nothing under `app/` may be declared working on Windows from a Linux build. The
+  `windows app` workflow's record, or an owner run of
+  [`docs/engineering/WINDOWS_VALIDATION.md`](docs/engineering/WINDOWS_VALIDATION.md), is what
+  moves `M23` in `docs/architecture/roadmap.json`.
+
 ## Commit and review
 
 Focused commits with a message that says what changed and what it proves. Branches

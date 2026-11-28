@@ -209,3 +209,22 @@ firmware payload exists anywhere reachable. It does not claim a reproducible bui
 D-6), hardware compatibility (the OVMF result is a firmware-emulation result), or the
 existence of any Windows code. It fixes no licence, adds no milestone, and deletes
 nothing. It is a measurement, taken on 2026-11-28, of what there is to build on.
+
+## 12. Follow-up on the debt register — 2026-11-28, same branch, not a rewrite
+
+This page stays a measurement of `9b20228`, exactly as taken; the corrections below are
+appended rather than edited into §5, because a baseline that rewrites itself stops being a
+baseline. Measured on `arena/5e36f38b-pc5` after the work described in `docs/CHANGELOG.md`:
+
+| Debt | State after this branch | What closed it |
+|---|---|---|
+| **D-2** | closed | `.gitattributes`'s Unity block replaced by rules for `.cs`/`.xaml`/`.csproj`/`.props`/`.sln`/`.trx`, same line count, `*.pup` routing untouched |
+| **D-4** | closed in both halves | the sentence at `2e5d39f`; the *gate* in `tools/docs_check.py` (prose licence statements, six documents, quotation exemption, three tests) |
+| **D-5** | closed | `Makefile:680` and `tests/test_ovmf_gate_profiles.py` name the real pins and cite this register |
+| **D-6** | closed | `tools/completion.py` derives tag and publication facts; `unknown` is representable; `ReleaseDerivationTests` pins it |
+| **D-7** | **partially closed** | `.github/workflows/windows-app.yml` exists, parses, and is read-only; it has **not run**, and its `app` dimension files no committed record yet — that is `M28`'s remaining acceptance |
+| **D-8** | closed for the reporter | a missing-dependency probe no longer reads as a crash; the machine-model tests still import `unicorn` |
+| **D-9** | closed | `document_version` 4, `updated 2026-11-28`, 43 milestones in 15 workstreams, `make roadmap` in sync |
+| **D-3** | verified, unchanged | re-counted: exactly `10` root `*_2026-11-16.md` files (`ls *_2026-11-16.md \| wc -l`), as §5 recorded — an earlier census note claiming 11 was the error |
+| **D-1**, **D-10** | open | the payload and the nine stale PRs are the owner's to decide on; nothing here changed either |
+
