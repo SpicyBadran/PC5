@@ -1,0 +1,23 @@
+<Project>
+
+  <!-- Applied to every project under app/: one place for the language and analysis rules,
+       so the Core library and the Windows application cannot drift apart. No package versions
+       are pinned here, because no restore has yet been run from this repository to prove which
+       versions resolve; see the Windows application row of docs/PROGRESS.md, and note that the
+       first hosted attempt (run 46109038081) died on THIS file, not on any C#: an XML comment
+       may not contain a double hyphen, and MSBuild reported MSB4024 for the whole import.
+       `tests/test_pc5_app_structure.py` now parses every XML file in app/ for exactly that. -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <Deterministic>true</Deterministic>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <Company>PC5</Company>
+    <Product>PC5</Product>
+    <Copyright>PC5 project. Licensed under GPL-3.0-only; see LICENSING.md.</Copyright>
+  </PropertyGroup>
+
+</Project>

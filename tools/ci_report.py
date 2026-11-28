@@ -77,6 +77,19 @@ NON_EXCEPTION_PREFIXES = ("FAIL:", "ERROR:", "Ran ", "OK", "FAILED", "make:", "T
 #: What the machine has.  A failure that cannot be reproduced locally is nearly
 #: always an environment difference, and the log should answer that question without
 #: a shell on the runner.
+#: What each probe answers, in the report's own words. A probe that fails *because a
+#: dependency is absent* is a fact about the machine, and the report is the only place a
+#: reader will meet it -- so the requirement is named there, and the probe's raw failure
+#: text is never pasted in. The `Traceback` CPython prints for an absent module reads
+#: exactly like the reporter itself had crashed, which is the one thing this file must
+#: never look like (debt D-8: the local suite's `unicorn` dependence used to surface as a
+#: confusing reporter failure instead of a named missing dependency).
+PROBE_REQUIREMENTS = {
+    "python3 -c 'import unicorn; print(unicorn.__version__)'": (
+        "the machine-model tests import it; `pip install -r requirements-harness.txt` "
+        "installs `unicorn==2.1.4`"),
+}
+
 PROBES = (
     "python3 -VV",
     "make --version | head -n 1",
@@ -307,7 +320,18 @@ def environment_lines():
         finally:
             stream.close()
         flat = text.replace("\n", " | ")[:200] if text else ""
-        lines.append("- `%s`: %s" % (cmd, flat or "MISSING"))
+        if "Traceback" in flat:
+            # The probe died in the interpreter, which says nothing the reader can act on
+            # beyond "not available here"; quote the exception's last line instead of the
+            # whole block, and never the word that makes this report look like a crash.
+            tail = [row for row in flat.split(" | ") if row.strip()]
+            flat = "not available (" + (tail[-1][:80] if tail else "the probe produced no verdict") + ")"
+        required = PROBE_REQUIREMENTS.get(cmd)
+        if not flat or flat == "MISSING":
+            flat = "MISSING" + (f" -- {required}" if required else "")
+        elif required and flat.startswith("not available"):
+            flat += f"; {required}"
+        lines.append("- `%s`: %s" % (cmd, flat))
     return lines
 
 

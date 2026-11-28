@@ -1,0 +1,292 @@
+name: windows app
+
+# The `app` dimension of PC5's evidence model (ADR-029). It exists beside `build.yml`, not
+# inside it: that workflow's green result certifies the legacy boot image, and reading it as
+# "the application works" is the specific confusion this project forbids. Two jobs, because the
+# point of the split is that the portable core can be proven anywhere while PC5.exe can only be
+# proven on Windows -- and a failure in the first must not be reported as a failure of the second.
+#
+# What this workflow can certify: the milestones M22-M29 that the owner's directive defines
+# (ADR-036 numbers them in the existing graph). `app/` holds the source;
+# docs/engineering/WINDOWS_VALIDATION.md holds the procedure for the claims a runner cannot
+# reach -- launching a window, driving it, reading its log.
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'app/**'
+      - 'tools/app_evidence.py'
+      - 'tools/ci_annotations.py'
+      - '.github/workflows/windows-app.yml'
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'tools/app_evidence.py'
+      - 'tools/ci_annotations.py'
+      - '.github/workflows/windows-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Which side of the boundary changed. Reported, never gating: like the
+  # research dimension, it must not be able to redden a legacy-only commit.
+  # --------------------------------------------------------------------------
+  paths-filter:
+    name: which app milestones this touches
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      gating: ${{ steps.classify.outputs.gating }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify the changed paths
+        id: classify
+        shell: bash
+        run: |
+          base='${{ github.event.pull_request.base.sha || github.event.before }}'
+          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git rev-parse HEAD^ 2>/dev/null || git rev-parse HEAD)"
+          fi
+          mapfile -t changed < <(git diff --name-only "$base" "${GITHUB_SHA}")
+          if [ "${#changed[@]}" -eq 0 ]; then
+            changed=("${changed[@]}" $(git ls-tree -r --name-only HEAD -- app tools/app_evidence.py))
+          fi
+          echo "changed files considered: ${#changed[@]}"
+          if printf '%s\n' "${changed[@]}" | grep -Eq '^app/src/PC5'; then
+            echo "gating=true" >> "$GITHUB_OUTPUT"
+            echo ":red_circle: \`app/src/PC5*\` changed: this run is evidence for M23, M24, M26 and M27" >> "$GITHUB_STEP_SUMMARY"
+            echo "-> the app dimension must pass before that change can be called an improvement." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "gating=false" >> "$GITHUB_OUTPUT"
+            echo ":white_circle: only app tooling or this workflow changed: report, do not gate." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # --------------------------------------------------------------------------
+  # The portable half. This is the job that can run on any host, which is why
+  # it is the one that proves the boundary rule in CI: PC5.Core is only worth
+  # having if it compiles and tests somewhere that is not Windows.
+  # --------------------------------------------------------------------------
+  core-portable:
+    name: PC5.Core builds and tests cross-platform
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the commit under test
+        uses: actions/checkout@v4
+
+      - name: Install the .NET SDK this tree targets
+        # `dotnet-version` is stated rather than left to `global-json-file`, because the
+        # first run of this workflow resolved the runner's SDK 11.0.100 while `app/` is
+        # written and documented against .NET 8 (ADR-033: a version is pinned from a run
+        # that succeeded, and a preview SDK is not that). If the floor moves, it moves
+        # here and in app/global.json together, with a run behind it.
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+          global-json-file: app/global.json
+
+      - name: Report the toolchain actually installed
+        shell: bash
+        run: |
+          mkdir -p build/logs build/app-trx
+          dotnet --version
+          dotnet --list-sdks
+
+      - name: Restore
+        # Both projects: `dotnet test` needs the test project's own packages (xunit, the test
+        # SDK), and restoring only the library is how a run gets as far as "build succeeded"
+        # and then dies on a project nobody restored.
+        shell: bash
+        run: |
+          dotnet restore app/src/PC5.Core/PC5.Core.csproj
+          dotnet restore app/tests/PC5.Core.Tests/PC5.Core.Tests.csproj
+
+      # Every dotnet step is quoted into a log and then annotated, because a hosted
+      # runner's log body is served from a blob host many reviewers cannot reach
+      # while the API always returns annotations. The annotation pass must never
+      # change the verdict: the tool exits 0, and the step's status is the build's.
+      - name: Build
+        shell: bash
+        run: |
+          status=0
+          dotnet build app/src/PC5.Core/PC5.Core.csproj -c Release --no-restore \
+            > build/logs/dotnet-core-build.log 2>&1 || status=$?
+          cat build/logs/dotnet-core-build.log
+          python3 tools/ci_annotations.py --in build/logs/dotnet-core-build.log --limit 25
+          exit $status
+
+      - name: Unit tests
+        if: always()
+        shell: bash
+        run: |
+          status=0
+          # No `--no-build` here, deliberately: only `PC5.Core` was built above, and a test run
+          # that skips the build of the *test* project fails for a reason that has nothing to do
+          # with any assertion (run 46109851242, step 7). `dotnet test` builds what it needs and
+          # restores nothing new, because the step above already restored it.
+          dotnet test app/tests/PC5.Core.Tests/PC5.Core.Tests.csproj -c Release --no-restore \
+            --logger "trx;LogFileName=core.trx" --results-directory build/app-trx \
+            > build/logs/dotnet-core-test.log 2>&1 || status=$?
+          cat build/logs/dotnet-core-test.log
+          python3 tools/ci_annotations.py --in build/logs/dotnet-core-test.log --limit 25
+          exit $status
+
+      - name: Application structure gates (the checks that need no .NET at all)
+        if: always()
+        shell: bash
+        run: python3 -m unittest tests.test_pc5_app_structure tests.test_app_evidence tests.test_ci_annotations
+
+      - name: File the evidence record from the result file
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p build
+          python3 tools/app_evidence.py --trx build/app-trx/core.trx \
+            --out build/app-evidence.json --subsystem app --milestone M23
+          cat build/app-evidence.json
+
+      - name: Upload the diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc5-app-core-diagnostics
+          path: |
+            build/app-trx/core.trx
+            build/app-evidence.json
+            build/logs
+          if-no-files-found: warn
+          retention-days: 30
+
+  # --------------------------------------------------------------------------
+  # The Windows half: PC5.exe itself. Nothing here is claimed to work until
+  # this job has run green on a Windows runner at least once -- including the
+  # toolchain pins, which this job is the first place that can settle them.
+  # --------------------------------------------------------------------------
+  app-windows:
+    name: PC5.exe builds and packages on Windows
+    runs-on: windows-latest
+    timeout-minutes: 35
+    needs: core-portable
+    steps:
+      - name: Check out the commit under test
+        uses: actions/checkout@v4
+
+      - name: Install the .NET SDK this tree targets
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+          global-json-file: app/global.json
+
+      - name: Report the Windows host this ran on
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build/logs, build/app-trx | Out-Null
+          "OS      : $([System.Environment]::OSVersion.VersionString)"
+          "Host    : $env:COMPUTERNAME"
+          "Note    : virtualisation state is NOT queried here; that is a hardware claim"
+          dotnet --version
+
+      - name: Restore the application
+        shell: pwsh
+        run: |
+          dotnet restore app/src/PC5.App/PC5.App.csproj
+          dotnet restore app/tests/PC5.Core.Tests/PC5.Core.Tests.csproj
+
+      - name: Build PC5.exe
+        shell: pwsh
+        run: |
+          dotnet build app/src/PC5.App/PC5.App.csproj -c Release --no-restore -p:Platform=x64 *>&1 |
+            Tee-Object -FilePath build/logs/dotnet-app-build.log
+          $status = $LASTEXITCODE
+          python tools/ci_annotations.py --in build/logs/dotnet-app-build.log --limit 25
+          exit $status
+
+      - name: Test the core on Windows, where it is also expected to pass
+        if: always()
+        shell: pwsh
+        run: |
+          dotnet test app/tests/PC5.Core.Tests/PC5.Core.Tests.csproj -c Release --no-restore `
+            --logger "trx;LogFileName=core-windows.trx" --results-directory build/app-trx *>&1 |
+            Tee-Object -FilePath build/logs/dotnet-app-test.log
+          exit $LASTEXITCODE
+
+      # Packaging, honestly scoped. `-p:PublishProfile=Default` and
+      # `-p:RuntimeIdentifierOverride=` were both written here as plausible-looking guesses, and
+      # no run had ever shown either to exist; ADR-033 forbids shipping a flag nobody verified,
+      # so this publishes the app folder with a documented RID and says plainly that an signed
+      # .msix is not produced by this workflow. That is M29's work, with a certificate owner that
+      # lives outside this repository.
+      - name: Publish the application folder
+        shell: pwsh
+        run: |
+          dotnet publish app/src/PC5.App/PC5.App.csproj -c Release --no-restore -p:Platform=x64 `
+            -p:RuntimeIdentifier=win-x64 --self-contained false -o build/app-publish *>&1 |
+            Tee-Object -FilePath build/logs/dotnet-app-publish.log
+          python tools/ci_annotations.py --in build/logs/dotnet-app-publish.log --limit 25
+          exit $LASTEXITCODE
+
+      - name: Confirm the deliverable is named PC5.exe and hash what was produced
+        if: always()
+        shell: pwsh
+        run: |
+          $exe = Join-Path build/app-publish PC5.exe
+          if (Test-Path $exe) {
+            "PC5.exe  : $((Get-Item $exe).Length) bytes"
+            Get-ChildItem -Recurse build/app-publish -Include *.exe,*.msix,*.appx,*.pri |
+              ForEach-Object { "{0,-12} {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.Substring(0,12), $_.Name } |
+              Tee-Object -FilePath build/app-publish/artifact-hashes.txt
+          } else {
+            "NOT PRODUCED: this run did not build PC5.exe; nothing is claimed about packaging"
+          }
+
+      - name: File the Windows evidence record from the result file
+        if: always()
+        shell: pwsh
+        run: |
+          python tools/app_evidence.py --trx build/app-trx/core-windows.trx `
+            --out build/app-windows-evidence.json --subsystem app-windows --milestone M23
+          if (Test-Path build/app-windows-evidence.json) { Get-Content build/app-windows-evidence.json }
+
+      - name: Upload the application artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc5-app-windows
+          path: |
+            build/app-publish
+            build/app-trx/core-windows.trx
+            build/app-windows-evidence.json
+            build/logs
+          if-no-files-found: warn
+          retention-days: 30
+
+      # The limit of a CI job: it can build and hash a binary, it cannot see a
+      # window. This step keeps that gap in the run output rather than in a
+      # README a reader may never open.
+      - name: What this run did not prove
+        if: always()
+        shell: pwsh
+        run: |
+          "=========================================================================="
+          "This job built and tested PC5.exe. It did NOT:"
+          "  - launch the window or drive it (docs/engineering/WINDOWS_VALIDATION.md)"
+          "  - start a guest of any kind, generic or PlayStation"
+          "  - run a virtualisation backend: PC5.Core ships the test backend only"
+          "  - touch a PS5 package, key, or signature"
+          "Evidence ceiling for this dimension: E1 (the application builds)."
+          "MSIX packaging/signing is NOT attempted here: that is M29, and it needs an owner"
+          "  signing identity that deliberately does not live in this repository."
+          "=========================================================================="

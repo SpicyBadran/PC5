@@ -68,6 +68,25 @@ security primitive.
 explicit `--yes`, and refuses the device that backs `/`. It prints the target
 before writing. `dd` is invoked with `conv=fsync`.
 
+## 5b. The Windows application's surface (`app/`) — what it touches, on the host
+
+Written as source, **never yet executed**: this environment has no Windows and no .NET SDK,
+so the table describes the code as written, not behaviour observed on a machine.
+
+| Surface | What PC5 does with it | Boundary as written |
+|---|---|---|
+| Settings file under `%LOCALAPPDATA%\PC5` | read at start-up, written on save | atomic write to a temporary file then a move; an unparseable file is quarantined as `.bad` and the failure is raised, never silently replaced with defaults |
+| Log file `logs\pc5.log` | append with flush per line | the log holds text, hashes and identifiers — never firmware bytes, never a key, never a payload fragment (§4 rules apply unchanged) |
+| Windows registry | one read: the display adapter's `DriverDesc`, for the diagnostics pane | read-only, under `HKLM\HARDWARE\DEVICEMAP\VIDEO`; no write, no elevation, and a failure yields `unknown` with a reason rather than an empty answer |
+| `WinHvPlatform.dll` | `NativeLibrary.TryLoad`, to report that the API is present | loadability is reported as loadability. PC5 does not create a partition, does not enable the Windows feature, and does not treat a successful load as "virtualisation works" (ADR-037) |
+| Packaging (MSIX) | the project declares `WindowsPackageType=MSIX` | no certificate, no signing identity and no key material exists in this repository, and signing is an owner action (`M29`) |
+| Guest memory / guest code | none yet: the only shipped backend runs a PC5-authored test workload | a backend must declare `MaximumEvidenceLevel` before it can be selected, so no engine can report a capability the tree has not implemented |
+
+Two rules that apply to anything added under `app/`: an over-claim in a diagnostics surface is
+a **security defect**, not a cosmetic one (see `docs/engineering/WINDOWS_VALIDATION.md` §6),
+and no path may read, write or hash a firmware payload inside the repository — the input stays
+outside the tree and outside version control, exactly as in §4.
+
 ## 6. Planned security work
 
 | Item | Status |

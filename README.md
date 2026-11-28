@@ -31,21 +31,22 @@ repository contains or has executed Sony's system software.
 ![PC5 overall project completion: a ring drawn at the criteria-weighted percentage, the milestone graph as one stacked bar by state, the same progress level by level through the success hierarchy, and chips naming the destination, the release milestone, the latest filed hosted run and the last verified commit](docs/assets/pc5-completion.svg)
 
 <!-- pc5:completion:begin -->
-**26.7% of PC5's declared scope is complete and evidenced.** 9 of 35 milestones are `complete` (25.7% counted by milestone), 31 of 116 acceptance criteria are met, and the destination `M19` is **BLOCKED**.
+**23.4% of PC5's declared scope is complete and evidenced.** 10 of 43 milestones are `complete` (23.3% counted by milestone), 37 of 158 acceptance criteria are met, and the destination `M19` is **BLOCKED**.
 
 | Measure | Value |
 |---|---|
-| **Overall completion** | **26.7%** — criteria-weighted |
-| **Same figure by milestone count** | 25.7% (the two models agree within 1.0 points) |
-| **Earned weight / total weight** | 31 / 116 |
-| **Milestones complete** | 9 of 35 in 14 workstreams |
-| **Current milestone** | `M2a`, `M2b`, `M9`, `M10` |
-| **Remaining** | 16 not started, 6 blocked, 4 in progress |
-| **By level of the hierarchy** | `L1` 74.1% · `L2` 50.0% · `L3` 0.0% · `L4` 0.0% · `L5` 0.0% · `L6` 0.0% — the low levels are the ones with evidence, the top levels have none yet |
-| **Release-gating milestones** | 9 of 18 complete; outstanding: `M1`, `M2`, `M2a`, `M2b`, `M2c`, `M2d`, `M3`, `M7`, `M8` |
+| **Overall completion** | **23.4%** — criteria-weighted |
+| **Same figure by milestone count** | 23.3% (the two models agree within 0.2 points) |
+| **Earned weight / total weight** | 37 / 158 |
+| **Milestones complete** | 10 of 43 in 15 workstreams |
+| **Current milestone** | `M2a`, `M2b`, `M9`, `M10`, `M23`, `M24`, `M25`, `M27`, `M28` |
+| **Remaining** | 18 not started, 6 blocked, 9 in progress |
+| **By level of the hierarchy** | `L1` 59.1% · `L2` 50.0% · `L3` 0.0% · `L4` 0.0% · `L5` 0.0% · `L6` 0.0% — the low levels are the ones with evidence, the top levels have none yet |
+| **Release-gating milestones** | 10 of 23 complete; outstanding: `M1`, `M2`, `M2a`, `M2b`, `M2c`, `M2d`, `M3`, `M7`, `M8`, `M23`, `M24`, `M28`, `M29` |
 | **Partial credit** | excluded — no milestone declares `criteria_met`, so in-progress work counts 0 |
+| **Windows application** | **no record filed** — the `windows app` workflow has not filed an evidence record on this history, so `app/` is source that has never been built on Windows (ceiling: E1 unproven) |
 | **Hosted CI** | run `46102447128` **SUCCESS** at `a79df48`, 1382 host tests OK (13 skipped) |
-| **Release readiness** | `M1b` **BLOCKED** — 2 acceptance criteria outstanding; nothing published (no tag exists on this history and the release job has never executed) |
+| **Release readiness** | `M1b` **BLOCKED** — 2 acceptance criteria outstanding (nothing published: the `publish release assets` job in run `46102447128` was `skipped`; 1 tag(s) here: none on this history (pc5-0.1.0 at `09b885a`)) |
 | **Last verified** | 2026-11-23 — `verify` recorded **passed** at `86b862f` (10/11 committed gate records passed) |
 
 One number, one formula, one source: `python3 tools/completion.py model` reprints this calculation from `docs/architecture/roadmap.json` and the records under `docs/evidence/validation/`, and `python3 tools/completion.py check` fails if a milestone id is duplicated, a weight is undefined, an in-progress fraction is invented, or a percentage is typed into prose instead of generated here.
@@ -152,12 +153,12 @@ the data.
 | | |
 |---|---|
 | Product version | `0.2.0` (single source: `Makefile VERSION`) |
-| Roadmap document | `0.4.0-dev`, updated 2026-11-22 |
-| Milestones | 35 in 14 workstreams |
-| Complete | 9 |
-| In progress | 4 |
+| Roadmap document | `4`, updated 2026-11-28 |
+| Milestones | 43 in 15 workstreams |
+| Complete | 10 |
+| In progress | 9 |
 | Blocked | 6 |
-| Not started | 16 |
+| Not started | 18 |
 | Destination | `M19` — Genuine system software boots on PC5 (DESTINATION) |
 | Destination state | **BLOCKED** |
 | Last recorded ISO verification | passed @ 86b862f |
@@ -553,4 +554,4 @@ archive and depends on no other project's code: prior art is cited in documentat
 never copied into the tree (ADR-025), and
 `tests/test_project_independence.py` enforces it.
 
-Licensed under the GNU General Public License version 2 only — [`LICENSE`](LICENSE).
+Licensed under the GNU General Public License version 3 only — [`LICENSE`](LICENSE).

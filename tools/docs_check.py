@@ -70,8 +70,20 @@ ABOUT_BLOCKS = ("about-identity", "about-capabilities", "about-progress")
 
 #: Documents whose licence statement has to agree with the notice's grant.  Dated records under
 #: `docs/` are deliberately excluded: they quote a past state, and rewriting history to
-#: satisfy a checker is the worse error.
-LICENCE_DOCUMENTS = ("README.md", "docs/ABOUT.md", "CONTRIBUTING.md", "docs/BRAND.md")
+#: satisfy a checker is the worse error.  `AGENTS.md` is included because it instructs every
+#: future contributor, and a wrong duty stated there outlives any single pull request.
+LICENCE_DOCUMENTS = ("README.md", "docs/ABOUT.md", "CONTRIBUTING.md", "docs/BRAND.md",
+                     "AGENTS.md", "docs/SECURITY.md")
+
+#: A licence stated **in words** rather than as an identifier: the form a README footer uses.
+#: The SPDX pattern below cannot see this, and `2e5d39f`'s fix existed precisely because a
+#: footer that said "version 2 only" while `LICENSING.md` granted `GPL-3.0-only` reached
+#: `main` past an id-only check (debt D-4).  A mention of a *quotation* is not an assertion,
+#: so quoted and inline-code spans are stripped before this is applied -- see
+#: `strip_quotations`.
+LICENCE_PROSE = re.compile(
+    r"(?:GNU )?General Public License[^.\n]{0,24}?version\s+(\d+)|\bGPL\s+v(?:ersion)?\s*(\d+)",
+    re.I)
 
 #: Documents that speak *about* the tree rather than record what happened to it.  A cited
 #: path in one of these is a claim about where something lives.
@@ -146,6 +158,25 @@ def strip_generated_blocks(text: str) -> str:
 #: no licence claim to check, and the link rule already reports the missing text; either
 #: half present without the other is a refusal, because then the tree does make a statement,
 #: and it is an unverifiable one.
+
+
+def strip_quotations(text: str) -> str:
+    """Remove inline-code spans, quoted passages and blockquotes.
+
+    A gate over licence *statements* has to distinguish asserting a thing from recording that
+    somebody once asserted it. `docs/CHANGELOG.md`-style honesty ("the footer said \"version 2
+    only\"; corrected here") must stay writable, so quoted material and code spans are dropped
+    rather than the whole check being loosened.
+    """
+    kept = []
+    for line in text.splitlines():
+        if line.lstrip().startswith(">"):
+            continue
+        line = re.sub(r"`[^`]*`", " ", line)
+        line = re.sub(r'\"[^\"]{0,300}?\"', " ", line)
+        line = re.sub(r"“[^”]{0,300}?”", " ", line)
+        kept.append(line)
+    return "\n".join(kept)
 
 
 def licence_grant(root: Path = ROOT) -> tuple:
@@ -264,11 +295,24 @@ def about_problems(about: Path, root: Path = ROOT) -> list:
         # pointing at four would send a reader to fix the wrong thing
         problems.append(f"{culprit}: {note}")
     if granted:
+        granted_major = int(re.search(r"(\d+)", granted).group(1)) if granted else None
         for document in LICENCE_DOCUMENTS:
             path = root / document
             if not path.exists():
                 continue
-            for match in LICENCE_ID.finditer(path.read_text(encoding="utf-8", errors="ignore")):
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            if granted_major is not None:
+                for spoken in strip_quotations(strip_generated_blocks(text)).splitlines():
+                    wording = LICENCE_PROSE.search(spoken)
+                    if wording is None:
+                        continue
+                    stated = int(wording.group(1) or wording.group(2))
+                    if stated != granted_major:
+                        problems.append(
+                            f"{document}: states the licence in words as version {stated}, but "
+                            f"`LICENSING.md` grants {granted!r}; fix the sentence, not the grant "
+                            f"(a quote or a code span is not an assertion and is ignored here)")
+            for match in LICENCE_ID.finditer(text):
                 stated = match.group(0)
                 if stated == granted or re.fullmatch(r"GPL-\d+(?:\.\d+)?", stated):
                     # a bare family name is not a contradiction; nor is naming the version

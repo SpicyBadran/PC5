@@ -1,16 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="790" viewBox="0 0 1000 790" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="828" viewBox="0 0 1000 828" role="img" aria-labelledby="t d">
   <title id="t">PC5 milestone progress</title>
   <desc id="d">One bar per workstream showing how many of its milestones are complete, in progress or blocked, with the count of blocked milestones and the longest dependency chain to the destination milestone M19.</desc>
-  <rect width="1000" height="790" fill="#0b0f14"/>
+  <rect width="1000" height="828" fill="#0b0f14"/>
   <text x="48" y="46" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="20" fill="#e6edf3" font-weight="bold" text-anchor="start">MILESTONE GRAPH</text>
-  <text x="48" y="70" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">milestones per workstream by state — 9 of 35 complete in the graph</text>
+  <text x="48" y="70" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">milestones per workstream by state — 10 of 43 complete in the graph</text>
   <text x="48" y="88" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#fbbf24" font-weight="normal" text-anchor="start">a count of graph nodes, not of effort; a blocked milestone is not partial progress</text>
   <rect x="36" y="112" width="928" height="32" rx="6" fill="#0f151d" stroke="none"/>
   <text x="52" y="133" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS0</text>
   <text x="96" y="133" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">Governance: architecture, evidenc…</text>
   <rect x="372" y="120" width="448" height="14" rx="7" fill="#243040"/>
-  <rect x="372" y="120" width="448" height="14" rx="7.0" fill="#34d399" fill-opacity="1"><animate attributeName="width" from="0" to="448" begin="0.10s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
-  <text x="834" y="133" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">1/1</text>
+  <rect x="372" y="120" width="224" height="14" rx="7.0" fill="#34d399" fill-opacity="1"><animate attributeName="width" from="0" to="224" begin="0.10s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
+  <rect x="596" y="120" width="112" height="14" rx="7.0" fill="#38bdf8" fill-opacity="0.75"><animate attributeName="width" from="0" to="112" begin="0.10s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
+  <text x="834" y="133" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">2/4</text>
   <text x="52" y="171" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS1</text>
   <text x="96" y="171" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">Hardware discovery and compatibil…</text>
   <rect x="372" y="158" width="448" height="14" rx="7" fill="#243040"/>
@@ -50,7 +51,7 @@
   <text x="52" y="437" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS8</text>
   <text x="96" y="437" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">USB, Bluetooth and controllers</text>
   <rect x="372" y="424" width="448" height="14" rx="7" fill="#243040"/>
-  <text x="834" y="437" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">0/1</text>
+  <text x="834" y="437" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">0/2</text>
   <text x="52" y="475" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS9</text>
   <text x="96" y="475" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">System services and operating-sys…</text>
   <rect x="372" y="462" width="448" height="14" rx="7" fill="#243040"/>
@@ -59,9 +60,9 @@
   <text x="52" y="513" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS10</text>
   <text x="96" y="513" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">PS5 platform compatibility (syste…</text>
   <rect x="372" y="500" width="448" height="14" rx="7" fill="#243040"/>
-  <rect x="372" y="500" width="69" height="14" rx="7.0" fill="#38bdf8" fill-opacity="0.75"><animate attributeName="width" from="0" to="69" begin="0.70s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
-  <rect x="441" y="500" width="138" height="14" rx="7.0" fill="#f87171" fill-opacity="0.75"><animate attributeName="width" from="0" to="138" begin="0.70s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
-  <text x="834" y="513" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">0/13</text>
+  <rect x="372" y="500" width="96" height="14" rx="7.0" fill="#38bdf8" fill-opacity="0.75"><animate attributeName="width" from="0" to="96" begin="0.70s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
+  <rect x="468" y="500" width="128" height="14" rx="7.0" fill="#f87171" fill-opacity="0.75"><animate attributeName="width" from="0" to="128" begin="0.70s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
+  <text x="834" y="513" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">0/14</text>
   <text x="882" y="513" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f87171" font-weight="normal" text-anchor="start">4 blocked</text>
   <text x="52" y="551" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS11</text>
   <text x="96" y="551" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">Game execution and runtime compat…</text>
@@ -71,24 +72,31 @@
   <text x="52" y="589" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS12</text>
   <text x="96" y="589" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">Installation, recovery and system…</text>
   <rect x="372" y="576" width="448" height="14" rx="7" fill="#243040"/>
-  <rect x="372" y="576" width="299" height="14" rx="7.0" fill="#f87171" fill-opacity="0.75"><animate attributeName="width" from="0" to="299" begin="0.82s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
-  <text x="834" y="589" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">0/3</text>
+  <rect x="372" y="576" width="112" height="14" rx="7.0" fill="#38bdf8" fill-opacity="0.75"><animate attributeName="width" from="0" to="112" begin="0.82s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
+  <rect x="484" y="576" width="224" height="14" rx="7.0" fill="#f87171" fill-opacity="0.75"><animate attributeName="width" from="0" to="224" begin="0.82s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
+  <text x="834" y="589" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">0/4</text>
   <text x="882" y="589" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#f87171" font-weight="normal" text-anchor="start">2 blocked</text>
   <text x="52" y="627" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS13</text>
   <text x="96" y="627" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">Product experience: shell, librar…</text>
   <rect x="372" y="614" width="448" height="14" rx="7" fill="#243040"/>
   <text x="834" y="627" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">0/1</text>
-  <line x1="48" y1="658" x2="952" y2="658" stroke="#243040"/>
-  <rect x="48" y="670" width="10" height="10" rx="3" fill="#34d399"/>
-  <text x="66" y="679" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">complete</text>
-  <rect x="140" y="670" width="10" height="10" rx="3" fill="#38bdf8"/>
-  <text x="158" y="679" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">in progress</text>
-  <rect x="242" y="670" width="10" height="10" rx="3" fill="#f87171"/>
-  <text x="260" y="679" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">blocked</text>
-  <rect x="330" y="670" width="10" height="10" rx="3" fill="#243040"/>
-  <text x="348" y="679" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">not started</text>
-  <text x="48" y="710" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#f87171" font-weight="bold" text-anchor="start">DESTINATION  M19  Genuine system software boots on PC5 (DESTINATION)</text>
-  <text x="48" y="732" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">longest dependency chain: M0 → M1d → M1e → M1f → M1g → M1i → M1 → M2a → M2 → M2b → M3 → M11 → M12 → M13</text>
-  <text x="48" y="748" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">→ M14 → M19</text>
-  <text x="48" y="770" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">print it from the graph with: python3 tools/roadmap.py path</text>
+  <rect x="36" y="644" width="928" height="32" rx="6" fill="#0f151d" stroke="none"/>
+  <text x="52" y="665" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#38bdf8" font-weight="bold" text-anchor="start">WS14</text>
+  <text x="96" y="665" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#e6edf3" font-weight="normal" text-anchor="start">Windows host application</text>
+  <rect x="372" y="652" width="448" height="14" rx="7" fill="#243040"/>
+  <rect x="372" y="652" width="448" height="14" rx="7.0" fill="#38bdf8" fill-opacity="0.75"><animate attributeName="width" from="0" to="448" begin="0.94s" dur="1.15s" fill="freeze" keyTimes="0;1" keySplines="0.16 1 0.3 1" calcMode="spline"/></rect>
+  <text x="834" y="665" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="12" fill="#8b98a8" font-weight="normal" text-anchor="start">0/2</text>
+  <line x1="48" y1="696" x2="952" y2="696" stroke="#243040"/>
+  <rect x="48" y="708" width="10" height="10" rx="3" fill="#34d399"/>
+  <text x="66" y="717" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">complete</text>
+  <rect x="140" y="708" width="10" height="10" rx="3" fill="#38bdf8"/>
+  <text x="158" y="717" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">in progress</text>
+  <rect x="242" y="708" width="10" height="10" rx="3" fill="#f87171"/>
+  <text x="260" y="717" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">blocked</text>
+  <rect x="330" y="708" width="10" height="10" rx="3" fill="#243040"/>
+  <text x="348" y="717" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">not started</text>
+  <text x="48" y="748" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="13" fill="#f87171" font-weight="bold" text-anchor="start">DESTINATION  M19  Genuine system software boots on PC5 (DESTINATION)</text>
+  <text x="48" y="770" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">longest dependency chain: M0 → M1d → M1e → M1f → M1g → M1i → M1 → M2a → M2 → M2b → M3 → M11 → M12 → M13</text>
+  <text x="48" y="786" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">→ M14 → M19</text>
+  <text x="48" y="808" font-family="'JetBrains Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="11" fill="#8b98a8" font-weight="normal" text-anchor="start">print it from the graph with: python3 tools/roadmap.py path</text>
 </svg>

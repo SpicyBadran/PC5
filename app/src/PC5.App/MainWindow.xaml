@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Pc5.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Grid Padding="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0" Spacing="4">
+      <TextBlock Text="PC5" FontSize="28" FontWeight="SemiBold" />
+      <TextBlock x:Name="Subtitle" TextWrapping="Wrap"
+                 Style="{ThemeResource BodyTextBlockStyle}"
+                 ToolTipService.ToolTip="The ceiling is a property of this build, not of this machine." />
+    </StackPanel>
+
+    <Border Grid.Row="1" Margin="0,16,0,0" Padding="12" CornerRadius="6"
+            BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+      <StackPanel Spacing="6">
+        <TextBlock x:Name="LifecycleLine" FontWeight="SemiBold" />
+        <TextBlock x:Name="ClaimLine" TextWrapping="Wrap" Opacity="0.85" />
+        <TextBlock x:Name="FirmwareLine" TextWrapping="Wrap" Opacity="0.85" />
+      </StackPanel>
+    </Border>
+
+    <ScrollViewer Grid.Row="2" Margin="0,16,0,0" VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="10">
+        <TextBlock Text="Host capabilities" Style="{ThemeResource SubtitleTextBlockStyle}" />
+        <TextBlock x:Name="Capabilities" TextWrapping="Wrap" FontFamily="Consolas, Cascadia Mono, monospace" />
+        <TextBlock Text="Lifecycle history" Style="{ThemeResource SubtitleTextBlockStyle}" />
+        <TextBlock x:Name="History" TextWrapping="Wrap" FontFamily="Consolas, Cascadia Mono, monospace" Opacity="0.9" />
+        <TextBlock Text="Log" Style="{ThemeResource SubtitleTextBlockStyle}" />
+        <TextBlock x:Name="Log" TextWrapping="Wrap" FontFamily="Consolas, Cascadia Mono, monospace" Opacity="0.9" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" Margin="0,16,0,0">
+      <Button x:Name="ProbeButton" Content="Detect host capabilities" Click="OnProbe" />
+      <Button x:Name="StartButton" Content="Start test backend" Click="OnStart" />
+      <Button x:Name="StopButton" Content="Stop" Click="OnStop" />
+      <Button x:Name="SaveButton" Content="Write settings" Click="OnSaveSettings" />
+      <Button x:Name="ExitButton" Content="Exit" Click="OnExit" />
+    </StackPanel>
+
+  </Grid>
+</Window>

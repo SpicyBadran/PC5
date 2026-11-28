@@ -21,10 +21,10 @@ evidence path exists.
 |---|---|---|
 | 1 | PC5 boots on qualified PC hardware | **emulated only** — SeaBIOS and real OVMF firmware; no physical machine yet (`M1`) |
 | 2 | PC5 controls the required hardware through its own architecture | partial: PCI/ACPI inventory, ATA PIO, PS/2, FAT32; 64-bit local APIC xAPIC bring-up, exception capture, a PIT-calibrated TSC and MADT CPU enumeration (no interrupt delivery, no preemption, no secondary-CPU bring-up); no NVMe, USB (`M2`, `M2a`, `M2b`) |
-| 3 | Core platform services work | not started (`M3`, `M2c`, `M2d`, `M7`) |
+| 3 | Core platform services work | not started for the platform (`M3`, `M2c`, `M2d`, `M7`); PC5's own application-side contracts are written but uncompiled (`M24`) |
 | 4 | PS5 execution and system-software interfaces exist and are experimentally validated | **partial** — the platform contract, evidence registry and ten PC5-authored interfaces exist and pass 261 conformance checks (`M10`, acceptance met); no console-side behaviour is modelled yet (`M11`–`M16`) |
 | 5 | Genuine system-software compatibility | **blocked** — the authenticity boundary (`M17`) and a lawful input (`M18`) |
-| 6 | Platform experience | not started (`M4`, `M5`); `M20` is blocked |
+| 6 | Platform experience | not started as a console experience (`M4`, `M5`), `M20` blocked; the *application* surface `M23` is `in_progress` — source exists, no Windows build has ever run |
 
 Nothing above level 1 is claimed, and level 1 itself is claimed only for
 emulators. The evidence classes for each level are fixed in `roadmap.json`
@@ -32,8 +32,9 @@ emulators. The evidence classes for each level are fixed in `roadmap.json`
 
 ## 2. What is actually complete
 
-Nine milestones are complete, all of them infrastructure or storage work that
-the destination needs:
+Ten milestones are complete. Nine are infrastructure or storage work the
+destination needs; the tenth (`M22`) is the transformation's baseline, whose
+acceptance criteria are about producing records rather than running code:
 
 | Milestone | What it delivered | Evidence |
 |---|---|---|
@@ -46,6 +47,7 @@ the destination needs:
 | `M1f` | read-only FAT32 | kernel SHA-256 equals an independent reader |
 | `M1g` | FAT32 create | independent read-back, mirrors equal |
 | `M1i` | FAT32 overwrite, directories, 8.3 paths | 50 host tests, second-boot read-back |
+| `M22` | the measured baseline: inventory, the firmware input verified as an object, path verdicts, ADR-028…037, and the corrected licence sentence | `docs/TRANSFORMATION_BASELINE.md`, `docs/research/PS5_FIRMWARE_AND_PUP.md`, `docs/architecture/EXECUTION_FEASIBILITY.md` |
 
 ## 3. The destination workstream (`WS10`)
 
@@ -104,10 +106,15 @@ one appeared there.
 | WS11 | Game execution and runtime | `M5` | 6 |
 | WS12 | Installation, recovery, updates | `M1b`, `M8`, `M21` | 1, 3 |
 | WS13 | Product experience | `M4` | 6 |
+| WS14 | **Windows host application** (`PC5.exe`) | `M23`, `M24` | 1, 6 |
 
 ## 6. Next tasks, in dependency order
 
-1. **`M1` — physical boot.** One machine from the qualification list, BIOS and
+1. **`M23` — the first runnable `PC5.exe`.** The tree exists; the *record* does not. Run
+   the `windows app` workflow on a Windows runner, take the SDK and Windows App SDK
+   versions from the run that resolved them, and file the derived record so the README row
+   stops saying "no record filed". Until then the application dimension is source, not E1.
+2. **`M1` — physical boot.** One machine from the qualification list, BIOS and
    UEFI, serial logs committed. Everything above level 1 is emulated until this
    exists.
 2. **`M10` — platform contract.** Acceptance met: `docs/architecture/PS5_PLATFORM_CONTRACT.md`
@@ -128,6 +135,9 @@ one appeared there.
 
 * It does not put a look-alike interface on the critical path and call it
   progress: `M4` is level 6, owned by WS13, and explicitly not the destination.
+  The same rule binds `M23`: the window being buildable is level-1 evidence about
+  the application, and the graph records it as `in_progress` with an empty
+  `evidence[]` until a Windows run exists.
 * It does not schedule level 5 as if a prerequisite existed: `M17`–`M21` are
   `blocked` with named blockers, not `in_progress` with optimistic dates.
 * It does not allow an experimental component to gate a release (ADR-021), and it
@@ -143,3 +153,10 @@ preserved in [`docs/TEST_RESULTS.md`](TEST_RESULTS.md) (sections 9–16),
 and, as the superseded architecture,
 [`docs/architecture/PC5_ARCHITECTURE_SPEC_v1.md`](architecture/PC5_ARCHITECTURE_SPEC_v1.md).
 The `legacy` field on each milestone maps the old names to the current ones.
+
+**2026-11-28 — the transformation enters the graph.** The owner's directive numbered its
+own milestones `M0`–`M7`, which collide with the ids above; ADR-036 maps them to `M22`–`M29`
+and leaves every earlier id pointing at the same work it always did. Adding eight milestones
+whose acceptance criteria are unmet moved the published figure *down*, from 26.7 % to 23.4 %,
+which is the property this page is meant to have: declaring scope costs progress, and no
+document is allowed to edit the number to recover it.
