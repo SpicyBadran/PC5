@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import re
 import sys
 from pathlib import Path
@@ -170,6 +171,11 @@ def validate(data: dict) -> list[str]:
 
 CI_EVIDENCE = "docs/evidence/ci"
 CI_SCHEMA = "pc5.ci/1"
+#: Where the `windows app` dimension files its derived record (see `tools/app_evidence.py`).
+#: The row is deliberately its own: a legacy ISO that builds says nothing about PC5.exe, and
+#: this table is where that separation has to be visible (ADR-029).
+APP_EVIDENCE = "docs/evidence/app"
+APP_SCHEMA = "pc5.app-evidence/1"
 
 
 def hosted_runs(root: Path | None = None) -> list[dict]:
@@ -221,6 +227,52 @@ def hosted_summary(root: Path | None = None) -> dict:
             "text": f"run `{newest.get('run_id')}` **{conclusion.upper()}** at "
                     f"`{str(newest.get('head_sha') or '')[:7]}`" + tally,
             "skipped_note": str(newest.get("notes") or "")}
+
+
+def app_summary(root: Path | None = None) -> dict:
+    """The Windows application dimension, read from its own filed record or declared absent.
+
+    Three states, because the difference between them is the whole point of the dimension:
+    a record that says `passed`, a record that says anything else, and *no record at all* --
+    which is what "the code exists and has never been built on Windows" looks like in data.
+    The absence is printed as an absence, never folded into the CI row above it and never
+    reported as a failure of the legacy pipeline.
+    """
+    directory = (root or ROOT) / APP_EVIDENCE
+    found = []
+    if directory.is_dir():
+        for path in sorted(directory.glob("*.json")):
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(record, dict) and record.get("schema") == APP_SCHEMA:
+                record["_file"] = f"{APP_EVIDENCE}/{path.name}"
+                found.append(record)
+    if not found:
+        found.sort(key=lambda r: str(r.get("generated_at") or ""), reverse=True)
+    if not found:
+        return {"available": False, "light": "grey", "status": "no record",
+                "text": "**no record filed** — the `windows app` workflow has not filed an "
+                        "evidence record on this history, so `app/` is source that has never "
+                        "been built on Windows (ceiling: E1 unproven)"}
+    newest = found[0]
+    status = str(newest.get("status") or "unknown")
+    tests = newest.get("tests") or {}
+    ceiling = str(newest.get("maximum_claim") or "no claim recorded")
+    tally = ""
+    if isinstance(tests.get("executed"), int):
+        tally = f", {tests['executed']} test(s) executed"
+        if isinstance(tests.get("passed"), int):
+            tally += f" / {tests['passed']} passed"
+        if isinstance(tests.get("failed"), int):
+            tally += f" / {tests['failed']} failed"
+    light = {"passed": "green", "failed": "red", "blocked": "amber",
+             "not_run": "grey"}.get(status, "amber")
+    return {"available": True, "light": light, "status": status, "file": newest["_file"],
+            "tally": tally, "ceiling": ceiling, "milestone": newest.get("milestone"),
+            "text": (f"record `{newest.get('run_id') or newest.get('generated_at')}` "
+                     f"**{status.upper()}**{tally}; claim ceiling: {ceiling}")}
 
 
 # ---------------------------------------------------------------- the model
@@ -337,23 +389,112 @@ def verified_at(records: dict) -> dict:
 
 
 # ---------------------------------------------------------------- release state
-def release_state(data: dict, root: Path | None = None) -> dict:
-    """What the roadmap says about publication, read from the graph rather than assumed.
+PUBLISH_JOB = "publish release assets"
 
-    ``M1b`` is the release milestone; the repository has no tag on a commit in this
-    history and the release job has no executed run, so "release ready" and "released"
-    are reported as two different false-and-true pairs and never conflated.
+
+def tag_facts(root: Path | None = None) -> dict:
+    """What this checkout's tag store actually says, or why it cannot be asked.
+
+    A release tag is a *fact about history*, not a fact about publication: a tag can exist
+    against a commit that was later superseded, and PC5 has done exactly that. The answer is
+    therefore three-valued per tag — present, and either on this history or not — and
+    `unavailable` when git cannot be asked at all, which is reported as such rather than as
+    "no tag exists".
+    """
+    root = root or ROOT
+
+    def git(*args: str):
+        try:
+            return subprocess.run(("git", "-C", str(root)) + args, capture_output=True,
+                                  text=True, timeout=20)
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    listed = git("tag", "--list", "--format=%(refname:short)\t%(objectname:short)")
+    if listed is None or listed.returncode != 0:
+        return {"available": False, "names": [], "on_history": [], "off_history": [],
+                "reason": "git could not be asked about this checkout"}
+    names, on, off = [], [], []
+    for row in listed.stdout.splitlines():
+        name, _, sha = row.partition("\t")
+        name, sha = name.strip(), sha.strip()
+        if not name:
+            continue
+        names.append(name)
+        ancestor = git("merge-base", "--is-ancestor", sha, "HEAD")
+        if ancestor is None:
+            continue
+        (on if ancestor.returncode == 0 else off).append(f"{name} at `{sha[:7]}`")
+    return {"available": True, "names": names, "on_history": on, "off_history": off, "reason": ""}
+
+
+def publication_facts(root: Path | None = None) -> dict:
+    """Whether a release was published, read from the filed CI record that would have done it.
+
+    The publish job is the only mechanism PC5 has for putting assets on a release, so its
+    recorded conclusion is the evidence — and when no record has been filed, the state is
+    `unknown`, not `False`. A hardcoded "nothing published" reads as a verified negative and
+    is not one: it would stay true-looking even after the day a release does happen.
+    """
+    runs = hosted_runs(root)
+    if not runs:
+        return {"state": "unknown", "run_id": None, "conclusion": None,
+                "reason": "no hosted CI record has been filed, so no publish job has been read"}
+    newest = runs[0]
+    for job in newest.get("jobs") or []:
+        if str(job.get("name", "")) != PUBLISH_JOB:
+            continue
+        conclusion = str(job.get("conclusion") or "unknown")
+        assets = job.get("assets")
+        detail = f"the `{PUBLISH_JOB}` job in run `{newest.get('run_id')}` was `{conclusion}`"
+        if isinstance(assets, int):
+            detail += f" with {assets} asset(s)"
+        return {"state": "published" if conclusion == "success" else "not published",
+                "run_id": newest.get("run_id"), "conclusion": conclusion, "assets": assets,
+                "reason": detail}
+    return {"state": "unknown", "run_id": newest.get("run_id"), "conclusion": None,
+            "reason": f"run `{newest.get('run_id')}` filed no `{PUBLISH_JOB}` job, so "
+                      f"publication was never observed by this tool"}
+
+
+def release_state(data: dict, root: Path | None = None) -> dict:
+    """Publication and readiness as three derived facts, never one assumed flag.
+
+    ``M1b`` is the release milestone in the graph, so *readiness* comes from it. *Tag* and
+    *publication* are independent observations: a tag can point off this history, and the
+    publish job can be skipped while a release page exists. The earlier version of this
+    function returned ``published: False`` with the note "no tag exists on this history", which
+    was false in both halves -- ``pc5-0.1.0`` exists, at a commit that is not an ancestor of
+    ``main`` -- and a stale certainty is worse than an admitted unknown, because it is
+    quotable. See debt D-6 in ``docs/TRANSFORMATION_BASELINE.md``.
     """
     by_id = {m["id"]: m for m in data["milestones"]}
     m1b = by_id.get("M1b") or {}
     state = m1b.get("state", "unknown")
+    tags, published = tag_facts(root), publication_facts(root)
+    if published["state"] == "published":
+        note = f"published: {published['reason']}"
+    elif published["state"] == "not published":
+        note = f"nothing published: {published['reason']}"
+    else:
+        note = f"publication unknown: {published['reason']}"
+    if not tags["available"]:
+        note += f"; tags {tags['reason'].lower()}"
+    elif not tags["names"]:
+        note += "; no tag in this checkout"
+    else:
+        note += f"; {len(tags['names'])} tag(s) here: " + (
+            ", ".join(tags["on_history"]) if tags["on_history"] else
+            "none on this history (" + ", ".join(tags["off_history"]) + ")")
     return {"milestone": "M1b",
             "state": state,
             "ready": state == COMPLETE,
             "criteria": len(m1b.get("acceptance") or []),
             "blocker": str(m1b.get("blocker") or ""),
-            "published": False,
-            "note": "no tag exists on this history and the release job has never executed"}
+            "published": {"published": True, "not published": False}.get(published["state"]),
+            "publication": published["state"],
+            "tags": tags,
+            "note": note}
 
 
 # ---------------------------------------------------------------- rendering
@@ -361,8 +502,13 @@ def _row(label: str, value: str) -> str:
     return f"| **{label}** | {value} |"
 
 
-def markdown(model: dict, stamp: dict, release: dict, hosted: dict | None = None) -> str:
-    """The generated block.  Numbers live here and nowhere else in the README."""
+def markdown(model: dict, stamp: dict, release: dict, hosted: dict | None = None,
+             root: Path | None = None) -> str:
+    """The generated block.  Numbers live here and nowhere else in the README.
+
+    `root` is threaded to `app_summary` so a caller generating against a temporary tree sees
+    that tree's evidence, exactly as the CI-record reader does; the default is this checkout.
+    """
     counts = model["counts"]
     lines = ["<!-- pc5:completion:begin -->"]
     lines.append(f"**{model['percent']}% of PC5's declared scope is complete and evidenced.** "
@@ -399,12 +545,14 @@ def markdown(model: dict, stamp: dict, release: dict, hosted: dict | None = None
         if model["milestones"]["partial_credit"] else
         "no milestone declares `criteria_met`, so in-progress work counts 0")))
     hosted = hosted if hosted is not None else hosted_summary()
+    app = app_summary(root)
+    lines.append(_row("Windows application", app["text"]))
     lines.append(_row("Hosted CI", hosted["text"] + (
         f" · {hosted['skipped_note']}" if hosted.get("skipped_note") else "")))
     lines.append(_row("Release readiness", f"`{release['milestone']}` "
                       f"**{release['state'].upper().replace('_', ' ')}** — "
-                      f"{release['criteria']} acceptance criteria outstanding; nothing published "
-                      f"({release['note']})"))
+                      f"{release['criteria']} acceptance criteria outstanding "
+                      f"({release.get('note', '')})"))
     lines.append(_row("Last verified", f"{stamp['date']} — `{stamp['gate']}` recorded "
                       f"**{stamp['result']}** at `{stamp['short'] if stamp.get('short') else 'no record'}` "
                       f"({stamp['passed']}/{stamp['gates']} committed gate records passed)"))

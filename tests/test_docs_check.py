@@ -259,6 +259,50 @@ class AboutFixture(Fixture):
                             for problem in self.about_problems()),
                         "the front page's licence line is the one most readers see")
 
+    def test_a_licence_stated_in_words_is_caught_even_without_an_spdx_id(self):
+        """Debt D-4, as a gate.
+
+        `README.md` on `main` once said "GNU General Public License version 2 only" while
+        `LICENSING.md` granted `GPL-3.0-only`. The id pattern could not see it: the sentence
+        spells the version out, and the fix that removed the sentence left the class of error
+        open. This test is the difference between those two states — a footer in prose is a
+        licence statement, and it has to agree with the grant.
+        """
+        self.write_page()
+        (self.root / "README.md").write_text(
+            "# PC5\n\nLicense\n-------\n\nPC5 is licensed under the GNU General Public "
+            "License version 2 only.\n", encoding="utf-8")
+        problems = [problem for problem in self.about_problems()
+                    if "README.md" in problem and "version 2" in problem]
+        self.assertTrue(problems, "a prose licence statement that contradicts the grant must fail")
+        self.assertIn("fix the sentence, not the grant", problems[0])
+
+    def test_a_quoted_or_coded_licence_mention_is_not_an_assertion(self):
+        """Recording a corrected mistake must stay writable, or the gate gets worked around.
+
+        A changelog line — the footer said "version 2 only"; fixed here — is a fact about a
+        past state, not a present grant. Quotations and inline code are therefore excluded,
+        and this test is what keeps that exemption from being quietly widened to whole files.
+        """
+        self.write_page()
+        (self.root / "README.md").write_text(
+            "# PC5\n\nThe footer once read \"GNU General Public License version 2 only\"; "
+            "it was corrected at `2e5d39f`.\n\n`GPL version 2` is not this project's licence.\n",
+            encoding="utf-8")
+        self.assertEqual([problem for problem in self.about_problems()
+                          if "in words as version" in problem], [])
+
+    def test_the_prose_rule_reads_the_documents_that_instruct_contributors(self):
+        """`AGENTS.md` tells every future agent what the licence is; it cannot be allowed to drift."""
+        self.write_page()
+        (self.root / "AGENTS.md").write_text(
+            "# Instructions\n\nPC5 is licensed under the GNU General Public License "
+            "version 2 only.\n", encoding="utf-8")
+        self.assertTrue(any("AGENTS.md" in problem and "version 2" in problem
+                            for problem in self.about_problems()),
+                        "AGENTS.md is inside the checked set precisely because it is copied "
+                        "forward into every future session")
+
     def test_a_notice_without_the_official_text_is_refused(self):
         """The grant needs the document it grants: a notice alone is an unverifiable claim."""
         self.write_page()

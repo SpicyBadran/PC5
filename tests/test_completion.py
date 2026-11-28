@@ -467,6 +467,98 @@ class CheckTest(unittest.TestCase):
         self.assertFalse(release["published"], "nothing here published anything")
 
 
+class ReleaseDerivationTests(unittest.TestCase):
+    """Debt D-6: publication and tags are *derived*, and an admitted unknown is allowed.
+
+    The function used to return ``published: False`` with the note "no tag exists on this
+    history and the release job has never executed". Both halves were false — ``pc5-0.1.0``
+    exists, at a commit that is not an ancestor of ``main`` — and the dangerous part of a
+    wrong certainty is that it reads like a verified negative forever. These tests pin the
+    replacement: read the record, read the tag store, and say ``unknown`` when neither speaks.
+    """
+
+    def setUp(self):
+        self.data = roadmap()
+        self.root = Path(tempfile.mkdtemp())
+        (self.root / "docs/evidence/ci").mkdir(parents=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def file_record(self, conclusion, run_id=901, assets=None):
+        job = {"name": "publish release assets", "conclusion": conclusion}
+        if assets is not None:
+            job["assets"] = assets
+        record = {"schema": C.CI_SCHEMA, "run_id": run_id, "conclusion": "success",
+                  "head_sha": "0" * 40, "completed_at": "2026-11-28T00:00:00Z",
+                  "jobs": [{"name": "build and verify", "conclusion": "success"}, job]}
+        (self.root / "docs/evidence/ci" / f"{run_id}.json").write_text(json.dumps(record))
+
+    def test_an_unfiled_record_leaves_publication_unknown_rather_than_false(self):
+        release = C.release_state(self.data, self.root)
+        self.assertIsNone(release["published"], "no record means no answer, not a negative one")
+        self.assertEqual(release["publication"], "unknown")
+        self.assertIn("publication unknown", release["note"])
+
+    def test_a_skipped_publish_job_is_a_true_negative_about_that_run(self):
+        self.file_record("skipped")
+        release = C.release_state(self.data, self.root)
+        self.assertIs(release["published"], False)
+        self.assertIn("was `skipped`", release["note"])
+
+    def test_a_successful_publish_job_is_reported_as_published(self):
+        """The old hardcoding could not have said this at all, which was the bug's other half."""
+        self.file_record("success", assets=3)
+        release = C.release_state(self.data, self.root)
+        self.assertIs(release["published"], True)
+        self.assertEqual(release["publication"], "published")
+        self.assertIn("3 asset(s)", release["note"])
+        block = C.markdown(C.compute(self.data), C.verified_at(C.load_records()), release,
+                           C.hosted_summary())
+        self.assertNotIn("nothing published", block, "a published release must not be "
+                           "described as an absence because a constant once said so")
+
+    def test_a_tag_on_the_off_history_is_named_instead_of_denied(self):
+        repo = Path(tempfile.mkdtemp())
+        try:
+            def git(*args):
+                return subprocess.run(("git", "-C", str(repo)) + args, capture_output=True,
+                                      text=True, check=True)
+            git("init", "-q", "-b", "main")
+            (repo / "a.txt").write_text("one\n")
+            git("add", "a.txt")
+            git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "one")
+            # The tagged commit lives on another branch only: `main` moved on without it,
+            # which is the shape PC5's own pc5-0.1.0 tag has.
+            git("checkout", "-qb", "side")
+            (repo / "b.txt").write_text("two\n")
+            git("add", "b.txt")
+            git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "two")
+            git("tag", "pc5-0.0.9")
+            git("checkout", "-q", "main")
+
+            facts = C.tag_facts(repo)
+            self.assertTrue(facts["available"])
+            self.assertIn("pc5-0.0.9", facts["names"])
+            self.assertEqual(facts["on_history"], [], "the tag sits on the side branch only")
+            self.assertTrue(facts["off_history"][0].startswith("pc5-0.0.9 at `"))
+
+            release = C.release_state(self.data, repo)
+            self.assertIn("none on this history", release["note"])
+            self.assertNotIn("no tag exists", release["note"])
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+    def test_a_checkout_without_git_says_so_rather_than_claiming_absence(self):
+        bare = Path(tempfile.mkdtemp())
+        try:
+            facts = C.tag_facts(bare)
+            self.assertFalse(facts["available"])
+            self.assertIn("git could not be asked", facts["reason"])
+        finally:
+            shutil.rmtree(bare, ignore_errors=True)
+
+
 class SyncTests(unittest.TestCase):
     def test_writing_twice_writes_once(self):
         """The no-empty-commit property of the automation, at the layer it is cheap to prove."""

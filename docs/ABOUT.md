@@ -39,7 +39,7 @@ PC5 is not a Sony product and contains no Sony software. The identity names the 
 | **Evidence class at the destination** | execution evidence produced by the software itself (levels[4]) |
 | **Hardware-enablement substrate** | Linux tier (optional host) — role `hardware-enablement`, `required_for_product: false`, exits at `M8` (ADR-020) |
 | **Licence** | **GPL-3.0-only** — the grant in [`LICENSING.md`](../LICENSING.md), the official body in [`LICENSE`](../LICENSE) verified verbatim; no third-party source archive is vendored ([ADR-025](TECHNICAL_DECISIONS.md)) |
-| **Roadmap authority** | [PC5_ARCHITECTURE_SPEC_v2.md](architecture/PC5_ARCHITECTURE_SPEC_v2.md), document version `0.4.0-dev`, updated 2026-11-22 |
+| **Roadmap authority** | [PC5_ARCHITECTURE_SPEC_v2.md](architecture/PC5_ARCHITECTURE_SPEC_v2.md), document version `4`, updated 2026-11-28 |
 
 **What the destination cannot be satisfied by** — stated in the roadmap so that no page, figure or release note can quietly substitute one of these for the real thing:
 
@@ -289,10 +289,10 @@ standings are used, all of them read from the roadmap rather than judged here.
 <!-- pc5:about-capabilities:begin -->
 | Standing | Count | How this bucket is decided |
 |---|---:|---|
-| **Implemented and verified** | 9 | the milestone's state is `complete`, which in this roadmap means its acceptance criteria are met and evidence is filed in the repository |
+| **Implemented and verified** | 10 | the milestone's state is `complete`, which in this roadmap means its acceptance criteria are met and evidence is filed in the repository |
 | **Implemented, not fully validated** | 2 | an entry in `roadmap.json`'s `foundations[]`, whose recorded `state` says what has been tested and what has not |
-| **Experimental or in progress** | 4 | state `in_progress`; these earn nothing in the completion figure |
-| **Planned** | 16 | state `not_started` |
+| **Experimental or in progress** | 9 | state `in_progress`; these earn nothing in the completion figure |
+| **Planned** | 18 | state `not_started` |
 | **Blocked** | 6 | state `blocked`, with the blocker named in the roadmap |
 
 **Implemented and verified** — with the file that holds the evidence, so the claim can be checked rather than trusted:
@@ -306,6 +306,7 @@ standings are used, all of them read from the roadmap rather than judged here.
 - `M1g` — FAT32 create with independent read-back (2 acceptance criteria · evidence: [`docs/TEST_RESULTS.md`](TEST_RESULTS.md))
 - `M1h` — Hybrid MBR: the same image boots as a hard disk (2 acceptance criteria · evidence: [`docs/TEST_RESULTS.md`](TEST_RESULTS.md))
 - `M1i` — FAT32 overwrite, directories and 8.3 paths (3 acceptance criteria · evidence: [`docs/TEST_RESULTS.md`](TEST_RESULTS.md))
+- `M22` — Transformation baseline: what exists, what it proves, and what is owed (6 acceptance criteria · evidence: [`docs/TRANSFORMATION_BASELINE.md`](TRANSFORMATION_BASELINE.md), [`docs/research/PS5_FIRMWARE_AND_PUP.md`](research/PS5_FIRMWARE_AND_PUP.md), [`docs/architecture/EXECUTION_FEASIBILITY.md`](architecture/EXECUTION_FEASIBILITY.md), [`docs/architecture/ARCHITECTURE_DECISION_RECORD.md`](architecture/ARCHITECTURE_DECISION_RECORD.md))
 
 **Implemented, not fully validated** — quoted from `foundations[]`, because the distinction *is* the sentence:
 
@@ -343,8 +344,18 @@ standings are used, all of them read from the roadmap rather than judged here.
   *Advances:* establishes what the protected input actually is before anything is built around it
 - `M10` — PS5 platform contract specification  
   *Advances:* the destination needs a written platform contract before a single device model can be built
+- `M23` — The first runnable PC5.exe: window, navigation, services, settings, log, tests  
+  *Advances:* the product surface: a real Windows application that owns state, persists settings and can be started, inspected and stopped
+- `M24` — Subsystems behind contracts: execution, diagnostics, firmware integrity, storage state  
+  *Advances:* the boundary that keeps a future guest engine, a host probe and a package reader from becoming three dialects of one lie
+- `M25` — Genuine-execution interface research: lawful inputs, observable contracts, no decryption  
+  *Advances:* keeps the destination reachable as a research programme while the product is built, without pretending the blockers are smaller than they are
+- `M27` — Update and installation semantics against PC5's own package format  
+  *Advances:* the package, verification and rollback behaviour a real system needs, implemented where PC5 owns the format
+- `M28` — Four evidence dimensions in CI, with the application dimension on Windows  
+  *Advances:* the reporting shape the owner asked for: application, legacy image, research and release readiness each carry their own colour, so a green ISO cannot imply a working app
 
-**Planned** — 16 milestones carry `not_started`; the list is in [docs/ROADMAP.md](ROADMAP.md) and in `docs/architecture/roadmap.json`, and none of them is described as done anywhere in this repository.
+**Planned** — 18 milestones carry `not_started`; the list is in [docs/ROADMAP.md](ROADMAP.md) and in `docs/architecture/roadmap.json`, and none of them is described as done anywhere in this repository.
 
 **Blocked** — 6 milestones, each with its blocker quoted: see the generated table in [README → What is blocked](../README.md#what-is-blocked).  This page does not repeat it, because two copies of a blocker list are two things that can go stale.
 
@@ -394,15 +405,15 @@ never weakened to keep a gate green.
 <!-- pc5:about-progress:begin -->
 | | |
 |---|---|
-| **Overall completion** | **26.7%** — earned acceptance-criteria weight ÷ declared weight |
-| **Milestones** | 9 complete · 4 in progress · 6 blocked · 16 not started, in 14 workstreams |
-| **Current milestone** | `M2a`, `M2b`, `M9`, `M10` |
+| **Overall completion** | **23.4%** — earned acceptance-criteria weight ÷ declared weight |
+| **Milestones** | 10 complete · 9 in progress · 6 blocked · 18 not started, in 15 workstreams |
+| **Current milestone** | `M2a`, `M2b`, `M9`, `M10`, `M23`, `M24`, `M25`, `M27`, `M28` |
 | **Last verified** | 2026-11-23 — `verify` recorded **passed** at `86b862f` (10/11 committed gate records passed) |
 | **Hosted CI** | run `46102447128` **SUCCESS** at `a79df48`, 1382 host tests OK (13 skipped) |
 | **Release** | `M1b` **BLOCKED** — nothing published |
 | **Canonical roadmap** | [docs/ROADMAP.md](ROADMAP.md) · [`roadmap.json`](architecture/roadmap.json) |
 
-The figure is criteria-weighted, not commit-weighted: 31 of 116 declared acceptance criteria are met.  Counting milestones instead gives 25.7%, and the two agree within 1.0 points — so the headline is not an artefact of the weighting.  Progress is **never** computed from commits, files, lines or test counts, and an `in_progress` milestone scores zero until it declares which of its criteria it has met.  `python3 tools/completion.py model` reprints this calculation; `python3 tools/completion.py check` refuses inconsistent roadmap data.
+The figure is criteria-weighted, not commit-weighted: 37 of 158 declared acceptance criteria are met.  Counting milestones instead gives 23.3%, and the two agree within 0.2 points — so the headline is not an artefact of the weighting.  Progress is **never** computed from commits, files, lines or test counts, and an `in_progress` milestone scores zero until it declares which of its criteria it has met.  `python3 tools/completion.py model` reprints this calculation; `python3 tools/completion.py check` refuses inconsistent roadmap data.
 <!-- pc5:about-progress:end -->
 
 **The canonical documents** are [`docs/ROADMAP.md`](ROADMAP.md) (the narrative,
