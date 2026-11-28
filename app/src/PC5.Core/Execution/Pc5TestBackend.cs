@@ -21,7 +21,13 @@ public sealed class Pc5TestBackend : IExecutionEngine
     private readonly TimeSpan stepDelay;
     private readonly TestFailurePoint failAt;
     private ExecutionConfiguration? configuration;
-    private Guid? pause;
+    /// <summary>The outstanding pause, or none. Typed as the handle itself and not as a
+    /// <see cref="Guid"/>: the first hosted compile (run 461090283704's successor) rejected
+    /// <c>pause.Value != handle</c> because a bare <c>Guid</c> and a <c>PauseHandle</c> are not
+    /// comparable, and they should not be -- the handle is the thing a caller must return, so
+    /// the field has to hold that same type for the refusal in <see cref="ResumeAsync"/> to mean
+    /// "not the handle I gave you" rather than "not the GUID I happened to hash".</summary>
+    private PauseHandle? pause;
     private int ticks;
 
     public Pc5TestBackend(

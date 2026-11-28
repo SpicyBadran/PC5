@@ -120,9 +120,13 @@ public sealed class FileLog : ILog, IDisposable
             Directory.CreateDirectory(directory);
         }
 
-        return new StreamWriter(new FileStream(Path, FileMode.Append, FileAccess.Write, FileShare.Read))
+        // `Encoding` is a constructor argument here, not an initialiser: `StreamWriter.Encoding`
+        // is read-only (CS0200, reported by the first hosted compile), and the explicit
+        // UTF8Encoding is what keeps a BOM out of a file that is appended to for its life.
+        return new StreamWriter(
+            new FileStream(Path, FileMode.Append, FileAccess.Write, FileShare.Read),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))
         {
-            Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
             AutoFlush = false,
         };
     }
