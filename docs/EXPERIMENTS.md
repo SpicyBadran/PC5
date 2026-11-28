@@ -17,7 +17,20 @@ investigating it is the expensive alternative. Statuses:
 | **EXP-E** | How does host input become guest input without pretending a DualSense exists? | RawInput/XInput capture → guest-visible device model | key/mouse/pad events in a log | not started | planned | — | after a guest exists |
 | **EXP-F** | Does the firmware object the repository declares actually exist anywhere reachable? | `git cat-file -t 42ea0e5a…`; `.gitattributes`/`check-attr`; `ci/README.md`'s recorded `smudge filter lfs failed`, exit 128; `git lfs` unavailable in the sandbox | a definite answer with commands | **definite answer: no.** The pointer is real, the object is absent, and the absence has broken CI | **passed** (as a negative result) | `docs/research/PS5_FIRMWARE_AND_PUP.md` §1 | the owner's §5 procedure, if a package is lawfully held |
 | **EXP-G** | Can `Pc5.Core.Firmware` distinguish the repository's pointer from a package? | compile + run `FirmwareArtifactTests` against the real pointer text | `Status.PointerOnly`, declared size 1,423,697,408, `ReadBytes` = the pointer's own length | **not run** — needs the SDK; the same assertion runs today in Python form via the repository's own tooling | blocked (environment) | `app/tests/PC5.Core.Tests/FirmwareArtifactTests.cs` | CI |
+| **EXP-I** | What does the *hosted* `windows app` run say about `app/`? | first execution of `.github/workflows/windows-app.yml`, at `74fa139`, run `46109038081` | an E1 verdict either way | **the build failed.** `core-portable` → `PC5.Core builds and tests cross-platform`: step 5 *Restore* success, step 6 *Build* **failure**, steps 7 *Unit tests* and 8 *structure gates* **skipped**, step 9 *File the evidence record* **failure**, step 10 *Upload the diagnostics* success (nothing to upload); `app-windows` → **skipped** because `needs: core-portable`. Conclusion: **the C# does not compile as written**, exactly as every page here predicted, and no `app/` claim may move until it does | **failed (expected, informative)** | [run 46109038081](https://github.com/SpicyBadran/PC5/actions/runs/46109038081); annotations read via `gh api repos/SpicyBadran/PC5/check-runs/140868203941/annotations` | the *next* run's annotations, which now carry the compiler errors (§"why annotations"), then fix the C# in `app/` |
 | **EXP-H** | Does the licence gate catch a wrong licence statement in prose? | the D-4 experiment: a README footer contradicting `LICENSING.md` on `main` | it should have caught it | **it did not** — `tools/licensing.py` reads only `LICENSING.md`/`LICENSE`; the wrong sentence reached `main` and was found by hand | **failed** (by design: kept as the reason for B-5) | [`TRANSFORMATION_BASELINE.md`](TRANSFORMATION_BASELINE.md) D-4 | extend the gate with third-party-notice exemptions |
+
+## Why the next run will say more than this one
+
+The runner's log *body* is served from a blob host this sandbox cannot reach (`gh api
+.../jobs/<id>/logs` and `gh run view --log-failed` both fail; the annotations endpoint does
+not). So `.github/workflows/windows-app.yml` now pipes every `dotnet` step through
+`tools/ci_annotations.py`, which re-emits the compiler's own `path(line,col): error CS…` lines
+as **workflow annotations** — a channel the API returns, capped at 25, with the tool forced to
+exit 0 so it can never change the verdict. `tests/test_ci_annotations.py` (16 tests) pins that
+last property, and one of its tests is the YAML bug that made run `46109038081` fail twice: a
+`run:` block whose second line began with `--logger` was a *second shell command*, not a
+continuation.
 
 ## Rules this register enforces
 
