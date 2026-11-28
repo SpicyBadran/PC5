@@ -1,0 +1,52 @@
+# Progress — measured per dimension, 2026-11-28
+
+The project's status, reported as **independent dimensions**. A green row in one column is
+never evidence for another, and no row here is a project-wide average: PC5 can be 100 % on its
+host foundation and 0 % on genuine execution, and that is the honest reading of the state
+below. Statuses are `passed · partial · source-only · research · blocked · not started · unknown`.
+
+| # | Dimension | Status | What exists | Evidence | Next |
+|---|---|---|---|---|---|
+| 1 | **Windows application (`PC5.exe`)** | **source-only** (README row says "no record filed") | `app/src/PC5.Core` (lifecycle machine, settings store, file log, capability model, service registry, build ceiling), `app/src/PC5.App` (WinUI 3 window, Windows host probe, composition root), `app/tests/PC5.Core.Tests` structure/claim gates pass here: `python3 -m unittest tests.test_pc5_app_structure tests.test_app_evidence` → 28 tests OK; the whole host suite is green (`1396 tests, 141 skipped`). **No compiler has seen the C#: `command -v dotnet` → absent** | first `windows app` workflow run → then E1 |
+| 2 | **Host execution infrastructure** | partial (contracts) | `IExecutionEngine`, `ExecutionConfiguration/Status`, `EvidenceLevel`, `Pc5TestBackend` (lifecycle, cancellation, injected failures), `HostSupportResult` ceiling | `app/tests/PC5.Core.Tests/TestBackendLifecycleTests.cs` (unexecuted here) | `EXP-B` generic backend on a Windows runner |
+| 3 | **PS5 hardware & compatibility research** | research | [`architecture/EXECUTION_FEASIBILITY.md`](architecture/EXECUTION_FEASIBILITY.md) (path verdicts A/B/C, 2026 field data, legal line), [`research/VIRTUALIZATION_BACKENDS.md`](research/VIRTUALIZATION_BACKENDS.md) (backend comparison + `VBP-1…5`) | sources tiered in [`research/PS5_FIRMWARE_AND_PUP.md`](research/PS5_FIRMWARE_AND_PUP.md) §4; contradictions recorded rather than resolved silently | `M25` continues it, feeding the per-subsystem requirement records in `WS10` (`M9`–`M16`) |
+| 4 | **Firmware & boot-chain research** | blocked on input | the input is measured, not assumed: 135-byte LFS pointer, `sha256:42ea0e5a…`, 1,423,697,408 B declared, **no object in the store**; parsing and hashing logic implemented in `Pc5.Core.Firmware` | [`research/PS5_FIRMWARE_AND_PUP.md`](research/PS5_FIRMWARE_AND_PUP.md) §1; `ci/README.md` (the clone that died on it); `tests/test_pc5_app_structure.py` | the owner's lawful verification step (`EXP-F`) |
+| 5 | **Genuine guest execution** | **0 — not started** | nothing; the graph records it as `WS10`'s `M17`–`M21` (`blocked`) with `M25` as the lawful-intake research and `M24` as the engine seam it would attach to | no record can exist, so none is claimed | stays at E0 until E2 exists on a real host |
+| 6 | **Graphics & display** | not started | none | — | `VBP-4`, then `EXP-D` |
+| 7 | **Input & devices** | not started | none in `app/`; the legacy kernel has PS/2 keyboard and USB-adjacent code, which is not a guest device model | `boot/`, `kernel/` inventory rows in [`audit/COMPONENT_INVENTORY.md`](audit/COMPONENT_INVENTORY.md) | `EXP-E` |
+| 8 | **Audio** | not started | none | the PS5's Tempest DSP is class-3 in [`playstation/BOOT_FEASIBILITY.md`](playstation/BOOT_FEASIBILITY.md) | after the guest exists |
+| 9 | **Storage & packages** | partial (host side) | ISO9660/El Torito writer + independent verifier; `psm/` manifest registry; settings persistence and atomic write in `PC5.Core` | `make unit` 165 checks; `make psm`; 1382 host tests at `a79df48` | guest-visible block device model |
+| 10 | **Legacy kernel & image** | **passed** | `boot/`, `kernel/`, `kernel64/`, `psm/`, the image chain, the OVMF gate | run `46102447128` `success` at `a79df48`: `build and verify` 22 steps succeeded / 2 skipped of 24, `UEFI boot under genuine OVMF` 8 succeeded / 2 skipped of 10, `publish release assets` skipped; `docs/evidence/ci/46102447128.json` (machine-filed) | unchanged by the transformation; kept green on its own pipeline |
+| 11 | **Documentation & gates** | passed | six gates, the generated README/About blocks, the citation register, and a licence-prose rule the previous gate did not have | `make docs-check` → "100 Markdown files, 48 make targets … resolve"; `citations-check` → "263 commit reference(s) resolve" (measured on this branch, 2026-11-28) | B-5: extend the licence gate to prose |
+| 12 | **Evidence pipeline** | **passed, proven in production** | `progress.yml` + `tools/progress_record.py`: a verified run becomes a committed record, and prose regenerates from it | run `46104362009` 14/14 steps → commit `9b20228` authored `github-actions[bot]`; README Hosted CI row updated by the bot; no recursion | add the app dimension's own record commit path |
+| 13 | **Release readiness** | **derived** (was: asserted) | `tag_facts()` + `publication_facts()` in `tools/completion.py`; the README row now reads "nothing published: the `publish release assets` job in run `46102447128` was `skipped`; 1 tag(s) here: none on this history (`pc5-0.1.0` at `09b885a`)" | the row's own wording is the measurement, and `tests/test_completion.py::ReleaseDerivationTests` pins all three states (`published` / `not published` / `unknown`) | `M29`: derive *assets verified* too, and decide signing |
+
+## What this sprint delivered, as claims a reader can check
+
+| Claim | Grade | Basis |
+|---|---|---|
+| The Windows application tree exists with real, non-stub logic | **implemented** | 30 files under `app/`; state machine with a total transition table; atomic settings write; log with event ids; firmware pointer parser |
+| Its unit tests pass | **not established here** | they cannot run without a .NET SDK (`app/tests/PC5.Core.Tests`: 4 files, 41 `[Fact]`/`[Theory]` members by count of attributes); CI is the first place they will run |
+| The application builds on Windows 11 | **not established** | `windows app` workflow pending its first run (its YAML parses; both jobs declare a timeout; `permissions: contents: read`); `docs/engineering/WINDOWS_VALIDATION.md` is the owner's procedure |
+| The app dimension's evidence is derived, not asserted | **implemented and tested** | `tools/app_evidence.py` + `tests/test_app_evidence.py`: 8 tests OK, including "refuse `passed` over zero executed tests" and "never emits a guest-execution claim" |
+| No file in `app/` claims a PlayStation capability | **enforced** | `tests/test_pc5_app_structure.py::ClaimTests`, and the test backend's own `DisplayName` says "not PS5" |
+| Genuine PS5 execution is closer than it was | **no** | unchanged: `M27` remains blocked; the objective's blockers are the same two the feasibility document names |
+
+## 4. Blocker register (this is the project's blocker list; no second copy exists)
+
+| ID | Blocker | Kind | Consequence | Who can clear it | Next lawful step |
+|---|---|---|---|---|---|
+| **B-1** | No lawful PS5 system-software input: the repository's pointer names an object the LFS store does not hold | missing input | `M26`/`M27` cannot leave research; no E3+ claim is possible | the owner | run `docs/research/PS5_FIRMWARE_AND_PUP.md` §5 against a package the owner lawfully holds |
+| **B-2** | Per-component encryption with keys bound to on-die secure storage | security + legal | PC5 cannot obtain runnable code from a package, and will not attempt to | nobody — it is a boundary, not a task | keep intake/verification only; see ADR-030 |
+| **B-3** | No Windows, .NET SDK, hypervisor or GPU in the development sandbox | environment | every `app/` claim stops at "source exists" until CI or the owner runs it | CI (first run) | read the `windows app` run per step, then file its record |
+| **B-4** | ~~Release state is asserted~~ — **closed on this branch**: `tag_facts()` + `publication_facts()` derive it, `unknown` is a permitted answer, and the README row prints the publish job's conclusion and the tag's position on history | debt (D-6) | was: a stale certainty quotable as fact | this project | `tests/test_completion.py::ReleaseDerivationTests` (5 tests) is the guard; a *real* release page with assets still needs the record to say so |
+| **B-5** | ~~The licence gate could not see a licence stated in words~~ — **closed on this branch**: `docs_check` matches `General Public License … version N` across six front-page documents, quotations exempt, three tests added (the gate half of D-4) | debt | the sentence was fixed at `2e5d39f`; the class of error is now caught | this project | keep the exemption list narrow, or the gate gets worked around instead of obeyed |
+| **B-6** | `Makefile:680` and `tests/test_ovmf_gate_profiles.py:893` described present-tense behaviour of `tools/build_release.py`, which has never existed here | debt | a reader could trust a release script that does not run | this project | **closed on this branch**: both now name the real pins -- `Makefile:356` `ESP_IMAGE` and `tests/ovmf_boot.py`'s `ARTIFACTS` -- and cite D-5 as the correction |
+| **B-7** | ~~2 `test_ci_report` tests failed on a host without `unicorn`~~ — **closed on this branch**: the reporter names the missing dependency instead of pasting a traceback; nothing was skipped or weakened | environment (D-8) | a local green run no longer depends on it | this project | the machine-model tests still need `unicorn`; the report says so |
+
+## 5. Reading a number here
+
+The published scope figures (26.7 % by acceptance criteria, 25.7 % by milestone count at the
+baseline) are recomputed from `docs/architecture/roadmap.json` by `make completion-check`, and
+they now include the transformation's `M22`–`M29`. They measure *declared scope evidenced* — not
+closeness to a booting PlayStation, which those same milestones record as blocked.
