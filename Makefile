@@ -677,9 +677,11 @@ stubtest: $(ISO)
 # variables, so `make PC5_UEFI=64 ovmf-test` boots and grades the 64-bit release
 # artifact -- `$(ESP_IMAGE)` is the ESP that was embedded, not a lookalike.  Passing
 # the 32-bit `efi.img`/`kernel.bin` here while claiming to test the 64-bit path would
-# compare the ISO against the wrong build artifacts, and `tools/build_release.py`
-# hardcodes exactly that pair, which is why the release-side 64-bit gate is driven
-# through this target rather than through that script.
+# compare the ISO against the wrong build artifacts.  The pair the release embeds is
+# pinned in this file instead -- `ESP_IMAGE`/`ESP_KERNEL` above, and the
+# `ARTIFACTS["x64"]` table in `tests/ovmf_boot.py` -- because there is no separate
+# release script here: an earlier revision of this comment named
+# `tools/build_release.py`, which this repository has never contained (debt D-5).
 ovmf-test: $(ISO) $(ESP_IMAGE) $(ESP_KERNEL)
 	python3 tests/ovmf_boot.py --iso $(ISO) --efi-image $(ESP_IMAGE) \
 	  --kernel $(ESP_KERNEL) --json-out $(BUILD)/ovmf-report.json \

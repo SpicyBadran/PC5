@@ -1,16 +1,16 @@
-## Unity ##
-*.cs diff=csharp text
-*.cginc text
-*.shader text
-*.mat merge=unityyamlmerge eol=lf
-*.anim merge=unityyamlmerge eol=lf
-*.unity merge=unityyamlmerge eol=lf
-*.prefab merge=unityyamlmerge eol=lf
-*.physicsMaterial2D merge=unityyamlmerge eol=lf
-*.physicMaterial merge=unityyamlmerge eol=lf
-*.asset merge=unityyamlmerge eol=lf
-*.meta merge=unityyamlmerge eol=lf
-*.controller merge=unityyamlmerge eol=lf
+# PC5's own attributes. The LFS block below is inherited from the repository's earliest days
+# and is load-bearing: `.pup`/`PS5UPDATE.PUP` routing is what keeps the protected firmware
+# input a *pointer* rather than bytes in the tree (docs/research/PS5_FIRMWARE_AND_PUP.md; the
+# incident recorded in ci/README.md). The rules that used to sit above it were a Unity
+# project's -- `merge=unityyamlmerge` on `.mat`/`.unity`/`.asset`/`.meta` -- for file types
+# this repository has never contained, and with no such driver configured they were inert at
+# best and misleading at worst (debt D-2). They are replaced by rules for the tree PC5 has,
+# in the same number of lines so that a citation of a line number here cannot silently drift.
+*.cs diff=csharp text eol=lf
+*.xaml text eol=lf
+*.csproj text eol=lf
+*.props text eol=lf
+*.sln text eol=lf
 ## git-lfs ##
 #Image
 *.jpg filter=lfs diff=lfs merge=lfs -text

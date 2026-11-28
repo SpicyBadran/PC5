@@ -890,9 +890,14 @@ class MemoryCountsAreBounded(unittest.TestCase):
 
 class ArtifactDefaults(unittest.TestCase):
     def test_the_64bit_gate_is_not_handed_the_32bit_artifacts(self):
-        """`tools/build_release.py` hardcodes `efi.img`/`mbr.bin`; the gate must not.
+        """A default that handed every gate `efi.img`/`mbr.bin` is the failure pinned out.
 
-        The 64-bit release embeds `build/efi64-release.img`.  `build/efi64.img` is the
+        The 64-bit release embeds `build/efi64-release.img` (pinned in `Makefile:356` and
+        in the `ARTIFACTS["x64"]` table of `tests/ovmf_boot.py`). This note used to attribute
+        that pinning to `tools/build_release.py`, a script this repository has never
+        contained; debt D-5 in `docs/TRANSFORMATION_BASELINE.md` records the correction,
+        because a comment naming a phantom file is how a reader ends up trusting a step
+        that does not run.  `build/efi64.img` is the
         bare `make uefi64` image the stub gate runs, which has no README.TXT, so it is
         not the ESP the release carries: comparing the ISO's ESP against the wrong one
         would fail for a reason that has nothing to do with the boot, and comparing it
