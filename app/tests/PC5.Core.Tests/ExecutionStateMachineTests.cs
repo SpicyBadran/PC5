@@ -57,10 +57,31 @@ public class ExecutionStateMachineTests
 
         var history = machine.History;
         Assert.Equal(2, history.Count);
+
+        // Entry order is the whole point, so both entries are checked field by field. The
+        // first draft of this test asserted `history[1].Reason == "startup begins"` and
+        // `history[1].From == Ready`, which is what the *second* edge is not: the reason of
+        // the second move is its own, and its `From` is the state the first move arrived at.
+        // The compiler and the other 49 tests passed while this one failed, which is the
+        // useful kind of red -- a test that was wrong about the contract it claimed to pin.
         Assert.Equal(ExecutionState.NotInitialized, history[0].From);
-        Assert.Equal("startup begins", history[1].Reason);
+        Assert.Equal(ExecutionState.Initializing, history[0].To);
+        Assert.Equal("startup begins", history[0].Reason);
+
+        Assert.Equal(ExecutionState.Initializing, history[1].From);
+        Assert.Equal(ExecutionState.Ready, history[1].To);
+        Assert.Equal("no blocker found", history[1].Reason);
+
+        // and the chain has to be continuous: a history that records states out of order
+        // would let a log describe a lifecycle that never happened
+        for (var index = 1; index < history.Count; index++)
+        {
+            Assert.Equal(history[index - 1].To, history[index].From);
+            Assert.True(history[index].Utc >= history[index - 1].Utc,
+                        $"entry {index} is stamped before the entry it follows");
+        }
+
         Assert.True(history[1].Utc <= DateTimeOffset.UtcNow);
-        Assert.Equal(ExecutionState.Ready, history[1].From);
     }
 
     [Theory]

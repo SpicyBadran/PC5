@@ -99,6 +99,13 @@ neighbours). Every item below is a delivered change on that commit; nothing here
   and states that **no signed `.msix` is produced here** — that is `M29`, and it needs a signing
   identity that deliberately does not live in this repository.
 
+- `app/tests/PC5.Core.Tests/ExecutionStateMachineTests.cs` — the single failure in the first
+  executed run (`46110109247`: 50 cases, 49 passed, 1 failed) was this test's own expectation: it
+  read `history[1].Reason` and `history[1].From` as if the second recorded edge inherited the
+  first one's reason and started where it started. The state machine had recorded both edges
+  correctly. Now asserts every field of both entries and that the chain is continuous, so the test
+  actually pins what its name claims — the fix tightens it rather than relaxing it (EXP-K).
+
 ### Fixed
 - `.github/workflows/windows-app.yml` — its first hosted run (`46109038081`) failed twice over:
   the *File the evidence record* step piped into `tee build/app-evidence.json` in a directory
