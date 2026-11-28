@@ -85,9 +85,16 @@ jobs:
       - name: Check out the commit under test
         uses: actions/checkout@v4
 
-      - name: Install the .NET SDK pinned by app/global.json
+      - name: Install the .NET SDK this tree targets
+        # `dotnet-version` is stated rather than left to `global-json-file`, because the
+        # first run of this workflow resolved the runner's SDK 11.0.100 while `app/` is
+        # written and documented against .NET 8 (ADR-033: a version is pinned from a run
+        # that succeeded, and a preview SDK is not that). If the floor moves, it moves
+        # here and in app/global.json together, with a run behind it.
         uses: actions/setup-dotnet@v4
         with:
+          dotnet-version: |
+            8.0.x
           global-json-file: app/global.json
 
       - name: Report the toolchain actually installed
@@ -167,9 +174,11 @@ jobs:
       - name: Check out the commit under test
         uses: actions/checkout@v4
 
-      - name: Install the .NET SDK pinned by app/global.json
+      - name: Install the .NET SDK this tree targets
         uses: actions/setup-dotnet@v4
         with:
+          dotnet-version: |
+            8.0.x
           global-json-file: app/global.json
 
       - name: Report the Windows host this ran on

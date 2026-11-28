@@ -13,9 +13,11 @@ have to catch by eye, and that CI on the real runners enforces the rest:
 Anything here that could be checked by `dotnet` is left to the `windows app` workflow.
 """
 
+import json
 import re
 import subprocess
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -134,6 +136,58 @@ class TreeTests(unittest.TestCase):
                 self.assertIsNotNone(match, f"{path.relative_to(REPO)} declares no namespace")
                 self.assertTrue(match.group(1).startswith(expected),
                                 f"{path.relative_to(REPO)} is in namespace {match.group(1)}, expected under {expected}")
+
+
+class MarkupTests(unittest.TestCase):
+    """Every XML file in `app/` has to be well-formed, and this host can check that.
+
+    The point of this class is that it *caught nothing* the first time: the first hosted run
+    (46109038081) failed with MSB4024, "An XML comment cannot contain '--'", in
+    `app/Directory.Build.props` -- a file every project imports, so no C# was ever compiled and
+    the failure looked like "the code is broken". Python parses XML without a .NET toolchain, so
+    the whole class of project-file syntax errors is now caught here, before a runner spends
+    four minutes telling us the same thing.
+    """
+
+    def test_every_xml_file_parses(self):
+        for path in sorted(APP.rglob("*.props")) + sorted(APP.rglob("*.csproj")) \
+                + sorted(APP.rglob("*.xaml")):
+            text = path.read_text(encoding="utf-8")
+            try:
+                ET.fromstring(text)
+            except ET.ParseError as failure:
+                self.fail(f"{path.relative_to(REPO)} is not well-formed XML: {failure}")
+
+    def test_no_xml_comment_carries_a_double_hyphen(self):
+        for path in sorted(APP.rglob("*.props")) + sorted(APP.rglob("*.csproj")) \
+                + sorted(APP.rglob("*.xaml")):
+            text = path.read_text(encoding="utf-8")
+            for comment in re.findall(r"<!--(.*?)-->", text, flags=re.S):
+                self.assertNotIn("--", comment,
+                                 f"{path.relative_to(REPO)} has '--' inside an XML comment, "
+                                 f"which MSBuild refuses to load (MSB4024)")
+                self.assertFalse(comment.rstrip().endswith("-"),
+                                 f"{path.relative_to(REPO)} ends an XML comment with '-', "
+                                 f"which is equally illegal")
+
+    def test_the_project_files_declare_the_frameworks_the_boundary_requires(self):
+        for name, expected in (("PC5.Core.csproj", "net8.0"),
+                              ("PC5.App.csproj", "net8.0-windows10.0.19041.0"),
+                              ("PC5.Core.Tests.csproj", "net8.0")):
+            path = next(APP.rglob(name))
+            root = ET.fromstring(path.read_text(encoding="utf-8"))
+            tfms = [node.text.strip() for node in root.iter()
+                    if node.tag.endswith("TargetFramework") or node.tag.endswith("TargetFrameworks")]
+            self.assertIn(expected, tfms, f"{name} targets {tfms}, expected {expected}")
+
+    def test_the_sdk_floor_says_what_it_meant(self):
+        """`latestMajor` let a runner pick a preview SDK; a floor needs a ceiling too."""
+        global_json = json.loads((APP / "global.json").read_text(encoding="utf-8"))
+        sdk = global_json["sdk"]
+        self.assertTrue(sdk["version"].startswith("8."), sdk["version"])
+        self.assertIn(sdk["rollForward"], ("latestFeature", "latestPatch", "disable"),
+                      "rollForward latestMajor silently accepts a preview SDK of a later "
+                      "major, which is how a documented .NET 8 tree ends up built by 11.0.100")
 
 
 class BoundaryTests(unittest.TestCase):
