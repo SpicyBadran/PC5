@@ -23,10 +23,20 @@ import argparse
 import re
 import sys
 
-#: MSBuild/Roslyn shape: `path/(line,column): error CS1234: message [project]`.
-COMPILE_DIAGNOSTIC = re.compile(
-    r"^(?P<file>[^\s:(][^(]*?)\((?P<line>\d+),(?P<col>\d+)\):\s*"
-    r"(?P<severity>error|warning)\s+(?P<id>[A-Z]+\d+)\s*:\s*(?P<message>.*?)\s*(?:\[|$)")
+#: The shape of an MSBuild or Roslyn diagnostic, with the position optional:
+#:   `path/log.cs(41,17): error CS0103: message [project]`   a compiler diagnostic
+#:   `path/app.csproj : error NU1102: message [project]`     a restore or evaluation failure
+#:   `C:\a\b.csproj : error NU1102: …`                        the same, on Windows
+#:
+#: The file part is matched lazily up to the diagnostic marker rather than with a character
+#: class that excludes `:`, because a Windows path *contains* colons: an earlier pattern did
+#: exclude them, the first hosted Windows run failed on a `…csproj : error NU1102:` line, and
+#: the reporter printed nothing -- a silent exit 1 with no reason attached. Position is used when
+#: the log supplies it and never invented when it does not.
+DIAGNOSTIC = re.compile(
+    r"^(?P<file>.*?)\s*(?:\((?P<line>\d+)(?:,\d+)?\))?\s*:\s*"
+    r"(?P<severity>error|warning)\s+(?P<id>[A-Za-z]+\d+)\s*:\s*"
+    r"(?P<message>.*?)(?:\s*\[[^\]]*\])?\s*$")
 
 #: A test runner's own failure lines, in the shapes `dotnet test` prints: the per-test line and
 #: the summary tally. A red *test* has to be as legible as a red *build*, and the two are
@@ -82,7 +92,7 @@ def annotate(text: str, limit: int = 20, with_warnings: bool = False) -> list:
             errors.append(("", "", f"failing test {test.group('name')}"
                             + (f" [{detail}]" if detail else ""), "error"))
             continue
-        match = COMPILE_DIAGNOSTIC.match(line.strip())
+        match = DIAGNOSTIC.match(line.strip())
         if match:
             entry = (match.group("file").strip(), match.group("line"),
                      f"{match.group('id')}: {match.group('message')}", match.group("severity"))
@@ -90,18 +100,61 @@ def annotate(text: str, limit: int = 20, with_warnings: bool = False) -> list:
             continue
         if "error" not in line.lower():
             continue
+        if DIAGNOSTIC.match(line.strip()):
+            continue
         tool = TOOL_FAILURE.search(line)
-        if tool and not COMPILE_DIAGNOSTIC.match(line.strip()):
+        if tool:
             errors.append(("", "", tool.group("message").strip()[:300], "error"))
     out = []
     for file, number, message, severity in (errors + (warnings if with_warnings else []))[:limit]:
         level = SEVERITY.get(severity, "error")
-        if file and number:
-            location = (f"file={quote(file, PARAM_ESCAPES)},line={quote(number, PARAM_ESCAPES)}")
-            out.append(f"::{level} {location}::{quote(message)}")
+        properties = []
+        if file:
+            properties.append(f"file={quote(file, PARAM_ESCAPES)}")
+        if number:
+            properties.append(f"line={quote(number, PARAM_ESCAPES)}")
+        if properties:
+            out.append(f"::{level} {','.join(properties)}::{quote(message)}")
         else:
             out.append(f"::{level}::{quote(message)}")
     return out
+
+
+def read_log(path: str) -> str:
+    """Read a build log whatever encoding its writer chose.
+
+    This exists because the first hosted Windows run produced a build failure and no
+    annotation. `Tee-Object -FilePath` on that runner wrote UTF-16, and a UTF-8 reader saw
+    `e\x00r\x00r\x00` -- which contains no substring "error", so the reporter fell silent on a
+    real failure. A tool whose silence reads as "nothing to report" has to be the thing that is
+    fixed, not the log: sniff the byte-order mark, fall back to UTF-16 when NUL bytes alternate,
+    and only then treat the file as UTF-8 with errors replaced.
+    """
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    for bom, encoding in ((b"\xff\xfe", "utf-16-le"), (b"\xfe\xff", "utf-16-be"),
+                          (b"\xef\xbb\xbf", "utf-8-sig")):
+        if raw.startswith(bom):
+            return raw[len(bom):].decode(encoding, errors="replace").replace("\x00", "")
+    if len(raw) >= 2 and len(raw) % 2 == 0 and raw.count(b"\x00") >= len(raw) // 20:
+        # No mark, but NULs everywhere the odd bytes should be: a UTF-16 write without a BOM,
+        # which is exactly what PowerShell's `Tee-Object -FilePath` produces on Windows
+        # PowerShell 5.1. Decoding as little-endian is the only reading that yields text here.
+        return raw.decode("utf-16-le", errors="replace").replace("\x00", "")
+    return raw.decode("utf-8", errors="replace").replace("\x00", "")
+
+
+#: How many lines to quote when nothing was recognised. Small on purpose: an annotation is a
+#: pointer, and a wall of quoted log in the Checks tab buries the pointer.
+TAIL_LINES = 5
+TAIL_WIDTH = 200
+
+
+def tail(text: str, limit: int = TAIL_LINES) -> list[str]:
+    """The last non-empty lines, each truncated -- quoted only as a last resort."""
+    kept = [line.strip() for line in text.splitlines() if line.strip()]
+    return [entry if len(entry) <= TAIL_WIDTH else entry[:TAIL_WIDTH - 1] + "\u2026"
+            for entry in kept[-limit:]]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -114,14 +167,16 @@ def main(argv: list[str] | None = None) -> int:
                         help="include warnings as well as errors")
     parser.add_argument("--quiet", action="store_true",
                         help="print only the count, for a step that wants a one-line summary")
+    parser.add_argument("--status", type=int, default=0,
+                        help="the step's exit status; when it is non-zero and nothing matched, "
+                             "the last lines of the log are quoted instead of silence")
     args = parser.parse_args(argv)
 
     try:
         if args.source == "-":
             text = sys.stdin.read()
         else:
-            with open(args.source, "r", encoding="utf-8", errors="replace") as handle:
-                text = handle.read()
+            text = read_log(args.source)
     except OSError as failure:
         # Say that nothing was read. Do not claim the log was clean.
         print(f"::warning title=ci annotations::could not read {args.source}: "
@@ -129,6 +184,20 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     lines = annotate(text, limit=max(0, args.limit), with_warnings=args.with_warnings)
+
+    # The silence that reads as "nothing wrong" is the failure mode this guard exists for.
+    # Both hosted jobs failed a step and produced no annotation at all -- once because the log
+    # was UTF-16, once because the shape was `project : error NU1102:` -- so "no output" was
+    # indistinguishable from "no errors". When the caller says the step failed and the reporter
+    # found nothing, say so and quote the end of the log, which is where a build writes why it
+    # stopped. A passing step still produces exactly nothing.
+    if not lines and args.status != 0:
+        quoted = tail(text)
+        detail = " | ".join(quoted) if quoted else "the log was empty"
+        lines = [f"::warning title=ci annotations::no compiler or test diagnostic recognised "
+                 f"in a step that exited {args.status}; last {len(quoted)} line(s): "
+                 f"{quote(detail)}"]
+
     if not args.quiet:
         for line in lines:
             print(line)

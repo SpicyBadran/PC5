@@ -32,6 +32,10 @@ Build FAILED.
 
 
 class AnnotateTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
     def test_a_compiler_error_becomes_an_annotation_that_points_at_the_line(self):
         lines = ci_annotations.annotate(BUILD_LOG)
         self.assertEqual(1, len(lines), "warnings stay out unless asked for")
@@ -71,6 +75,34 @@ class AnnotateTests(unittest.TestCase):
         self.assertEqual(1, len(ci_annotations.annotate(BUILD_LOG)))
         self.assertEqual(2, len(ci_annotations.annotate(BUILD_LOG, with_warnings=True)))
 
+    def test_a_windows_path_and_a_bare_position_are_both_readable(self):
+        """`path : error NU1102:` is a real MSBuild shape, and `C:\\a\\b` has a colon.
+
+        Both facts broke the first hosted Windows run: the pattern demanded a colon-free path
+        with an explicit (line,column), so the only failure line in the log was invisible.
+        """
+        windows = ("C:\\a\\PC5\\PC5\\app\\src\\PC5.App\\PC5.App.csproj : error NU1102: "
+                   "Unable to find package Microsoft.WindowsAppSDK with version (>= 1.6.2) "
+                   "[C:\\a\\PC5\\PC5\\app\\src\\PC5.App\\PC5.App.csproj]\n")
+        lines = ci_annotations.annotate(windows)
+        self.assertEqual(1, len(lines), lines)
+        self.assertIn("file=C%3A", lines[0], "the drive-qualified path survives, escaped")
+        self.assertIn("NU1102", lines[0])
+        self.assertNotIn("line=", lines[0], "no position is invented when the log gives none")
+        self.assertNotIn("PC5.App.csproj]", lines[0], "the trailing project bracket is not the message")
+
+    def test_a_utf16_log_written_by_tee_object_is_read_as_a_log(self):
+        """PowerShell's `Tee-Object -FilePath` writes UTF-16; UTF-8 reading hid every failure."""
+        message = "app/src/PC5.App/PC5.App.csproj : error NU1101: no such package\n"
+        for data in (message.encode("utf-16-le"),
+                     b"\xff\xfe" + message.encode("utf-16-le"),
+                     b"\xfe\xff" + message.encode("utf-16-be")):
+            path = Path(self.tmp.name) / "log.txt"
+            path.write_bytes(data)
+            text = ci_annotations.read_log(str(path))
+            self.assertIn("error NU1101", text, data[:4])
+            self.assertEqual(1, len(ci_annotations.annotate(text)), data[:4])
+
     def test_a_failing_test_is_annotated_by_name(self):
         """A red assertion says something about behaviour; `exit code 1` says nothing.
 
@@ -104,6 +136,25 @@ class CLITests(unittest.TestCase):
     def run_tool(self, *args, stdin=None):
         return subprocess.run([sys.executable, str(REPO / "tools" / "ci_annotations.py")] + list(args),
                               input=stdin, capture_output=True, text=True, timeout=60)
+
+    def test_a_step_that_failed_with_nothing_recognised_says_so(self):
+        """Silence from a red step is the exact ambiguity that hid two real failures."""
+        log = ("  Determining projects to restore...\n"
+               "  Restored /home/runner/app/src/PC5.App/PC5.App.csproj (in 4.2 sec).\n"
+               "  1 of 2 projects are up-to-date for restore.\n"
+               "  PC5.Core -> bin/Release/net8.0/PC5.Core.dll\n"
+               "  LaunchSettingsProfile: warning : no profile\n"
+               "  XamlCompiler : task failed\n"
+               "Build FAILED.\n")
+        self.assertEqual([], ci_annotations.annotate(log), "no diagnostic shape is matched")
+        reported = self.run_tool("--in", "-", "--status", "1", stdin=log).stdout
+        self.assertIn("no compiler or test diagnostic recognised", reported)
+        self.assertIn("Build FAILED.", reported, "the tail is quoted, because the tail is the reason")
+        self.assertIn("XamlCompiler", reported)
+        self.assertNotIn("Determining projects", reported,
+                         "and only the last lines of it, not the whole log")
+        silent = self.run_tool("--in", "-", "--status", "0", stdin=log).stdout
+        self.assertEqual("", silent.strip(), "a passing step produces nothing at all")
 
     def test_exit_zero_on_a_log_that_reports_a_failed_build(self):
         """The reporter's exit code must never become the step's verdict."""
@@ -152,9 +203,44 @@ class WiringTests(unittest.TestCase):
                                 "core build, app build and the publish step all need the "
                                 "annotation pass; that is the whole reason the tool exists")
 
+    #: The blocks this file's verdicts are built from, found by indentation rather than by a
+    #: YAML parser: `shell:` and `run: |` sit at 8 spaces inside a step, their body at 10.
+    BLOCKS = re.compile(r"shell: (bash|pwsh)\n[ ]{8}run: \|\n((?:[ ]{10}.*\n?)+)")
+
+    def annotated_blocks(self):
+        found = []
+        for match in self.BLOCKS.finditer(self.text):
+            shell, body = match.group(1), match.group(2)
+            if "dotnet" in body and "ci_annotations.py" in body:
+                found.append((shell, body))
+        return found
+
     def test_the_verdicts_come_from_the_tools_not_the_reporter(self):
-        self.assertIn("exit $status", self.text, "the bash steps must exit with dotnet's code")
-        self.assertIn("exit $LASTEXITCODE", self.text, "the pwsh steps must exit with dotnet's code")
+        """Every annotated step exits with *dotnet's* code, captured before the reporter runs.
+
+        The first version of this test only asked that `exit $LASTEXITCODE` appear somewhere in
+        the file, and that is the wrong invariant. `$LASTEXITCODE` is the exit code of the last
+        native command, so a pwsh step that runs the reporter and then exits with `$LASTEXITCODE`
+        reports python's 0 -- which is exactly what this workflow's publish step did: a failed
+        publish would have been recorded as a green step. Checking "captured before, exited after"
+        per block is the property; a substring anywhere in the file was decoration.
+        """
+        blocks = self.annotated_blocks()
+        self.assertGreaterEqual(len(blocks), 5,
+                                f"expected the five annotated dotnet steps, found {len(blocks)}")
+        offenders = []
+        for shell, body in blocks:
+            call = body.index("ci_annotations.py")
+            capture = "$status = $LASTEXITCODE" if shell == "pwsh" else "|| status=$?"
+            if capture not in body[:call]:
+                offenders.append(f"{shell}: the reporter runs before dotnet's status is captured")
+            after = body[call:]
+            if "exit $status" not in after:
+                offenders.append(f"{shell}: the step does not exit with the captured status")
+            if "--status $status" not in after:
+                offenders.append(f"{shell}: the reporter is not told the status, so a log it "
+                                 "cannot parse is indistinguishable from a clean one")
+        self.assertEqual([], offenders, "; ".join(offenders))
 
     def test_the_paths_filter_includes_the_new_tool(self):
         self.assertIn("tools/ci_annotations.py", self.text)

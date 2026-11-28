@@ -106,6 +106,26 @@ neighbours). Every item below is a delivered change on that commit; nothing here
   correctly. Now asserts every field of both entries and that the chain is continuous, so the test
   actually pins what its name claims — the fix tightens it rather than relaxing it (EXP-K).
 
+- `tools/ci_annotations.py` — three defects that turned four real hosted failures into silence, all
+  found by reading `46110354254`'s annotations (7 warnings, **no errors**, on a job that failed twice):
+  it decoded logs as UTF-8 while PowerShell's `Tee-Object -FilePath` writes UTF-16; its compiler pattern
+  required a `(line,column)` pair and a colon-free path, so a Windows-shaped
+  `C:\a\…csproj : error NU1102:` line was invisible (the position is now optional and a drive-qualified
+  path is matched); and the Windows `dotnet test` step never called it at all. It also takes
+  `--status <exit code>` now, so a step that failed with nothing recognised **quotes the last lines of
+  its own log** rather than producing the same output as a clean build — the ambiguity that hid all
+  three. A passing step still emits nothing: `tools/ci_annotations.py` reports failures, never health.
+- `.github/workflows/windows-app.yml` — the Windows `publish` step ran the reporter and then
+  `exit $LASTEXITCODE`, i.e. python's 0, so **a failed publish would have been recorded as a green
+  step**. Every pwsh step now captures `$status = $LASTEXITCODE` before the reporter runs and exits
+  with it, and `tests/test_ci_annotations.py::WiringTests` enforces that per `run:` block (capture
+  before, `exit $status` after, `--status $status` passed) instead of the old substring check that
+  would have passed on the broken file.
+- `app/src/PC5.App/PC5.App.csproj` — the comment above its `PackageReference` said the pinned
+  `Microsoft.WindowsAppSDK` version had never been restored. Run `46110354254` restored it on
+  `windows-latest` successfully, so the comment now records that, and records that the *build* of the
+  same project failed for a reason this repository does not yet have in writing.
+
 ### Fixed
 - `.github/workflows/windows-app.yml` — its first hosted run (`46109038081`) failed twice over:
   the *File the evidence record* step piped into `tee build/app-evidence.json` in a directory

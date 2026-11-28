@@ -8,9 +8,12 @@
        WindowsPackageType=MSIX produces the packaged application install; the output name is
        PC5.exe because the product is named for that executable.
 
-       Microsoft.WindowsAppSDK is pinned here to a version this repository has NOT yet
-       restored: CI's first restore is the evidence that settles it, and if it does not
-       resolve the version is corrected from the NuGet listing, not guessed twice. -->
+       Microsoft.WindowsAppSDK 1.6.2 is a verified pin, not a guess: run 46110354254 restored
+       it on a windows-latest runner ("Restore the application": success). The build of this
+       project failed in the next step of the same run, and this file does not pretend to know
+       why: the cause belongs to the run's record (docs/EXPERIMENTS.md, EXP-L), not to a
+       comment. What is NOT in doubt: no packaging or signing certificate is referenced here,
+       because M29 owns that and its identity deliberately lives outside this repository. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>

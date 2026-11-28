@@ -91,6 +91,31 @@ If the failure is "the app built and the capability pane says `yes` to something
 cannot use", that is the most important class of defect this project can receive: an
 over-claim in a diagnostics surface. File it as such.
 
+## 6b. What the hosted runs have actually shown, and how to read them
+
+Four things, each of them learned from a run rather than assumed:
+
+1. **Restore is a verdict, not a formality.** `Restore the application` succeeded on
+   `windows-latest`, which is what makes `Microsoft.WindowsAppSDK 1.6.2` a verified pin instead
+   of a plausible guess. A build failure *after* a successful restore is therefore never a
+   version-resolution problem, and it should not be triaged as one.
+2. **`Tee-Object -FilePath` writes UTF-16.** Every step that pipes `dotnet` output into a log
+   file for later reading does so through `Tee-Object`, and the reporter that turns those logs
+   into CI annotations had to learn to decode them; a UTF-8 reader saw no `error` substring in a
+   file that was full of them. If you follow §6 by hand on Windows and attach a log that an
+   issue tracker renders as mojibake, re-export it as UTF-8 (`Get-Content x | Set-Content -Encoding utf8 x.txt`);
+   nothing about the content changes and everything about whether it can be read does.
+3. **The failure line is often shaped `project : error NU1102:`**, without the `(line,column)`
+   pair a compiler diagnostic carries. `Select-String -Pattern 'error [A-Z]+[0-9]+' build/logs/*.log`
+   is the shortest way to see the real cause of a Windows build failure in this repository, and
+   `tools/ci_annotations.py` now accepts both shapes so the Checks tab carries them too.
+4. **A step whose verdict comes after the reporter must capture the exit code first.** In
+   PowerShell `$LASTEXITCODE` belongs to the last native command, so `python tools/ci_annotations.py`
+   between `dotnet build` and `exit $LASTEXITCODE` silently converts a failed build into a green
+   step. The workflow does `$status = $LASTEXITCODE` immediately, and `tests/test_ci_annotations.py`
+   enforces that ordering per `run:` block, because §6's instructions are only as good as the
+   evidence the pipeline files.
+
 ## 7. What CI does instead
 
 The `windows app` workflow ([`../../.github/workflows/windows-app.yml`](../../.github/workflows/windows-app.yml))
