@@ -553,4 +553,4 @@ archive and depends on no other project's code: prior art is cited in documentat
 never copied into the tree (ADR-025), and
 `tests/test_project_independence.py` enforces it.
 
-Licensed under the GNU General Public License version 2 only — [`LICENSE`](LICENSE).
+Licensed under the GNU General Public License version 3 only — [`LICENSE`](LICENSE).
